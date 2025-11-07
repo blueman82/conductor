@@ -35,24 +35,54 @@ type yamlTask struct {
 	DependsOn     []int    `yaml:"depends_on"`
 	EstimatedTime string   `yaml:"estimated_time"`
 	Agent         string   `yaml:"agent"`
+	Status        string   `yaml:"status"`
 	Description   string   `yaml:"description"`
 	TestFirst     struct {
-		TestFile        string `yaml:"test_file"`
-		TestStructure   string `yaml:"test_structure"`
-		TestSpecifics   string `yaml:"test_specifics"`
-		ExampleSkeleton string `yaml:"example_skeleton"`
+		TestFile        string   `yaml:"test_file"`
+		Structure       []string `yaml:"structure"`
+		TestStructure   string   `yaml:"test_structure"`
+		TestSpecifics   string   `yaml:"test_specifics"`
+		Mocks           []string `yaml:"mocks"`
+		Fixtures        []string `yaml:"fixtures"`
+		Assertions      []string `yaml:"assertions"`
+		EdgeCases       []string `yaml:"edge_cases"`
+		ExampleSkeleton string   `yaml:"example_skeleton"`
 	} `yaml:"test_first"`
 	Implementation struct {
-		Approach           string   `yaml:"approach"`
-		CodeStructure      string   `yaml:"code_structure"`
-		KeyPoints          []string `yaml:"key_points"`
-		IntegrationPoints  []string `yaml:"integration_points"`
+		Approach      string `yaml:"approach"`
+		CodeStructure string `yaml:"code_structure"`
+		KeyPoints     []struct {
+			Point     string `yaml:"point"`
+			Details   string `yaml:"details"`
+			Reference string `yaml:"reference"`
+		} `yaml:"key_points"`
+		Integration struct {
+			Imports           []string `yaml:"imports"`
+			ServicesToInject  []string `yaml:"services_to_inject"`
+			ConfigValues      []string `yaml:"config_values"`
+			ErrorHandling     []string `yaml:"error_handling"`
+		} `yaml:"integration"`
+		IntegrationPoints []string `yaml:"integration_points"` // Legacy field
 	} `yaml:"implementation"`
 	Verification struct {
-		ManualTesting   []string `yaml:"manual_testing"`
-		AutomatedTests  string   `yaml:"automated_tests"`
-		ExpectedOutput  string   `yaml:"expected_output"`
+		ManualTesting []struct {
+			Step     string `yaml:"step"`
+			Command  string `yaml:"command"`
+			Expected string `yaml:"expected"`
+		} `yaml:"manual_testing"`
+		AutomatedTests struct {
+			Command        string `yaml:"command"`
+			ExpectedOutput string `yaml:"expected_output"`
+		} `yaml:"automated_tests"`
+		SuccessCriteria []string `yaml:"success_criteria"`
+		ExpectedOutput  string   `yaml:"expected_output"` // Legacy field
 	} `yaml:"verification"`
+	Commit struct {
+		Type    string   `yaml:"type"`
+		Message string   `yaml:"message"`
+		Body    string   `yaml:"body"`
+		Files   []string `yaml:"files"`
+	} `yaml:"commit"`
 }
 
 // yamlConductorConfig represents the optional conductor configuration section in YAML
@@ -142,16 +172,58 @@ func buildPromptFromYAML(yt *yamlTask) string {
 	}
 
 	// Test First section
-	if yt.TestFirst.TestFile != "" || yt.TestFirst.TestStructure != "" ||
-	   yt.TestFirst.TestSpecifics != "" || yt.TestFirst.ExampleSkeleton != "" {
+	if yt.TestFirst.TestFile != "" || len(yt.TestFirst.Structure) > 0 ||
+		yt.TestFirst.TestStructure != "" || yt.TestFirst.TestSpecifics != "" ||
+		len(yt.TestFirst.Mocks) > 0 || len(yt.TestFirst.Fixtures) > 0 ||
+		len(yt.TestFirst.Assertions) > 0 || len(yt.TestFirst.EdgeCases) > 0 ||
+		yt.TestFirst.ExampleSkeleton != "" {
 		fmt.Fprintf(&prompt, "## Test First (TDD)\n\n")
 
 		if yt.TestFirst.TestFile != "" {
 			fmt.Fprintf(&prompt, "**Test file**: `%s`\n\n", yt.TestFirst.TestFile)
 		}
 
-		if yt.TestFirst.TestStructure != "" {
+		// Handle both structure array and test_structure string
+		if len(yt.TestFirst.Structure) > 0 {
+			fmt.Fprintf(&prompt, "**Test structure**:\n")
+			for _, item := range yt.TestFirst.Structure {
+				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(item))
+			}
+			fmt.Fprintf(&prompt, "\n")
+		} else if yt.TestFirst.TestStructure != "" {
 			fmt.Fprintf(&prompt, "**Test structure**:\n%s\n\n", strings.TrimSpace(yt.TestFirst.TestStructure))
+		}
+
+		if len(yt.TestFirst.Mocks) > 0 {
+			fmt.Fprintf(&prompt, "**Mocks**:\n")
+			for _, mock := range yt.TestFirst.Mocks {
+				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(mock))
+			}
+			fmt.Fprintf(&prompt, "\n")
+		}
+
+		if len(yt.TestFirst.Fixtures) > 0 {
+			fmt.Fprintf(&prompt, "**Fixtures**:\n")
+			for _, fixture := range yt.TestFirst.Fixtures {
+				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(fixture))
+			}
+			fmt.Fprintf(&prompt, "\n")
+		}
+
+		if len(yt.TestFirst.Assertions) > 0 {
+			fmt.Fprintf(&prompt, "**Assertions**:\n")
+			for _, assertion := range yt.TestFirst.Assertions {
+				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(assertion))
+			}
+			fmt.Fprintf(&prompt, "\n")
+		}
+
+		if len(yt.TestFirst.EdgeCases) > 0 {
+			fmt.Fprintf(&prompt, "**Edge cases**:\n")
+			for _, edgeCase := range yt.TestFirst.EdgeCases {
+				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(edgeCase))
+			}
+			fmt.Fprintf(&prompt, "\n")
 		}
 
 		if yt.TestFirst.TestSpecifics != "" {
@@ -164,8 +236,13 @@ func buildPromptFromYAML(yt *yamlTask) string {
 	}
 
 	// Implementation section
-	if yt.Implementation.Approach != "" || yt.Implementation.CodeStructure != "" ||
-	   len(yt.Implementation.KeyPoints) > 0 || len(yt.Implementation.IntegrationPoints) > 0 {
+	hasImplementation := yt.Implementation.Approach != "" || yt.Implementation.CodeStructure != "" ||
+		len(yt.Implementation.KeyPoints) > 0 ||
+		len(yt.Implementation.Integration.Imports) > 0 ||
+		len(yt.Implementation.Integration.ErrorHandling) > 0 ||
+		len(yt.Implementation.IntegrationPoints) > 0
+
+	if hasImplementation {
 		fmt.Fprintf(&prompt, "## Implementation\n\n")
 
 		if yt.Implementation.Approach != "" {
@@ -176,14 +253,52 @@ func buildPromptFromYAML(yt *yamlTask) string {
 			fmt.Fprintf(&prompt, "**Code structure**:\n```\n%s\n```\n\n", strings.TrimSpace(yt.Implementation.CodeStructure))
 		}
 
+		// Handle key_points as array of objects
 		if len(yt.Implementation.KeyPoints) > 0 {
 			fmt.Fprintf(&prompt, "**Key points**:\n")
-			for _, point := range yt.Implementation.KeyPoints {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(point))
+			for _, kp := range yt.Implementation.KeyPoints {
+				if kp.Point != "" {
+					fmt.Fprintf(&prompt, "- %s", strings.TrimSpace(kp.Point))
+					if kp.Details != "" {
+						fmt.Fprintf(&prompt, ": %s", strings.TrimSpace(kp.Details))
+					}
+					if kp.Reference != "" {
+						fmt.Fprintf(&prompt, " (ref: %s)", strings.TrimSpace(kp.Reference))
+					}
+					fmt.Fprintf(&prompt, "\n")
+				}
 			}
 			fmt.Fprintf(&prompt, "\n")
 		}
 
+		// Handle integration object
+		hasIntegration := len(yt.Implementation.Integration.Imports) > 0 ||
+			len(yt.Implementation.Integration.ServicesToInject) > 0 ||
+			len(yt.Implementation.Integration.ConfigValues) > 0 ||
+			len(yt.Implementation.Integration.ErrorHandling) > 0
+
+		if hasIntegration {
+			fmt.Fprintf(&prompt, "**Integration**:\n")
+
+			if len(yt.Implementation.Integration.Imports) > 0 {
+				fmt.Fprintf(&prompt, "- Imports: %s\n", strings.Join(yt.Implementation.Integration.Imports, ", "))
+			}
+			if len(yt.Implementation.Integration.ServicesToInject) > 0 {
+				fmt.Fprintf(&prompt, "- Services to inject: %s\n", strings.Join(yt.Implementation.Integration.ServicesToInject, ", "))
+			}
+			if len(yt.Implementation.Integration.ConfigValues) > 0 {
+				fmt.Fprintf(&prompt, "- Config values: %s\n", strings.Join(yt.Implementation.Integration.ConfigValues, ", "))
+			}
+			if len(yt.Implementation.Integration.ErrorHandling) > 0 {
+				fmt.Fprintf(&prompt, "- Error handling:\n")
+				for _, eh := range yt.Implementation.Integration.ErrorHandling {
+					fmt.Fprintf(&prompt, "  - %s\n", strings.TrimSpace(eh))
+				}
+			}
+			fmt.Fprintf(&prompt, "\n")
+		}
+
+		// Legacy integration_points field
 		if len(yt.Implementation.IntegrationPoints) > 0 {
 			fmt.Fprintf(&prompt, "**Integration points**:\n")
 			for _, point := range yt.Implementation.IntegrationPoints {
@@ -194,25 +309,72 @@ func buildPromptFromYAML(yt *yamlTask) string {
 	}
 
 	// Verification section
-	if len(yt.Verification.ManualTesting) > 0 || yt.Verification.AutomatedTests != "" ||
-	   yt.Verification.ExpectedOutput != "" {
+	hasVerification := len(yt.Verification.ManualTesting) > 0 ||
+		yt.Verification.AutomatedTests.Command != "" ||
+		len(yt.Verification.SuccessCriteria) > 0 ||
+		yt.Verification.ExpectedOutput != ""
+
+	if hasVerification {
 		fmt.Fprintf(&prompt, "## Verification\n\n")
 
+		// Handle manual_testing as array of objects
 		if len(yt.Verification.ManualTesting) > 0 {
 			fmt.Fprintf(&prompt, "**Manual testing**:\n")
-			for i, step := range yt.Verification.ManualTesting {
-				fmt.Fprintf(&prompt, "%d. %s\n", i+1, strings.TrimSpace(step))
+			for i, mt := range yt.Verification.ManualTesting {
+				if mt.Step != "" {
+					fmt.Fprintf(&prompt, "%d. %s", i+1, strings.TrimSpace(mt.Step))
+					if mt.Command != "" {
+						fmt.Fprintf(&prompt, "\n   Command: `%s`", strings.TrimSpace(mt.Command))
+					}
+					if mt.Expected != "" {
+						fmt.Fprintf(&prompt, "\n   Expected: %s", strings.TrimSpace(mt.Expected))
+					}
+					fmt.Fprintf(&prompt, "\n")
+				}
 			}
 			fmt.Fprintf(&prompt, "\n")
 		}
 
-		if yt.Verification.AutomatedTests != "" {
-			fmt.Fprintf(&prompt, "**Automated tests**:\n```bash\n%s\n```\n\n", strings.TrimSpace(yt.Verification.AutomatedTests))
+		// Handle automated_tests as object
+		if yt.Verification.AutomatedTests.Command != "" {
+			fmt.Fprintf(&prompt, "**Automated tests**:\n```bash\n%s\n```\n", strings.TrimSpace(yt.Verification.AutomatedTests.Command))
+			if yt.Verification.AutomatedTests.ExpectedOutput != "" {
+				fmt.Fprintf(&prompt, "\n**Expected output**:\n```\n%s\n```\n", strings.TrimSpace(yt.Verification.AutomatedTests.ExpectedOutput))
+			}
+			fmt.Fprintf(&prompt, "\n")
 		}
 
-		if yt.Verification.ExpectedOutput != "" {
+		if len(yt.Verification.SuccessCriteria) > 0 {
+			fmt.Fprintf(&prompt, "**Success criteria**:\n")
+			for _, criterion := range yt.Verification.SuccessCriteria {
+				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(criterion))
+			}
+			fmt.Fprintf(&prompt, "\n")
+		}
+
+		// Legacy expected_output field
+		if yt.Verification.ExpectedOutput != "" && yt.Verification.AutomatedTests.ExpectedOutput == "" {
 			fmt.Fprintf(&prompt, "**Expected output**:\n```\n%s\n```\n\n", strings.TrimSpace(yt.Verification.ExpectedOutput))
 		}
+	}
+
+	// Commit section
+	if yt.Commit.Message != "" {
+		fmt.Fprintf(&prompt, "## Commit\n\n")
+		if yt.Commit.Type != "" {
+			fmt.Fprintf(&prompt, "**Type**: %s\n", yt.Commit.Type)
+		}
+		fmt.Fprintf(&prompt, "**Message**: %s\n", strings.TrimSpace(yt.Commit.Message))
+		if yt.Commit.Body != "" {
+			fmt.Fprintf(&prompt, "\n**Body**:\n%s\n", strings.TrimSpace(yt.Commit.Body))
+		}
+		if len(yt.Commit.Files) > 0 {
+			fmt.Fprintf(&prompt, "\n**Files**:\n")
+			for _, file := range yt.Commit.Files {
+				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(file))
+			}
+		}
+		fmt.Fprintf(&prompt, "\n")
 	}
 
 	return prompt.String()
