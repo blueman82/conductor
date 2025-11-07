@@ -20,7 +20,7 @@ go.work
 # Build output
 /bin/
 /dist/
-conductor
+/conductor
 
 # IDE directories
 .vscode/
