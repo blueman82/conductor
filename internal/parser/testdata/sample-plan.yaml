@@ -1,0 +1,124 @@
+conductor:
+  default_agent: "general-purpose"
+  max_concurrency: 10
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+    retry_on_red: 2
+
+plan:
+  metadata:
+    feature_name: "Sample Implementation Plan"
+    created: "2025-11-07"
+    estimated_tasks: 3
+
+  tasks:
+    - task_number: 1
+      name: "Initialize Project Structure"
+      files:
+        - "go.mod"
+        - "main.go"
+      depends_on: []
+      estimated_time: "15m"
+      agent: "golang-pro"
+      description: |
+        Create the foundational Go module structure with proper directory organization.
+
+      test_first:
+        test_file: "main_test.go"
+        test_structure: |
+          - TestMainExists - verify main.go compiles
+          - TestVersionCommand - verify version can be displayed
+        example_skeleton: |
+          package main
+
+          import "testing"
+
+          func TestVersionConstant(t *testing.T) {
+              if Version == "" {
+                  t.Error("Version constant should not be empty")
+              }
+          }
+
+      implementation:
+        approach: |
+          Initialize Go module, create directory structure following standard Go project layout,
+          set up basic main.go entry point.
+
+        code_structure: |
+          conductor/
+          ├── cmd/conductor/main.go
+          ├── internal/
+          ├── go.mod
+          └── README.md
+
+        key_points:
+          - Use go mod init
+          - Follow golang-standards/project-layout
+          - Version format: const Version = "1.0.0"
+
+      verification:
+        manual_testing:
+          - Run go mod init
+          - Run go build ./cmd/conductor
+          - Verify binary compiles
+
+        automated_tests: "go test ./..."
+
+    - task_number: 2
+      name: "Add Cobra CLI Framework"
+      files:
+        - "go.mod"
+        - "internal/cmd/root.go"
+      depends_on: [1]
+      estimated_time: "30m"
+      agent: "golang-pro"
+      description: |
+        Set up cobra CLI framework to handle commands like 'conductor run' and 'conductor validate'.
+
+      test_first:
+        test_file: "internal/cmd/root_test.go"
+        test_structure: |
+          - TestRootCommandExists
+          - TestRootCommandHasSubcommands
+          - TestVersionFlag
+
+      implementation:
+        approach: |
+          Install cobra package, create root command with version flag,
+          prepare subcommand structure.
+
+        integration_points:
+          - Import: github.com/spf13/cobra
+          - Update main.go to call cmd.Execute()
+
+    - task_number: 3
+      name: "Define Core Data Models"
+      files:
+        - "internal/models/plan.go"
+        - "internal/models/task.go"
+        - "internal/models/result.go"
+      depends_on: [1]
+      estimated_time: "45m"
+      agent: "golang-pro"
+      description: |
+        Define Go structs for Plan, Task, Wave, Result, and Agent that will be
+        used throughout the application.
+
+      test_first:
+        test_file: "internal/models/models_test.go"
+        test_structure: |
+          - TestTaskValidation
+          - TestDependencyCycleDetection
+          - TestWaveCalculation
+
+      implementation:
+        approach: |
+          Create clean data structures with validation methods,
+          dependency checking, and helper functions.
+
+        key_points:
+          - Use time.Duration for time fields
+          - Implement Validate() methods
+          - Add helper functions for common operations
+          - Use exported fields for JSON/YAML marshaling
