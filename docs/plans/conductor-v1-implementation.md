@@ -1517,11 +1517,17 @@ feat: implement dependency graph and wave calculator
 
 ---
 
-## Task 8: Implement Agent Discovery
+## Task 8: Implement Agent Discovery ✅
+
+**Status**: COMPLETE
+**Completed**: 2025-11-08
+**Git Commit**: 231ac7a
+**QA Status**: YELLOW (91.3% test coverage, 10/10 tests passing, 1 spec clarification needed)
 
 **File(s)**: `internal/agent/discovery.go`, `internal/agent/discovery_test.go`
 **Depends on**: Task 3
 **Estimated time**: 45m
+**Actual time**: ~45m
 
 ### What you're building
 Scan ~/.claude/agents/ directory for available agents, parse agent metadata files, provide agent lookup by name.
