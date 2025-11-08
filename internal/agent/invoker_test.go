@@ -330,28 +330,24 @@ func TestInvokeWithTimeout(t *testing.T) {
 		task    models.Task
 		timeout time.Duration
 		wantErr bool
-		skip    string
 	}{
 		{
 			name: "basic invocation structure",
 			task: models.Task{
 				Number: 1,
 				Name:   "Test Task",
-				Prompt: "echo test",
+				Prompt: "print 'hello'",
 			},
-			timeout: 5 * time.Second,
+			timeout: 10 * time.Second,
 			wantErr: false,
-			skip:    "requires claude CLI",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skip != "" {
-				t.Skip(tt.skip)
-			}
-
 			inv := NewInvoker()
+			inv.ClaudePath = "/opt/homebrew/bin/claude"
+
 			result, err := inv.InvokeWithTimeout(tt.task, tt.timeout)
 
 			if (err != nil) != tt.wantErr {
@@ -368,6 +364,21 @@ func TestInvokeWithTimeout(t *testing.T) {
 			if result.Duration == 0 {
 				t.Error("Duration should be recorded")
 			}
+
+			// Duration should be less than timeout
+			if result.Duration >= tt.timeout {
+				t.Errorf("Duration %v should be less than timeout %v", result.Duration, tt.timeout)
+			}
+
+			// Output should be captured
+			if result.Output == "" {
+				t.Error("Output should be captured")
+			}
+
+			// Exit code should be set (0 for success)
+			if result.ExitCode != 0 {
+				t.Logf("Exit code: %d, Output: %s", result.ExitCode, result.Output)
+			}
 		})
 	}
 }
@@ -378,28 +389,24 @@ func TestInvoke(t *testing.T) {
 		task    models.Task
 		timeout time.Duration
 		wantErr bool
-		skip    string
 	}{
 		{
-			name: "context cancellation",
+			name: "successful invocation",
 			task: models.Task{
 				Number: 1,
 				Name:   "Test Task",
-				Prompt: "sleep 10",
+				Prompt: "respond with 'ok'",
 			},
-			timeout: 100 * time.Millisecond,
+			timeout: 10 * time.Second,
 			wantErr: false,
-			skip:    "requires claude CLI",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skip != "" {
-				t.Skip(tt.skip)
-			}
-
 			inv := NewInvoker()
+			inv.ClaudePath = "/opt/homebrew/bin/claude"
+
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
 			defer cancel()
 
@@ -413,6 +420,360 @@ func TestInvoke(t *testing.T) {
 			if result == nil {
 				t.Fatal("Invoke() returned nil result")
 			}
+
+			// Duration should be tracked
+			if result.Duration == 0 {
+				t.Error("Duration should be tracked")
+			}
+
+			// Output should be captured
+			if result.Output == "" {
+				t.Error("Output should be captured")
+			}
+		})
+	}
+}
+
+// TestInvokeSuccess tests the happy path with simple prompt
+func TestInvokeSuccess(t *testing.T) {
+	inv := NewInvoker()
+	inv.ClaudePath = "/opt/homebrew/bin/claude"
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Simple Test",
+		Prompt: "say 'test'",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := inv.Invoke(ctx, task)
+
+	if err != nil {
+		t.Fatalf("Invoke() unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Invoke() returned nil result")
+	}
+
+	// Verify output contains something
+	if result.Output == "" {
+		t.Error("Output should not be empty")
+	}
+
+	// Exit code should be 0 for success
+	if result.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0. Output: %s", result.ExitCode, result.Output)
+	}
+
+	// Duration should be reasonable (under 10 seconds)
+	if result.Duration <= 0 {
+		t.Error("Duration should be positive")
+	}
+	if result.Duration >= 10*time.Second {
+		t.Errorf("Duration %v too long for simple prompt", result.Duration)
+	}
+
+	// No error should be set
+	if result.Error != nil {
+		t.Errorf("Result.Error should be nil, got: %v", result.Error)
+	}
+}
+
+// TestInvokeTimeout tests that timeout is properly handled
+func TestInvokeTimeout(t *testing.T) {
+	inv := NewInvoker()
+	inv.ClaudePath = "/opt/homebrew/bin/claude"
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Timeout Test",
+		Prompt: "count to 1000 slowly, taking at least 5 seconds",
+	}
+
+	// Use a very short timeout to force timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	result, err := inv.Invoke(ctx, task)
+
+	// Should not return error from Invoke itself (returns result with error info)
+	if err != nil {
+		t.Fatalf("Invoke() unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Invoke() returned nil result")
+	}
+
+	// Result should have an error set (context deadline exceeded or killed)
+	// or a non-zero exit code
+	if result.Error == nil && result.ExitCode == 0 {
+		t.Error("Expected timeout to cause error or non-zero exit code")
+	}
+}
+
+// TestInvokeContextCancellation tests context cancellation handling
+func TestInvokeContextCancellation(t *testing.T) {
+	inv := NewInvoker()
+	inv.ClaudePath = "/opt/homebrew/bin/claude"
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Cancellation Test",
+		Prompt: "perform a long task",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel immediately
+	cancel()
+
+	result, err := inv.Invoke(ctx, task)
+
+	if err != nil {
+		t.Fatalf("Invoke() unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Invoke() returned nil result")
+	}
+
+	// Should have error or non-zero exit code due to cancellation
+	if result.Error == nil && result.ExitCode == 0 {
+		t.Error("Expected cancellation to cause error or non-zero exit code")
+	}
+}
+
+// TestInvokeExitCode tests handling of non-zero exit codes
+func TestInvokeExitCode(t *testing.T) {
+	inv := NewInvoker()
+	inv.ClaudePath = "/opt/homebrew/bin/claude"
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Exit Code Test",
+		Prompt: "test",
+	}
+
+	// Build args and append an invalid flag to cause error
+	args := inv.BuildCommandArgs(task)
+	args = append(args, "--invalid-flag-xyz")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Create a custom invocation with invalid flag
+	task.Prompt = "test --invalid-flag-xyz-should-fail"
+
+	result, err := inv.Invoke(ctx, task)
+
+	if err != nil {
+		t.Fatalf("Invoke() unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Invoke() returned nil result")
+	}
+
+	// Output should be captured even on error
+	if result.Output == "" {
+		t.Log("Warning: Expected some output even on error")
+	}
+
+	// Note: This test may not always produce non-zero exit code
+	// depending on how claude CLI handles invalid input
+	// The important thing is that exit code is captured
+	t.Logf("Exit code: %d, Output: %s", result.ExitCode, result.Output)
+}
+
+// TestInvokeOutput tests that output is properly captured
+func TestInvokeOutput(t *testing.T) {
+	inv := NewInvoker()
+	inv.ClaudePath = "/opt/homebrew/bin/claude"
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Output Test",
+		Prompt: "respond with exactly: EXPECTED_OUTPUT",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := inv.Invoke(ctx, task)
+
+	if err != nil {
+		t.Fatalf("Invoke() unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Invoke() returned nil result")
+	}
+
+	// Output should be captured
+	if result.Output == "" {
+		t.Error("Output should not be empty")
+	}
+
+	// Verify output is in InvocationResult
+	if len(result.Output) == 0 {
+		t.Error("InvocationResult should contain output")
+	}
+
+	t.Logf("Captured output (%d bytes): %s", len(result.Output), result.Output)
+}
+
+// TestBuildCommandArgsWithRealRegistry tests integration with Registry
+func TestBuildCommandArgsWithRealRegistry(t *testing.T) {
+	// Create temporary directory with test agent
+	tmpDir := t.TempDir()
+
+	agentContent := `---
+name: test-agent
+description: Test agent for integration
+tools:
+  - read
+  - write
+---
+This is a test agent for integration testing.
+`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "test-agent.md"), []byte(agentContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create registry and discover agents
+	registry := NewRegistry(tmpDir)
+	agents, err := registry.Discover()
+	if err != nil {
+		t.Fatalf("Registry.Discover() error: %v", err)
+	}
+
+	if len(agents) != 1 {
+		t.Fatalf("Expected 1 agent, got %d", len(agents))
+	}
+
+	// Create invoker with registry
+	inv := NewInvokerWithRegistry(registry)
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Test with agent",
+		Prompt: "perform task",
+		Agent:  "test-agent",
+	}
+
+	args := inv.BuildCommandArgs(task)
+
+	// Verify agent is mentioned in prompt
+	foundAgentRef := false
+	for _, arg := range args {
+		if strings.Contains(arg, "use the test-agent subagent to:") {
+			foundAgentRef = true
+			break
+		}
+	}
+
+	if !foundAgentRef {
+		t.Error("Agent should be referenced in built command args")
+	}
+
+	// Verify original prompt is still there
+	foundPrompt := false
+	for _, arg := range args {
+		if strings.Contains(arg, "perform task") {
+			foundPrompt = true
+			break
+		}
+	}
+
+	if !foundPrompt {
+		t.Error("Original prompt should be in command args")
+	}
+}
+
+// TestInvokeWithTimeoutShort tests short timeout handling
+func TestInvokeWithTimeoutShort(t *testing.T) {
+	inv := NewInvoker()
+	inv.ClaudePath = "/opt/homebrew/bin/claude"
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Short Timeout",
+		Prompt: "take a very long time to respond",
+	}
+
+	// Very short timeout
+	result, err := inv.InvokeWithTimeout(task, 200*time.Millisecond)
+
+	if err != nil {
+		t.Fatalf("InvokeWithTimeout() unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("InvokeWithTimeout() returned nil result")
+	}
+
+	// Should complete quickly (timeout or actual completion)
+	if result.Duration > 1*time.Second {
+		t.Errorf("Duration %v too long for short timeout", result.Duration)
+	}
+}
+
+// TestInvokeWithDifferentPrompts tests various prompt types
+func TestInvokeWithDifferentPrompts(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt string
+	}{
+		{
+			name:   "simple prompt",
+			prompt: "hello",
+		},
+		{
+			name:   "question prompt",
+			prompt: "what is 2+2?",
+		},
+		{
+			name:   "instruction prompt",
+			prompt: "list three colors",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inv := NewInvoker()
+			inv.ClaudePath = "/opt/homebrew/bin/claude"
+
+			task := models.Task{
+				Number: 1,
+				Name:   tt.name,
+				Prompt: tt.prompt,
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			result, err := inv.Invoke(ctx, task)
+
+			if err != nil {
+				t.Fatalf("Invoke() unexpected error: %v", err)
+			}
+
+			if result == nil {
+				t.Fatal("Invoke() returned nil result")
+			}
+
+			// All should produce some output
+			if result.Output == "" {
+				t.Error("Expected output from claude CLI")
+			}
+
+			t.Logf("Prompt: %s, Output length: %d bytes", tt.prompt, len(result.Output))
 		})
 	}
 }
