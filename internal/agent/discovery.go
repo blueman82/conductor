@@ -1,0 +1,138 @@
+package agent
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Agent represents a Claude Code agent with metadata
+type Agent struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	Tools       []string `yaml:"tools"`
+	FilePath    string   `yaml:"-"` // Not parsed from YAML
+}
+
+// Registry manages discovered agents
+type Registry struct {
+	AgentsDir string
+	agents    map[string]*Agent
+}
+
+// NewRegistry creates a new agent registry
+// If agentsDir is empty, uses ~/.claude/agents as default
+func NewRegistry(agentsDir string) *Registry {
+	if agentsDir == "" {
+		// Default to ~/.claude/agents
+		home, _ := os.UserHomeDir()
+		agentsDir = filepath.Join(home, ".claude", "agents")
+	}
+
+	return &Registry{
+		AgentsDir: agentsDir,
+		agents:    make(map[string]*Agent),
+	}
+}
+
+// Discover scans the agents directory and parses agent files
+// Returns a map of agent names to Agent structs
+// Returns an empty map (not an error) if the directory doesn't exist
+func (r *Registry) Discover() (map[string]*Agent, error) {
+	// Check if directory exists
+	if _, err := os.Stat(r.AgentsDir); os.IsNotExist(err) {
+		// No agents directory - return empty map, not an error
+		return r.agents, nil
+	}
+
+	// Walk directory
+	err := filepath.Walk(r.AgentsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		// Only process .md files
+		if !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+
+		agent, err := parseAgentFile(path)
+		if err != nil {
+			// Log warning but continue
+			fmt.Fprintf(os.Stderr, "Warning: failed to parse %s: %v\n", path, err)
+			return nil
+		}
+
+		r.agents[agent.Name] = agent
+		return nil
+	})
+
+	return r.agents, err
+}
+
+// Exists checks if an agent with the given name exists in the registry
+func (r *Registry) Exists(agentName string) bool {
+	_, exists := r.agents[agentName]
+	return exists
+}
+
+// Get retrieves an agent by name
+// Returns the agent and true if found, nil and false otherwise
+func (r *Registry) Get(agentName string) (*Agent, bool) {
+	agent, exists := r.agents[agentName]
+	return agent, exists
+}
+
+// parseAgentFile parses a single agent file
+func parseAgentFile(path string) (*Agent, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract YAML frontmatter between --- markers
+	frontmatter, _ := extractFrontmatter(content)
+	if frontmatter == nil {
+		return nil, fmt.Errorf("no frontmatter found in %s", path)
+	}
+
+	var agent Agent
+	if err := yaml.Unmarshal(frontmatter, &agent); err != nil {
+		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
+	}
+
+	agent.FilePath = path
+
+	if agent.Name == "" {
+		return nil, fmt.Errorf("agent name is required")
+	}
+
+	return &agent, nil
+}
+
+// extractFrontmatter extracts YAML frontmatter from markdown content
+// Returns the frontmatter and the remaining body
+func extractFrontmatter(content []byte) ([]byte, []byte) {
+	lines := strings.Split(string(content), "\n")
+	if len(lines) < 3 || lines[0] != "---" {
+		return nil, content
+	}
+
+	// Find closing ---
+	for i := 1; i < len(lines); i++ {
+		if lines[i] == "---" {
+			frontmatter := []byte(strings.Join(lines[1:i], "\n"))
+			body := []byte(strings.Join(lines[i+1:], "\n"))
+			return frontmatter, body
+		}
+	}
+
+	return nil, content
+}
