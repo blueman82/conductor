@@ -1216,11 +1216,17 @@ feat: add unified parser interface with auto-detection
 
 ---
 
-## Task 7: Implement Dependency Graph and Wave Calculator
+## Task 7: Implement Dependency Graph and Wave Calculator ✅
+
+**Status**: COMPLETE
+**Completed**: 2025-11-08
+**Git Commit**: 3b2db76
+**QA Status**: GREEN (94.4% test coverage, 31/31 tests passing)
 
 **File(s)**: `internal/executor/graph.go`, `internal/executor/graph_test.go`
 **Depends on**: Task 3
 **Estimated time**: 1.5h
+**Actual time**: ~1.5h
 
 ### What you're building
 Build dependency graph from tasks, detect cycles, calculate execution waves using topological sort (Kahn's algorithm).
