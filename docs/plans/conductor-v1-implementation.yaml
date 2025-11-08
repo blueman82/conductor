@@ -1520,7 +1520,11 @@ plan:
         - "internal/agent/testdata/sample-agent.md"
       depends_on: [3]
       estimated_time: "45m"
-      status: "pending"
+      status: "completed"
+      completed: "2025-11-08"
+      git_commit: "231ac7a"
+      qa_status: "YELLOW (91.3% test coverage, 10/10 tests passing, 1 spec clarification needed)"
+      actual_time: "45m"
 
       description: |
         Scan ~/.claude/agents/ directory for available agents, parse agent metadata files, provide agent lookup by name.
