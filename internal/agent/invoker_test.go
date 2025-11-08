@@ -830,3 +830,98 @@ func TestClaudeOutput(t *testing.T) {
 		t.Errorf("Error = %s, want %s", parsed.Error, co.Error)
 	}
 }
+
+// TestInvokeInvalidPath tests the error path when ClaudePath is invalid
+// This test covers line 94 in invoker.go (result.Error = err)
+func TestInvokeInvalidPath(t *testing.T) {
+	inv := NewInvoker()
+	inv.ClaudePath = "/nonexistent/path/to/claude"
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Test Task",
+		Prompt: "test",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	result, err := inv.Invoke(ctx, task)
+
+	// Should not panic, err can be nil (error in result.Error)
+	if err != nil {
+		t.Fatalf("Invoke() returned unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Expected result, got nil")
+	}
+
+	// The critical assertion - line 94 path
+	// When the executable doesn't exist, result.Error should be set
+	if result.Error == nil {
+		t.Error("Expected result.Error to be set for invalid path")
+	}
+
+	// Error should indicate missing/invalid binary
+	if result.Error != nil {
+		errMsg := result.Error.Error()
+		if !strings.Contains(errMsg, "executable") && !strings.Contains(errMsg, "no such file") {
+			t.Logf("Error message: %v", result.Error)
+		}
+	}
+
+	// Exit code should remain 0 (wasn't set by ExitError)
+	if result.ExitCode != 0 {
+		t.Errorf("Expected ExitCode 0 for spawn failure, got %d", result.ExitCode)
+	}
+}
+
+// TestInvokeExitCodeGuaranteed tests the exit code extraction path with deterministic exit code
+// This test covers lines 91-92 in invoker.go (exit code extraction)
+func TestInvokeExitCodeGuaranteed(t *testing.T) {
+	// Create wrapper script that exits with code 42
+	tmpDir := t.TempDir()
+	scriptPath := filepath.Join(tmpDir, "exit42.sh")
+
+	scriptContent := `#!/bin/sh
+exit 42
+`
+	err := os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+	if err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	inv := NewInvoker()
+	inv.ClaudePath = scriptPath // Use our script instead of claude
+
+	task := models.Task{
+		Number: 1,
+		Name:   "Test Task",
+		Prompt: "anything", // Script ignores this
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	result, err := inv.Invoke(ctx, task)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Expected result, got nil")
+	}
+
+	// THE CRITICAL ASSERTION - lines 91-92 path
+	// This guarantees the exit code extraction code is executed
+	if result.ExitCode != 42 {
+		t.Errorf("Expected exit code 42, got %d", result.ExitCode)
+	}
+
+	// Verify error is NOT set (only ExitCode should be populated)
+	if result.Error != nil {
+		t.Errorf("Expected result.Error to be nil with exit code, got: %v", result.Error)
+	}
+}
