@@ -1,0 +1,191 @@
+package executor
+
+import (
+	"fmt"
+
+	"github.com/harrison/conductor/internal/models"
+)
+
+const (
+	// DefaultMaxConcurrency is the default maximum number of concurrent tasks per wave
+	DefaultMaxConcurrency = 10
+)
+
+// DependencyGraph represents a directed graph of task dependencies
+type DependencyGraph struct {
+	Tasks    map[int]*models.Task
+	Edges    map[int][]int // task -> tasks that depend on it (adjacency list: prerequisite -> dependents)
+	InDegree map[int]int   // task -> number of dependencies
+}
+
+// ValidateTasks checks that all task dependencies are valid
+func ValidateTasks(tasks []models.Task) error {
+	taskMap := make(map[int]bool)
+	for _, task := range tasks {
+		if task.Number <= 0 {
+			return fmt.Errorf("task %d: invalid task number (must be positive)", task.Number)
+		}
+		if taskMap[task.Number] {
+			return fmt.Errorf("task %d: duplicate task number", task.Number)
+		}
+		taskMap[task.Number] = true
+	}
+
+	// Validate dependencies
+	for _, task := range tasks {
+		for _, dep := range task.DependsOn {
+			if !taskMap[dep] {
+				return fmt.Errorf("task %d (%s): depends on non-existent task %d", task.Number, task.Name, dep)
+			}
+		}
+	}
+
+	return nil
+}
+
+// BuildDependencyGraph constructs a dependency graph from a list of tasks
+func BuildDependencyGraph(tasks []models.Task) *DependencyGraph {
+	g := &DependencyGraph{
+		Tasks:    make(map[int]*models.Task),
+		Edges:    make(map[int][]int),
+		InDegree: make(map[int]int),
+	}
+
+	// Build task map and initialize in-degree
+	for i := range tasks {
+		g.Tasks[tasks[i].Number] = &tasks[i]
+		g.InDegree[tasks[i].Number] = 0
+	}
+
+	// Build edges and calculate in-degree
+	// Only add edges for valid dependencies
+	for _, task := range tasks {
+		for _, dep := range task.DependsOn {
+			// Validate that dependency exists
+			if _, exists := g.Tasks[dep]; !exists {
+				// Skip invalid dependencies - they will be caught by validation
+				continue
+			}
+			// dep -> task (dep must complete before task)
+			g.Edges[dep] = append(g.Edges[dep], task.Number)
+			g.InDegree[task.Number]++
+		}
+	}
+
+	return g
+}
+
+// HasCycle detects if the graph contains a cycle using DFS with color marking
+func (g *DependencyGraph) HasCycle() bool {
+	const (
+		white = 0 // not visited
+		gray  = 1 // visiting
+		black = 2 // visited
+	)
+
+	colors := make(map[int]int)
+	for taskNum := range g.Tasks {
+		colors[taskNum] = white
+	}
+
+	var dfs func(int) bool
+	dfs = func(node int) bool {
+		colors[node] = gray
+
+		for _, neighbor := range g.Edges[node] {
+			if colors[neighbor] == gray {
+				return true // back edge = cycle
+			}
+			if colors[neighbor] == white && dfs(neighbor) {
+				return true
+			}
+		}
+
+		colors[node] = black
+		return false
+	}
+
+	// Check for self-referencing first
+	for taskNum, task := range g.Tasks {
+		for _, dep := range task.DependsOn {
+			if dep == taskNum {
+				return true // self-reference is a cycle
+			}
+		}
+	}
+
+	// Run DFS from all unvisited nodes
+	for taskNum := range g.Tasks {
+		if colors[taskNum] == white {
+			if dfs(taskNum) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// CalculateWaves computes execution waves using Kahn's algorithm (topological sort)
+// Tasks with no dependencies go in Wave 1, tasks depending only on Wave 1 go in Wave 2, etc.
+func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
+	// Validate tasks first
+	if err := ValidateTasks(tasks); err != nil {
+		return nil, err
+	}
+
+	// Handle empty task list
+	if len(tasks) == 0 {
+		return []models.Wave{}, nil
+	}
+
+	graph := BuildDependencyGraph(tasks)
+
+	// Check for cycles
+	if graph.HasCycle() {
+		return nil, fmt.Errorf("circular dependency detected")
+	}
+
+	// Kahn's algorithm for topological sort + wave grouping
+	var waves []models.Wave
+	inDegree := make(map[int]int)
+	for k, v := range graph.InDegree {
+		inDegree[k] = v
+	}
+
+	for len(inDegree) > 0 {
+		// Find all tasks with in-degree 0 (current wave)
+		var currentWave []int
+		for taskNum, degree := range inDegree {
+			if degree == 0 {
+				currentWave = append(currentWave, taskNum)
+			}
+		}
+
+		if len(currentWave) == 0 {
+			return nil, fmt.Errorf("graph error: no tasks with zero in-degree")
+		}
+
+		// Create wave
+		wave := models.Wave{
+			Name:           fmt.Sprintf("Wave %d", len(waves)+1),
+			TaskNumbers:    currentWave,
+			MaxConcurrency: DefaultMaxConcurrency,
+		}
+		waves = append(waves, wave)
+
+		// Remove current wave tasks and update in-degrees
+		for _, taskNum := range currentWave {
+			delete(inDegree, taskNum)
+
+			// Decrease in-degree for dependent tasks
+			for _, dependent := range graph.Edges[taskNum] {
+				if _, exists := inDegree[dependent]; exists {
+					inDegree[dependent]--
+				}
+			}
+		}
+	}
+
+	return waves, nil
+}
