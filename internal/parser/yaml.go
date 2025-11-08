@@ -57,10 +57,10 @@ type yamlTask struct {
 			Reference string `yaml:"reference"`
 		} `yaml:"key_points"`
 		Integration struct {
-			Imports           []string `yaml:"imports"`
-			ServicesToInject  []string `yaml:"services_to_inject"`
-			ConfigValues      []string `yaml:"config_values"`
-			ErrorHandling     []string `yaml:"error_handling"`
+			Imports          []string `yaml:"imports"`
+			ServicesToInject []string `yaml:"services_to_inject"`
+			ConfigValues     []string `yaml:"config_values"`
+			ErrorHandling    []string `yaml:"error_handling"`
 		} `yaml:"integration"`
 		IntegrationPoints []string `yaml:"integration_points"` // Legacy field
 	} `yaml:"implementation"`

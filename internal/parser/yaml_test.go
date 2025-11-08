@@ -91,9 +91,9 @@ plan:
 
 func TestParseYAMLEstimatedTime(t *testing.T) {
 	tests := []struct {
-		name          string
-		timeStr       string
-		expectedDur   time.Duration
+		name        string
+		timeStr     string
+		expectedDur time.Duration
 	}{
 		{"30 minutes", "30m", 30 * time.Minute},
 		{"1 hour", "1h", 1 * time.Hour},
