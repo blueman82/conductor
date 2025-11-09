@@ -1,0 +1,14 @@
+plan:
+  metadata:
+    feature_name: "Plan with File Overlaps"
+  tasks:
+    - task_number: 1
+      name: "Task One"
+      files: ["shared.go", "file1.go"]
+      depends_on: []
+      description: "First task"
+    - task_number: 2
+      name: "Task Two"
+      files: ["shared.go", "file2.go"]
+      depends_on: []
+      description: "Second task - both in wave 1 with overlapping file"

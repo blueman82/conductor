@@ -1,0 +1,10 @@
+plan:
+  metadata:
+    feature_name: "Plan with Unknown Agent"
+  tasks:
+    - task_number: 1
+      name: "Task One"
+      files: ["file1.go"]
+      depends_on: []
+      agent: "nonexistent-super-agent"
+      description: "Uses an agent that doesn't exist"

@@ -1,9 +1,13 @@
 package executor
 
 import (
-	"testing"
+    "bytes"
+    "io"
+    "os"
+    "strings"
+    "testing"
 
-	"github.com/harrison/conductor/internal/models"
+    "github.com/harrison/conductor/internal/models"
 )
 
 func TestValidateTasks(t *testing.T) {
@@ -329,4 +333,174 @@ func TestTopologicalSort(t *testing.T) {
 			completed[taskNum] = true
 		}
 	}
+}
+
+func TestValidateFileOverlaps(t *testing.T) {
+    type expectations struct {
+        errContains     []string
+        warningContains []string
+    }
+
+    tests := []struct {
+        name           string
+        tasks          []models.Task
+        waves          []models.Wave
+        wantErr        bool
+        expectWarning  bool
+        expectations   expectations
+    }{
+        {
+            name: "no overlaps in single wave",
+            tasks: []models.Task{
+                {Number: 1, Name: "Task 1", Files: []string{"alpha.go"}},
+                {Number: 2, Name: "Task 2", Files: []string{"beta.go"}},
+            },
+            waves: []models.Wave{
+                {Name: "Wave 1", TaskNumbers: []int{1, 2}},
+            },
+            wantErr:       false,
+            expectWarning: false,
+        },
+        {
+            name: "overlap within same wave returns error",
+            tasks: []models.Task{
+                {Number: 1, Name: "Task A", Files: []string{"shared/file.go"}},
+                {Number: 2, Name: "Task B", Files: []string{"shared/file.go"}},
+            },
+            waves: []models.Wave{
+                {Name: "Wave 1", TaskNumbers: []int{1, 2}},
+            },
+            wantErr: true,
+            expectations: expectations{
+                errContains: []string{"Wave 1", "shared/file.go", "Task A", "Task B", "Move the conflicting tasks"},
+            },
+        },
+        {
+            name: "overlap across waves allowed",
+            tasks: []models.Task{
+                {Number: 1, Name: "Task A", Files: []string{"shared/file.go"}},
+                {Number: 2, Name: "Task B", Files: []string{"shared/file.go"}},
+            },
+            waves: []models.Wave{
+                {Name: "Wave 1", TaskNumbers: []int{1}},
+                {Name: "Wave 2", TaskNumbers: []int{2}},
+            },
+            wantErr:       false,
+            expectWarning: false,
+        },
+        {
+            name: "skip validation when task has no files",
+            tasks: []models.Task{
+                {Number: 1, Name: "Task A", Files: nil},
+                {Number: 2, Name: "Task B", Files: []string{"beta.go"}},
+            },
+            waves: []models.Wave{
+                {Name: "Wave 1", TaskNumbers: []int{1, 2}},
+            },
+            wantErr:       false,
+            expectWarning: true,
+            expectations: expectations{
+                warningContains: []string{"Wave 1", "Task A", "skipping file overlap validation"},
+            },
+        },
+        {
+            name: "path normalization treats ./file and file as same",
+            tasks: []models.Task{
+                {Number: 1, Name: "Task A", Files: []string{"./config.go"}},
+                {Number: 2, Name: "Task B", Files: []string{"config.go"}},
+            },
+            waves: []models.Wave{
+                {Name: "Wave 1", TaskNumbers: []int{1, 2}},
+            },
+            wantErr: true,
+            expectations: expectations{
+                errContains: []string{"Wave 1", "config.go", "Task A", "Task B"},
+            },
+        },
+        {
+            name: "duplicate files within same task do not error",
+            tasks: []models.Task{
+                {Number: 1, Name: "Task A", Files: []string{"alpha.go", "alpha.go"}},
+                {Number: 2, Name: "Task B", Files: []string{"beta.go"}},
+            },
+            waves: []models.Wave{
+                {Name: "Wave 1", TaskNumbers: []int{1, 2}},
+            },
+            wantErr:       false,
+            expectWarning: false,
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Build taskMap from tasks
+            taskMap := make(map[int]*models.Task)
+            for i := range tt.tasks {
+                taskMap[tt.tasks[i].Number] = &tt.tasks[i]
+            }
+
+            var (
+                err      error
+                warnings string
+            )
+
+            if tt.expectWarning {
+                warnings = captureStderr(t, func() {
+                    err = ValidateFileOverlaps(tt.waves, taskMap)
+                })
+            } else {
+                err = ValidateFileOverlaps(tt.waves, taskMap)
+            }
+
+            if (err != nil) != tt.wantErr {
+                t.Fatalf("ValidateFileOverlaps() error = %v, wantErr %v", err, tt.wantErr)
+            }
+
+            if err != nil {
+                msg := err.Error()
+                for _, snippet := range tt.expectations.errContains {
+                    if !strings.Contains(msg, snippet) {
+                        t.Errorf("expected error to contain %q, got %q", snippet, msg)
+                    }
+                }
+            }
+
+            if tt.expectWarning {
+                if warnings == "" {
+                    t.Fatal("expected warning output but got none")
+                }
+                for _, snippet := range tt.expectations.warningContains {
+                    if !strings.Contains(warnings, snippet) {
+                        t.Errorf("expected warning to contain %q, got %q", snippet, warnings)
+                    }
+                }
+            } else if warnings != "" {
+                t.Fatalf("did not expect warning but got: %s", warnings)
+            }
+        })
+    }
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+    t.Helper()
+
+    original := os.Stderr
+    r, w, err := os.Pipe()
+    if err != nil {
+        t.Fatalf("failed to create pipe: %v", err)
+    }
+
+    os.Stderr = w
+    fn()
+    if err := w.Close(); err != nil {
+        t.Fatalf("failed to close writer: %v", err)
+    }
+    os.Stderr = original
+
+    var buf bytes.Buffer
+    if _, err := io.Copy(&buf, r); err != nil {
+        t.Fatalf("failed to copy stderr output: %v", err)
+    }
+
+    return buf.String()
 }

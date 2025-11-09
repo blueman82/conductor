@@ -1,9 +1,12 @@
 package executor
 
 import (
-	"fmt"
+    "fmt"
+    "os"
+    "path/filepath"
+    "strings"
 
-	"github.com/harrison/conductor/internal/models"
+    "github.com/harrison/conductor/internal/models"
 )
 
 const (
@@ -36,6 +39,66 @@ func ValidateTasks(tasks []models.Task) error {
 		for _, dep := range task.DependsOn {
 			if !taskMap[dep] {
 				return fmt.Errorf("task %d (%s): depends on non-existent task %d", task.Number, task.Name, dep)
+			}
+		}
+	}
+
+	return nil
+}
+
+// ValidateFileOverlaps checks that tasks within the same wave do not modify
+// the same files. Tasks in different waves are allowed to modify the same files.
+// If any task has empty Files, validation is skipped for that wave with a warning.
+//
+// Parameters:
+//   - waves: Wave grouping from topological sort
+//   - tasks: Map of task number to task pointer for lookup
+//
+// Returns error if file overlaps detected in same wave, nil if valid.
+func ValidateFileOverlaps(waves []models.Wave, tasks map[int]*models.Task) error {
+	for _, wave := range waves {
+		tasksInWave := make([]*models.Task, 0, len(wave.TaskNumbers))
+		for _, taskNum := range wave.TaskNumbers {
+			task, exists := tasks[taskNum]
+			if !exists {
+				return fmt.Errorf("wave %q: task %d not found in dependency graph", wave.Name, taskNum)
+			}
+			tasksInWave = append(tasksInWave, task)
+		}
+
+		var missingFiles []*models.Task
+		for _, task := range tasksInWave {
+			if len(task.Files) == 0 {
+				missingFiles = append(missingFiles, task)
+			}
+		}
+
+		if len(missingFiles) > 0 {
+			switch len(missingFiles) {
+			case 1:
+				task := missingFiles[0]
+				fmt.Fprintf(os.Stderr, "Warning: wave %q skipping file overlap validation because task %d (%s) has no files configured\n", wave.Name, task.Number, task.Name)
+			default:
+				entries := make([]string, 0, len(missingFiles))
+				for _, task := range missingFiles {
+					entries = append(entries, fmt.Sprintf("%d (%s)", task.Number, task.Name))
+				}
+				fmt.Fprintf(os.Stderr, "Warning: wave %q skipping file overlap validation because tasks %s have no files configured\n", wave.Name, strings.Join(entries, ", "))
+			}
+			continue
+		}
+
+		fileOwners := make(map[string]*models.Task)
+		for _, task := range tasksInWave {
+			for _, file := range task.Files {
+				normalized := filepath.Clean(file)
+				if owner, exists := fileOwners[normalized]; exists {
+					if owner.Number == task.Number {
+						continue
+					}
+					return fmt.Errorf("wave %q: file %q is assigned to multiple tasks (%d - %s and %d - %s). Move the conflicting tasks to separate waves or adjust each task's file list so only one task can modify the file per wave.", wave.Name, normalized, owner.Number, owner.Name, task.Number, task.Name)
+				}
+				fileOwners[normalized] = task
 			}
 		}
 	}
@@ -153,7 +216,7 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 		inDegree[k] = v
 	}
 
-	for len(inDegree) > 0 {
+    for len(inDegree) > 0 {
 		// Find all tasks with in-degree 0 (current wave)
 		var currentWave []int
 		for taskNum, degree := range inDegree {
@@ -185,7 +248,16 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 				}
 			}
 		}
+    }
+
+	// Validate file overlaps in waves
+	taskMap := make(map[int]*models.Task)
+	for i := range tasks {
+		taskMap[tasks[i].Number] = &tasks[i]
+	}
+	if err := ValidateFileOverlaps(waves, taskMap); err != nil {
+		return nil, err
 	}
 
-	return waves, nil
+    return waves, nil
 }

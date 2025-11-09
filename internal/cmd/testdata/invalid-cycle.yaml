@@ -1,0 +1,19 @@
+plan:
+  metadata:
+    feature_name: "Invalid Plan with Cycle"
+  tasks:
+    - task_number: 1
+      name: "Task One"
+      files: ["file1.go"]
+      depends_on: [2]
+      description: "Depends on task 2"
+    - task_number: 2
+      name: "Task Two"
+      files: ["file2.go"]
+      depends_on: [3]
+      description: "Depends on task 3"
+    - task_number: 3
+      name: "Task Three"
+      files: ["file3.go"]
+      depends_on: [1]
+      description: "Depends on task 1 - creates cycle"
