@@ -39,38 +39,32 @@ Before installing this plugin, ensure you have:
 
 ## Installation Methods
 
-### Method 1: Clone from Repository (Recommended)
+### Method 1: Copy from Conductor Repository (Recommended)
+
+The plugin is now included in the [Conductor monorepo](https://github.com/blueman82/conductor).
 
 ```bash
-# Clone the plugin repository
-cd ~/.claude/plugins/
-git clone https://github.com/harrison/conductor-plugin.git conductor-tools
+# Clone conductor repository (if you haven't already)
+git clone https://github.com/blueman82/conductor.git
+cd conductor
+
+# Copy plugin to Claude Code plugins directory
+cp -r plugin ~/.claude/plugins/conductor-tools
 
 # Verify installation
 ls ~/.claude/plugins/conductor-tools/
 ```
 
-### Method 2: Manual Installation
+### Method 2: Direct Copy from Existing Conductor Clone
+
+If you already have Conductor cloned:
 
 ```bash
-# Download the plugin
-cd ~/.claude/plugins/
-curl -L https://github.com/harrison/conductor-plugin/archive/main.zip -o conductor-tools.zip
-unzip conductor-tools.zip
-mv conductor-plugin-main conductor-tools
+# From any directory, copy the plugin
+cp -r /path/to/conductor/plugin ~/.claude/plugins/conductor-tools
 
 # Verify installation
 ls ~/.claude/plugins/conductor-tools/
-```
-
-### Method 3: Using Claude Code Plugin Manager
-
-```bash
-# Install using Claude Code's plugin manager
-claude plugin install conductor-tools
-
-# Or with URL
-claude plugin install https://github.com/harrison/conductor-plugin
 ```
 
 ## Directory Structure
@@ -324,28 +318,20 @@ sudo chown -R $USER:$USER ~/.claude/plugins/conductor-tools/
 
 ## Updating the Plugin
 
-### Update from Git
+### Update from Conductor Repository
+
+Since the plugin is now part of the Conductor monorepo:
 
 ```bash
-cd ~/.claude/plugins/conductor-tools/
+# Update conductor repository
+cd /path/to/conductor
 git pull origin main
-```
 
-### Manual Update
+# Copy updated plugin
+cp -r plugin ~/.claude/plugins/conductor-tools
 
-```bash
-# Backup your configuration
-cp ~/.claude/plugins/conductor-tools/PLUGIN.yaml ~/conductor-tools-config-backup.yaml
-
-# Download new version
-cd ~/.claude/plugins/
-rm -rf conductor-tools/
-curl -L https://github.com/harrison/conductor-plugin/archive/main.zip -o conductor-tools.zip
-unzip conductor-tools.zip
-mv conductor-plugin-main conductor-tools
-
-# Restore configuration if needed
-cp ~/conductor-tools-config-backup.yaml ~/.claude/plugins/conductor-tools/PLUGIN.yaml
+# Verify update
+ls ~/.claude/plugins/conductor-tools/
 ```
 
 ### Check Version
@@ -391,13 +377,13 @@ Now that you have the plugin installed:
 
 - [Usage Guide](./USAGE.md) - How to use each command and skill
 - [Architecture](./ARCHITECTURE.md) - How the plugin works
-- [Conductor README](https://github.com/harrison/conductor/blob/main/README.md) - Conductor documentation
+- [Conductor README](https://github.com/blueman82/conductor/blob/main/README.md) - Conductor documentation
 
 ### Getting Help
 
-- **Issues**: https://github.com/harrison/conductor-plugin/issues
-- **Discussions**: https://github.com/harrison/conductor-plugin/discussions
-- **Conductor Issues**: https://github.com/harrison/conductor/issues
+- **Issues**: https://github.com/blueman82/conductor/issues
+- **Documentation**: See plugin docs in the conductor repository
+- **Conductor Documentation**: https://github.com/blueman82/conductor/blob/main/README.md
 
 ### Contributing
 
