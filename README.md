@@ -48,6 +48,9 @@ go build ./cmd/conductor
 
 # Verify installation
 ./conductor --version
+
+# Optional: Install the plugin for plan generation
+cp -r plugin ~/.claude/plugins/conductor-tools
 ```
 
 ### Your First Execution
@@ -199,16 +202,24 @@ plan:
 
 For complete format specifications, see [Plan Format Guide](docs/plan-format.md).
 
-## Conductor Plugin (Optional)
+## Conductor Plugin (Included)
 
-Generate implementation plans automatically using Claude Code slash commands:
+Generate implementation plans automatically using Claude Code slash commands. The plugin is included in this monorepo under the `plugin/` directory.
+
+### Installation
 
 ```bash
-# Install plugin
-cd ~/.claude/plugins
-git clone https://github.com/blueman82/conductor-plugin.git conductor-tools
+# From the conductor repository root
+cp -r plugin ~/.claude/plugins/conductor-tools
 
-# Use commands
+# Verify installation
+ls ~/.claude/plugins/conductor-tools
+```
+
+### Usage
+
+```bash
+# Use commands in Claude Code
 /doc design.md                  # Generate Markdown plan
 /doc-yaml design.md            # Generate YAML plan
 /cook-man design.md            # Interactive plan generation
