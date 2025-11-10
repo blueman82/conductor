@@ -47,9 +47,7 @@ func NewInvokerWithRegistry(registry *Registry) *Invoker {
 
 // BuildCommandArgs constructs the command-line arguments for invoking claude CLI
 func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
-	args := []string{
-		"-p", // Print mode (non-interactive)
-	}
+	args := []string{}
 
 	// Build prompt with agent reference if specified
 	prompt := task.Prompt
