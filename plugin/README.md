@@ -2,6 +2,8 @@
 
 Complete design → plan → execute workflow tools for Conductor and Claude Code.
 
+**Note**: This plugin is now part of the [Conductor monorepo](https://github.com/blueman82/conductor) and is included in the `plugin/` directory.
+
 ## What is This?
 
 A Claude Code plugin that provides everything you need for the full feature development lifecycle:
@@ -16,8 +18,11 @@ A Claude Code plugin that provides everything you need for the full feature deve
 ### Install
 
 ```bash
-cd ~/.claude/plugins/
-git clone https://github.com/harrison/conductor-plugin.git conductor-tools
+# From the conductor repository root
+cp -r plugin ~/.claude/plugins/conductor-tools
+
+# Or, if you cloned conductor elsewhere
+cp -r /path/to/conductor/plugin ~/.claude/plugins/conductor-tools
 ```
 
 ### Enable
@@ -272,13 +277,13 @@ claude "/doc Add API documentation with OpenAPI specs"
 
 ## Contributing
 
-Contributions welcome! Please:
+Contributions welcome! Please submit pull requests to the main [Conductor repository](https://github.com/blueman82/conductor):
 
-1. Fork the repository
+1. Fork the conductor repository
 2. Create a feature branch
-3. Make your changes
+3. Make your changes in the `plugin/` directory
 4. Add tests if applicable
-5. Submit a pull request
+5. Submit a pull request to the main repo
 
 ## License
 
@@ -286,13 +291,13 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/harrison/conductor-plugin/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/harrison/conductor-plugin/discussions)
-- **Conductor Issues**: [Conductor Repo](https://github.com/harrison/conductor/issues)
+- **Issues**: [GitHub Issues](https://github.com/blueman82/conductor/issues)
+- **Documentation**: See plugin docs in the conductor repo
+- **Conductor Issues**: [Conductor Repo](https://github.com/blueman82/conductor/issues)
 
 ## Links
 
-- **Conductor Repository**: https://github.com/harrison/conductor
+- **Conductor Repository**: https://github.com/blueman82/conductor
 - **Claude Code**: https://claude.ai/code
 - **Documentation**: [docs/](docs/)
 - **Examples**: [templates/](templates/)
@@ -305,7 +310,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Credits
 
-Created for use with [Conductor](https://github.com/harrison/conductor), an autonomous multi-agent orchestration CLI.
+Part of [Conductor](https://github.com/blueman82/conductor), an autonomous multi-agent orchestration CLI. This plugin is included in the conductor monorepo.
 
 ## Summary
 
