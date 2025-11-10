@@ -3730,18 +3730,19 @@ plan:
           - "docs/plan-format.md"
 
     - task_number: 25
-      letter: "A"
-      name: "Integrate File Logger with Conductor Run Command"
+      name: "Final Integration and Testing"
       files:
         - "internal/cmd/run.go"
         - "internal/executor/orchestrator.go"
         - "internal/cmd/run_test.go"
-      depends_on: [16, 18, 19]
-      estimated_time: "1h"
+        - "Various files"
+      depends_on: [16, 17, 18, 19, 22, 23, 24]
+      estimated_time: "3h"
       status: "pending"
 
       description: |
-        Integrate FileLogger with the conductor run command, allowing users to choose between console logging and file logging (or both), and ensuring logs are properly created during plan execution.
+        Run full end-to-end Conductor workflows with real implementation plans, test various error scenarios,
+        performance testing, integrate FileLogger with conductor run command, and final bug fixes/polish before release.
 
       test_first:
         test_file: "internal/cmd/run_test.go"
@@ -3754,34 +3755,40 @@ plan:
           - "TestLogsContainExecutionDetails - log content includes task results"
           - "TestLogDirFlag - --log-dir flag sets custom log directory"
           - "TestNoLogFileIfDryRun - dry-run doesn't create log files"
+          - "TestE2E_SimpleMarkdownPlan - full execution with Markdown plan"
+          - "TestE2E_SimpleYamlPlan - full execution with YAML plan"
+          - "TestE2E_FailureHandling - handle task failures gracefully"
+          - "TestE2E_ComplexDependencies - complex dependency graph execution"
+          - "TestE2E_DryRunMode - --dry-run shows plan without executing"
+          - "TestE2E_TimeoutHandling - timeout cancels remaining tasks"
+          - "TestE2E_LargePlan - performance test with many tasks"
         mocks: []
-        fixtures: []
+        fixtures:
+          - "test/integration/fixtures/simple-plan.md"
+          - "test/integration/fixtures/simple-plan.yaml"
+          - "test/integration/fixtures/with-failures.md"
+          - "test/integration/fixtures/complex-dependencies.md"
+          - "test/integration/fixtures/large-plan.md"
         assertions:
           - "Logger instance passed to Orchestrator"
           - "Log files created in .conductor/logs/"
-          - "Per-task logs created in .conductor/logs/tasks/"
+          - "Per-task logs created correctly"
           - "Symlink management works correctly"
         edge_cases:
           - "Dry-run should not create log files"
           - "Custom log directory handling"
           - "Concurrent runs with different timestamps"
-        example_skeleton: |
-          func TestRunWithFileLogger(t *testing.T) {
-              // Setup
-              cmd := &RunCmd{}
-
-              // Execute
-              err := cmd.Execute(ctx, plan)
-
-              // Verify
-              assert.NoError(t, err)
-              assert.FileExists(t, ".conductor/logs/run-*.log")
-              assert.FileExists(t, ".conductor/logs/latest.log")
-          }
 
       implementation:
         approach: |
-          Add logger support to Orchestrator constructor, modify conductor run command to instantiate FileLogger, pass logger to Orchestrator, verify logs are written during execution.
+          1. Integrate FileLogger with Orchestrator: Add logger field and parameter
+          2. Modify conductor run command to instantiate FileLogger
+          3. Pass FileLogger to Orchestrator constructor
+          4. Add --log-dir flag for custom log directory
+          5. Run comprehensive end-to-end tests with real plans
+          6. Test error scenarios and performance
+          7. Fix any remaining bugs
+          8. Polish and finalize
 
         code_structure: |
           // internal/executor/orchestrator.go
@@ -3794,6 +3801,7 @@ plan:
               return &Orchestrator{
                   plan:   plan,
                   logger: logger,
+                  // ... other fields
               }
           }
 
@@ -3808,18 +3816,18 @@ plan:
           result, err := orchestrator.Execute(ctx)
 
         key_points:
-          - point: "Logger parameter optional (nil-safe)"
-            details: "Can be nil for backward compatibility"
-          - point: "FileLogger default choice"
-            details: "Unless --console-only flag specified"
+          - point: "FileLogger integration"
+            details: "Add logger field to Orchestrator, pass FileLogger from run command"
           - point: "Log directory management"
-            details: ".conductor/logs/ with override via --log-dir"
-          - point: "Log content"
-            details: "Wave progress, task results, execution summary"
-          - point: "Per-task logs"
-            details: "In .conductor/logs/tasks/ directory"
-          - point: "Symlink management"
-            details: "latest.log always points to most recent run"
+            details: ".conductor/logs/ with override via --log-dir flag"
+          - point: "End-to-end testing"
+            details: "Run conductor on real implementation plans"
+          - point: "Error scenario testing"
+            details: "Verify graceful failure handling"
+          - point: "Performance testing"
+            details: "Check performance with various plan sizes"
+          - point: "Bug fixes and polish"
+            details: "Final cleanup and optimization"
 
         integration:
           imports:
@@ -3831,6 +3839,7 @@ plan:
           error_handling:
             - "Logger creation failures"
             - "Log write errors"
+            - "Task failure handling"
 
       verification:
         manual_testing:
@@ -3846,98 +3855,37 @@ plan:
           - step: "Custom log directory"
             command: "./conductor run docs/plans/test-plan.md --log-dir /custom/logs"
             expected: "Logs created in custom directory"
+          - step: "Dry-run mode"
+            command: "./conductor run docs/plans/test-plan.md --dry-run"
+            expected: "Plan shown without execution, no logs created"
 
         automated_tests:
-          command: "go test ./internal/cmd/ -v -run TestRun"
+          command: "go test ./... -v"
           expected_output: |
-            All tests passing with proper logger integration
+            All tests passing with >78% coverage
 
         success_criteria:
           - "FileLogger integrated with run command"
           - "Log files created during execution"
           - "Per-task logs created correctly"
           - "Symlink updated on each run"
-          - "All tests pass"
-          - "Logs contain expected content"
+          - "End-to-end tests pass"
+          - "Error scenarios handled gracefully"
+          - "Performance acceptable"
+          - "All tests pass with >78% coverage"
+          - "No known bugs"
+          - "Code ready for public release"
 
       commit:
-        type: "feat"
-        message: "integrate file logger with conductor run command"
+        type: "feat/chore"
+        message: "final integration and testing with logger integration"
         body: ""
         files:
           - "internal/cmd/run.go"
           - "internal/executor/orchestrator.go"
           - "internal/cmd/run_test.go"
-
-    - task_number: 25
-      name: "Final Integration and Testing"
-      files:
-        - "Various files"
-      depends_on: [22, 23, 24, "25A"]
-      estimated_time: "2h"
-      status: "pending"
-
-      description: |
-        Run full orchestration with real plans, test error scenarios, performance testing,
-        bug fixes and polish.
-
-      test_first:
-        test_file: "N/A"
-        structure:
-          - "Tests to be defined during implementation"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          // To be defined during implementation
-
-      implementation:
-        approach: |
-          Run conductor on real implementation plans, test various scenarios,
-          identify and fix bugs, performance optimization if needed.
-
-        code_structure: |
-          // To be defined during implementation
-
-        key_points:
-          - point: "Run full orchestration with real plans"
-            details: "End-to-end testing with real data"
-          - point: "Test error scenarios"
-            details: "Verify error handling"
-          - point: "Performance testing"
-            details: "Check performance characteristics"
-          - point: "Bug fixes and polish"
-            details: "Final cleanup and fixes"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
-
-      verification:
-        manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            Tests passing
-
-        success_criteria:
-          - "Full orchestration works"
-          - "All scenarios tested"
-          - "Performance acceptable"
-          - "No critical bugs"
-
-      commit:
-        type: "chore"
-        message: "final integration and testing"
-        body: ""
-        files:
-          - "Various files"
+          - "test/integration/orchestrator_test.go"
+          - "Various files (bug fixes and polish)"
 
     # Phase 2A: Multi-File Plan Support & Objective Plan Splitting
     - task_number: 26

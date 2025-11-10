@@ -3968,22 +3968,32 @@ Write comprehensive documentation including installation instructions, usage exa
 
 ---
 
-## Task 25A: Integrate File Logger with Conductor Run Command
+## Task 25: Final Integration and Testing
 
 **Status**: pending
-**File(s)**: `internal/cmd/run.go`, `internal/executor/orchestrator.go`, `internal/cmd/run_test.go`
-**Depends on**: Tasks 16, 18, 19
-**Estimated time**: 1h
+**File(s)**: `internal/cmd/run.go`, `internal/executor/orchestrator.go`, `internal/cmd/run_test.go`, Various (bug fixes)
+**Depends on**: Tasks 16, 17, 18, 19, 22, 23, 24
+**Estimated time**: 3h
 
 ### What you're building
 
-Integrate FileLogger with the conductor run command, allowing users to choose between console logging and file logging (or both), and ensuring logs are properly created during plan execution.
+Run full end-to-end Conductor workflows with real implementation plans, test various error scenarios, performance testing, integrate FileLogger with conductor run command, and final bug fixes/polish before release.
 
-### Test First (TDD)
+### What to Test
 
-**Test file**: `internal/cmd/run_test.go`
+1. **Real Plan Execution**: Run conductor on actual implementation plans
+2. **Error Scenarios**: Task failures, timeout scenarios, invalid inputs
+3. **Performance**: Measure execution time for various plan sizes
+4. **Stability**: Long-running executions, stress testing
+5. **Documentation**: Verify all examples work correctly
+6. **FileLogger Integration**: Verify logs are created and contain correct content
+7. **Logger Configuration**: Test custom log directory, symlink management
 
-**Test structure**:
+### FileLogger Integration Requirements
+
+Add FileLogger integration to conductor run command:
+
+**Test First (TDD)**:
 ```
 TestRunWithFileLogger - executor uses FileLogger for logging
 TestRunWithConsoleLogger - executor uses ConsoleLogger for logging
@@ -3995,19 +4005,17 @@ TestLogDirFlag - --log-dir flag sets custom log directory
 TestNoLogFileIfDryRun - dry-run doesn't create log files
 ```
 
-**Test specifics**:
-- Test that Orchestrator receives logger instance
-- Test log file creation in .conductor/logs/
-- Test per-task log files are created
-- Test symlink management
-- Test flag handling for logger selection
+**Implementation**:
+- Add logger field to Orchestrator struct
+- Modify Orchestrator constructor to accept Logger parameter
+- Update conductor run command to instantiate FileLogger
+- Pass FileLogger to Orchestrator
+- Add --log-dir flag to run command for custom log directory
+- Ensure logs include wave progress, task results, execution summary
+- Create per-task logs in .conductor/logs/tasks/ directory
+- Manage latest.log symlink for easy access to most recent run
 
-### Implementation
-
-**Approach**:
-Add logger support to Orchestrator constructor, modify `conductor run` command to instantiate FileLogger, pass logger to Orchestrator, verify logs are written during execution.
-
-**Code structure**:
+**Code Changes**:
 ```go
 // internal/executor/orchestrator.go
 type Orchestrator struct {
@@ -4015,92 +4023,24 @@ type Orchestrator struct {
     logger Logger  // Add logger field
 }
 
-// Modify constructor
 func NewOrchestrator(plan *Plan, logger Logger) *Orchestrator {
     return &Orchestrator{
         plan:   plan,
-        logger: logger,  // Store logger
+        logger: logger,
         // ... other fields
     }
 }
 
 // internal/cmd/run.go
-// Add logger instantiation
 fileLogger, err := logger.NewFileLogger()
 if err != nil {
     return fmt.Errorf("failed to create logger: %w", err)
 }
 defer fileLogger.Close()
 
-// Pass to orchestrator
 orchestrator := executor.NewOrchestrator(plan, fileLogger)
 result, err := orchestrator.Execute(ctx)
 ```
-
-**Key points**:
-- Logger parameter optional (can be nil for backward compatibility)
-- FileLogger default unless --console-only flag specified
-- Log directory: `.conductor/logs/` (can override with --log-dir)
-- Logs include wave progress, task results, execution summary
-- Per-task logs in `.conductor/logs/tasks/` directory
-- latest.log symlink always points to most recent run
-
-### Verification
-
-**Manual testing**:
-```bash
-# Run with file logging (default)
-./conductor run docs/plans/test-plan.md
-ls -la .conductor/logs/
-cat .conductor/logs/latest.log
-
-# Run with custom log directory
-./conductor run docs/plans/test-plan.md --log-dir /custom/logs
-
-# Verify per-task logs
-ls -la .conductor/logs/tasks/
-cat .conductor/logs/tasks/task-1.log
-```
-
-**Automated tests**:
-```bash
-go test ./internal/cmd/ -v -run TestRun
-```
-
-**Success criteria**:
-- FileLogger integrated with run command
-- Log files created during execution
-- Per-task logs created correctly
-- Symlink updated on each run
-- All tests pass
-- Logs contain expected content
-
-### Commit
-
-**Type**: feat
-**Message**: integrate file logger with conductor run command
-**Files**: internal/cmd/run.go, internal/executor/orchestrator.go, internal/cmd/run_test.go
-
----
-
-## Task 25: Final Integration and Testing
-
-**Status**: pending
-**File(s)**: Various
-**Depends on**: Tasks 22, 23, 24, 25A
-**Estimated time**: 2h
-
-### What you're building
-
-Run full end-to-end Conductor workflows with real implementation plans, test various error scenarios, performance testing, and final bug fixes/polish before release.
-
-### What to Test
-
-1. **Real Plan Execution**: Run conductor on actual implementation plans
-2. **Error Scenarios**: Task failures, timeout scenarios, invalid inputs
-3. **Performance**: Measure execution time for various plan sizes
-4. **Stability**: Long-running executions, stress testing
-5. **Documentation**: Verify all examples work correctly
 
 ### Final Verification Checklist
 
@@ -4111,6 +4051,11 @@ Run full end-to-end Conductor workflows with real implementation plans, test var
 - [ ] Parallel tasks execute concurrently
 - [ ] File updates are atomic
 - [ ] Logs are comprehensive and useful
+- [ ] FileLogger integrated with run command
+- [ ] Log files created in .conductor/logs/
+- [ ] Per-task logs created correctly
+- [ ] latest.log symlink works
+- [ ] Custom log directory flag works
 - [ ] Error messages are clear
 - [ ] Documentation examples work
 - [ ] Build succeeds on clean checkout
@@ -4119,7 +4064,7 @@ Run full end-to-end Conductor workflows with real implementation plans, test var
 
 ### Implementation
 
-Fix any remaining bugs discovered during comprehensive testing, optimize performance if needed, ensure all features work together seamlessly.
+Integrate FileLogger with conductor run command, fix any remaining bugs discovered during comprehensive testing, optimize performance if needed, ensure all features work together seamlessly.
 
 ### Success Criteria
 
@@ -4132,9 +4077,9 @@ Fix any remaining bugs discovered during comprehensive testing, optimize perform
 
 ### Commit
 
-**Type**: chore
-**Message**: final integration and testing
-**Files**: Various (bug fixes and polish)
+**Type**: feat/chore
+**Message**: final integration and testing with logger integration
+**Files**: internal/cmd/run.go, internal/executor/orchestrator.go, internal/cmd/run_test.go, Various (bug fixes and polish)
 
 ---
 
