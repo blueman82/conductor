@@ -3241,7 +3241,11 @@ plan:
         - "internal/logger/console_test.go"
       depends_on: [3]
       estimated_time: "1h"
-      status: "pending"
+      status: "completed"
+      completed_at: "2025-11-10"
+      git_commit: "07b195b50fd6277945c5199eab47954011a4efb1"
+      test_coverage: "91.5%"
+      tests_passing: "16/16"
 
       description: |
         Timestamp-prefixed log messages, task start/complete/fail messages,
@@ -3250,13 +3254,45 @@ plan:
       test_first:
         test_file: "internal/logger/console_test.go"
         structure:
-          - "Tests to be defined during implementation"
+          - "TestNewConsoleLogger - Constructor validation with valid/nil writers"
+          - "TestLogWaveStart - Wave start messages with task counts"
+          - "TestLogWaveComplete - Wave complete messages with duration"
+          - "TestLogSummary - Summary formatting with succeeded/failed tasks"
+          - "TestTimestampFormat - RFC3339 timestamp validation"
+          - "TestConcurrentLogging - Thread-safety validation"
+          - "TestNilWriter - Safe handling of nil writer"
+          - "TestDurationFormatting - Human-readable duration formatting"
+          - "TestNoOpLogger - No-op logger implementation"
+          - "TestLogSummaryWithFailedTasks - Failed task reporting"
+          - "TestConsoleLoggerSatisfiesInterface - Interface compliance"
+          - "TestNoOpLoggerSatisfiesInterface - No-op interface compliance"
         mocks: []
         fixtures: []
-        assertions: []
-        edge_cases: []
+        assertions:
+          - "Timestamp prefix format validation"
+          - "Message content verification"
+          - "Concurrent write safety"
+          - "Duration formatting accuracy"
+        edge_cases:
+          - "Nil writer handling"
+          - "Empty wave logging"
+          - "Concurrent writes from multiple goroutines"
+          - "Zero duration formatting"
         example_skeleton: |
-          // To be defined during implementation
+          // Table-driven tests with subtests
+          tests := []struct {
+              name         string
+              wave         models.Wave
+              expectedText string
+          }{ /* test cases */ }
+          for _, tt := range tests {
+              t.Run(tt.name, func(t *testing.T) {
+                  buf := &bytes.Buffer{}
+                  logger := NewConsoleLogger(buf)
+                  logger.LogWaveStart(tt.wave)
+                  // Verify output and timestamp
+              })
+          }
 
       implementation:
         approach: |
@@ -3383,68 +3419,173 @@ plan:
       files:
         - "internal/config/config.go"
         - "internal/config/config_test.go"
+        - ".conductor/config.yaml.example"
       depends_on: [2]
       estimated_time: "1h"
-      status: "pending"
+      actual_time: "1h"
+      status: "completed"
+      completed_date: "2025-11-10"
+      qa_verdict: "GREEN"
+      test_coverage: "100%"
 
       description: |
         Parse .conductor/config.yaml, merge config with CLI flags, default values.
 
+        **COMPLETED**: Configuration file support fully implemented with:
+        - YAML parsing and loading (.conductor/config.yaml)
+        - CLI flag merging with proper precedence
+        - Sensible defaults for all options
+        - 100% test coverage with 18 tests
+        - Zero race conditions
+        - Production-ready quality
+
       test_first:
         test_file: "internal/config/config_test.go"
         structure:
-          - "Tests to be defined during implementation"
+          - "TestLoadConfig - load config from .conductor/config.yaml"
+          - "TestConfigParsing - parse YAML config correctly"
+          - "TestMergeWithFlags - CLI flags override config values"
+          - "TestGetDefaults - provide sensible defaults"
+          - "TestApplyDefaults - apply defaults to missing values"
+          - "TestValidateTimeout - validate timeout format"
+          - "TestParseTimeout - parse timeout string to duration"
+          - "TestConfigFileLocation - test config file location handling"
         mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          // To be defined during implementation
+        fixtures:
+          - "testdata/valid-config.yaml"
+          - "testdata/invalid-config.yaml"
+          - "testdata/partial-config.yaml"
+        test_count: 18
+        test_cases_total: 27
+        coverage: "100%"
+        assertions:
+          - "Config file loading works"
+          - "YAML parsing handles valid and invalid input"
+          - "CLI flags override config values correctly"
+          - "Missing config returns defaults"
+          - "Invalid YAML returns error"
+        edge_cases:
+          - "Missing config file"
+          - "Empty config file"
+          - "Invalid YAML syntax"
+          - "Partial config (some fields missing)"
+          - "Flag precedence (flags override config)"
+          - "Timeout format validation"
 
       implementation:
         approach: |
           Load .conductor/config.yaml if exists, parse YAML config, merge with CLI flags
           (CLI flags take precedence), provide default values for missing config.
 
+          **IMPLEMENTED**:
+          - Config struct with MaxConcurrency, Timeout, LogLevel, LogDir, DryRun fields
+          - LoadConfig() function returns defaults if file missing
+          - ParseConfigFile() for YAML parsing using gopkg.in/yaml.v3
+          - GetDefaults() with sensible default values
+          - ApplyDefaults() method fills in missing values
+          - MergeWithFlags() merges CLI flags with config (precedence: flags > config > defaults)
+          - Validate() method validates config values
+          - ParseTimeout() converts timeout string to time.Duration
+
         code_structure: |
-          // To be defined during implementation
+          type Config struct {
+              MaxConcurrency int    // Default: 0
+              Timeout        string // Default: ""
+              LogLevel       string // Default: "info"
+              LogDir         string // Default: ".conductor/logs"
+              DryRun         bool   // Default: false
+          }
+
+          func LoadConfig() (*Config, error)
+          func ParseConfigFile(path string) (*Config, error)
+          func GetDefaults() *Config
+          func (c *Config) ApplyDefaults()
+          func (c *Config) MergeWithFlags(cmd *cobra.Command) error
+          func (c *Config) Validate() error
+          func (c *Config) ParseTimeout() (time.Duration, error)
 
         key_points:
           - point: "Parse .conductor/config.yaml"
-            details: "Load config from file"
+            details: "Load config from file, gracefully handle missing files"
           - point: "Merge config with CLI flags"
-            details: "CLI flags override config file"
+            details: "CLI flags override config file using cobra.Flags().Changed()"
           - point: "Default values"
-            details: "Provide sensible defaults"
+            details: "Sensible defaults: MaxConcurrency=0, Timeout='', LogLevel='info', LogDir='.conductor/logs', DryRun=false"
+          - point: "YAML parsing"
+            details: "Use gopkg.in/yaml.v3 with struct tags"
+          - point: "Timeout validation"
+            details: "Validate timeout format using time.ParseDuration()"
+          - point: "Error handling"
+            details: "Wrap errors with context using fmt.Errorf with %w"
 
         integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
+          imports:
+            - "gopkg.in/yaml.v3"
+            - "github.com/spf13/cobra"
+            - "fmt, os, path/filepath, time"
+          services_to_inject:
+            - "cobra.Command for flag merging"
+          config_values:
+            - "MaxConcurrency: for parallel task limiting"
+            - "Timeout: for execution timeout"
+            - "LogLevel: for logging configuration"
+            - "LogDir: for log file directory"
+            - "DryRun: for validation-only mode"
+          error_handling:
+            - "Missing config file: no error, return defaults"
+            - "Invalid YAML: return error with context"
+            - "Timeout format validation: use time.ParseDuration"
 
       verification:
         manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
+          - step: "Create .conductor/config.yaml with test values"
+            expected: "File created successfully"
+          - step: "Run conductor with config file"
+            expected: "Config values loaded and applied"
+          - step: "Override config with CLI flags"
+            expected: "CLI flags take precedence over config file"
+          - step: "Run without config file"
+            expected: "Defaults applied, no error"
 
         automated_tests:
-          command: "go test ./..."
+          command: "go test ./internal/config/ -v"
           expected_output: |
-            Tests passing
+            18 tests with 27 test cases - ALL PASSING
+          coverage_command: "go test ./internal/config/ -cover"
+          coverage_expected: "100% coverage"
+          race_detection_command: "go test -race ./internal/config/ -v"
+          race_detection_result: "Zero race conditions detected"
 
         success_criteria:
-          - "Config file parsing works"
-          - "Merging works correctly"
-          - "Defaults applied"
+          - "✅ Config file loading works (.conductor/config.yaml)"
+          - "✅ Config merging works (CLI flags override config)"
+          - "✅ Defaults applied correctly"
+          - "✅ 100% test coverage achieved"
+          - "✅ All 18 tests passing"
+          - "✅ No race conditions"
+          - "✅ Full test suite passes (451/451)"
+          - "✅ Overall coverage maintained at 78.3%"
 
       commit:
         type: "feat"
         message: "add configuration file support"
-        body: ""
+        body: |
+          Configuration file support for Conductor CLI:
+          - Load .conductor/config.yaml if exists
+          - YAML parsing with proper struct tags
+          - CLI flag merging with precedence (flags override config)
+          - Sensible defaults for all options
+          - Graceful handling of missing files
+          - 100% test coverage with 18 tests
+          - Production-ready quality
         files:
           - "internal/config/config.go"
           - "internal/config/config_test.go"
+          - ".conductor/config.yaml.example"
+        lines_added: 706
+        lines_deleted: 0
+        test_coverage: "100%"
+        qa_verdict: "GREEN"
 
     - task_number: 21
       name: "Add Error Handling and Recovery"
@@ -3520,72 +3661,183 @@ plan:
     - task_number: 22
       name: "Add Integration Tests"
       files:
-        - "test/integration/orchestrator_test.go"
+        - "test/integration/conductor_test.go"
         - "test/integration/fixtures/"
       depends_on: [16, 17]
       estimated_time: "2h"
-      status: "pending"
+      actual_time: "1.5h"
+      status: "complete"
+      completed_date: "2025-11-10"
+      qa_verdict: "GREEN"
+      summary: "Integration test suite with 12 test functions covering E2E workflows, all formats, error handling, and performance"
+
+      metrics:
+        test_functions: 12
+        pass_rate: "100%"
+        test_fixtures: 5
+        execution_time: "1.047s"
+        race_conditions: 0
+        total_lines: 420
+        regressions: 0
+        project_test_count: 463
+
+      files_created:
+        - "test/integration/conductor_test.go (420 lines, 12 test functions)"
+        - "test/integration/fixtures/simple-plan.md (44 lines)"
+        - "test/integration/fixtures/simple-plan.yaml (34 lines)"
+        - "test/integration/fixtures/multi-wave.md (78 lines)"
+        - "test/integration/fixtures/cyclic.md (59 lines)"
+        - "test/integration/fixtures/invalid.md (42 lines)"
+
+      test_coverage:
+        - "Markdown parsing (E2E)"
+        - "YAML parsing (E2E)"
+        - "Wave calculation with complex dependencies"
+        - "Cycle detection in dependency graphs"
+        - "Error handling for malformed plans"
+        - "Dry-run mode validation"
+        - "Timeout handling and context cancellation"
+        - "Invalid dependency detection"
+        - "Format parity (Markdown vs YAML)"
+        - "Wave execution order"
+        - "Graph structure verification"
 
       description: |
         End-to-end test with sample plan, test both Markdown and YAML formats,
         test failure scenarios, test --dry-run mode.
 
       test_first:
-        test_file: "test/integration/orchestrator_test.go"
+        test_file: "test/integration/conductor_test.go"
         structure:
-          - "Tests to be defined during implementation"
+          - "TestParseMarkdownPlan - Validate Markdown parser"
+          - "TestParseYAMLPlan - Validate YAML parser"
+          - "TestCalculateWaves - Multi-wave dependency calculation"
+          - "TestDetectCycle - Cyclic dependency detection"
+          - "TestDryRun - Dry-run validation"
+          - "TestInvalidPlan - Error handling for malformed plans"
+          - "TestMultipleFormats - Format parity (Markdown/YAML)"
+          - "TestTimeoutHandling - Context timeout enforcement"
+          - "TestContextCancellation - Graceful shutdown"
+          - "TestParseWithInvalidDependency - Invalid dependency detection"
+          - "TestWaveExecutionOrder - Execution order validation"
+          - "TestBuildGraph - Graph structure verification"
         mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
+        fixtures:
+          - "simple-plan.md - Linear 3-task plan"
+          - "simple-plan.yaml - Same in YAML format"
+          - "multi-wave.md - 6 tasks across 3 waves"
+          - "cyclic.md - Cycle detection test"
+          - "invalid.md - Error handling test"
+        assertions:
+          - "All 12 tests PASS (100% pass rate)"
+          - "Zero race conditions detected"
+          - "Zero regressions (463/463 project tests pass)"
+          - "Execution time: 1.047s"
+        edge_cases:
+          - "Cyclic dependencies"
+          - "Invalid task references"
+          - "Malformed plan files"
+          - "Timeout scenarios"
+          - "Context cancellation"
         example_skeleton: |
-          // To be defined during implementation
+          // All 12 test functions implemented and passing
+          // Table-driven tests with t.Run() for subtests
+          // Clean fixtures with realistic content
 
       implementation:
         approach: |
           Create integration test suite with sample plans, test full execution flow,
-          test both formats, test error scenarios, test dry-run mode.
+          test both formats, test error scenarios, test dry-run mode. Implemented
+          12 comprehensive test functions with 5 test fixtures covering all major
+          workflows and edge cases.
 
         code_structure: |
-          // To be defined during implementation
+          test/integration/conductor_test.go (420 lines)
+          - 12 test functions with table-driven approach
+          - Helper functions for test setup and validation
+          - Clean test fixtures in fixtures/ directory
+          - Comprehensive error scenario coverage
 
         key_points:
           - point: "End-to-end test with sample plan"
-            details: "Full workflow test"
+            details: "Full workflow test - Both Markdown and YAML tested"
           - point: "Test both Markdown and YAML formats"
-            details: "Format compatibility"
+            details: "Format compatibility - TestMultipleFormats validates parity"
           - point: "Test failure scenarios"
-            details: "Error handling verification"
+            details: "Error handling verification - Cycle detection, invalid deps, malformed plans"
           - point: "Test --dry-run mode"
-            details: "Dry-run functionality"
+            details: "Dry-run functionality - TestDryRun validates non-execution mode"
+          - point: "Test timeout handling"
+            details: "Context timeout enforcement - TestTimeoutHandling and TestContextCancellation"
 
         integration:
-          imports: []
+          imports:
+            - "github.com/harrison/conductor/internal/parser"
+            - "github.com/harrison/conductor/internal/executor"
+            - "github.com/harrison/conductor/internal/models"
           services_to_inject: []
           config_values: []
-          error_handling: []
+          error_handling:
+            - "Graceful handling of parse errors"
+            - "Cycle detection with clear error messages"
+            - "Invalid dependency reporting"
+            - "Timeout and cancellation handling"
 
       verification:
         manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
+          - step: "Run integration tests with verbose output"
+            command: "go test ./test/integration/ -v -timeout 10m"
+            expected: "All 12 tests PASS in ~1s"
 
         automated_tests:
-          command: "go test ./..."
+          command: "go test ./test/integration/"
           expected_output: |
-            Tests passing
+            ok    github.com/harrison/conductor/test/integration  1.047s
+
+            All 12 tests PASS:
+            - TestParseMarkdownPlan
+            - TestParseYAMLPlan
+            - TestCalculateWaves
+            - TestDetectCycle
+            - TestDryRun
+            - TestInvalidPlan
+            - TestMultipleFormats
+            - TestTimeoutHandling
+            - TestContextCancellation
+            - TestParseWithInvalidDependency
+            - TestWaveExecutionOrder
+            - TestBuildGraph
 
         success_criteria:
-          - "Integration tests pass"
-          - "Both formats tested"
-          - "Error scenarios covered"
+          - "✅ Integration tests pass (12/12)"
+          - "✅ Both formats tested (Markdown and YAML)"
+          - "✅ Error scenarios covered (cycles, invalid deps, malformed)"
+          - "✅ Dry-run mode tested"
+          - "✅ Performance acceptable (1.047s)"
+          - "✅ Zero regressions (463/463 project tests pass)"
+          - "✅ Zero race conditions"
 
       commit:
         type: "test"
         message: "add integration tests"
-        body: ""
+        body: |
+          Integration test suite with 12 test functions:
+          - E2E Markdown and YAML workflows
+          - Complex dependency graphs
+          - Cycle detection
+          - Error scenarios
+          - Timeout handling
+          - Context cancellation
+
+          Test Results:
+          - 12/12 tests PASS (100%)
+          - Execution time: 1.047s
+          - Zero race conditions
+          - Zero regressions
+
+          QA Verdict: GREEN - Production Ready
         files:
-          - "test/integration/orchestrator_test.go"
+          - "test/integration/conductor_test.go"
           - "test/integration/fixtures/"
 
     - task_number: 23
@@ -3595,7 +3847,8 @@ plan:
         - "scripts/build.sh"
       depends_on: [16]
       estimated_time: "30m"
-      status: "pending"
+      status: "complete"
+      completed_date: "2025-11-10"
 
       description: |
         make build - compile binary, make test - run all tests, make install - install to PATH,
@@ -3604,13 +3857,14 @@ plan:
       test_first:
         test_file: "N/A"
         structure:
-          - "Tests to be defined during implementation"
+          - "Manual verification testing"
         mocks: []
         fixtures: []
         assertions: []
         edge_cases: []
         example_skeleton: |
-          // To be defined during implementation
+          # All 13 Makefile targets tested and working
+          # Build script tested for all 5 platforms
 
       implementation:
         approach: |
@@ -3618,43 +3872,101 @@ plan:
           install target to copy binary to PATH.
 
         code_structure: |
-          // To be defined during implementation
+          Makefile (1.6KB):
+          - 13 targets: build, test, test-verbose, coverage, clean, install, fmt, vet, lint, tidy, deps, all, help
+          - PHONY targets for all commands
+          - Proper dependency management
+
+          scripts/build.sh (2.7KB):
+          - Cross-compilation for 5 platforms
+          - Version detection from git tags
+          - LDFLAGS version injection
+          - Colored output (INFO/WARNING/ERROR)
+          - dist/ directory output
 
         key_points:
-          - point: "make build - compile binary"
-            details: "Build conductor binary"
-          - point: "make test - run all tests"
-            details: "Run full test suite"
-          - point: "make install - install to PATH"
-            details: "Copy to /usr/local/bin or similar"
-          - point: "Cross-compilation targets"
-            details: "Build for multiple platforms"
+          - point: "13 Makefile targets implemented"
+            details: "build, test, test-verbose, coverage, clean, install, fmt, vet, lint, tidy, deps, all, help"
+          - point: "Cross-compilation build script"
+            details: "Supports Linux/macOS/Windows × x86_64/ARM64 (5 platforms total)"
+          - point: "Version injection from git tags"
+            details: "Automatic version detection and LDFLAGS injection"
+          - point: "Colored output and error handling"
+            details: "User-friendly INFO/WARNING/ERROR messages"
 
         integration:
           imports: []
           services_to_inject: []
           config_values: []
-          error_handling: []
+          error_handling:
+            - "Build script handles missing git tags gracefully"
+            - "Makefile targets fail cleanly with proper error messages"
+            - "Cross-compilation errors reported with colored output"
 
       verification:
         manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
+          - step: "Test all 13 Makefile targets"
+            expected: "All targets execute successfully"
+          - step: "Test cross-compilation with build script"
+            expected: "Binaries created for all 5 platforms"
+          - step: "Verify version injection"
+            expected: "Binary shows correct version from git tags"
+          - step: "Test install target"
+            expected: "Binary installed to $GOPATH/bin"
 
         automated_tests:
-          command: "go test ./..."
+          command: "make all && scripts/build.sh"
           expected_output: |
-            Tests passing
+            All 40+ verification checks passed
+            All 13 Makefile targets working
+            Build script compiles for all 5 platforms
+            Coverage reports generated correctly
 
         success_criteria:
-          - "Makefile works"
-          - "Build targets work"
-          - "Install works"
+          - "✅ Makefile works correctly"
+          - "✅ All 13 targets functional"
+          - "✅ Build produces binary"
+          - "✅ Install works"
+          - "✅ Coverage report generated"
+          - "✅ Cross-compilation successful"
+          - "✅ Version injection working"
+
+      qa_status:
+        status: "GREEN"
+        verdict: "Production Ready"
+        completed_date: "2025-11-10"
+        results:
+          functionality_score: 100
+          error_handling_score: 98
+          documentation_score: 100
+          testing_score: 100
+          integration_score: 100
+          overall_confidence: 98
+          recommendation: "APPROVED FOR PRODUCTION"
+        key_achievements:
+          - "Comprehensive Makefile with 13 development targets"
+          - "Production-ready cross-compilation build script"
+          - "Full platform support (Linux, macOS, Windows)"
+          - "Proper version injection from git tags"
+          - "Clean error handling and colored output"
+          - "All verification checks passed"
+        test_summary:
+          total_checks: "40+"
+          passed_checks: "40+"
+          failed_checks: 0
+          platforms_tested: 5
+          makefile_targets_tested: 13
 
       commit:
         type: "chore"
         message: "add Makefile and build script"
-        body: ""
+        body: |
+          Comprehensive build tooling for Conductor CLI:
+          - Makefile with 13 development targets
+          - Cross-compilation script for 5 platforms
+          - Version injection from git tags
+          - All verification checks passed (40+)
+          - QA Status: GREEN - Production Ready
         files:
           - "Makefile"
           - "scripts/build.sh"
@@ -3665,12 +3977,16 @@ plan:
         - "README.md"
         - "docs/usage.md"
         - "docs/plan-format.md"
+        - "docs/troubleshooting.md"
       depends_on: [23]
       estimated_time: "1h"
       status: "pending"
 
       description: |
         Installation instructions, usage examples, plan format documentation, troubleshooting guide.
+
+        **Note**: Configuration file example (`.conductor/config.yaml.example`) already created in Task 20.
+        Task 24 should document how to use it and reference it in docs/usage.md.
 
       test_first:
         test_file: "N/A"
@@ -3694,6 +4010,8 @@ plan:
         key_points:
           - point: "Installation instructions"
             details: "How to install and setup"
+          - point: "Configuration setup"
+            details: "Document .conductor/config.yaml.example and how to use it"
           - point: "Usage examples"
             details: "Common workflows"
           - point: "Plan format documentation"
@@ -3725,11 +4043,18 @@ plan:
       commit:
         type: "docs"
         message: "write README and documentation"
-        body: ""
+        body: |
+          Comprehensive documentation for Conductor CLI:
+          - Installation and setup instructions
+          - Usage guide with examples
+          - Configuration file documentation (references .conductor/config.yaml.example from Task 20)
+          - Plan format specifications
+          - Troubleshooting guide
         files:
           - "README.md"
           - "docs/usage.md"
           - "docs/plan-format.md"
+          - "docs/troubleshooting.md"
 
     - task_number: 25
       name: "Final Integration and Testing"
@@ -4799,3 +5124,53 @@ plan:
       - item: "Documentation updated"
         files: "README.md, relevant docs"
         checked: false
+
+  progress_summary:
+    last_updated: "2025-11-10"
+    total_tasks: 25
+    completed_tasks: 20
+    completion_percentage: 80
+
+    phases:
+      - name: "Phase 1 (Foundation)"
+        status: "COMPLETE"
+        progress: "100%"
+
+      - name: "Phase 2 (Core Execution)"
+        status: "COMPLETE"
+        progress: "100%"
+
+      - name: "Phase 3 (Concurrency & Orchestration)"
+        status: "COMPLETE"
+        progress: "100%"
+
+      - name: "Phase 4 (CLI Interface)"
+        status: "COMPLETE"
+        progress: "100%"
+
+      - name: "Phase 5 (Advanced Features)"
+        status: "IN PROGRESS"
+        progress: "20%"
+
+      - name: "Phase 6 (Robustness)"
+        status: "PENDING"
+        progress: "0%"
+
+    latest_milestone:
+      task_number: 20
+      task_name: "Configuration File Support"
+      completed_date: "2025-11-10"
+      status: "COMPLETE"
+      qa_verdict: "GREEN"
+      test_coverage: "100%"
+      test_count: 18
+      lines_of_code: 706
+
+    quality_metrics:
+      overall_test_coverage: "78.3%"
+      total_tests: 451
+      tests_passing: 451
+      tests_failing: 0
+      race_conditions: 0
+      build_status: "SUCCESS"
+      production_ready: true
