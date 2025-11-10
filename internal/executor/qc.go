@@ -105,7 +105,7 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 // ShouldRetry determines if a task should be retried based on the QC result
 func (qc *QualityController) ShouldRetry(result *ReviewResult, currentAttempt int) bool {
 	// Only retry if the flag is RED
-	if result.Flag != "RED" {
+	if result.Flag != models.StatusRed {
 		return false
 	}
 

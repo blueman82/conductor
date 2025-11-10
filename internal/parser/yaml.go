@@ -29,14 +29,14 @@ type yamlPlan struct {
 
 // yamlTask represents a single task in the YAML plan
 type yamlTask struct {
-	TaskNumber    int      `yaml:"task_number"`
-	Name          string   `yaml:"name"`
-	Files         []string `yaml:"files"`
-	DependsOn     []int    `yaml:"depends_on"`
-	EstimatedTime string   `yaml:"estimated_time"`
-	Agent         string   `yaml:"agent"`
-	Status        string   `yaml:"status"`
-	Description   string   `yaml:"description"`
+	TaskNumber    interface{} `yaml:"task_number"` // Accepts int, float, or string
+	Name          string      `yaml:"name"`
+	Files         []string    `yaml:"files"`
+	DependsOn     []interface{} `yaml:"depends_on"` // Accepts int, float, or string
+	EstimatedTime string      `yaml:"estimated_time"`
+	Agent         string      `yaml:"agent"`
+	Status        string      `yaml:"status"`
+	Description   string      `yaml:"description"`
 	TestFirst     struct {
 		TestFile        string   `yaml:"test_file"`
 		Structure       []string `yaml:"structure"`
@@ -121,12 +121,26 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 	}
 
 	// Convert YAML tasks to models.Task
-	for _, yt := range yp.Plan.Tasks {
+	for i, yt := range yp.Plan.Tasks {
+		taskNum, err := convertToString(yt.TaskNumber)
+		if err != nil {
+			return nil, fmt.Errorf("task %d: invalid task_number: %w", i+1, err)
+		}
+
+		dependsOn := make([]string, 0, len(yt.DependsOn))
+		for j, dep := range yt.DependsOn {
+			depStr, err := convertToString(dep)
+			if err != nil {
+				return nil, fmt.Errorf("task %s: invalid depends_on[%d]: %w", taskNum, j, err)
+			}
+			dependsOn = append(dependsOn, depStr)
+		}
+
 		task := models.Task{
-			Number:    yt.TaskNumber,
+			Number:    taskNum,
 			Name:      yt.Name,
 			Files:     yt.Files,
-			DependsOn: yt.DependsOn,
+			DependsOn: dependsOn,
 			Agent:     yt.Agent,
 		}
 
@@ -144,6 +158,36 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 	}
 
 	return plan, nil
+}
+
+// convertToString converts interface{} to string, supporting int, float, and string types
+func convertToString(val interface{}) (string, error) {
+	if val == nil {
+		return "", fmt.Errorf("value is nil")
+	}
+
+	switch v := val.(type) {
+	case string:
+		return v, nil
+	case int:
+		return fmt.Sprintf("%d", v), nil
+	case int64:
+		return fmt.Sprintf("%d", v), nil
+	case float64:
+		// Check if it's a whole number
+		if v == float64(int64(v)) {
+			return fmt.Sprintf("%d", int64(v)), nil
+		}
+		return fmt.Sprintf("%g", v), nil
+	case float32:
+		// Check if it's a whole number
+		if v == float32(int64(v)) {
+			return fmt.Sprintf("%d", int64(v)), nil
+		}
+		return fmt.Sprintf("%g", v), nil
+	default:
+		return "", fmt.Errorf("unsupported type: %T", val)
+	}
 }
 
 // parseConductorConfigYAML parses the conductor configuration section
@@ -164,7 +208,8 @@ func buildPromptFromYAML(yt *yamlTask) string {
 	var prompt strings.Builder
 
 	// Task header
-	fmt.Fprintf(&prompt, "# Task %d: %s\n\n", yt.TaskNumber, yt.Name)
+	taskNum, _ := convertToString(yt.TaskNumber)
+	fmt.Fprintf(&prompt, "# Task %s: %s\n\n", taskNum, yt.Name)
 
 	// Description
 	if yt.Description != "" {

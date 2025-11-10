@@ -7,10 +7,10 @@ import (
 
 // Task represents a single task in an implementation plan
 type Task struct {
-	Number        int           // Task number/identifier
+	Number        string        // Task number/identifier (supports int, float, alphanumeric)
 	Name          string        // Task name/title
 	Files         []string      // Files to be modified/created
-	DependsOn     []int         // Task numbers this task depends on
+	DependsOn     []string      // Task numbers this task depends on
 	EstimatedTime time.Duration // Estimated time to complete
 	Agent         string        // Agent to use (optional)
 	Prompt        string        // Full task description/prompt
@@ -18,8 +18,8 @@ type Task struct {
 
 // Validate checks if the task has all required fields
 func (t *Task) Validate() error {
-	if t.Number <= 0 {
-		return errors.New("task number must be positive")
+	if t.Number == "" {
+		return errors.New("task number is required")
 	}
 	if t.Name == "" {
 		return errors.New("task name is required")
@@ -34,13 +34,13 @@ func (t *Task) Validate() error {
 // using DFS with color marking (white=unvisited, gray=visiting, black=visited)
 func HasCyclicDependencies(tasks []Task) bool {
 	// Build adjacency list: task number -> list of dependent task numbers
-	graph := make(map[int][]int)
-	taskMap := make(map[int]bool)
+	graph := make(map[string][]string)
+	taskMap := make(map[string]bool)
 
 	// Initialize graph and track valid task numbers
 	for _, task := range tasks {
 		taskMap[task.Number] = true
-		graph[task.Number] = []int{}
+		graph[task.Number] = []string{}
 	}
 
 	// Build edges: if task A depends on B, then B -> A
@@ -64,14 +64,14 @@ func HasCyclicDependencies(tasks []Task) bool {
 		black = 2 // visited
 	)
 
-	colors := make(map[int]int)
+	colors := make(map[string]int)
 	for taskNum := range taskMap {
 		colors[taskNum] = white
 	}
 
 	// DFS function to detect back edges (cycles)
-	var dfs func(int) bool
-	dfs = func(node int) bool {
+	var dfs func(string) bool
+	dfs = func(node string) bool {
 		colors[node] = gray
 
 		for _, neighbor := range graph[node] {

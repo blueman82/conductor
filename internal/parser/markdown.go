@@ -99,9 +99,8 @@ func (p *MarkdownParser) extractTasks(doc ast.Node, source []byte) ([]models.Tas
 
 			if len(matches) == 3 {
 				// Start new task
-				taskNum, _ := strconv.Atoi(matches[1])
 				currentTask = &models.Task{
-					Number: taskNum,
+					Number: matches[1], // Keep as string
 					Name:   matches[2],
 				}
 				taskContent.Reset()
@@ -139,15 +138,38 @@ func (p *MarkdownParser) extractTasks(doc ast.Node, source []byte) ([]models.Tas
 func extractTasksLineByLine(content []byte) ([]models.Task, error) {
 	var tasks []models.Task
 	taskRegex := regexp.MustCompile(`^##\s+Task\s+(\d+):\s+(.+)$`)
+	codeBlockRegex := regexp.MustCompile(`^` + "```")
 
 	lines := strings.Split(string(content), "\n")
 	var currentTask *models.Task
 	var taskContent strings.Builder
+	inCodeBlock := false
 
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 
-		// Check if this is a task heading
+		// Track code block state (triple backticks)
+		if codeBlockRegex.MatchString(line) {
+			inCodeBlock = !inCodeBlock
+			// If in task, accumulate the code block markers and content
+			if currentTask != nil {
+				taskContent.WriteString(line)
+				taskContent.WriteString("\n")
+			}
+			continue
+		}
+
+		// Skip task extraction if we're inside a code block
+		if inCodeBlock {
+			// Still accumulate content if we're in a task
+			if currentTask != nil {
+				taskContent.WriteString(line)
+				taskContent.WriteString("\n")
+			}
+			continue
+		}
+
+		// Check if this is a task heading (only if NOT in code block)
 		matches := taskRegex.FindStringSubmatch(line)
 		if len(matches) == 3 {
 			// Save previous task if exists
@@ -159,9 +181,8 @@ func extractTasksLineByLine(content []byte) ([]models.Task, error) {
 			}
 
 			// Start new task
-			taskNum, _ := strconv.Atoi(matches[1])
 			currentTask = &models.Task{
-				Number: taskNum,
+				Number: matches[1], // Keep as string
 				Name:   strings.TrimSpace(matches[2]),
 			}
 			taskContent.Reset()
@@ -210,11 +231,38 @@ func extractText(n ast.Node, source []byte) string {
 	return buf.String()
 }
 
+// removeCodeBlocks strips code blocks from content to prevent false positives
+// in metadata extraction. Code blocks are marked by triple backticks (```).
+func removeCodeBlocks(content string) string {
+	lines := strings.Split(content, "\n")
+	var result strings.Builder
+	inCodeBlock := false
+
+	for _, line := range lines {
+		// Toggle code block state on triple backticks
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+
+		// Only include lines outside code blocks
+		if !inCodeBlock {
+			result.WriteString(line)
+			result.WriteString("\n")
+		}
+	}
+
+	return result.String()
+}
+
 // parseTaskMetadata extracts metadata fields from task content
 func parseTaskMetadata(task *models.Task, content string) {
+	// Strip code blocks to prevent extracting metadata from code examples
+	contentWithoutCode := removeCodeBlocks(content)
+
 	// Parse **File(s)**:
 	fileRegex := regexp.MustCompile(`\*\*File\(s\)\*\*:\s*(.+)`)
-	if matches := fileRegex.FindStringSubmatch(content); len(matches) > 1 {
+	if matches := fileRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
 		// Extract files from backticks or comma-separated list
 		filesStr := matches[1]
 		// Split by comma or backtick pairs
@@ -242,16 +290,15 @@ func parseTaskMetadata(task *models.Task, content string) {
 
 	// Parse **Depends on**:
 	depRegex := regexp.MustCompile(`\*\*Depends on\*\*:\s*(.+)`)
-	if matches := depRegex.FindStringSubmatch(content); len(matches) > 1 {
+	if matches := depRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
 		depStr := strings.TrimSpace(matches[1])
 		if !strings.Contains(strings.ToLower(depStr), "none") {
 			// Parse "Task X, Task Y" or "X, Y" or "[X, Y]"
-			numRegex := regexp.MustCompile(`\d+`)
+			// Support int, float, and alphanumeric task numbers
+			numRegex := regexp.MustCompile(`[\d.]+[a-zA-Z-]*|\d+`)
 			nums := numRegex.FindAllString(depStr, -1)
 			for _, n := range nums {
-				if num, err := strconv.Atoi(n); err == nil {
-					task.DependsOn = append(task.DependsOn, num)
-				}
+				task.DependsOn = append(task.DependsOn, strings.TrimSpace(n))
 			}
 		}
 	}
@@ -259,7 +306,7 @@ func parseTaskMetadata(task *models.Task, content string) {
 	// Parse **Estimated time**:
 	// Support formats: "30m", "1h", "2h30m"
 	timeRegex := regexp.MustCompile(`\*\*Estimated time\*\*:\s*(.+)`)
-	if matches := timeRegex.FindStringSubmatch(content); len(matches) > 1 {
+	if matches := timeRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
 		timeStr := strings.TrimSpace(matches[1])
 		// Try parsing as duration first (handles "2h30m" format)
 		if dur, err := parseDuration(timeStr); err == nil {
@@ -269,7 +316,7 @@ func parseTaskMetadata(task *models.Task, content string) {
 
 	// Parse **Agent**:
 	agentRegex := regexp.MustCompile(`\*\*Agent\*\*:\s*(\S+)`)
-	if matches := agentRegex.FindStringSubmatch(content); len(matches) > 1 {
+	if matches := agentRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
 		task.Agent = strings.TrimSpace(matches[1])
 	}
 }

@@ -89,31 +89,31 @@ func TestParseReviewResponse(t *testing.T) {
 		{
 			name:         "GREEN response",
 			output:       "Quality Control: GREEN\n\nAll tests pass",
-			wantFlag:     "GREEN",
+			wantFlag:     models.StatusGreen,
 			wantFeedback: "All tests pass",
 		},
 		{
 			name:         "RED response",
 			output:       "Quality Control: RED\n\nTests are failing",
-			wantFlag:     "RED",
+			wantFlag:     models.StatusRed,
 			wantFeedback: "Tests are failing",
 		},
 		{
 			name:         "YELLOW response",
 			output:       "Quality Control: YELLOW\n\nMinor issues detected",
-			wantFlag:     "YELLOW",
+			wantFlag:     models.StatusYellow,
 			wantFeedback: "Minor issues detected",
 		},
 		{
 			name:         "GREEN with extra whitespace",
 			output:       "Quality Control:   GREEN  \n\n  Looks good!  ",
-			wantFlag:     "GREEN",
+			wantFlag:     models.StatusGreen,
 			wantFeedback: "Looks good!",
 		},
 		{
 			name:         "multiline feedback",
 			output:       "Quality Control: RED\n\nIssue 1: Tests failing\nIssue 2: Coverage low\nIssue 3: Linting errors",
-			wantFlag:     "RED",
+			wantFlag:     models.StatusRed,
 			wantFeedback: "Issue 1: Tests failing\nIssue 2: Coverage low\nIssue 3: Linting errors",
 		},
 		{
@@ -125,7 +125,7 @@ func TestParseReviewResponse(t *testing.T) {
 		{
 			name:         "flag without feedback",
 			output:       "Quality Control: GREEN",
-			wantFlag:     "GREEN",
+			wantFlag:     models.StatusGreen,
 			wantFeedback: "",
 		},
 	}
@@ -154,7 +154,7 @@ func TestShouldRetry(t *testing.T) {
 		{
 			name: "RED flag under max retries",
 			result: &ReviewResult{
-				Flag:     "RED",
+				Flag:     models.StatusRed,
 				Feedback: "Needs fixes",
 			},
 			currentAttempt: 0,
@@ -164,7 +164,7 @@ func TestShouldRetry(t *testing.T) {
 		{
 			name: "RED flag at max retries",
 			result: &ReviewResult{
-				Flag:     "RED",
+				Flag:     models.StatusRed,
 				Feedback: "Needs fixes",
 			},
 			currentAttempt: 2,
@@ -174,7 +174,7 @@ func TestShouldRetry(t *testing.T) {
 		{
 			name: "GREEN flag",
 			result: &ReviewResult{
-				Flag:     "GREEN",
+				Flag:     models.StatusGreen,
 				Feedback: "All good",
 			},
 			currentAttempt: 0,
@@ -184,7 +184,7 @@ func TestShouldRetry(t *testing.T) {
 		{
 			name: "YELLOW flag",
 			result: &ReviewResult{
-				Flag:     "YELLOW",
+				Flag:     models.StatusYellow,
 				Feedback: "Minor issues",
 			},
 			currentAttempt: 0,
@@ -194,7 +194,7 @@ func TestShouldRetry(t *testing.T) {
 		{
 			name: "RED flag first attempt",
 			result: &ReviewResult{
-				Flag:     "RED",
+				Flag:     models.StatusRed,
 				Feedback: "Fails",
 			},
 			currentAttempt: 1,
@@ -241,7 +241,7 @@ func TestReview(t *testing.T) {
 				Duration: 50 * time.Millisecond,
 			},
 			mockError: nil,
-			wantFlag:  "GREEN",
+			wantFlag:  models.StatusGreen,
 			wantErr:   false,
 		},
 		{
@@ -258,7 +258,7 @@ func TestReview(t *testing.T) {
 				Duration: 75 * time.Millisecond,
 			},
 			mockError: nil,
-			wantFlag:  "RED",
+			wantFlag:  models.StatusRed,
 			wantErr:   false,
 		},
 		{
@@ -288,7 +288,7 @@ func TestReview(t *testing.T) {
 				Duration: 60 * time.Millisecond,
 			},
 			mockError: nil,
-			wantFlag:  "YELLOW",
+			wantFlag:  models.StatusYellow,
 			wantErr:   false,
 		},
 	}
@@ -360,7 +360,7 @@ func TestQualityControlFlow(t *testing.T) {
 			t.Fatalf("Review() error = %v", err)
 		}
 
-		if result.Flag != "GREEN" {
+		if result.Flag != models.StatusGreen {
 			t.Errorf("Review() Flag = %q, want GREEN", result.Flag)
 		}
 
@@ -395,7 +395,7 @@ func TestQualityControlFlow(t *testing.T) {
 			t.Fatalf("Review() error = %v", err)
 		}
 
-		if result.Flag != "RED" {
+		if result.Flag != models.StatusRed {
 			t.Errorf("Review() Flag = %q, want RED", result.Flag)
 		}
 

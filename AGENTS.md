@@ -56,14 +56,27 @@ type Agent struct {
 }
 ```
 
-#### Discovery Process
+#### Discovery Process (Strategy B - Directory Whitelisting)
 
-1. Walk the agents directory recursively
-2. Parse only `.md` files
-3. Extract YAML frontmatter (between `---` delimiters)
-4. Skip invalid/incomplete agent definitions (warning logged, no error)
-5. Return map of agent name → Agent struct
-6. Return empty map if directory doesn't exist (not an error)
+The discovery process uses directory whitelisting to reduce false warnings from documentation files:
+
+1. **Directory Whitelisting**:
+   - Include root-level `.md` files (agent definitions)
+   - Include numbered subdirectories: `01-*`, `02-*`, ..., `10-*` (categorized agents)
+   - Skip special directories: `examples/`, `transcripts/`, `logs/` (documentation/metadata)
+
+2. **File Filtering**:
+   - Process only `.md` files
+   - Skip `README.md` (category documentation)
+   - Skip `*-framework.md` (methodology documentation)
+
+3. **Parsing**:
+   - Extract YAML frontmatter (between `---` delimiters)
+   - Skip invalid/incomplete agent definitions (warning logged, no error)
+
+4. **Results**:
+   - Return map of agent name → Agent struct
+   - Return empty map if directory doesn't exist (not an error)
 
 ## Agent Invocation
 

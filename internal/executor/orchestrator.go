@@ -1,3 +1,18 @@
+// Package executor provides task execution orchestration for Conductor.
+//
+// The executor package coordinates multi-wave task execution with quality control,
+// graceful shutdown, and result aggregation. It manages the lifecycle of plan
+// execution from parsing through completion.
+//
+// Key components:
+//   - Orchestrator: Coordinates plan execution with signal handling and result aggregation
+//   - WaveExecutor: Executes waves sequentially with bounded parallelism within each wave
+//   - TaskExecutor: Executes individual tasks with quality control review and retry logic
+//   - QualityController: Reviews task output and determines GREEN/RED/YELLOW status
+//   - DependencyGraph: Calculates execution waves using Kahn's algorithm
+//
+// The execution flow is:
+//   Plan → Graph → Waves → Orchestrator → WaveExecutor → TaskExecutor → QC → Results
 package executor
 
 import (
@@ -11,13 +26,13 @@ import (
 	"github.com/harrison/conductor/internal/models"
 )
 
-// Logger defines the interface for logging orchestrator progress and results.
+// Logger interface for orchestrator progress reporting.
+// Task-level logging is deferred to CLI implementation (Task 16/18).
+// The orchestrator operates at wave/summary granularity.
+// Implementations can log to console, file, or other destinations.
 type Logger interface {
 	LogWaveStart(wave models.Wave)
 	LogWaveComplete(wave models.Wave, duration time.Duration)
-	LogTaskStart(task models.Task)
-	LogTaskComplete(result models.TaskResult)
-	LogTaskFail(result models.TaskResult)
 	LogSummary(result models.ExecutionResult)
 }
 
@@ -33,7 +48,8 @@ type Orchestrator struct {
 }
 
 // NewOrchestrator creates a new Orchestrator instance.
-// The logger parameter is optional and can be nil.
+// The logger parameter is optional and can be nil to disable logging.
+// The waveExecutor is required and must not be nil.
 func NewOrchestrator(waveExecutor WaveExecutorInterface, logger Logger) *Orchestrator {
 	if waveExecutor == nil {
 		panic("wave executor cannot be nil")
@@ -104,7 +120,7 @@ func (o *Orchestrator) aggregateResults(plan *models.Plan, results []models.Task
 		FailedTasks: []models.TaskResult{},
 	}
 
-	// Count completed and failed tasks
+	// Count completed and failed tasks (handles empty results slice gracefully)
 	for _, result := range results {
 		if isCompleted(result) {
 			executionResult.Completed++
@@ -117,14 +133,14 @@ func (o *Orchestrator) aggregateResults(plan *models.Plan, results []models.Task
 	return executionResult
 }
 
-// isCompleted checks if a task result represents successful completion.
+// isCompleted returns true if the task result indicates successful completion.
+// Both GREEN (perfect) and YELLOW (acceptable with warnings) are considered completed.
 func isCompleted(result models.TaskResult) bool {
-	// GREEN and YELLOW are considered successful completions
-	return result.Status == "GREEN" || result.Status == "YELLOW"
+	return result.Status == models.StatusGreen || result.Status == models.StatusYellow
 }
 
-// isFailed checks if a task result represents a failure.
+// isFailed returns true if the task result indicates failure.
+// This includes RED (quality control failed), FAILED (execution error), or presence of Error field.
 func isFailed(result models.TaskResult) bool {
-	// RED, FAILED status, or presence of an error indicates failure
-	return result.Status == "RED" || result.Status == "FAILED" || result.Error != nil
+	return result.Status == models.StatusRed || result.Status == models.StatusFailed || result.Error != nil
 }

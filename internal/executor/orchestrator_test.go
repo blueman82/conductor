@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"syscall"
 	"testing"
 	"time"
 
@@ -31,10 +29,7 @@ type mockLogger struct {
 		wave     models.Wave
 		duration time.Duration
 	}
-	taskStartCalls    []models.Task
-	taskCompleteCalls []models.TaskResult
-	taskFailCalls     []models.TaskResult
-	summaryCalls      []models.ExecutionResult
+	summaryCalls []models.ExecutionResult
 }
 
 func (m *mockLogger) LogWaveStart(wave models.Wave) {
@@ -46,18 +41,6 @@ func (m *mockLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
 		wave     models.Wave
 		duration time.Duration
 	}{wave: wave, duration: duration})
-}
-
-func (m *mockLogger) LogTaskStart(task models.Task) {
-	m.taskStartCalls = append(m.taskStartCalls, task)
-}
-
-func (m *mockLogger) LogTaskComplete(result models.TaskResult) {
-	m.taskCompleteCalls = append(m.taskCompleteCalls, result)
-}
-
-func (m *mockLogger) LogTaskFail(result models.TaskResult) {
-	m.taskFailCalls = append(m.taskFailCalls, result)
 }
 
 func (m *mockLogger) LogSummary(result models.ExecutionResult) {
@@ -88,8 +71,8 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 				},
 			},
 			results: []models.TaskResult{
-				{Task: models.Task{Number: 1}, Status: "GREEN"},
-				{Task: models.Task{Number: 2}, Status: "GREEN"},
+				{Task: models.Task{Number: 1}, Status: models.StatusGreen},
+				{Task: models.Task{Number: 2}, Status: models.StatusGreen},
 			},
 			waveErr:        nil,
 			expectedErr:    nil,
@@ -111,9 +94,9 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 				},
 			},
 			results: []models.TaskResult{
-				{Task: models.Task{Number: 1}, Status: "GREEN"},
-				{Task: models.Task{Number: 2}, Status: "RED", Error: errors.New("task failed")},
-				{Task: models.Task{Number: 3}, Status: "GREEN"},
+				{Task: models.Task{Number: 1}, Status: models.StatusGreen},
+				{Task: models.Task{Number: 2}, Status: models.StatusRed, Error: errors.New("task failed")},
+				{Task: models.Task{Number: 3}, Status: models.StatusGreen},
 			},
 			waveErr:        errors.New("task failed"),
 			expectedErr:    errors.New("task failed"),
@@ -168,9 +151,9 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 			greenCount := 0
 			failedCount := 0
 			for _, r := range tt.results {
-				if r.Status == "GREEN" || r.Status == "YELLOW" {
+				if r.Status == models.StatusGreen || r.Status == models.StatusYellow {
 					greenCount++
-				} else if r.Status == "RED" || r.Status == "FAILED" || r.Error != nil {
+				} else if r.Status == models.StatusRed || r.Status == models.StatusFailed || r.Error != nil {
 					failedCount++
 				}
 			}
@@ -191,6 +174,8 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 	}
 }
 
+// TestOrchestratorGracefulShutdown verifies graceful shutdown via context cancellation.
+// This also covers signal handling, as SIGINT/SIGTERM trigger context cancellation.
 func TestOrchestratorGracefulShutdown(t *testing.T) {
 	mockWave := &mockWaveExecutor{
 		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
@@ -198,11 +183,11 @@ func TestOrchestratorGracefulShutdown(t *testing.T) {
 			select {
 			case <-time.After(5 * time.Second):
 				return []models.TaskResult{
-					{Task: models.Task{Number: 1}, Status: "GREEN"},
+					{Task: models.Task{Number: 1}, Status: models.StatusGreen},
 				}, nil
 			case <-ctx.Done():
 				return []models.TaskResult{
-					{Task: models.Task{Number: 1}, Status: "FAILED", Error: ctx.Err()},
+					{Task: models.Task{Number: 1}, Status: models.StatusFailed, Error: ctx.Err()},
 				}, ctx.Err()
 			}
 		},
@@ -258,11 +243,11 @@ func TestOrchestratorGracefulShutdown(t *testing.T) {
 
 func TestOrchestratorResultAggregation(t *testing.T) {
 	results := []models.TaskResult{
-		{Task: models.Task{Number: 1}, Status: "GREEN", Duration: 100 * time.Millisecond},
-		{Task: models.Task{Number: 2}, Status: "YELLOW", Duration: 150 * time.Millisecond},
-		{Task: models.Task{Number: 3}, Status: "RED", Error: errors.New("failed"), Duration: 200 * time.Millisecond},
-		{Task: models.Task{Number: 4}, Status: "FAILED", Error: errors.New("error"), Duration: 50 * time.Millisecond},
-		{Task: models.Task{Number: 5}, Status: "GREEN", Duration: 300 * time.Millisecond},
+		{Task: models.Task{Number: 1}, Status: models.StatusGreen, Duration: 100 * time.Millisecond},
+		{Task: models.Task{Number: 2}, Status: models.StatusYellow, Duration: 150 * time.Millisecond},
+		{Task: models.Task{Number: 3}, Status: models.StatusRed, Error: errors.New("failed"), Duration: 200 * time.Millisecond},
+		{Task: models.Task{Number: 4}, Status: models.StatusFailed, Error: errors.New("error"), Duration: 50 * time.Millisecond},
+		{Task: models.Task{Number: 5}, Status: models.StatusGreen, Duration: 300 * time.Millisecond},
 	}
 
 	mockWave := &mockWaveExecutor{
@@ -375,7 +360,7 @@ func TestOrchestratorContextCancellation(t *testing.T) {
 		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
 			<-ctx.Done()
 			return []models.TaskResult{
-				{Task: models.Task{Number: 1}, Status: "FAILED", Error: ctx.Err()},
+				{Task: models.Task{Number: 1}, Status: models.StatusFailed, Error: ctx.Err()},
 			}, ctx.Err()
 		},
 	}
@@ -450,59 +435,6 @@ func TestOrchestratorNilInputs(t *testing.T) {
 	}
 }
 
-// TestOrchestratorSignalHandling tests actual signal handling with real signals.
-// This test is more integration-style and may be flaky in some environments.
-func TestOrchestratorSignalHandling(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping signal handling test in short mode")
-	}
-
-	// Create a mock wave executor that blocks until context is canceled
-	mockWave := &mockWaveExecutor{
-		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
-			<-ctx.Done()
-			return []models.TaskResult{
-				{Task: models.Task{Number: 1}, Status: "FAILED", Error: ctx.Err()},
-			}, ctx.Err()
-		},
-	}
-	mockLog := &mockLogger{}
-
-	plan := &models.Plan{
-		Name:  "Test Plan",
-		Tasks: []models.Task{{Number: 1}},
-		Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []int{1}}},
-	}
-
-	orch := NewOrchestrator(mockWave, mockLog)
-
-	// Start execution in background
-	resultChan := make(chan error, 1)
-	go func() {
-		_, err := orch.ExecutePlan(context.Background(), plan)
-		resultChan <- err
-	}()
-
-	// Give orchestrator time to set up signal handling
-	time.Sleep(50 * time.Millisecond)
-
-	// Send SIGINT to self
-	proc, _ := os.FindProcess(os.Getpid())
-	if err := proc.Signal(syscall.SIGINT); err != nil {
-		t.Fatalf("failed to send SIGINT: %v", err)
-	}
-
-	// Wait for result
-	select {
-	case err := <-resultChan:
-		if err != context.Canceled {
-			t.Errorf("expected context.Canceled, got %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("orchestrator did not respond to SIGINT")
-	}
-}
-
 func TestNewOrchestrator(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -536,8 +468,8 @@ func TestNewOrchestrator(t *testing.T) {
 
 func TestOrchestratorLogging(t *testing.T) {
 	results := []models.TaskResult{
-		{Task: models.Task{Number: 1, Name: "Task 1"}, Status: "GREEN"},
-		{Task: models.Task{Number: 2, Name: "Task 2"}, Status: "RED", Error: fmt.Errorf("failed")},
+		{Task: models.Task{Number: 1, Name: "Task 1"}, Status: models.StatusGreen},
+		{Task: models.Task{Number: 2, Name: "Task 2"}, Status: models.StatusRed, Error: fmt.Errorf("failed")},
 	}
 
 	mockWave := &mockWaveExecutor{

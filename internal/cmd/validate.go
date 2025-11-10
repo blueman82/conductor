@@ -62,7 +62,7 @@ func validatePlan(filePath string, registry *agent.Registry, output io.Writer) e
 	// 2. Validate individual tasks
 	for _, task := range plan.Tasks {
 		if err := task.Validate(); err != nil {
-			errors = append(errors, fmt.Sprintf("Task %d: %v", task.Number, err))
+			errors = append(errors, fmt.Sprintf("Task %s: %v", task.Number, err))
 		}
 	}
 
@@ -147,7 +147,7 @@ func validateAgents(plan *models.Plan, registry *agent.Registry) []string {
 	for _, task := range plan.Tasks {
 		if task.Agent != "" && !checkedAgents[task.Agent] {
 			if !registry.Exists(task.Agent) {
-				errors = append(errors, fmt.Sprintf("Task %d (%s): agent '%s' not found in registry", task.Number, task.Name, task.Agent))
+				errors = append(errors, fmt.Sprintf("Task %s (%s): agent '%s' not found in registry", task.Number, task.Name, task.Agent))
 			}
 			checkedAgents[task.Agent] = true
 		}

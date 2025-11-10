@@ -2,6 +2,14 @@ package models
 
 import "time"
 
+// Task execution status constants
+const (
+	StatusGreen  = "GREEN"  // Task completed successfully
+	StatusYellow = "YELLOW" // Task completed with warnings
+	StatusRed    = "RED"    // Task failed quality control
+	StatusFailed = "FAILED" // Task failed to execute
+)
+
 // TaskResult represents the result of executing a single task
 type TaskResult struct {
 	Task           Task          // The task that was executed

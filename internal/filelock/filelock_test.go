@@ -1,6 +1,7 @@
 package filelock
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -420,5 +421,147 @@ func TestAtomicWriteCreateDirectory(t *testing.T) {
 	dirPath := filepath.Join(tmpDir, "subdir", "nested")
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 		t.Error("Directory should have been created")
+	}
+}
+
+func TestLockWithTimeoutSuccess(t *testing.T) {
+	tmpDir := t.TempDir()
+	lockPath := filepath.Join(tmpDir, "test.lock")
+
+	holder := NewFileLock(lockPath)
+	if err := holder.Lock(); err != nil {
+		t.Fatalf("failed to acquire holder lock: %v", err)
+	}
+
+	released := make(chan struct{})
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		if err := holder.Unlock(); err != nil {
+			t.Errorf("failed to release holder lock: %v", err)
+		}
+		close(released)
+	}()
+
+	contender := NewFileLock(lockPath)
+	start := time.Now()
+	if err := contender.LockWithTimeout(500 * time.Millisecond); err != nil {
+		t.Fatalf("LockWithTimeout should succeed: %v", err)
+	}
+
+	wait := time.Since(start)
+	if wait < 90*time.Millisecond {
+		t.Fatalf("expected to wait for lock, waited only %v", wait)
+	}
+
+	metrics := contender.LastMetrics()
+	if metrics.Attempts < 2 {
+		t.Fatalf("expected multiple attempts, got %d", metrics.Attempts)
+	}
+	if metrics.TimedOut {
+		t.Fatal("metrics should not report timeout")
+	}
+
+	if err := contender.Unlock(); err != nil {
+		t.Fatalf("failed to release contender lock: %v", err)
+	}
+
+	<-released
+}
+
+func TestLockWithTimeoutTimeout(t *testing.T) {
+	tmpDir := t.TempDir()
+	lockPath := filepath.Join(tmpDir, "test.lock")
+
+	holder := NewFileLock(lockPath)
+	if err := holder.Lock(); err != nil {
+		t.Fatalf("failed to acquire holder lock: %v", err)
+	}
+
+	contender := NewFileLock(lockPath)
+	err := contender.LockWithTimeout(100 * time.Millisecond)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !errors.Is(err, ErrLockTimeout) {
+		t.Fatalf("expected ErrLockTimeout, got %v", err)
+	}
+
+	metrics := contender.LastMetrics()
+	if !metrics.TimedOut {
+		t.Fatal("metrics should report timeout")
+	}
+	if metrics.Attempts == 0 {
+		t.Fatal("expected at least one lock attempt")
+	}
+
+	if err := holder.Unlock(); err != nil {
+		t.Fatalf("failed to release holder lock: %v", err)
+	}
+}
+
+func TestSetMonitorReceivesMetrics(t *testing.T) {
+	tmpDir := t.TempDir()
+	lockPath := filepath.Join(tmpDir, "test.lock")
+
+	lock := NewFileLock(lockPath)
+
+	metricsCh := make(chan LockMetrics, 1)
+	lock.SetMonitor(func(path string, metrics LockMetrics) {
+		if path != lockPath {
+			t.Errorf("unexpected path in monitor: %s", path)
+		}
+		metricsCh <- metrics
+	})
+
+	if err := lock.Lock(); err != nil {
+		t.Fatalf("failed to acquire lock: %v", err)
+	}
+	if err := lock.Unlock(); err != nil {
+		t.Fatalf("failed to release lock: %v", err)
+	}
+
+	select {
+	case metrics := <-metricsCh:
+		if metrics.Attempts != 1 {
+			t.Errorf("expected 1 attempt, got %d", metrics.Attempts)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("monitor did not receive metrics")
+	}
+
+	lock.SetMonitor(nil)
+}
+
+func TestMonitorReceivesTimeoutMetrics(t *testing.T) {
+	tmpDir := t.TempDir()
+	lockPath := filepath.Join(tmpDir, "test.lock")
+
+	holder := NewFileLock(lockPath)
+	if err := holder.Lock(); err != nil {
+		t.Fatalf("failed to acquire holder lock: %v", err)
+	}
+
+	contender := NewFileLock(lockPath)
+	metricsCh := make(chan LockMetrics, 1)
+	contender.SetMonitor(func(path string, metrics LockMetrics) {
+		metricsCh <- metrics
+	})
+
+	err := contender.LockWithTimeout(100 * time.Millisecond)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+
+	select {
+	case metrics := <-metricsCh:
+		if !metrics.TimedOut {
+			t.Fatal("monitor metrics should indicate timeout")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("monitor did not capture timeout metrics")
+	}
+
+	if err := holder.Unlock(); err != nil {
+		t.Fatalf("failed to release holder lock: %v", err)
 	}
 }

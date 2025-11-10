@@ -1,0 +1,269 @@
+package executor
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/models"
+	"github.com/harrison/conductor/internal/updater"
+)
+
+// Task status constants for plan updates.
+const (
+	StatusInProgress = "in-progress"
+	StatusCompleted  = "completed"
+	StatusFailed     = "failed"
+)
+
+// ErrQualityGateFailed indicates that a task failed quality control after exhausting retries.
+var ErrQualityGateFailed = errors.New("quality control failed after maximum retries")
+
+// Reviewer is implemented by quality control components capable of reviewing task output.
+type Reviewer interface {
+	Review(ctx context.Context, task models.Task, output string) (*ReviewResult, error)
+	ShouldRetry(result *ReviewResult, currentAttempt int) bool
+}
+
+// PlanUpdater abstracts plan status updates to allow fakes in tests.
+type PlanUpdater interface {
+	Update(planPath string, taskNumber string, status string, completedAt *time.Time) error
+}
+
+type planUpdaterFunc func(planPath string, taskNumber string, status string, completedAt *time.Time) error
+
+func (f planUpdaterFunc) Update(planPath string, taskNumber string, status string, completedAt *time.Time) error {
+	if f == nil {
+		return nil
+	}
+	return f(planPath, taskNumber, status, completedAt)
+}
+
+// TaskExecutorConfig configures TaskExecutor behaviour for a specific plan.
+type TaskExecutorConfig struct {
+	PlanPath       string
+	DefaultAgent   string
+	QualityControl models.QualityControlConfig
+}
+
+// DefaultTaskExecutor executes individual tasks, applying QC review and plan updates.
+type DefaultTaskExecutor struct {
+	invoker     InvokerInterface
+	reviewer    Reviewer
+	planUpdater PlanUpdater
+	cfg         TaskExecutorConfig
+	clock       func() time.Time
+	qcEnabled   bool
+	retryLimit  int
+}
+
+// NewTaskExecutor constructs a TaskExecutor implementation.
+func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater PlanUpdater, cfg TaskExecutorConfig) (*DefaultTaskExecutor, error) {
+	if invoker == nil {
+		return nil, fmt.Errorf("task executor requires an invoker")
+	}
+
+	if planUpdater == nil {
+		planUpdater = planUpdaterFunc(func(path string, taskNumber string, status string, completedAt *time.Time) error {
+			if path == "" {
+				return nil
+			}
+			return updater.UpdateTaskStatus(path, taskNumber, status, completedAt)
+		})
+	}
+
+	te := &DefaultTaskExecutor{
+		invoker:     invoker,
+		reviewer:    reviewer,
+		planUpdater: planUpdater,
+		cfg:         cfg,
+		clock:       time.Now,
+	}
+
+	if cfg.QualityControl.Enabled {
+		te.qcEnabled = true
+		te.retryLimit = cfg.QualityControl.RetryOnRed
+		if te.retryLimit < 0 {
+			te.retryLimit = 0
+		}
+
+		if te.reviewer == nil {
+			qc := NewQualityController(invoker)
+			if cfg.QualityControl.ReviewAgent != "" {
+				qc.ReviewAgent = cfg.QualityControl.ReviewAgent
+			}
+			qc.MaxRetries = te.retryLimit
+			te.reviewer = qc
+		} else if qc, ok := te.reviewer.(*QualityController); ok {
+			if cfg.QualityControl.ReviewAgent != "" {
+				qc.ReviewAgent = cfg.QualityControl.ReviewAgent
+			}
+			qc.MaxRetries = te.retryLimit
+		}
+	}
+
+	return te, nil
+}
+
+// Execute runs an individual task, handling agent invocation, quality control, and plan updates.
+func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
+	result := models.TaskResult{Task: task}
+
+	// Apply default agent if provided.
+	if task.Agent == "" && te.cfg.DefaultAgent != "" {
+		task.Agent = te.cfg.DefaultAgent
+		result.Task.Agent = te.cfg.DefaultAgent
+	}
+
+	if err := te.updatePlanStatus(task.Number, StatusInProgress, false); err != nil {
+		result.Status = models.StatusFailed
+		result.Error = err
+		return result, err
+	}
+
+	maxAttempt := te.retryLimit
+	if !te.qcEnabled || te.reviewer == nil {
+		maxAttempt = 0
+	}
+
+	var totalDuration time.Duration
+	var lastErr error
+
+	for attempt := 0; attempt <= maxAttempt; attempt++ {
+		if err := ctx.Err(); err != nil {
+			result.Status = models.StatusFailed
+			result.Error = err
+			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			return result, err
+		}
+
+		invocation, err := te.invoker.Invoke(ctx, task)
+		if err != nil {
+			result.Status = models.StatusFailed
+			result.Error = err
+			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			return result, err
+		}
+
+		totalDuration += invocation.Duration
+
+		if invocation.Error != nil {
+			err = fmt.Errorf("task invocation error: %w", invocation.Error)
+			result.Status = models.StatusFailed
+			result.Error = err
+			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			return result, err
+		}
+		if invocation.ExitCode != 0 {
+			err = fmt.Errorf("task exited with code %d", invocation.ExitCode)
+			result.Status = models.StatusFailed
+			result.Error = err
+			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			return result, err
+		}
+
+		parsedOutput, _ := agent.ParseClaudeOutput(invocation.Output)
+		output := invocation.Output
+		if parsedOutput != nil {
+			if parsedOutput.Content != "" {
+				output = parsedOutput.Content
+			} else if parsedOutput.Error != "" {
+				output = parsedOutput.Error
+			} else {
+				output = ""
+			}
+		}
+
+		result.Output = output
+		result.Duration = totalDuration
+
+		if !te.qcEnabled || te.reviewer == nil {
+			result.Status = models.StatusGreen
+			result.RetryCount = attempt
+			if err := te.updatePlanStatus(task.Number, StatusCompleted, true); err != nil {
+				result.Status = models.StatusFailed
+				result.Error = err
+				return result, err
+			}
+			return result, nil
+		}
+
+		review, reviewErr := te.reviewer.Review(ctx, task, output)
+		if reviewErr != nil {
+			result.Status = models.StatusFailed
+			result.Error = reviewErr
+			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			return result, reviewErr
+		}
+
+		if review != nil {
+			result.ReviewFeedback = review.Feedback
+		}
+
+		switch {
+		case review == nil || review.Flag == "":
+			lastErr = fmt.Errorf("quality control did not return a valid flag")
+		case review.Flag == models.StatusGreen:
+			result.Status = models.StatusGreen
+			result.RetryCount = attempt
+			if err := te.updatePlanStatus(task.Number, StatusCompleted, true); err != nil {
+				result.Status = models.StatusFailed
+				result.Error = err
+				return result, err
+			}
+			return result, nil
+		case review.Flag == models.StatusYellow:
+			result.Status = models.StatusYellow
+			result.RetryCount = attempt
+			if err := te.updatePlanStatus(task.Number, StatusCompleted, true); err != nil {
+				result.Status = models.StatusFailed
+				result.Error = err
+				return result, err
+			}
+			return result, nil
+		case review.Flag == models.StatusRed:
+			lastErr = ErrQualityGateFailed
+		default:
+			lastErr = fmt.Errorf("quality control returned unsupported flag %q", review.Flag)
+		}
+
+		if lastErr == nil {
+			lastErr = ErrQualityGateFailed
+		}
+
+		// Determine whether to retry.
+		if attempt >= te.retryLimit || !te.reviewer.ShouldRetry(review, attempt) {
+			result.Status = models.StatusRed
+			result.RetryCount = attempt
+			result.Error = lastErr
+			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			return result, lastErr
+		}
+	}
+
+	// Should not reach here; treat as failure.
+	if lastErr == nil {
+		lastErr = ErrQualityGateFailed
+	}
+	result.Status = models.StatusRed
+	result.RetryCount = te.retryLimit
+	result.Error = lastErr
+	_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+	return result, lastErr
+}
+
+func (te *DefaultTaskExecutor) updatePlanStatus(taskNumber string, status string, markComplete bool) error {
+	if te.planUpdater == nil {
+		return nil
+	}
+
+	var completedAt *time.Time
+	if markComplete {
+		ts := te.clock().UTC()
+		completedAt = &ts
+	}
+
+	return te.planUpdater.Update(te.cfg.PlanPath, taskNumber, status, completedAt)
+}

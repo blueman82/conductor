@@ -16,20 +16,20 @@ const (
 
 // DependencyGraph represents a directed graph of task dependencies
 type DependencyGraph struct {
-	Tasks    map[int]*models.Task
-	Edges    map[int][]int // task -> tasks that depend on it (adjacency list: prerequisite -> dependents)
-	InDegree map[int]int   // task -> number of dependencies
+	Tasks    map[string]*models.Task
+	Edges    map[string][]string // task -> tasks that depend on it (adjacency list: prerequisite -> dependents)
+	InDegree map[string]int      // task -> number of dependencies
 }
 
 // ValidateTasks checks that all task dependencies are valid
 func ValidateTasks(tasks []models.Task) error {
-	taskMap := make(map[int]bool)
+	taskMap := make(map[string]bool)
 	for _, task := range tasks {
-		if task.Number <= 0 {
-			return fmt.Errorf("task %d: invalid task number (must be positive)", task.Number)
+		if task.Number == "" {
+			return fmt.Errorf("task has empty task number")
 		}
 		if taskMap[task.Number] {
-			return fmt.Errorf("task %d: duplicate task number", task.Number)
+			return fmt.Errorf("task %s: duplicate task number", task.Number)
 		}
 		taskMap[task.Number] = true
 	}
@@ -38,7 +38,7 @@ func ValidateTasks(tasks []models.Task) error {
 	for _, task := range tasks {
 		for _, dep := range task.DependsOn {
 			if !taskMap[dep] {
-				return fmt.Errorf("task %d (%s): depends on non-existent task %d", task.Number, task.Name, dep)
+				return fmt.Errorf("task %s (%s): depends on non-existent task %s", task.Number, task.Name, dep)
 			}
 		}
 	}
@@ -55,13 +55,13 @@ func ValidateTasks(tasks []models.Task) error {
 //   - tasks: Map of task number to task pointer for lookup
 //
 // Returns error if file overlaps detected in same wave, nil if valid.
-func ValidateFileOverlaps(waves []models.Wave, tasks map[int]*models.Task) error {
+func ValidateFileOverlaps(waves []models.Wave, tasks map[string]*models.Task) error {
 	for _, wave := range waves {
 		tasksInWave := make([]*models.Task, 0, len(wave.TaskNumbers))
 		for _, taskNum := range wave.TaskNumbers {
 			task, exists := tasks[taskNum]
 			if !exists {
-				return fmt.Errorf("wave %q: task %d not found in dependency graph", wave.Name, taskNum)
+				return fmt.Errorf("wave %q: task %s not found in dependency graph", wave.Name, taskNum)
 			}
 			tasksInWave = append(tasksInWave, task)
 		}
@@ -77,11 +77,11 @@ func ValidateFileOverlaps(waves []models.Wave, tasks map[int]*models.Task) error
 			switch len(missingFiles) {
 			case 1:
 				task := missingFiles[0]
-				fmt.Fprintf(os.Stderr, "Warning: wave %q skipping file overlap validation because task %d (%s) has no files configured\n", wave.Name, task.Number, task.Name)
+				fmt.Fprintf(os.Stderr, "Warning: wave %q skipping file overlap validation because task %s (%s) has no files configured\n", wave.Name, task.Number, task.Name)
 			default:
 				entries := make([]string, 0, len(missingFiles))
 				for _, task := range missingFiles {
-					entries = append(entries, fmt.Sprintf("%d (%s)", task.Number, task.Name))
+					entries = append(entries, fmt.Sprintf("%s (%s)", task.Number, task.Name))
 				}
 				fmt.Fprintf(os.Stderr, "Warning: wave %q skipping file overlap validation because tasks %s have no files configured\n", wave.Name, strings.Join(entries, ", "))
 			}
@@ -96,7 +96,7 @@ func ValidateFileOverlaps(waves []models.Wave, tasks map[int]*models.Task) error
 					if owner.Number == task.Number {
 						continue
 					}
-					return fmt.Errorf("wave %q: file %q is assigned to multiple tasks (%d - %s and %d - %s). Move the conflicting tasks to separate waves or adjust each task's file list so only one task can modify the file per wave.", wave.Name, normalized, owner.Number, owner.Name, task.Number, task.Name)
+					return fmt.Errorf("wave %q: file %q is assigned to multiple tasks (%s - %s and %s - %s). Move the conflicting tasks to separate waves or adjust each task's file list so only one task can modify the file per wave.", wave.Name, normalized, owner.Number, owner.Name, task.Number, task.Name)
 				}
 				fileOwners[normalized] = task
 			}
@@ -109,9 +109,9 @@ func ValidateFileOverlaps(waves []models.Wave, tasks map[int]*models.Task) error
 // BuildDependencyGraph constructs a dependency graph from a list of tasks
 func BuildDependencyGraph(tasks []models.Task) *DependencyGraph {
 	g := &DependencyGraph{
-		Tasks:    make(map[int]*models.Task),
-		Edges:    make(map[int][]int),
-		InDegree: make(map[int]int),
+		Tasks:    make(map[string]*models.Task),
+		Edges:    make(map[string][]string),
+		InDegree: make(map[string]int),
 	}
 
 	// Build task map and initialize in-degree
@@ -146,13 +146,13 @@ func (g *DependencyGraph) HasCycle() bool {
 		black = 2 // visited
 	)
 
-	colors := make(map[int]int)
+	colors := make(map[string]int)
 	for taskNum := range g.Tasks {
 		colors[taskNum] = white
 	}
 
-	var dfs func(int) bool
-	dfs = func(node int) bool {
+	var dfs func(string) bool
+	dfs = func(node string) bool {
 		colors[node] = gray
 
 		for _, neighbor := range g.Edges[node] {
@@ -211,14 +211,14 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 
 	// Kahn's algorithm for topological sort + wave grouping
 	var waves []models.Wave
-	inDegree := make(map[int]int)
+	inDegree := make(map[string]int)
 	for k, v := range graph.InDegree {
 		inDegree[k] = v
 	}
 
     for len(inDegree) > 0 {
 		// Find all tasks with in-degree 0 (current wave)
-		var currentWave []int
+		var currentWave []string
 		for taskNum, degree := range inDegree {
 			if degree == 0 {
 				currentWave = append(currentWave, taskNum)
@@ -251,7 +251,7 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
     }
 
 	// Validate file overlaps in waves
-	taskMap := make(map[int]*models.Task)
+	taskMap := make(map[string]*models.Task)
 	for i := range tasks {
 		taskMap[tasks[i].Number] = &tasks[i]
 	}

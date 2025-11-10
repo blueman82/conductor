@@ -21,8 +21,8 @@ and orchestrates parallel execution of tasks across multiple agents.`,
 		SilenceUsage: true,
 	}
 
-	// Future subcommands (run, validate) will be added here
-	// in subsequent tasks
+	// Add subcommands
+	cmd.AddCommand(NewValidateCommand())
 
 	return cmd
 }

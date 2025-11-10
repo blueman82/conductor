@@ -341,3 +341,262 @@ Write tests first
 		t.Error("Prompt should contain 'Test First' section")
 	}
 }
+
+func TestParseMarkdownIgnoresHeadingsInCodeBlocks(t *testing.T) {
+	markdown := `# Test Plan
+
+## Task 1: Real Task
+
+**File(s)**: ` + "`file1.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+### Implementation
+
+Here's an example test:
+
+` + "```go" + `
+func TestExample(t *testing.T) {
+    markdown := ` + "`# Plan\n\n## Task 2: Fake Task\n\n**File(s)**: file2.go`" + `
+    // This is inside a code block
+}
+` + "```" + `
+
+## Task 3: Another Real Task
+
+**File(s)**: ` + "`file3.go`" + `
+**Depends on**: Task 1
+**Estimated time**: 1h
+`
+
+	parser := NewMarkdownParser()
+	plan, err := parser.Parse(strings.NewReader(markdown))
+	if err != nil {
+		t.Fatalf("Failed to parse markdown: %v", err)
+	}
+
+	// Should only find Task 1 and Task 3, not Task 2 (which is in code block)
+	if len(plan.Tasks) != 2 {
+		t.Errorf("Expected 2 tasks (ignoring code block), got %d", len(plan.Tasks))
+		for i, task := range plan.Tasks {
+			t.Logf("Task %d: Number=%d, Name=%s", i, task.Number, task.Name)
+		}
+	}
+
+	// Verify tasks are 1 and 3, not 2
+	if len(plan.Tasks) >= 1 && plan.Tasks[0].Number != 1 {
+		t.Errorf("First task should be number 1, got %d", plan.Tasks[0].Number)
+	}
+	if len(plan.Tasks) >= 2 && plan.Tasks[1].Number != 3 {
+		t.Errorf("Second task should be number 3, got %d", plan.Tasks[1].Number)
+	}
+}
+
+func TestParseMarkdownExtractsHeadingsOutsideCodeBlocks(t *testing.T) {
+	markdown := `# Test Plan
+
+## Task 1: Before Code Block
+
+**File(s)**: ` + "`file1.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+Some content before code block.
+
+` + "```go" + `
+// Code example
+func example() {
+    // Not a real task
+}
+` + "```" + `
+
+## Task 2: After Code Block
+
+**File(s)**: ` + "`file2.go`" + `
+**Depends on**: Task 1
+**Estimated time**: 45m
+
+Some content after code block.
+`
+
+	parser := NewMarkdownParser()
+	plan, err := parser.Parse(strings.NewReader(markdown))
+	if err != nil {
+		t.Fatalf("Failed to parse markdown: %v", err)
+	}
+
+	if len(plan.Tasks) != 2 {
+		t.Errorf("Expected 2 tasks, got %d", len(plan.Tasks))
+	}
+
+	if len(plan.Tasks) >= 1 && plan.Tasks[0].Name != "Before Code Block" {
+		t.Errorf("First task name: expected 'Before Code Block', got '%s'", plan.Tasks[0].Name)
+	}
+	if len(plan.Tasks) >= 2 && plan.Tasks[1].Name != "After Code Block" {
+		t.Errorf("Second task name: expected 'After Code Block', got '%s'", plan.Tasks[1].Name)
+	}
+}
+
+func TestParseMetadataIgnoresCodeBlocks(t *testing.T) {
+	// This test verifies that metadata extraction ignores patterns in code blocks
+	// This is a regression test for the bug where variables like "agentRegex"
+	// from code examples were being extracted as agent names
+	content := `**Agent**: real-agent
+**File(s)**: ` + "`real-file.go`" + `
+**Depends on**: Task 1
+**Estimated time**: 1h
+
+### Implementation
+
+Here's a code example that contains fake metadata:
+
+` + "```go" + `
+agentRegex := regexp.MustCompile(` + "`" + `\*\*Agent\*\*:\s*(\S+)` + "`" + `)
+fileRegex := regexp.MustCompile(` + "`" + `\*\*File\(s\)\*\*:\s*(.+)` + "`" + `)
+depRegex := regexp.MustCompile(` + "`" + `\*\*Depends on\*\*:\s*(.+)` + "`" + `)
+// This code should not affect metadata extraction:
+// **Agent**: fake-agent
+// **File(s)**: fake-file.go
+// **Depends on**: Task 99
+// **Estimated time**: 5h
+` + "```" + `
+
+More content after code block.
+`
+
+	task := &models.Task{}
+	parseTaskMetadata(task, content)
+
+	// Verify only real metadata extracted, not fake metadata from code block
+	if task.Agent != "real-agent" {
+		t.Errorf("Expected agent 'real-agent', got '%s' (should not extract from code block)", task.Agent)
+	}
+
+	if len(task.Files) != 1 || task.Files[0] != "real-file.go" {
+		t.Errorf("Expected files ['real-file.go'], got %v (should not extract from code block)", task.Files)
+	}
+
+	if len(task.DependsOn) != 1 || task.DependsOn[0] != 1 {
+		t.Errorf("Expected dependencies [1], got %v (should not extract from code block)", task.DependsOn)
+	}
+
+	if task.EstimatedTime != 1*time.Hour {
+		t.Errorf("Expected time 1h, got %v (should not extract from code block)", task.EstimatedTime)
+	}
+}
+
+func TestRemoveCodeBlocks(t *testing.T) {
+	// Test the helper function directly
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no code blocks",
+			input:    "This is plain text\nNo code here",
+			expected: "This is plain text\nNo code here\n",
+		},
+		{
+			name: "single code block",
+			input: `Text before
+` + "```go" + `
+code here
+` + "```" + `
+Text after`,
+			expected: "Text before\nText after\n",
+		},
+		{
+			name: "multiple code blocks",
+			input: `Start
+` + "```" + `
+first block
+` + "```" + `
+Middle
+` + "```" + `
+second block
+` + "```" + `
+End`,
+			expected: "Start\nMiddle\nEnd\n",
+		},
+		{
+			name: "preserves metadata outside blocks",
+			input: `**Agent**: real-agent
+` + "```" + `
+**Agent**: fake-agent
+` + "```" + `
+**File(s)**: real.go`,
+			expected: "**Agent**: real-agent\n**File(s)**: real.go\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := removeCodeBlocks(tt.input)
+			if result != tt.expected {
+				t.Errorf("removeCodeBlocks() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestParseMarkdownHandlesMultipleCodeBlocks(t *testing.T) {
+	markdown := `# Test Plan
+
+## Task 1: Real Task One
+
+**File(s)**: ` + "`file1.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+First code block:
+
+` + "```go" + `
+## Task 99: Fake Task in First Block
+` + "```" + `
+
+## Task 2: Real Task Two
+
+**File(s)**: ` + "`file2.go`" + `
+**Depends on**: Task 1
+**Estimated time**: 45m
+
+Second code block:
+
+` + "```markdown" + `
+## Task 98: Fake Task in Second Block
+
+**File(s)**: fake.go
+` + "```" + `
+
+## Task 3: Real Task Three
+
+**File(s)**: ` + "`file3.go`" + `
+**Depends on**: Task 2
+**Estimated time**: 1h
+`
+
+	parser := NewMarkdownParser()
+	plan, err := parser.Parse(strings.NewReader(markdown))
+	if err != nil {
+		t.Fatalf("Failed to parse markdown: %v", err)
+	}
+
+	// Should find 3 real tasks, ignoring 2 fake tasks in code blocks
+	if len(plan.Tasks) != 3 {
+		t.Errorf("Expected 3 tasks (ignoring code blocks), got %d", len(plan.Tasks))
+		for i, task := range plan.Tasks {
+			t.Logf("Task %d: Number=%d, Name=%s", i, task.Number, task.Name)
+		}
+	}
+
+	expectedNumbers := []int{1, 2, 3}
+	for i, expected := range expectedNumbers {
+		if i >= len(plan.Tasks) {
+			break
+		}
+		if plan.Tasks[i].Number != expected {
+			t.Errorf("Task %d: expected number %d, got %d", i, expected, plan.Tasks[i].Number)
+		}
+	}
+}

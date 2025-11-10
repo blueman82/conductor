@@ -458,6 +458,14 @@ func TestInvokeSuccess(t *testing.T) {
 		t.Fatal("Invoke() returned nil result")
 	}
 
+	// Some environments require manual acceptance of updated terms.
+	// If the CLI exits with a non-zero code and prints the terms notice,
+	// skip this integration test instead of failing the suite.
+	outputLower := strings.ToLower(result.Output)
+	if result.ExitCode != 0 && strings.Contains(outputLower, "terms") && strings.Contains(outputLower, "action required") {
+		t.Skip("claude CLI requires manual terms acceptance; skipping integration test")
+	}
+
 	// Verify output contains something
 	if result.Output == "" {
 		t.Error("Output should not be empty")

@@ -41,6 +41,12 @@ func NewRegistry(agentsDir string) *Registry {
 // Discover scans the agents directory and parses agent files
 // Returns a map of agent names to Agent structs
 // Returns an empty map (not an error) if the directory doesn't exist
+//
+// Strategy: Directory whitelisting + file filtering to reduce false warnings
+// - Scans root level .md files (agent definitions)
+// - Scans numbered subdirectories: 01-*, 02-*, ..., 10-* (categorized agents)
+// - Skips special directories: examples/, transcripts/, logs/ (documentation/metadata)
+// - Skips README.md files (category documentation, not agent definitions)
 func (r *Registry) Discover() (map[string]*Agent, error) {
 	// Check if directory exists
 	if _, err := os.Stat(r.AgentsDir); os.IsNotExist(err) {
@@ -54,12 +60,48 @@ func (r *Registry) Discover() (map[string]*Agent, error) {
 			return err
 		}
 
+		// Handle directories with whitelist filtering
 		if info.IsDir() {
-			return nil
+			// Always allow the root agents directory itself
+			if path == r.AgentsDir {
+				return nil
+			}
+
+			// Get directory name relative to agents directory
+			relPath, err := filepath.Rel(r.AgentsDir, path)
+			if err != nil {
+				return err
+			}
+
+			// Extract the directory name (first component of relative path)
+			dirName := strings.Split(relPath, string(filepath.Separator))[0]
+
+			// Skip special documentation/metadata directories
+			// These contain examples, transcripts, logs - not agent definitions
+			if dirName == "examples" || dirName == "transcripts" || dirName == "logs" {
+				return filepath.SkipDir
+			}
+
+			// Allow numbered directories (01-*, 02-*, ..., 10-*)
+			// These contain categorized agent definitions
+			if len(dirName) >= 3 && dirName[0] >= '0' && dirName[0] <= '9' && dirName[1] >= '0' && dirName[1] <= '9' && dirName[2] == '-' {
+				return nil
+			}
+
+			// Skip any other subdirectories not matching our whitelist
+			return filepath.SkipDir
 		}
 
 		// Only process .md files
 		if !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+
+		// Skip non-agent documentation files
+		// - README.md: Category documentation
+		// - *-framework.md: Framework/methodology documentation
+		basename := filepath.Base(path)
+		if basename == "README.md" || strings.HasSuffix(basename, "-framework.md") {
 			return nil
 		}
 

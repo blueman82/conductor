@@ -59,9 +59,13 @@ func TestRootCommandHasSubcommands(t *testing.T) {
 		t.Errorf("Expected Use to be 'conductor', got '%s'", cmd.Use)
 	}
 
-	// The commands slice may be empty for now, which is fine
+	// The commands slice should have validate command now
 	// We're just testing the structure
-	t.Logf("Found %d subcommands (expected 0 for now)", len(commands))
+	if len(commands) == 0 {
+		t.Errorf("Expected at least 1 subcommand (validate), got %d", len(commands))
+	}
+
+	t.Logf("Found %d subcommands", len(commands))
 }
 
 func TestVersionFlag(t *testing.T) {
