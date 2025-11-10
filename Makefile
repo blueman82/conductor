@@ -109,6 +109,15 @@ install:
 	@echo "Installing $(BINARY_NAME) to \$$GOPATH/bin..."
 	$(GOINSTALL) $(LDFLAGS) $(CMD_PATH)
 	@echo "Install complete"
+	@echo ""
+	@echo "To use conductor globally, add \$$GOPATH/bin to your PATH:"
+	@echo ""
+	@echo "  Add to ~/.zshrc or ~/.bash_profile:"
+	@echo "  export PATH=\$$PATH:\$$GOPATH/bin"
+	@echo ""
+	@echo "Then reload: source ~/.zshrc"
+	@echo ""
+	@echo "Or run directly: $$(go env GOPATH)/bin/$(BINARY_NAME)"
 
 ## fmt: Format code with gofmt
 fmt:
