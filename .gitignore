@@ -53,3 +53,6 @@ coverage.html
 # Transcripts (session logs)
 transcripts/
 conductor
+
+# Deployment strategies (local planning docs)
+docs/plans/subagent-deployment-strategy.md
