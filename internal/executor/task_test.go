@@ -45,7 +45,7 @@ type recordingUpdater struct {
 	err   error
 }
 
-func (r *recordingUpdater) Update(_ string, _ int, status string, completedAt *time.Time) error {
+func (r *recordingUpdater) Update(_ string, _ string, status string, completedAt *time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.err != nil {
@@ -106,7 +106,7 @@ func TestTaskExecutor_ExecutesTaskWithoutQC(t *testing.T) {
 	fixedTime := time.Date(2025, time.November, 8, 12, 0, 0, 0, time.UTC)
 	executor.clock = func() time.Time { return fixedTime }
 
-	task := models.Task{Number: 1, Name: "Demo", Prompt: "Do the thing"}
+	task := models.Task{Number: "1", Name: "Demo", Prompt: "Do the thing"}
 
 	result, err := executor.Execute(context.Background(), task)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestTaskExecutor_RetriesOnRedFlag(t *testing.T) {
 
 	executor.clock = func() time.Time { return time.Date(2025, time.November, 9, 9, 30, 0, 0, time.UTC) }
 
-	task := models.Task{Number: 2, Name: "Write feature", Prompt: "Implement"}
+	task := models.Task{Number: "2", Name: "Write feature", Prompt: "Implement"}
 
 	result, err := executor.Execute(context.Background(), task)
 	if err != nil {
@@ -224,7 +224,7 @@ func TestTaskExecutor_FailsAfterMaxRetries(t *testing.T) {
 		t.Fatalf("NewTaskExecutor returned error: %v", err)
 	}
 
-	task := models.Task{Number: 3, Name: "Hard task", Prompt: "Difficult"}
+	task := models.Task{Number: "3", Name: "Hard task", Prompt: "Difficult"}
 
 	result, err := executor.Execute(context.Background(), task)
 	if err == nil {
@@ -262,7 +262,7 @@ func TestTaskExecutor_InvocationFailure(t *testing.T) {
 		t.Fatalf("NewTaskExecutor returned error: %v", err)
 	}
 
-	task := models.Task{Number: 4, Name: "Broken", Prompt: "Broken"}
+	task := models.Task{Number: "4", Name: "Broken", Prompt: "Broken"}
 
 	result, err := executor.Execute(context.Background(), task)
 	if err == nil {
@@ -309,7 +309,7 @@ func TestTaskExecutor_YellowFlagHandling(t *testing.T) {
 	fixedTime := time.Date(2025, time.November, 9, 10, 0, 0, 0, time.UTC)
 	executor.clock = func() time.Time { return fixedTime }
 
-	task := models.Task{Number: 5, Name: "Yellow task", Prompt: "Do something"}
+	task := models.Task{Number: "5", Name: "Yellow task", Prompt: "Do something"}
 
 	result, err := executor.Execute(context.Background(), task)
 	if err != nil {
@@ -362,7 +362,7 @@ func TestTaskExecutor_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	task := models.Task{Number: 6, Name: "Cancelled task", Prompt: "Never completes"}
+	task := models.Task{Number: "6", Name: "Cancelled task", Prompt: "Never completes"}
 
 	result, err := executor.Execute(ctx, task)
 	if err == nil {
@@ -407,7 +407,7 @@ func TestTaskExecutor_ReviewError(t *testing.T) {
 		t.Fatalf("NewTaskExecutor returned error: %v", err)
 	}
 
-	task := models.Task{Number: 7, Name: "Review fails", Prompt: "Should fail on review"}
+	task := models.Task{Number: "7", Name: "Review fails", Prompt: "Should fail on review"}
 
 	result, err := executor.Execute(context.Background(), task)
 	if err == nil {
@@ -435,13 +435,13 @@ func TestTaskExecutor_ReviewError(t *testing.T) {
 // Critical: Lines 113-117 and 204-208 in task.go handle update failures but not tested.
 func TestTaskExecutor_PlanUpdateFailures(t *testing.T) {
 	tests := []struct {
-		name            string
-		failInitial     bool
-		failFinal       bool
-		expectedStatus  string
-		expectedError   bool
-		qcEnabled       bool
-		reviewFlag      string
+		name           string
+		failInitial    bool
+		failFinal      bool
+		expectedStatus string
+		expectedError  bool
+		qcEnabled      bool
+		reviewFlag     string
 	}{
 		{
 			name:           "Initial update fails",
@@ -487,7 +487,7 @@ func TestTaskExecutor_PlanUpdateFailures(t *testing.T) {
 			} else if tt.failFinal {
 				// Fail after first successful call - use custom wrapper
 				var callCount int
-				updater = planUpdaterFunc(func(path string, taskNum int, status string, completedAt *time.Time) error {
+				updater = planUpdaterFunc(func(path string, taskNum string, status string, completedAt *time.Time) error {
 					callCount++
 					if callCount == 1 {
 						return nil // First call succeeds
@@ -518,7 +518,7 @@ func TestTaskExecutor_PlanUpdateFailures(t *testing.T) {
 				t.Fatalf("NewTaskExecutor returned error: %v", err)
 			}
 
-			task := models.Task{Number: 8, Name: "Update fails", Prompt: "Test"}
+			task := models.Task{Number: "8", Name: "Update fails", Prompt: "Test"}
 
 			result, err := executor.Execute(context.Background(), task)
 
@@ -555,7 +555,7 @@ func TestTaskExecutor_DefaultAgentAssignment(t *testing.T) {
 	}
 
 	// Task with no agent specified
-	task := models.Task{Number: 9, Name: "Uses default", Prompt: "Do something", Agent: ""}
+	task := models.Task{Number: "9", Name: "Uses default", Prompt: "Do something", Agent: ""}
 
 	result, err := executor.Execute(context.Background(), task)
 	if err != nil {
@@ -636,7 +636,7 @@ func TestTaskExecutor_InvalidReviewFlag(t *testing.T) {
 				t.Fatalf("NewTaskExecutor returned error: %v", err)
 			}
 
-			task := models.Task{Number: 10, Name: "Invalid flag", Prompt: "Test"}
+			task := models.Task{Number: "10", Name: "Invalid flag", Prompt: "Test"}
 
 			result, err := executor.Execute(context.Background(), task)
 
@@ -713,7 +713,7 @@ func TestTaskExecutor_JSONParsingEdgeCases(t *testing.T) {
 				t.Fatalf("NewTaskExecutor returned error: %v", err)
 			}
 
-			task := models.Task{Number: 11, Name: "JSON test", Prompt: "Test"}
+			task := models.Task{Number: "11", Name: "JSON test", Prompt: "Test"}
 
 			result, err := executor.Execute(context.Background(), task)
 			if err != nil {
@@ -777,7 +777,7 @@ func TestTaskExecutor_InvocationErrorVsExitCode(t *testing.T) {
 				t.Fatalf("NewTaskExecutor returned error: %v", err)
 			}
 
-			task := models.Task{Number: 12, Name: "Error test", Prompt: "Test"}
+			task := models.Task{Number: "12", Name: "Error test", Prompt: "Test"}
 
 			result, err := executor.Execute(context.Background(), task)
 

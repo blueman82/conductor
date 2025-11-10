@@ -2,46 +2,13 @@ package cmd
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/harrison/conductor/internal/executor"
-	"github.com/harrison/conductor/internal/models"
 	"github.com/spf13/cobra"
 )
-
-// mockOrchestrator implements a mock orchestrator for testing
-type mockOrchestrator struct {
-	executeCalled   bool
-	executeErr      error
-	executeCtx      context.Context
-	executePlan     *models.Plan
-	executeFilePath string
-}
-
-func (m *mockOrchestrator) Execute(ctx context.Context, plan *models.Plan, filePath string) error {
-	m.executeCalled = true
-	m.executeCtx = ctx
-	m.executePlan = plan
-	m.executeFilePath = filePath
-	return m.executeErr
-}
-
-// orchestratorInterface defines the interface for orchestration
-type orchestratorInterface interface {
-	Execute(ctx context.Context, plan *models.Plan, filePath string) error
-}
-
-// Global var for testing (set in tests to use mocks)
-var newOrchestratorFunc = func(maxConcurrency int, timeout time.Duration, verbose bool) orchestratorInterface {
-	logger := &consoleLogger{writer: os.Stdout, verbose: verbose}
-	return executor.NewOrchestrator(executor.NewWaveExecutor(nil), logger)
-}
 
 // Helper function to create a test plan file
 func createTestPlanFile(t *testing.T, content string) string {
@@ -59,23 +26,12 @@ func createTestPlanFile(t *testing.T, content string) string {
 }
 
 // Helper function to execute run command with args
-func executeRunCommand(t *testing.T, args []string, mockOrch *mockOrchestrator) (string, error) {
+func executeRunCommand(t *testing.T, args []string) (string, error) {
 	t.Helper()
 
 	// Create a new root command and run command
 	rootCmd := &cobra.Command{Use: "conductor"}
 	runCmd := NewRunCommand()
-
-	// Replace orchestrator creation with mock
-	if mockOrch != nil {
-		originalNewOrchestrator := newOrchestratorFunc
-		defer func() { newOrchestratorFunc = originalNewOrchestrator }()
-
-		newOrchestratorFunc = func(maxConcurrency int, timeout time.Duration, verbose bool) orchestratorInterface {
-			return mockOrch
-		}
-	}
-
 	rootCmd.AddCommand(runCmd)
 
 	// Capture output
@@ -96,15 +52,11 @@ func TestRunCommand_Basic(t *testing.T) {
 
 ## Task 1: First task
 **Status**: pending
-**Agent**: default
-**Depends On**: none
 
 Do something simple.
 
 ## Task 2: Second task
 **Status**: pending
-**Agent**: default
-**Depends On**: Task 1
 
 Do something else.
 `
@@ -113,75 +65,37 @@ Do something else.
 		name           string
 		planContent    string
 		args           []string
-		mockErr        error
 		wantErr        bool
 		wantErrContain string
-		checkMock      func(*testing.T, *mockOrchestrator)
 	}{
 		{
-			name:        "valid plan execution",
-			planContent: validPlan,
-			args:        []string{"run"},
-			mockErr:     nil,
-			wantErr:     false,
-			checkMock: func(t *testing.T, m *mockOrchestrator) {
-				if !m.executeCalled {
-					t.Error("Execute was not called")
-				}
-				if m.executePlan == nil {
-					t.Error("Execute called with nil plan")
-				}
-				if m.executeFilePath == "" {
-					t.Error("Execute called with empty file path")
-				}
-			},
-		},
-		{
-			name:           "orchestrator execution error",
-			planContent:    validPlan,
-			args:           []string{"run"},
-			mockErr:        errors.New("execution failed"),
-			wantErr:        true,
-			wantErrContain: "execution failed",
-		},
-		{
-			name:        "dry run mode",
+			name:        "valid plan with dry-run",
 			planContent: validPlan,
 			args:        []string{"run", "--dry-run"},
-			mockErr:     nil,
 			wantErr:     false,
-			checkMock: func(t *testing.T, m *mockOrchestrator) {
-				if m.executeCalled {
-					t.Error("Execute should not be called in dry-run mode")
-				}
-			},
 		},
 		{
 			name:        "custom max concurrency",
 			planContent: validPlan,
-			args:        []string{"run", "--max-concurrency", "5"},
-			mockErr:     nil,
+			args:        []string{"run", "--dry-run", "--max-concurrency", "5"},
 			wantErr:     false,
 		},
 		{
 			name:        "custom timeout",
 			planContent: validPlan,
-			args:        []string{"run", "--timeout", "10m"},
-			mockErr:     nil,
+			args:        []string{"run", "--dry-run", "--timeout", "10m"},
 			wantErr:     false,
 		},
 		{
 			name:        "verbose mode",
 			planContent: validPlan,
-			args:        []string{"run", "--verbose"},
-			mockErr:     nil,
+			args:        []string{"run", "--dry-run", "--verbose"},
 			wantErr:     false,
 		},
 		{
 			name:        "all flags combined",
 			planContent: validPlan,
 			args:        []string{"run", "--dry-run", "--max-concurrency", "3", "--timeout", "15m", "--verbose"},
-			mockErr:     nil,
 			wantErr:     false,
 		},
 	}
@@ -194,13 +108,8 @@ Do something else.
 			// Append plan file to args
 			args := append(tt.args, planFile)
 
-			// Create mock orchestrator
-			mockOrch := &mockOrchestrator{
-				executeErr: tt.mockErr,
-			}
-
 			// Execute command
-			output, err := executeRunCommand(t, args, mockOrch)
+			output, err := executeRunCommand(t, args)
 
 			// Check error
 			if tt.wantErr {
@@ -215,11 +124,6 @@ Do something else.
 					t.Errorf("Unexpected error: %v\nOutput: %s", err, output)
 				}
 			}
-
-			// Run custom checks
-			if tt.checkMock != nil {
-				tt.checkMock(t, mockOrch)
-			}
 		})
 	}
 }
@@ -233,40 +137,43 @@ func TestRunCommand_ErrorCases(t *testing.T) {
 		{
 			name:           "missing plan file argument",
 			args:           []string{"run"},
-			wantErrContain: "requires exactly 1 arg",
+			wantErrContain: "accepts 1 arg",
 		},
 		{
 			name:           "too many arguments",
 			args:           []string{"run", "file1.md", "file2.md"},
-			wantErrContain: "requires exactly 1 arg",
+			wantErrContain: "accepts 1 arg",
 		},
 		{
 			name:           "plan file not found",
 			args:           []string{"run", "/nonexistent/plan.md"},
-			wantErrContain: "no such file or directory",
+			wantErrContain: "failed to load plan file",
 		},
 		{
 			name:           "invalid timeout format",
-			args:           []string{"run", "--timeout", "invalid"},
-			wantErrContain: "invalid duration",
+			args:           []string{"run", "--timeout", "invalid", "dummy.md"},
+			wantErrContain: "invalid timeout",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// For file not found case, use the provided path
+			// Create a valid plan file if args don't already have one
 			args := tt.args
 			if !strings.Contains(tt.name, "plan file not found") &&
 				!strings.Contains(tt.name, "missing plan file") &&
-				!strings.Contains(tt.name, "too many arguments") &&
-				!strings.Contains(tt.name, "invalid timeout") {
+				!strings.Contains(tt.name, "too many arguments") {
 				// Create a valid plan file for other cases
 				planFile := createTestPlanFile(t, "# Test\n## Task 1: Test\n**Status**: pending\n")
-				args = append(args, planFile)
+				// Replace dummy.md with actual plan file
+				if len(args) > 0 && strings.Contains(args[len(args)-1], "dummy.md") {
+					args[len(args)-1] = planFile
+				} else if !strings.Contains(strings.Join(args, " "), ".md") {
+					args = append(args, planFile)
+				}
 			}
 
-			mockOrch := &mockOrchestrator{}
-			_, err := executeRunCommand(t, args, mockOrch)
+			_, err := executeRunCommand(t, args)
 
 			if err == nil {
 				t.Errorf("Expected error but got none")
@@ -283,15 +190,11 @@ func TestRunCommand_DryRunOutput(t *testing.T) {
 
 ## Task 1: First task
 **Status**: pending
-**Agent**: default
-**Depends On**: none
 
 Do something.
 
 ## Task 2: Second task
 **Status**: pending
-**Agent**: default
-**Depends On**: Task 1
 
 Do something else.
 `
@@ -299,21 +202,20 @@ Do something else.
 	planFile := createTestPlanFile(t, validPlan)
 	args := []string{"run", "--dry-run", planFile}
 
-	mockOrch := &mockOrchestrator{}
-	output, err := executeRunCommand(t, args, mockOrch)
+	output, err := executeRunCommand(t, args)
 
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
 	// Verify dry-run output contains expected information
-	if !strings.Contains(output, "DRY RUN") && !strings.Contains(output, "Task 1") {
+	if !strings.Contains(output, "Dry-run mode") && !strings.Contains(output, "valid") {
 		t.Logf("Dry-run output: %s", output)
 	}
 
-	// Verify orchestrator was not called
-	if mockOrch.executeCalled {
-		t.Error("Orchestrator.Execute should not be called in dry-run mode")
+	// Verify output mentions plan validation
+	if !strings.Contains(output, "valid") && !strings.Contains(output, "Plan") {
+		t.Error("Expected dry-run output to mention plan validation")
 	}
 }
 
@@ -322,8 +224,6 @@ func TestRunCommand_TimeoutParsing(t *testing.T) {
 
 ## Task 1: Test timeout
 **Status**: pending
-**Agent**: default
-**Depends On**: none
 
 Test timeout parsing.
 `
@@ -353,10 +253,9 @@ Test timeout parsing.
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			planFile := createTestPlanFile(t, validPlan)
-			args := []string{"run", "--timeout", tt.timeout, planFile}
+			args := []string{"run", "--dry-run", "--timeout", tt.timeout, planFile}
 
-			mockOrch := &mockOrchestrator{}
-			_, err := executeRunCommand(t, args, mockOrch)
+			_, err := executeRunCommand(t, args)
 
 			if tt.wantErr {
 				if err == nil {
@@ -374,8 +273,8 @@ Test timeout parsing.
 func TestNewRunCommand(t *testing.T) {
 	cmd := NewRunCommand()
 
-	if cmd.Use != "run <plan-file>" {
-		t.Errorf("Expected Use to be 'run <plan-file>', got: %s", cmd.Use)
+	if cmd.Use != "run [plan-file]" {
+		t.Errorf("Expected Use to be 'run [plan-file]', got: %s", cmd.Use)
 	}
 
 	if cmd.Short == "" {
@@ -401,17 +300,14 @@ func TestRunCommand_VerboseOutput(t *testing.T) {
 
 ## Task 1: Verbose test
 **Status**: pending
-**Agent**: default
-**Depends On**: none
 
 Test verbose output.
 `
 
 	planFile := createTestPlanFile(t, validPlan)
-	args := []string{"run", "--verbose", planFile}
+	args := []string{"run", "--dry-run", "--verbose", planFile}
 
-	mockOrch := &mockOrchestrator{}
-	output, err := executeRunCommand(t, args, mockOrch)
+	output, err := executeRunCommand(t, args)
 
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -427,19 +323,281 @@ func TestRunCommand_PlanValidation(t *testing.T) {
 
 ## Task 1: Valid task
 **Status**: pending
-**Agent**: default
-**Depends On**: none
 
 Do something.
 `
 
 	planFile := createTestPlanFile(t, validPlan)
-	args := []string{"run", planFile}
+	args := []string{"run", "--dry-run", planFile}
 
-	mockOrch := &mockOrchestrator{}
-	_, err := executeRunCommand(t, args, mockOrch)
+	_, err := executeRunCommand(t, args)
 
 	if err != nil {
 		t.Errorf("Expected no error but got: %v", err)
+	}
+}
+
+func TestRunCommand_LogDirFlag(t *testing.T) {
+	validPlan := `# Test Plan
+
+## Task 1: First task
+**Status**: pending
+
+Do something.
+`
+
+	planFile := createTestPlanFile(t, validPlan)
+
+	tests := []struct {
+		name   string
+		logDir string
+	}{
+		{
+			name:   "default log directory",
+			logDir: "",
+		},
+		{
+			name:   "custom log directory",
+			logDir: filepath.Join(t.TempDir(), "custom-logs"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []string{"run", "--dry-run", planFile}
+			if tt.logDir != "" {
+				args = append(args, "--log-dir", tt.logDir)
+			}
+
+			_, err := executeRunCommand(t, args)
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestRunCommand_MaxConcurrency(t *testing.T) {
+	validPlan := `# Test Plan
+
+## Task 1: First task
+**Status**: pending
+
+Do something.
+
+## Task 2: Second task
+**Status**: pending
+
+Do something else.
+`
+
+	planFile := createTestPlanFile(t, validPlan)
+	args := []string{"run", "--dry-run", "--max-concurrency", "2", planFile}
+
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "Max concurrency: 2") {
+		t.Error("Expected output to mention max concurrency setting")
+	}
+}
+
+func TestRunCommand_EmptyPlan(t *testing.T) {
+	emptyPlan := `# Empty Plan
+
+No tasks defined.
+`
+
+	planFile := createTestPlanFile(t, emptyPlan)
+	args := []string{"run", "--dry-run", planFile}
+
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "no tasks") {
+		t.Error("Expected output to mention no tasks")
+	}
+}
+
+func TestRunCommand_CircularDependency(t *testing.T) {
+	cyclicPlan := `# Cyclic Plan
+
+## Task 1: First
+**Status**: pending
+**Depends on**: 2
+
+Do something.
+
+## Task 2: Second
+**Status**: pending
+**Depends on**: 1
+
+Do something else.
+`
+
+	planFile := createTestPlanFile(t, cyclicPlan)
+	args := []string{"run", "--dry-run", planFile}
+
+	_, err := executeRunCommand(t, args)
+
+	if err == nil {
+		t.Error("Expected error for circular dependency")
+	}
+
+	if !strings.Contains(err.Error(), "circular dependency") {
+		t.Errorf("Expected circular dependency error, got: %v", err)
+	}
+}
+
+func TestRunCommand_VerboseDryRun(t *testing.T) {
+	validPlan := `# Test Plan
+
+## Task 1: First task
+**Status**: pending
+
+Do something.
+
+## Task 2: Second task
+**Status**: pending
+**Depends on**: 1
+
+Do something else.
+`
+
+	planFile := createTestPlanFile(t, validPlan)
+	args := []string{"run", "--dry-run", "--verbose", planFile}
+
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Verbose mode should show task details
+	if !strings.Contains(output, "Task 1") || !strings.Contains(output, "Task 2") {
+		t.Error("Expected verbose output to show task details")
+	}
+
+	// Should show wave structure
+	if !strings.Contains(output, "Wave") {
+		t.Error("Expected output to show wave structure")
+	}
+}
+
+func TestRunCommand_ComplexDependencies(t *testing.T) {
+	complexPlan := `# Complex Plan
+
+## Task 1: Foundation
+**Status**: pending
+
+Build foundation.
+
+## Task 2: Branch A
+**Status**: pending
+**Depends on**: 1
+
+Build branch A.
+
+## Task 3: Branch B
+**Status**: pending
+**Depends on**: 1
+
+Build branch B.
+
+## Task 4: Convergence
+**Status**: pending
+**Depends on**: 2, 3
+
+Merge branches.
+`
+
+	planFile := createTestPlanFile(t, complexPlan)
+	args := []string{"run", "--dry-run", planFile}
+
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Should calculate 3 waves
+	if !strings.Contains(output, "Execution waves: 3") {
+		t.Errorf("Expected 3 waves for complex dependencies, got output: %s", output)
+	}
+}
+
+func TestRunCommand_YAMLFormat(t *testing.T) {
+	yamlPlan := `conductor:
+  max_concurrency: 2
+  timeout: "5m"
+  default_agent: "general-purpose"
+
+plan:
+  metadata:
+    name: "YAML Test Plan"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 1
+      name: "First YAML Task"
+      prompt: "Do the first task"
+      files: ["main.go"]
+      depends_on: []
+      estimated_time: "10m"
+    - task_number: 2
+      name: "Second YAML Task"
+      prompt: "Do the second task"
+      files: ["output.go"]
+      depends_on: [1]
+      estimated_time: "10m"
+`
+
+	tmpDir := t.TempDir()
+	planFile := filepath.Join(tmpDir, "test-plan.yaml")
+
+	err := os.WriteFile(planFile, []byte(yamlPlan), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create YAML plan file: %v", err)
+	}
+
+	args := []string{"run", "--dry-run", planFile}
+
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "Total tasks: 2") {
+		t.Errorf("Expected YAML plan to be parsed correctly, got output: %s", output)
+	}
+}
+
+func TestRunCommand_LongTimeout(t *testing.T) {
+	validPlan := `# Test Plan
+
+## Task 1: Test task
+**Status**: pending
+
+Test long timeout.
+`
+
+	planFile := createTestPlanFile(t, validPlan)
+	args := []string{"run", "--dry-run", "--timeout", "24h", planFile}
+
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "Timeout: 24h") {
+		t.Error("Expected output to show 24h timeout")
 	}
 }

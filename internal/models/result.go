@@ -23,9 +23,9 @@ type TaskResult struct {
 
 // ExecutionResult represents the aggregate result of executing a plan
 type ExecutionResult struct {
-	TotalTasks  int            // Total number of tasks
-	Completed   int            // Number of completed tasks
-	Failed      int            // Number of failed tasks
-	Duration    time.Duration  // Total execution time
-	FailedTasks []TaskResult   // Details of failed tasks
+	TotalTasks  int           // Total number of tasks
+	Completed   int           // Number of completed tasks
+	Failed      int           // Number of failed tasks
+	Duration    time.Duration // Total execution time
+	FailedTasks []TaskResult  // Details of failed tasks
 }

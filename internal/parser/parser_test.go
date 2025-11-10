@@ -223,8 +223,8 @@ func TestParseFile_Integration(t *testing.T) {
 		// Verify a task was parsed correctly
 		if len(plan.Tasks) > 0 {
 			task := plan.Tasks[0]
-			if task.Number <= 0 {
-				t.Error("Task number should be positive")
+			if task.Number == "" {
+				t.Error("Task number should not be empty")
 			}
 			if task.Name == "" {
 				t.Error("Task name should not be empty")
@@ -265,8 +265,8 @@ func TestParseFile_Integration(t *testing.T) {
 		// Verify a task was parsed correctly
 		if len(plan.Tasks) > 0 {
 			task := plan.Tasks[0]
-			if task.Number <= 0 {
-				t.Error("Task number should be positive")
+			if task.Number == "" {
+				t.Error("Task number should not be empty")
 			}
 			if task.Name == "" {
 				t.Error("Task name should not be empty")

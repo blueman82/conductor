@@ -1,0 +1,1290 @@
+plan:
+  metadata:
+    feature_name: "Random Inspiring Quotes CLI"
+    created: "2025-11-10"
+    target: "Simple CLI tool that generates random inspiring quotes with multiple output formats"
+    estimated_tasks: 7
+    language: "Go"
+    framework: "Cobra CLI framework"
+    test_framework: "Go testing (table-driven tests)"
+    estimated_total_time: "3-4 hours"
+
+  worktree_groups:
+    - group_id: "core-implementation"
+      description: "Core quotes functionality and formatters"
+      tasks: [1, 2, 3]
+      branch: "feature/quotes-cli/core-implementation"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Task 2 depends on Task 1, Task 3 depends on both formatters and core logic"
+      setup_commands: |
+        git worktree add ../wt-quotes-core -b feature/quotes-cli/core-implementation
+        cd ../wt-quotes-core
+        # Tasks 1→2→3 execute sequentially in this worktree
+
+    - group_id: "cli-and-integration"
+      description: "CLI interface with Cobra, flags, and integration"
+      tasks: [4, 5]
+      branch: "feature/quotes-cli/cli-and-integration"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Task 5 (CLI) depends on Task 4 (core implementation merged)"
+      setup_commands: |
+        # Wait for core-implementation to merge to main
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-quotes-cli -b feature/quotes-cli/cli-and-integration
+        cd ../wt-quotes-cli
+        # Task 4→5 execute sequentially
+
+    - group_id: "testing-and-docs"
+      description: "Comprehensive tests and documentation"
+      tasks: [6, 7]
+      branch: "feature/quotes-cli/testing-and-docs"
+      execution_model: "parallel"
+      isolation: "separate-worktree"
+      rationale: "Independent tasks that can run in parallel with CLI work"
+      setup_commands: |
+        git worktree add ../wt-quotes-testing -b feature/quotes-cli/testing-and-docs
+        cd ../wt-quotes-testing
+        # Tasks 6 and 7 can be done in parallel
+
+  context:
+    framework: "Go 1.21+ with Cobra CLI framework"
+    architecture: "Simple single-purpose CLI tool following Unix philosophy"
+    test_framework: "Go standard testing package with table-driven tests"
+    build_system: "Makefile (matching conductor patterns)"
+    other_context:
+      - "Single-purpose tool: generate random quotes"
+      - "No external dependencies beyond Cobra (already in conductor)"
+      - "Hardcoded quotes with optional ~/.quotes.json override"
+      - "Three output formats: text, JSON, markdown"
+      - "Reproducible randomness with --seed flag"
+    expectations:
+      - "Write tests BEFORE implementation (TDD red-green-refactor)"
+      - "Commit frequently after each completed task"
+      - "Follow conductor's existing patterns (Cobra setup, testing style, Makefile)"
+      - "Keep code simple (YAGNI principle)"
+      - "90%+ coverage for formatters and selection logic, 70%+ overall"
+
+  prerequisites:
+    - item: "Go 1.21+ installed"
+      details: "Run: go version"
+      verified: false
+    - item: "Git worktree support"
+      details: "Git 2.15+, verify: git worktree list"
+      verified: false
+    - item: "Familiar with conductor codebase"
+      details: "Review: cmd/conductor/main.go and internal/cmd/run.go"
+      verified: false
+    - item: "Understanding of Cobra framework"
+      details: "Conductor uses this - reference: internal/cmd/root.go"
+      verified: false
+
+  tasks:
+    - task_number: 1
+      name: "Define Quote data structure and core selection logic"
+      worktree_group: "core-implementation"
+      files:
+        - "cmd/quotes/types.go"
+      depends_on: []
+      estimated_time: "30m"
+
+      description: |
+        Create the Quote struct with Text and Author fields, and implement the core
+        randomness logic with optional seeding. This is the foundation for all other tasks.
+
+      test_first:
+        test_file: "cmd/quotes/types_test.go"
+        structure:
+          - "TestQuoteStruct - verify Quote fields are accessible"
+          - "TestRandomSelection_DeterministicSeed - verify seeded selection is reproducible"
+          - "TestRandomSelection_DifferentSeeds - verify different seeds produce different results"
+          - "TestRandomSelection_EdgeCases - empty list, single item"
+        mocks: []
+        fixtures:
+          - "sampleQuotes slice with 5 test quotes"
+        assertions:
+          - "Quote struct has Text and Author fields"
+          - "Same seed produces same selection"
+          - "Different seeds produce different selections"
+          - "Empty quote list returns error"
+        edge_cases:
+          - "Empty quote list"
+          - "Single quote in list"
+          - "Negative seed"
+          - "Zero seed"
+        example_skeleton: |
+          func TestRandomSelection(t *testing.T) {
+              tests := []struct {
+                  name   string
+                  quotes []Quote
+                  seed   int64
+                  want   int // expected index
+              }{
+                  {"seed 42 returns index 0", quotes, 42, 0},
+                  {"seed 99 returns index 2", quotes, 99, 2},
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      got := SelectRandom(tt.quotes, tt.seed)
+                      if got.Text != tt.quotes[tt.want].Text {
+                          t.Errorf("got %v, want %v", got, tt.quotes[tt.want])
+                      }
+                  })
+              }
+          }
+
+      implementation:
+        approach: |
+          Define Quote struct with Text and Author fields.
+          Create a SelectRandom function that takes a slice of quotes and an optional seed.
+          Use rand.NewSource(seed) for deterministic randomness when seed is provided.
+          Return a single Quote from the slice.
+
+        code_structure: |
+          package main
+
+          type Quote struct {
+              Text   string
+              Author string
+          }
+
+          var defaultQuotes = []Quote{
+              {Text: "Be the change...", Author: "Gandhi"},
+              {Text: "Code is poetry", Author: "Unknown"},
+              // ... more quotes
+          }
+
+          func SelectRandom(quotes []Quote, seed int64) (Quote, error) {
+              if len(quotes) == 0 {
+                  return Quote{}, ErrNoQuotes
+              }
+              source := rand.NewSource(seed)
+              rng := rand.New(source)
+              return quotes[rng.Intn(len(quotes))], nil
+          }
+
+        key_points:
+          - point: "Use rand.NewSource for reproducible randomness"
+            reference: "Go stdlib rand package"
+          - point: "Define Quote struct matching formatter needs"
+            reference: "Task 2 expects Text and Author fields"
+          - point: "Return error for edge cases"
+            details: "nil quotes slice should return ErrNoQuotes"
+          - point: "Keep quote data separate from selection logic"
+            details: "Makes testing and reuse easier"
+
+        integration:
+          imports:
+            - "import \"math/rand\""
+            - "import \"errors\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Return ErrNoQuotes when slice is empty"
+
+      verification:
+        manual_testing:
+          - step: "Compile package"
+            command: "go build ./cmd/quotes"
+            expected: "No compilation errors"
+          - step: "Run tests"
+            command: "go test ./cmd/quotes -v"
+            expected: "All tests pass"
+        automated_tests:
+          command: "go test ./cmd/quotes/types_test.go -v"
+          expected_output: |
+            === RUN   TestQuoteStruct
+            --- PASS: TestQuoteStruct (0.00s)
+            === RUN   TestRandomSelection
+            --- PASS: TestRandomSelection (0.00s)
+            PASS
+        success_criteria:
+          - "Quote struct compiles"
+          - "SelectRandom returns deterministic results with same seed"
+          - "All tests pass"
+          - "No errors with edge cases"
+
+      commit:
+        type: "feat"
+        message: "add Quote struct and random selection logic"
+        body: |
+          - Define Quote struct with Text and Author fields
+          - Implement SelectRandom with optional seeding for reproducibility
+          - Add comprehensive unit tests with table-driven approach
+          - Edge cases: empty list, negative seeds, single quote
+        files:
+          - "cmd/quotes/types.go"
+          - "cmd/quotes/types_test.go"
+
+    - task_number: 2
+      name: "Implement output formatters (text, JSON, markdown)"
+      worktree_group: "core-implementation"
+      files:
+        - "cmd/quotes/formatter.go"
+      depends_on: [1]
+      estimated_time: "45m"
+
+      description: |
+        Create three formatter functions that take a Quote and produce output in
+        plain text, JSON, and markdown formats. Each formatter should handle multiple
+        quotes and produce appropriate output (lists for JSON/markdown, numbered list for text).
+
+      test_first:
+        test_file: "cmd/quotes/formatter_test.go"
+        structure:
+          - "TestFormatText - single and multiple quotes"
+          - "TestFormatJSON - valid JSON structure"
+          - "TestFormatMarkdown - markdown quote blocks"
+          - "TestFormatters_InvalidInput - nil or empty quotes"
+        mocks: []
+        fixtures:
+          - "singleQuote: Quote{Text: \"Test\", Author: \"Author\"}"
+          - "multipleQuotes: []Quote with 3 items"
+        assertions:
+          - "Text format includes author attribution"
+          - "JSON format is valid and parseable"
+          - "Markdown format includes > for quote blocks"
+          - "Multiple quotes handled correctly"
+        edge_cases:
+          - "Empty quote text"
+          - "Empty author"
+          - "Quotes with special characters (quotes, newlines)"
+          - "Empty slice"
+        example_skeleton: |
+          func TestFormatText(t *testing.T) {
+              tests := []struct {
+                  name   string
+                  quotes []Quote
+                  want   string
+              }{
+                  {
+                      "single quote",
+                      []Quote{{Text: "Be", Author: "Gandhi"}},
+                      "Be\n- Gandhi\n",
+                  },
+                  {
+                      "multiple quotes",
+                      []Quote{
+                          {Text: "Be", Author: "Gandhi"},
+                          {Text: "Code", Author: "Unknown"},
+                      },
+                      "1. Be\n   - Gandhi\n2. Code\n   - Unknown\n",
+                  },
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      got := FormatText(tt.quotes)
+                      if got != tt.want {
+                          t.Errorf("got %q, want %q", got, tt.want)
+                      }
+                  })
+              }
+          }
+
+      implementation:
+        approach: |
+          Create three functions: FormatText, FormatJSON, FormatMarkdown.
+          Each takes []Quote and returns a string.
+          FormatText: "Quote text\n- Author\n" format
+          FormatJSON: JSON array of objects with "quote" and "author" fields
+          FormatMarkdown: "> Quote text\n\n— Author\n\n" format
+
+        code_structure: |
+          package main
+
+          import (
+              "encoding/json"
+              "fmt"
+              "strings"
+          )
+
+          func FormatText(quotes []Quote) string {
+              var result strings.Builder
+              for i, q := range quotes {
+                  if len(quotes) > 1 {
+                      fmt.Fprintf(&result, "%d. ", i+1)
+                  }
+                  fmt.Fprintf(&result, "%s\n   - %s\n", q.Text, q.Author)
+              }
+              return result.String()
+          }
+
+          func FormatJSON(quotes []Quote) string {
+              b, _ := json.MarshalIndent(quotes, "", "  ")
+              return string(b)
+          }
+
+          func FormatMarkdown(quotes []Quote) string {
+              var result strings.Builder
+              for _, q := range quotes {
+                  fmt.Fprintf(&result, "> %s\n\n— %s\n\n", q.Text, q.Author)
+              }
+              return result.String()
+          }
+
+        key_points:
+          - point: "Use strings.Builder for efficient string concatenation"
+            details: "Avoid repeated string concatenation with +"
+          - point: "Handle both single and multiple quotes"
+            details: "Text format uses numbers when count > 1"
+          - point: "JSON should be indented for readability"
+            details: "Use json.MarshalIndent with 2-space indent"
+          - point: "Test each formatter independently"
+            details: "Fixed quotes make output verification exact"
+
+        integration:
+          imports:
+            - "import \"encoding/json\""
+            - "import \"fmt\""
+            - "import \"strings\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle empty quotes slice gracefully"
+            - "Escape special characters in JSON"
+
+      verification:
+        manual_testing:
+          - step: "Test text output"
+            command: "go test ./cmd/quotes -run TestFormatText"
+            expected: "Pass with correct formatting"
+          - step: "Test JSON output"
+            command: "go run ./cmd/quotes && quotes --format json"
+            expected: "Valid JSON output"
+        automated_tests:
+          command: "go test ./cmd/quotes/formatter_test.go -v"
+          expected_output: |
+            === RUN   TestFormatText
+            --- PASS: TestFormatText (0.00s)
+            === RUN   TestFormatJSON
+            --- PASS: TestFormatJSON (0.00s)
+            === RUN   TestFormatMarkdown
+            --- PASS: TestFormatMarkdown (0.00s)
+            PASS
+        success_criteria:
+          - "All three formatters work correctly"
+          - "JSON is valid and parseable"
+          - "Markdown is properly formatted"
+          - "Multiple quotes handled in each format"
+          - "No TypeScript/linting errors"
+
+      commit:
+        type: "feat"
+        message: "add output formatters for text, JSON, markdown"
+        body: |
+          - Implement FormatText with author attribution
+          - Implement FormatJSON with indented output
+          - Implement FormatMarkdown with quote blocks
+          - Comprehensive tests for all formats and edge cases
+        files:
+          - "cmd/quotes/formatter.go"
+          - "cmd/quotes/formatter_test.go"
+
+    - task_number: 3
+      name: "Implement quote loading with hardcoded defaults and JSON override"
+      worktree_group: "core-implementation"
+      files:
+        - "cmd/quotes/loader.go"
+      depends_on: [1]
+      estimated_time: "30m"
+
+      description: |
+        Create a LoadQuotes function that returns hardcoded default quotes,
+        but checks for optional ~/.quotes.json override. If override exists and is valid,
+        use it; otherwise fall back to defaults. Never fail hard - always have quotes available.
+
+      test_first:
+        test_file: "cmd/quotes/loader_test.go"
+        structure:
+          - "TestLoadQuotes_DefaultsWhenNoOverride"
+          - "TestLoadQuotes_OverrideWhenFileExists"
+          - "TestLoadQuotes_InvalidJSON_FallsBackToDefaults"
+          - "TestLoadQuotes_MissingFile_UsesDefaults"
+        mocks: []
+        fixtures:
+          - "testdata/valid-quotes.json"
+          - "testdata/invalid-quotes.json"
+        assertions:
+          - "Default quotes returned when no override"
+          - "Override quotes used when valid file exists"
+          - "Falls back to defaults on invalid JSON"
+          - "Never returns nil or empty slice"
+        edge_cases:
+          - "Missing ~/.quotes.json file"
+          - "Malformed JSON in override file"
+          - "Empty JSON array in override"
+          - "Permission denied on override file"
+        example_skeleton: |
+          func TestLoadQuotes(t *testing.T) {
+              tests := []struct {
+                  name      string
+                  setupFile func() error
+                  want      int // expected count
+              }{
+                  {"defaults when no file", func() error { return nil }, 50},
+                  {"override when valid", func() error {
+                      return ioutil.WriteFile(path, validJSON, 0644)
+                  }, 3},
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      got := LoadQuotes()
+                      if len(got) != tt.want {
+                          t.Errorf("got %d quotes, want %d", len(got), tt.want)
+                      }
+                  })
+              }
+          }
+
+      implementation:
+        approach: |
+          Define 50-100 default quotes as a global var.
+          Create LoadQuotes() that checks if ~/.quotes.json exists.
+          If it exists and is valid JSON, use those quotes.
+          Otherwise return defaults.
+          Always return a non-empty slice - never fail hard.
+
+        code_structure: |
+          package main
+
+          import (
+              "encoding/json"
+              "os"
+              "path/filepath"
+          )
+
+          var defaultQuotes = []Quote{
+              {Text: "Be the change you wish to see in the world", Author: "Mahatma Gandhi"},
+              {Text: "Code is poetry", Author: "Unknown"},
+              // ... 48-98 more quotes
+          }
+
+          func LoadQuotes() []Quote {
+              home, err := os.UserHomeDir()
+              if err != nil {
+                  return defaultQuotes
+              }
+
+              overridePath := filepath.Join(home, ".quotes.json")
+              data, err := os.ReadFile(overridePath)
+              if err != nil {
+                  return defaultQuotes // file doesn't exist or unreadable
+              }
+
+              var quotes []Quote
+              if err := json.Unmarshal(data, &quotes); err != nil || len(quotes) == 0 {
+                  return defaultQuotes // invalid JSON or empty
+              }
+
+              return quotes
+          }
+
+        key_points:
+          - point: "Always return defaultQuotes as fallback"
+            details: "Never fail or return nil - graceful degradation"
+          - point: "Use os.UserHomeDir() for cross-platform compatibility"
+            details: "Works on Windows, macOS, Linux"
+          - point: "Size of default quotes is ~10KB in 5MB binary (0.2%)"
+            details: "Acceptable trade-off for zero-config"
+          - point: "Match conductor's config patterns"
+            reference: "Similar optional config file approach in conductor"
+
+        integration:
+          imports:
+            - "import \"encoding/json\""
+            - "import \"os\""
+            - "import \"path/filepath\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Silently fall back to defaults on any error"
+            - "No errors logged - should always work"
+
+      verification:
+        manual_testing:
+          - step: "Test with no override file"
+            command: "rm ~/.quotes.json 2>/dev/null; go test ./cmd/quotes"
+            expected: "Uses defaults"
+          - step: "Create valid override"
+            command: "echo '[{\"text\": \"Test\", \"author\": \"Me\"}]' > ~/.quotes.json"
+            expected: "LoadQuotes() uses override"
+          - step: "Test with invalid override"
+            command: "echo 'invalid json' > ~/.quotes.json && go test"
+            expected: "Falls back to defaults"
+        automated_tests:
+          command: "go test ./cmd/quotes/loader_test.go -v"
+          expected_output: |
+            === RUN   TestLoadQuotes_DefaultsWhenNoOverride
+            --- PASS: TestLoadQuotes_DefaultsWhenNoOverride (0.00s)
+            === RUN   TestLoadQuotes_OverrideWhenFileExists
+            --- PASS: TestLoadQuotes_OverrideWhenFileExists (0.00s)
+            PASS
+        success_criteria:
+          - "Always returns non-nil, non-empty slice"
+          - "Uses defaults when no override"
+          - "Uses override when valid file exists"
+          - "Falls back to defaults on any error"
+          - "Cross-platform compatible"
+
+      commit:
+        type: "feat"
+        message: "add quote loading with fallback to hardcoded defaults"
+        body: |
+          - Define 50+ default inspiring quotes
+          - Implement LoadQuotes() with ~/.quotes.json override support
+          - Graceful fallback to defaults on any error
+          - Zero-config design with power-user customization
+        files:
+          - "cmd/quotes/loader.go"
+          - "cmd/quotes/loader_test.go"
+          - "cmd/quotes/testdata/valid-quotes.json"
+
+    - task_number: 4
+      name: "Implement Cobra CLI with flags (--format, --count, --seed)"
+      worktree_group: "cli-and-integration"
+      files:
+        - "cmd/quotes/main.go"
+      depends_on: [1, 2, 3]
+      estimated_time: "1h"
+
+      description: |
+        Create the main CLI entrypoint using Cobra framework (matching conductor patterns).
+        Implement the root command that generates quotes with --format, --count, and --seed flags.
+        Plain invocation 'quotes' should return a single random quote in text format.
+
+      test_first:
+        test_file: "cmd/quotes/main_test.go"
+        structure:
+          - "TestQuotesCommand_DefaultBehavior - bare 'quotes' returns one quote"
+          - "TestQuotesCommand_FormatFlag - --format json|markdown works"
+          - "TestQuotesCommand_CountFlag - --count 5 returns 5 quotes"
+          - "TestQuotesCommand_SeedFlag - --seed 42 is reproducible"
+          - "TestQuotesCommand_FlagCombinations - multiple flags together"
+          - "TestQuotesCommand_InvalidFormat - rejects invalid format"
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Default command outputs text format"
+          - "Each format flag produces correct output"
+          - "Count flag increases output appropriately"
+          - "Seed flag produces reproducible output"
+          - "Invalid flags produce error"
+        edge_cases:
+          - "Count = 0"
+          - "Count > total quotes available"
+          - "Negative count"
+          - "Seed = 0"
+          - "Unknown format"
+        example_skeleton: |
+          func TestQuotesCommand(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  args    []string
+                  wantErr bool
+              }{
+                  {"default", []string{}, false},
+                  {"json format", []string{"--format", "json"}, false},
+                  {"count 3", []string{"--count", "3"}, false},
+                  {"invalid format", []string{"--format", "xml"}, true},
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      cmd := NewQuotesCommand()
+                      cmd.SetArgs(tt.args)
+                      err := cmd.Execute()
+                      if (err != nil) != tt.wantErr {
+                          t.Errorf("got error %v, want %v", err, tt.wantErr)
+                      }
+                  })
+              }
+          }
+
+      implementation:
+        approach: |
+          Use Cobra framework (from conductor) to create root command.
+          Define flags: --format (text|json|markdown), --count (1-100), --seed (optional int64).
+          In Run function: load quotes, select random, format, print.
+          Validate flags and return clear errors.
+
+        code_structure: |
+          package main
+
+          import (
+              "fmt"
+              "log"
+              "os"
+              "github.com/spf13/cobra"
+          )
+
+          var (
+              format string
+              count  int
+              seed   int64
+          )
+
+          var rootCmd = &cobra.Command{
+              Use:   "quotes",
+              Short: "Generate random inspiring quotes",
+              RunE: func(cmd *cobra.Command, args []string) error {
+                  // Validate flags
+                  if !isValidFormat(format) {
+                      return fmt.Errorf("invalid format: %s", format)
+                  }
+                  if count < 1 || count > 100 {
+                      return fmt.Errorf("count must be 1-100")
+                  }
+
+                  // Load quotes
+                  quotes := LoadQuotes()
+
+                  // Select random
+                  selected := make([]Quote, 0, count)
+                  for i := 0; i < count; i++ {
+                      q, _ := SelectRandom(quotes, seed+int64(i))
+                      selected = append(selected, q)
+                  }
+
+                  // Format and print
+                  var output string
+                  switch format {
+                  case "json":
+                      output = FormatJSON(selected)
+                  case "markdown":
+                      output = FormatMarkdown(selected)
+                  default:
+                      output = FormatText(selected)
+                  }
+
+                  fmt.Print(output)
+                  return nil
+              },
+          }
+
+          func init() {
+              rootCmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text|json|markdown")
+              rootCmd.Flags().IntVarP(&count, "count", "n", 1, "Number of quotes (1-100)")
+              rootCmd.Flags().Int64Var(&seed, "seed", 0, "Random seed for reproducibility")
+          }
+
+          func main() {
+              if err := rootCmd.Execute(); err != nil {
+                  log.Fatal(err)
+              }
+          }
+
+        key_points:
+          - point: "Follow conductor's Cobra patterns"
+            reference: "internal/cmd/run.go for structure"
+          - point: "Default format is text"
+            details: "Most common use case"
+          - point: "Count must be 1-100"
+            details: "Prevent abuse, reasonable max"
+          - point: "Seed is optional"
+            details: "Random if not provided"
+          - point: "Use RunE for proper error handling"
+            details: "Cobra best practice"
+
+        integration:
+          imports:
+            - "import \"github.com/spf13/cobra\""
+            - "import \"fmt\""
+          services_to_inject: []
+          config_values:
+            - "MAX_QUOTE_COUNT = 100"
+          error_handling:
+            - "Validate format is one of: text|json|markdown"
+            - "Validate count is 1-100"
+            - "Return clear error messages"
+
+      verification:
+        manual_testing:
+          - step: "Build binary"
+            command: "go build -o quotes ./cmd/quotes"
+            expected: "Binary created"
+          - step: "Test default"
+            command: "./quotes"
+            expected: "One random quote in text format"
+          - step: "Test format flags"
+            command: "./quotes --format json && ./quotes --format markdown"
+            expected: "JSON and markdown output work"
+          - step: "Test count flag"
+            command: "./quotes --count 5"
+            expected: "Five quotes in text format"
+          - step: "Test seed flag"
+            command: "./quotes --seed 42 --count 3 && ./quotes --seed 42 --count 3"
+            expected: "Both commands produce identical output"
+        automated_tests:
+          command: "go test ./cmd/quotes/main_test.go -v"
+          expected_output: |
+            === RUN   TestQuotesCommand_DefaultBehavior
+            --- PASS: TestQuotesCommand_DefaultBehavior (0.00s)
+            === RUN   TestQuotesCommand_FormatFlag
+            --- PASS: TestQuotesCommand_FormatFlag (0.00s)
+            PASS
+        success_criteria:
+          - "Binary builds without errors"
+          - "Default 'quotes' outputs text format"
+          - "All flags work and validate correctly"
+          - "Seed produces reproducible output"
+          - "All tests pass"
+          - "Help text is clear"
+
+      commit:
+        type: "feat"
+        message: "implement Cobra CLI with format, count, and seed flags"
+        body: |
+          - Create Cobra root command for 'quotes' tool
+          - Add --format flag (text|json|markdown, default: text)
+          - Add --count flag (1-100, default: 1)
+          - Add --seed flag for reproducible randomness
+          - Comprehensive CLI integration tests
+          - Flag validation and error handling
+        files:
+          - "cmd/quotes/main.go"
+          - "cmd/quotes/main_test.go"
+
+    - task_number: 5
+      name: "Build and test the complete binary with Makefile integration"
+      worktree_group: "cli-and-integration"
+      files:
+        - "Makefile"
+        - "cmd/quotes/Makefile"
+      depends_on: [4]
+      estimated_time: "30m"
+
+      description: |
+        Create build targets in Makefile matching conductor patterns.
+        Add 'make build', 'make test', 'make install' targets for quotes binary.
+        Verify binary compiles, installs, and runs correctly.
+
+      test_first:
+        test_file: "N/A - this is build/integration verification"
+        structure:
+          - "Verify make build creates executable"
+          - "Verify make test runs all tests"
+          - "Verify make install puts binary in GOPATH/bin"
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Binary exists after make build"
+          - "All tests pass"
+          - "Binary in GOPATH/bin after install"
+        edge_cases:
+          - "Clean build removes old binary"
+          - "Rebuilds when source changes"
+        example_skeleton: |
+          # Makefile targets for quotes CLI
+          .PHONY: build test install clean
+
+          build:
+              go build -o quotes ./cmd/quotes
+
+          test:
+              go test ./cmd/quotes/... -v
+
+          install:
+              go install ./cmd/quotes
+
+          clean:
+              rm -f quotes
+
+      implementation:
+        approach: |
+          Add build targets to Makefile matching conductor patterns.
+          Include version string from git commit.
+          Make test and build targets.
+          Ensure install works with PATH setup (like conductor).
+
+        code_structure: |
+          # Add to main Makefile
+
+          # Quotes CLI targets
+          .PHONY: quotes-build quotes-test quotes-install
+
+          quotes-build:
+              @echo "Building quotes CLI..."
+              go build -o quotes ./cmd/quotes
+              @echo "Build complete: ./quotes"
+
+          quotes-test:
+              @echo "Testing quotes CLI..."
+              go test -v ./cmd/quotes/...
+
+          quotes-install:
+              @echo "Installing quotes to $$GOPATH/bin..."
+              go install ./cmd/quotes
+              @echo "Install complete"
+
+        key_points:
+          - point: "Match conductor build patterns"
+            reference: "Makefile targets in conductor"
+          - point: "Version string from git"
+            details: "Use ldflags like conductor does"
+          - point: "Installation includes PATH setup"
+            details: "Match conductor's intelligent PATH configuration"
+
+        integration:
+          imports: []
+          services_to_inject: []
+          config_values:
+            - "QUOTES_BINARY_NAME = quotes"
+          error_handling:
+            - "Build fails cleanly on errors"
+            - "Tests fail cleanly on failures"
+
+      verification:
+        manual_testing:
+          - step: "Clean and rebuild"
+            command: "make clean && make quotes-build"
+            expected: "./quotes binary exists"
+          - step: "Run all tests"
+            command: "make quotes-test"
+            expected: "All tests pass"
+          - step: "Install binary"
+            command: "make quotes-install"
+            expected: "Binary in GOPATH/bin"
+          - step: "Test installed binary"
+            command: "quotes --version && quotes --help"
+            expected: "Binary works globally"
+        automated_tests:
+          command: "make quotes-test && make quotes-build"
+          expected_output: |
+            Testing quotes CLI...
+            ok      github.com/harrison/conductor/cmd/quotes    2.456s
+            Building quotes CLI...
+            Build complete: ./quotes
+        success_criteria:
+          - "Binary builds successfully"
+          - "All tests pass"
+          - "Make install works"
+          - "Binary is in GOPATH/bin"
+          - "Global 'quotes' command works"
+
+      commit:
+        type: "chore"
+        message: "add Makefile targets for quotes CLI build and installation"
+        body: |
+          - Add quotes-build target
+          - Add quotes-test target
+          - Add quotes-install target
+          - Match conductor's build patterns and conventions
+        files:
+          - "Makefile"
+
+    - task_number: 6
+      name: "Comprehensive unit and integration test suite"
+      worktree_group: "testing-and-docs"
+      files:
+        - "cmd/quotes/types_test.go"
+        - "cmd/quotes/formatter_test.go"
+        - "cmd/quotes/loader_test.go"
+        - "cmd/quotes/main_test.go"
+      depends_on: []
+      estimated_time: "1h"
+
+      description: |
+        Expand test coverage to achieve 70%+ overall and 90%+ for critical paths.
+        Add table-driven tests for all edge cases, error conditions, and combinations.
+        Ensure tests match conductor's testing patterns and quality standards.
+
+      test_first:
+        test_file: "All *_test.go files"
+        structure:
+          - "Existing tests from tasks 1-4 form foundation"
+          - "Add additional edge cases and combinations"
+          - "Integration tests for flag combinations"
+        mocks: []
+        fixtures:
+          - "testdata/quotes.json with valid and invalid examples"
+        assertions:
+          - "70%+ overall coverage"
+          - "90%+ for formatters, selection, loading"
+          - "All error paths tested"
+        edge_cases:
+          - "Unicode characters in quotes"
+          - "Very long quotes"
+          - "Special characters in author names"
+          - "Empty quotes array"
+          - "Seed edge cases"
+        example_skeleton: |
+          func TestFormatters_SpecialCharacters(t *testing.T) {
+              tests := []struct {
+                  name string
+                  quote Quote
+              }{
+                  {"unicode", Quote{Text: "Hello 世界", Author: "Test"}},
+                  {"quotes in text", Quote{Text: `He said "hello"`, Author: "Test"}},
+                  {"newlines", Quote{Text: "Line1\nLine2", Author: "Test"}},
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      // Test all formatters with special characters
+                      _ = FormatText([]Quote{tt.quote})
+                      _ = FormatJSON([]Quote{tt.quote})
+                      _ = FormatMarkdown([]Quote{tt.quote})
+                  })
+              }
+          }
+
+      implementation:
+        approach: |
+          Review and expand all existing test files from tasks 1-4.
+          Add comprehensive edge case coverage.
+          Ensure test fixtures include edge cases.
+          Run coverage reports and add tests for uncovered lines.
+
+        code_structure: |
+          # Run coverage analysis
+          go test ./cmd/quotes -coverprofile=coverage.out
+          go tool cover -html=coverage.out
+
+          # Identify uncovered lines and add tests
+
+        key_points:
+          - point: "Use table-driven tests exclusively"
+            reference: "conductor test patterns"
+          - point: "Test each function independently"
+            details: "Unit tests before integration"
+          - point: "Use testdata directory for fixtures"
+            reference: "conductor's testdata pattern"
+          - point: "Mock minimal dependencies"
+            details: "No external service mocks needed"
+          - point: "Test error paths explicitly"
+            details: "Every error condition covered"
+
+        integration:
+          imports:
+            - "import \"testing\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Test all error cases"
+            - "Verify error messages are clear"
+
+      verification:
+        manual_testing:
+          - step: "Run all tests"
+            command: "go test ./cmd/quotes -v"
+            expected: "All tests pass"
+          - step: "Check coverage"
+            command: "go test ./cmd/quotes -coverprofile=coverage.out && go tool cover -func=coverage.out | grep total"
+            expected: "70%+ coverage"
+        automated_tests:
+          command: "go test ./cmd/quotes/... -v -cover"
+          expected_output: |
+            coverage: 75.3% of statements
+            ok  github.com/harrison/conductor/cmd/quotes  2.234s
+        success_criteria:
+          - "70%+ overall test coverage"
+          - "90%+ coverage for formatters, selection, loading"
+          - "All tests pass"
+          - "Edge cases covered"
+          - "No flaky tests"
+
+      commit:
+        type: "test"
+        message: "expand test coverage to 70%+ with edge cases and integration tests"
+        body: |
+          - Add comprehensive edge case tests
+          - Test all formatter combinations with special characters
+          - Test loader with various file states
+          - Test CLI flag combinations
+          - Achieve 70%+ overall, 90%+ critical paths
+        files:
+          - "cmd/quotes/types_test.go"
+          - "cmd/quotes/formatter_test.go"
+          - "cmd/quotes/loader_test.go"
+          - "cmd/quotes/main_test.go"
+          - "cmd/quotes/testdata/quotes.json"
+
+    - task_number: 7
+      name: "Add documentation and finalize for release"
+      worktree_group: "testing-and-docs"
+      files:
+        - "docs/quotes-cli.md"
+        - "README.md"
+      depends_on: []
+      estimated_time: "30m"
+
+      description: |
+        Create comprehensive documentation for the quotes CLI tool.
+        Include usage examples, feature overview, installation instructions,
+        and integration with conductor for orchestrated execution.
+
+      test_first:
+        test_file: "N/A - documentation verification"
+        structure:
+          - "Verify documentation is complete and accurate"
+          - "Verify examples work as written"
+        mocks: []
+        fixtures: []
+        assertions:
+          - "All CLI flags documented"
+          - "Usage examples included"
+          - "Installation instructions clear"
+        edge_cases:
+          - "Documentation covers error cases"
+        example_skeleton: |
+          # Documentation should include:
+          - Feature overview
+          - Installation (via make install)
+          - Usage examples
+          - Flags reference
+          - Integration with conductor
+
+      implementation:
+        approach: |
+          Create docs/quotes-cli.md with complete feature documentation.
+          Update main README.md to reference the new quotes CLI.
+          Include real examples that work out of the box.
+          Document the ~/.quotes.json customization pattern.
+
+        code_structure: |
+          # docs/quotes-cli.md structure:
+
+          # Quotes CLI
+          ## Overview
+          Simple CLI tool that generates random inspiring quotes...
+
+          ## Installation
+          ```bash
+          make install
+          ```
+
+          ## Usage
+          ```bash
+          quotes                          # Random quote
+          quotes --format json --count 3  # Multiple in JSON
+          quotes --seed 42                # Reproducible random
+          ```
+
+          ## Customization
+          Create ~/.quotes.json to override default quotes...
+
+          ## Integration with Conductor
+          The Quotes CLI can be orchestrated by Conductor...
+
+        key_points:
+          - point: "Real, working examples"
+            details: "All examples should be copy-paste ready"
+          - point: "Clear customization section"
+            details: "Document ~/.quotes.json pattern"
+          - point: "Integration with conductor"
+            details: "Show how conductor can execute this"
+
+        integration:
+          imports: []
+          services_to_inject: []
+          config_values: []
+          error_handling: []
+
+      verification:
+        manual_testing:
+          - step: "Review documentation"
+            command: "cat docs/quotes-cli.md"
+            expected: "Complete and clear"
+          - step: "Try examples"
+            command: "quotes && quotes --format json && quotes --count 3"
+            expected: "All examples work"
+        automated_tests:
+          command: "grep -r 'TODO' docs/ || echo 'No TODOs found'"
+          expected_output: "No incomplete documentation"
+        success_criteria:
+          - "Documentation is complete"
+          - "All examples work correctly"
+          - "No typos or formatting issues"
+          - "Clear installation and usage instructions"
+
+      commit:
+        type: "docs"
+        message: "add comprehensive documentation for quotes CLI"
+        body: |
+          - Create docs/quotes-cli.md with full feature documentation
+          - Include usage examples and flags reference
+          - Document ~/.quotes.json customization
+          - Add conductor integration examples
+          - Update main README with quotes CLI reference
+        files:
+          - "docs/quotes-cli.md"
+          - "README.md"
+
+  testing_strategy:
+    unit_tests:
+      location: "cmd/quotes/*_test.go"
+      naming_convention: "Test* for table-driven tests"
+      run_command: "go test ./cmd/quotes -v"
+      coverage_target: "90% for critical paths (formatters, selection)"
+      coverage_command: "go test ./cmd/quotes -coverprofile=coverage.out && go tool cover -html=coverage.out"
+
+    integration_tests:
+      location: "cmd/quotes/*_test.go"
+      what_to_test:
+        - "CLI flag combinations"
+        - "Quote loading from files"
+        - "Binary invocation"
+      setup_required:
+        - "No external services needed"
+        - "Test fixtures in testdata/"
+      run_command: "go test ./cmd/quotes -v"
+
+    e2e_tests:
+      enabled: false
+      location: "test/integration/"
+      critical_flows:
+        - "quotes command works"
+        - "All flags functional"
+      tools: "Bash/shell scripts"
+      run_command: "make quotes-test"
+
+    test_design_principles:
+      patterns_to_use:
+        - pattern: "Table-driven tests"
+          example: |
+            tests := []struct {
+                name string
+                input interface{}
+                want interface{}
+            }{
+                {"case1", value1, expected1},
+                {"case2", value2, expected2},
+            }
+            for _, tt := range tests {
+                t.Run(tt.name, func(t *testing.T) {
+                    got := functionUnderTest(tt.input)
+                    if got != tt.want {
+                        t.Errorf("got %v, want %v", got, tt.want)
+                    }
+                })
+            }
+
+      anti_patterns_to_avoid:
+        - pattern: "Testing implementation details"
+          why: "Makes tests brittle"
+          instead: "Test behavior (inputs → outputs)"
+
+      mocking_guidelines:
+        mock_these: []
+        dont_mock_these:
+          - "Quote selection logic"
+          - "Format functions"
+          - "Core business logic"
+        project_mocking_pattern:
+          reference: "conductor uses interface mocking"
+          example: "No mocking needed for simple quotes CLI"
+
+  commit_strategy:
+    total_commits: 7
+    commits:
+      - sequence: 1
+        type: "feat"
+        description: "add Quote struct and random selection logic"
+      - sequence: 2
+        type: "feat"
+        description: "add output formatters for text, JSON, markdown"
+      - sequence: 3
+        type: "feat"
+        description: "add quote loading with fallback to hardcoded defaults"
+      - sequence: 4
+        type: "feat"
+        description: "implement Cobra CLI with format, count, and seed flags"
+      - sequence: 5
+        type: "chore"
+        description: "add Makefile targets for quotes CLI build and installation"
+      - sequence: 6
+        type: "test"
+        description: "expand test coverage to 70%+ with edge cases"
+      - sequence: 7
+        type: "docs"
+        description: "add comprehensive documentation for quotes CLI"
+
+    message_format:
+      pattern: "type: brief description in present tense"
+
+    commit_guidelines:
+      - "Keep commits atomic - one logical change per commit"
+      - "Write clear, descriptive messages"
+      - "Include tests with implementation"
+      - "Commit frequently"
+
+  common_pitfalls:
+    - pitfall: "Assuming quotes.json exists"
+      why: "File might not exist or be unreadable"
+      how_to_avoid: "Always fall back to hardcoded defaults gracefully"
+      reference:
+        pattern: "LoadQuotes() returns defaults on any error"
+
+    - pitfall: "Not handling Unicode in quotes"
+      why: "Special characters break formatting"
+      how_to_avoid: "Test with Unicode and special chars"
+      reference:
+        file: "cmd/quotes/formatter_test.go"
+        pattern: "TestFormatters_SpecialCharacters"
+
+    - pitfall: "Seed edge cases"
+      why: "Negative or zero seeds may behave unexpectedly"
+      how_to_avoid: "Test seed=0, seed=-1, large seeds"
+      reference:
+        pattern: "Test all seed edge cases"
+
+  resources:
+    existing_code:
+      - type: "Cobra CLI patterns"
+        path: "internal/cmd/run.go"
+        note: "Study conductor's flag parsing and command structure"
+
+      - type: "Testing patterns"
+        path: "internal/cmd/run_test.go"
+        note: "Table-driven test examples from conductor"
+
+      - type: "Makefile patterns"
+        path: "Makefile"
+        note: "Build, test, install targets to match"
+
+    documentation:
+      - type: "Cobra documentation"
+        link: "https://github.com/spf13/cobra"
+        relevance: "CLI framework used in conductor"
+
+      - type: "Go standard library"
+        link: "https://pkg.go.dev/std"
+        relevance: "Using encoding/json, math/rand, os, etc."
+
+    external_resources:
+      - title: "Go testing patterns"
+        url: "https://golang.org/doc/effective_go#testing"
+        why: "Best practices for Go tests"
+
+    validation_checklist:
+      - item: "All tests pass"
+        command: "go test ./cmd/quotes -v"
+        checked: false
+
+      - item: "Coverage >= 70%"
+        command: "go test ./cmd/quotes -cover"
+        checked: false
+
+      - item: "Code formatted"
+        command: "go fmt ./cmd/quotes"
+        checked: false
+
+      - item: "Linter passes"
+        command: "golangci-lint ./cmd/quotes 2>/dev/null || go vet ./cmd/quotes"
+        checked: false
+
+      - item: "Binary builds"
+        command: "go build -o quotes ./cmd/quotes"
+        checked: false
+
+      - item: "All examples work"
+        command: "quotes && quotes --format json && quotes --count 3"
+        checked: false
+
+      - item: "Documentation complete"
+        files: "docs/quotes-cli.md, README.md updated"
+        checked: false
+
+      - item: "Worktrees merged correctly"
+        verify: "All branches merged to main in order"
+        checked: false

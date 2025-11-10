@@ -14,7 +14,7 @@ func TestTaskValidation(t *testing.T) {
 		{
 			name: "valid task",
 			task: Task{
-				Number: 1,
+				Number: "1",
 				Name:   "Test Task",
 				Prompt: "Do something",
 			},
@@ -23,7 +23,7 @@ func TestTaskValidation(t *testing.T) {
 		{
 			name: "missing name",
 			task: Task{
-				Number: 1,
+				Number: "1",
 				Prompt: "Do something",
 			},
 			wantErr: true,
@@ -31,24 +31,15 @@ func TestTaskValidation(t *testing.T) {
 		{
 			name: "missing prompt",
 			task: Task{
-				Number: 1,
+				Number: "1",
 				Name:   "Test Task",
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid number (zero)",
+			name: "empty number string",
 			task: Task{
-				Number: 0,
-				Name:   "Test Task",
-				Prompt: "Do something",
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid number (negative)",
-			task: Task{
-				Number: -1,
+				Number: "",
 				Name:   "Test Task",
 				Prompt: "Do something",
 			},
@@ -57,11 +48,11 @@ func TestTaskValidation(t *testing.T) {
 		{
 			name: "valid task with optional fields",
 			task: Task{
-				Number:        1,
+				Number:        "1",
 				Name:          "Test Task",
 				Prompt:        "Do something",
 				Files:         []string{"file1.go", "file2.go"},
-				DependsOn:     []int{},
+				DependsOn:     []string{},
 				EstimatedTime: 30 * time.Minute,
 				Agent:         "test-agent",
 			},
@@ -88,44 +79,44 @@ func TestDetectCycles(t *testing.T) {
 		{
 			name: "no cycle - linear dependency",
 			tasks: []Task{
-				{Number: 1, Name: "Task 1", Prompt: "test", DependsOn: []int{}},
-				{Number: 2, Name: "Task 2", Prompt: "test", DependsOn: []int{1}},
+				{Number: "1", Name: "Task 1", Prompt: "test", DependsOn: []string{}},
+				{Number: "2", Name: "Task 2", Prompt: "test", DependsOn: []string{"1"}},
 			},
 			wantCycle: false,
 		},
 		{
 			name: "simple cycle",
 			tasks: []Task{
-				{Number: 1, Name: "Task 1", Prompt: "test", DependsOn: []int{2}},
-				{Number: 2, Name: "Task 2", Prompt: "test", DependsOn: []int{1}},
+				{Number: "1", Name: "Task 1", Prompt: "test", DependsOn: []string{"2"}},
+				{Number: "2", Name: "Task 2", Prompt: "test", DependsOn: []string{"1"}},
 			},
 			wantCycle: true,
 		},
 		{
 			name: "self reference",
 			tasks: []Task{
-				{Number: 1, Name: "Task 1", Prompt: "test", DependsOn: []int{1}},
+				{Number: "1", Name: "Task 1", Prompt: "test", DependsOn: []string{"1"}},
 			},
 			wantCycle: true,
 		},
 		{
 			name: "no cycle - multiple dependencies",
 			tasks: []Task{
-				{Number: 1, Name: "Task 1", Prompt: "test", DependsOn: []int{}},
-				{Number: 2, Name: "Task 2", Prompt: "test", DependsOn: []int{1}},
-				{Number: 3, Name: "Task 3", Prompt: "test", DependsOn: []int{1}},
-				{Number: 4, Name: "Task 4", Prompt: "test", DependsOn: []int{2, 3}},
+				{Number: "1", Name: "Task 1", Prompt: "test", DependsOn: []string{}},
+				{Number: "2", Name: "Task 2", Prompt: "test", DependsOn: []string{"1"}},
+				{Number: "3", Name: "Task 3", Prompt: "test", DependsOn: []string{"1"}},
+				{Number: "4", Name: "Task 4", Prompt: "test", DependsOn: []string{"2", "3"}},
 			},
 			wantCycle: false,
 		},
 		{
 			name: "cycle in chain",
 			tasks: []Task{
-				{Number: 1, Name: "Task 1", Prompt: "test", DependsOn: []int{}},
-				{Number: 2, Name: "Task 2", Prompt: "test", DependsOn: []int{1}},
-				{Number: 3, Name: "Task 3", Prompt: "test", DependsOn: []int{2}},
-				{Number: 4, Name: "Task 4", Prompt: "test", DependsOn: []int{3}},
-				{Number: 1, Name: "Task 1", Prompt: "test", DependsOn: []int{4}}, // This creates cycle
+				{Number: "1", Name: "Task 1", Prompt: "test", DependsOn: []string{}},
+				{Number: "2", Name: "Task 2", Prompt: "test", DependsOn: []string{"1"}},
+				{Number: "3", Name: "Task 3", Prompt: "test", DependsOn: []string{"2"}},
+				{Number: "4", Name: "Task 4", Prompt: "test", DependsOn: []string{"3"}},
+				{Number: "1", Name: "Task 1", Prompt: "test", DependsOn: []string{"4"}}, // This creates cycle
 			},
 			wantCycle: true,
 		},
@@ -137,9 +128,9 @@ func TestDetectCycles(t *testing.T) {
 		{
 			name: "no dependencies",
 			tasks: []Task{
-				{Number: 1, Name: "Task 1", Prompt: "test", DependsOn: []int{}},
-				{Number: 2, Name: "Task 2", Prompt: "test", DependsOn: []int{}},
-				{Number: 3, Name: "Task 3", Prompt: "test", DependsOn: []int{}},
+				{Number: "1", Name: "Task 1", Prompt: "test", DependsOn: []string{}},
+				{Number: "2", Name: "Task 2", Prompt: "test", DependsOn: []string{}},
+				{Number: "3", Name: "Task 3", Prompt: "test", DependsOn: []string{}},
 			},
 			wantCycle: false,
 		},
@@ -162,7 +153,7 @@ func TestWaveCalculation(t *testing.T) {
 	t.Run("wave struct has required fields", func(t *testing.T) {
 		wave := Wave{
 			Name:           "Wave 1",
-			TaskNumbers:    []int{1, 2, 3},
+			TaskNumbers:    []string{"1", "2", "3"},
 			MaxConcurrency: 5,
 		}
 
@@ -181,12 +172,12 @@ func TestWaveCalculation(t *testing.T) {
 		plan := Plan{
 			Name: "Test Plan",
 			Tasks: []Task{
-				{Number: 1, Name: "Task 1", Prompt: "test"},
-				{Number: 2, Name: "Task 2", Prompt: "test"},
+				{Number: "1", Name: "Task 1", Prompt: "test"},
+				{Number: "2", Name: "Task 2", Prompt: "test"},
 			},
 			Waves: []Wave{
-				{Name: "Wave 1", TaskNumbers: []int{1}},
-				{Name: "Wave 2", TaskNumbers: []int{2}},
+				{Name: "Wave 1", TaskNumbers: []string{"1"}},
+				{Name: "Wave 2", TaskNumbers: []string{"2"}},
 			},
 			DefaultAgent: "general",
 		}
@@ -219,7 +210,7 @@ func TestQualityControlConfig(t *testing.T) {
 
 func TestTaskResult(t *testing.T) {
 	t.Run("task result has required fields", func(t *testing.T) {
-		task := Task{Number: 1, Name: "Test", Prompt: "test"}
+		task := Task{Number: "1", Name: "Test", Prompt: "test"}
 		result := TaskResult{
 			Task:           task,
 			Status:         "GREEN",

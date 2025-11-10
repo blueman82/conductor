@@ -63,16 +63,16 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 			plan: &models.Plan{
 				Name: "Test Plan",
 				Tasks: []models.Task{
-					{Number: 1, Name: "Task 1"},
-					{Number: 2, Name: "Task 2"},
+					{Number: "1", Name: "Task 1"},
+					{Number: "2", Name: "Task 2"},
 				},
 				Waves: []models.Wave{
-					{Name: "Wave 1", TaskNumbers: []int{1, 2}},
+					{Name: "Wave 1", TaskNumbers: []string{"1", "2"}},
 				},
 			},
 			results: []models.TaskResult{
-				{Task: models.Task{Number: 1}, Status: models.StatusGreen},
-				{Task: models.Task{Number: 2}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "2"}, Status: models.StatusGreen},
 			},
 			waveErr:        nil,
 			expectedErr:    nil,
@@ -85,18 +85,18 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 			plan: &models.Plan{
 				Name: "Test Plan",
 				Tasks: []models.Task{
-					{Number: 1, Name: "Task 1"},
-					{Number: 2, Name: "Task 2"},
-					{Number: 3, Name: "Task 3"},
+					{Number: "1", Name: "Task 1"},
+					{Number: "2", Name: "Task 2"},
+					{Number: "3", Name: "Task 3"},
 				},
 				Waves: []models.Wave{
-					{Name: "Wave 1", TaskNumbers: []int{1, 2, 3}},
+					{Name: "Wave 1", TaskNumbers: []string{"1", "2", "3"}},
 				},
 			},
 			results: []models.TaskResult{
-				{Task: models.Task{Number: 1}, Status: models.StatusGreen},
-				{Task: models.Task{Number: 2}, Status: models.StatusRed, Error: errors.New("task failed")},
-				{Task: models.Task{Number: 3}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "2"}, Status: models.StatusRed, Error: errors.New("task failed")},
+				{Task: models.Task{Number: "3"}, Status: models.StatusGreen},
 			},
 			waveErr:        errors.New("task failed"),
 			expectedErr:    errors.New("task failed"),
@@ -183,11 +183,11 @@ func TestOrchestratorGracefulShutdown(t *testing.T) {
 			select {
 			case <-time.After(5 * time.Second):
 				return []models.TaskResult{
-					{Task: models.Task{Number: 1}, Status: models.StatusGreen},
+					{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
 				}, nil
 			case <-ctx.Done():
 				return []models.TaskResult{
-					{Task: models.Task{Number: 1}, Status: models.StatusFailed, Error: ctx.Err()},
+					{Task: models.Task{Number: "1"}, Status: models.StatusFailed, Error: ctx.Err()},
 				}, ctx.Err()
 			}
 		},
@@ -197,10 +197,10 @@ func TestOrchestratorGracefulShutdown(t *testing.T) {
 	plan := &models.Plan{
 		Name: "Test Plan",
 		Tasks: []models.Task{
-			{Number: 1, Name: "Long Task"},
+			{Number: "1", Name: "Long Task"},
 		},
 		Waves: []models.Wave{
-			{Name: "Wave 1", TaskNumbers: []int{1}},
+			{Name: "Wave 1", TaskNumbers: []string{"1"}},
 		},
 	}
 
@@ -243,11 +243,11 @@ func TestOrchestratorGracefulShutdown(t *testing.T) {
 
 func TestOrchestratorResultAggregation(t *testing.T) {
 	results := []models.TaskResult{
-		{Task: models.Task{Number: 1}, Status: models.StatusGreen, Duration: 100 * time.Millisecond},
-		{Task: models.Task{Number: 2}, Status: models.StatusYellow, Duration: 150 * time.Millisecond},
-		{Task: models.Task{Number: 3}, Status: models.StatusRed, Error: errors.New("failed"), Duration: 200 * time.Millisecond},
-		{Task: models.Task{Number: 4}, Status: models.StatusFailed, Error: errors.New("error"), Duration: 50 * time.Millisecond},
-		{Task: models.Task{Number: 5}, Status: models.StatusGreen, Duration: 300 * time.Millisecond},
+		{Task: models.Task{Number: "1"}, Status: models.StatusGreen, Duration: 100 * time.Millisecond},
+		{Task: models.Task{Number: "2"}, Status: models.StatusYellow, Duration: 150 * time.Millisecond},
+		{Task: models.Task{Number: "3"}, Status: models.StatusRed, Error: errors.New("failed"), Duration: 200 * time.Millisecond},
+		{Task: models.Task{Number: "4"}, Status: models.StatusFailed, Error: errors.New("error"), Duration: 50 * time.Millisecond},
+		{Task: models.Task{Number: "5"}, Status: models.StatusGreen, Duration: 300 * time.Millisecond},
 	}
 
 	mockWave := &mockWaveExecutor{
@@ -260,10 +260,10 @@ func TestOrchestratorResultAggregation(t *testing.T) {
 	plan := &models.Plan{
 		Name: "Test Plan",
 		Tasks: []models.Task{
-			{Number: 1}, {Number: 2}, {Number: 3}, {Number: 4}, {Number: 5},
+			{Number: "1"}, {Number: "2"}, {Number: "3"}, {Number: "4"}, {Number: "5"},
 		},
 		Waves: []models.Wave{
-			{Name: "Wave 1", TaskNumbers: []int{1, 2, 3, 4, 5}},
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2", "3", "4", "5"}},
 		},
 	}
 
@@ -293,11 +293,11 @@ func TestOrchestratorResultAggregation(t *testing.T) {
 	}
 
 	// Verify failed tasks are correct
-	failedNumbers := make(map[int]bool)
+	failedNumbers := make(map[string]bool)
 	for _, ft := range result.FailedTasks {
 		failedNumbers[ft.Task.Number] = true
 	}
-	if !failedNumbers[3] || !failedNumbers[4] {
+	if !failedNumbers["3"] || !failedNumbers["4"] {
 		t.Errorf("expected tasks 3 and 4 in failed tasks, got %v", failedNumbers)
 	}
 }
@@ -336,8 +336,8 @@ func TestOrchestratorErrorHandling(t *testing.T) {
 
 			plan := &models.Plan{
 				Name:  "Test Plan",
-				Tasks: []models.Task{{Number: 1}},
-				Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []int{1}}},
+				Tasks: []models.Task{{Number: "1"}},
+				Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []string{"1"}}},
 			}
 
 			orch := NewOrchestrator(mockWave, mockLog)
@@ -360,7 +360,7 @@ func TestOrchestratorContextCancellation(t *testing.T) {
 		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
 			<-ctx.Done()
 			return []models.TaskResult{
-				{Task: models.Task{Number: 1}, Status: models.StatusFailed, Error: ctx.Err()},
+				{Task: models.Task{Number: "1"}, Status: models.StatusFailed, Error: ctx.Err()},
 			}, ctx.Err()
 		},
 	}
@@ -368,8 +368,8 @@ func TestOrchestratorContextCancellation(t *testing.T) {
 
 	plan := &models.Plan{
 		Name:  "Test Plan",
-		Tasks: []models.Task{{Number: 1}},
-		Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []int{1}}},
+		Tasks: []models.Task{{Number: "1"}},
+		Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []string{"1"}}},
 	}
 
 	orch := NewOrchestrator(mockWave, mockLog)
@@ -468,8 +468,8 @@ func TestNewOrchestrator(t *testing.T) {
 
 func TestOrchestratorLogging(t *testing.T) {
 	results := []models.TaskResult{
-		{Task: models.Task{Number: 1, Name: "Task 1"}, Status: models.StatusGreen},
-		{Task: models.Task{Number: 2, Name: "Task 2"}, Status: models.StatusRed, Error: fmt.Errorf("failed")},
+		{Task: models.Task{Number: "1", Name: "Task 1"}, Status: models.StatusGreen},
+		{Task: models.Task{Number: "2", Name: "Task 2"}, Status: models.StatusRed, Error: fmt.Errorf("failed")},
 	}
 
 	mockWave := &mockWaveExecutor{
@@ -482,11 +482,11 @@ func TestOrchestratorLogging(t *testing.T) {
 	plan := &models.Plan{
 		Name: "Test Plan",
 		Tasks: []models.Task{
-			{Number: 1, Name: "Task 1"},
-			{Number: 2, Name: "Task 2"},
+			{Number: "1", Name: "Task 1"},
+			{Number: "2", Name: "Task 2"},
 		},
 		Waves: []models.Wave{
-			{Name: "Wave 1", TaskNumbers: []int{1, 2}},
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}},
 		},
 	}
 

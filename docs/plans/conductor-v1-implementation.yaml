@@ -3350,7 +3350,7 @@ plan:
       estimated_time: "45m"
       status: "completed"
       completed_at: "2025-11-10"
-      commit: "07b195b50fd6277945c5199eab47954011a4efb1"
+      git_commit: "07b195b50fd6277945c5199eab47954011a4efb1"
 
       description: |
         Create .conductor/logs/ directory, write per-run log files, write per-task detailed logs,

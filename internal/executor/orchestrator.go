@@ -12,7 +12,8 @@
 //   - DependencyGraph: Calculates execution waves using Kahn's algorithm
 //
 // The execution flow is:
-//   Plan → Graph → Waves → Orchestrator → WaveExecutor → TaskExecutor → QC → Results
+//
+//	Plan → Graph → Waves → Orchestrator → WaveExecutor → TaskExecutor → QC → Results
 package executor
 
 import (

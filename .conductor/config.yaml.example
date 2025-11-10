@@ -1,0 +1,49 @@
+# Conductor Configuration File
+#
+# Place this file at .conductor/config.yaml in your project root to set default values
+# for Conductor CLI commands. CLI flags will override these settings.
+#
+# Example usage:
+#   conductor run plan.md                    # Uses config.yaml defaults
+#   conductor run --verbose plan.md          # Verbose flag overrides config
+#   conductor run --timeout 2h plan.md       # Timeout flag overrides config
+
+# Maximum number of concurrent tasks
+# Set to 0 for unlimited concurrency (default: 0)
+max_concurrency: 4
+
+# Task execution timeout
+# Supported formats: 30s, 5m, 1h30m, etc.
+# Empty means no timeout (default: empty)
+timeout: 5m
+
+# Logging level
+# Levels: trace, debug, info, warn, error (default: info)
+log_level: info
+
+# Log output directory
+# Logs will be written to this directory (default: .conductor/logs)
+log_dir: .conductor/logs
+
+# Dry run mode
+# When true, validates and shows what would run without executing (default: false)
+dry_run: false
+
+# ===== ADVANCED CONFIGURATION =====
+# The settings below are optional and have sensible defaults.
+# Uncomment and modify only if you need to change them.
+
+# Example: Run with higher concurrency for parallel tasks
+# max_concurrency: 8
+
+# Example: Longer timeout for complex plans
+# timeout: 10m
+
+# Example: Debug mode for troubleshooting
+# log_level: debug
+
+# Example: Custom log directory
+# log_dir: /var/log/conductor
+
+# Example: Enable dry-run by default
+# dry_run: true

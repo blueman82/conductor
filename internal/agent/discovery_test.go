@@ -556,14 +556,14 @@ func TestDiscoverMixedStructure(t *testing.T) {
 
 	// Create a realistic mixed structure
 	structure := map[string][]string{
-		".":              {"agent-root.md"},
-		"01-core":        {"core-agent1.md", "core-agent2.md"},
-		"02-language":    {"lang-agent.md"},
-		"examples":       {"example-usage.md", "README.md"},
-		"transcripts":    {"session-2024.md"},
-		"logs":           {"debug.md"},
-		"custom-folder":  {"custom-agent.md"},
-		"10-research":    {"research-agent.md"},
+		".":             {"agent-root.md"},
+		"01-core":       {"core-agent1.md", "core-agent2.md"},
+		"02-language":   {"lang-agent.md"},
+		"examples":      {"example-usage.md", "README.md"},
+		"transcripts":   {"session-2024.md"},
+		"logs":          {"debug.md"},
+		"custom-folder": {"custom-agent.md"},
+		"10-research":   {"research-agent.md"},
 	}
 
 	expectedAgents := []string{

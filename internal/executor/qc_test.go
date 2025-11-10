@@ -36,7 +36,7 @@ func TestBuildReviewPrompt(t *testing.T) {
 		{
 			name: "basic task review",
 			task: models.Task{
-				Number: 1,
+				Number: "1",
 				Name:   "Implement feature X",
 				Prompt: "Add feature X to the system",
 			},
@@ -51,7 +51,7 @@ func TestBuildReviewPrompt(t *testing.T) {
 		{
 			name: "task with complex output",
 			task: models.Task{
-				Number: 2,
+				Number: "2",
 				Name:   "Fix bug Y",
 				Prompt: "Fix the Y bug",
 			},
@@ -229,7 +229,7 @@ func TestReview(t *testing.T) {
 		{
 			name: "successful GREEN review",
 			task: models.Task{
-				Number: 1,
+				Number: "1",
 				Name:   "Test task",
 				Prompt: "Do something",
 				Agent:  "developer",
@@ -247,7 +247,7 @@ func TestReview(t *testing.T) {
 		{
 			name: "RED review requiring fixes",
 			task: models.Task{
-				Number: 2,
+				Number: "2",
 				Name:   "Fix bug",
 				Prompt: "Fix the bug",
 			},
@@ -264,7 +264,7 @@ func TestReview(t *testing.T) {
 		{
 			name: "invoker error",
 			task: models.Task{
-				Number: 3,
+				Number: "3",
 				Name:   "Task",
 				Prompt: "Do it",
 			},
@@ -277,7 +277,7 @@ func TestReview(t *testing.T) {
 		{
 			name: "YELLOW review",
 			task: models.Task{
-				Number: 4,
+				Number: "4",
 				Name:   "Implement feature",
 				Prompt: "Add feature",
 			},
@@ -348,7 +348,7 @@ func TestQualityControlFlow(t *testing.T) {
 
 		qc := NewQualityController(mock)
 		task := models.Task{
-			Number: 1,
+			Number: "1",
 			Name:   "Implement feature",
 			Prompt: "Add new feature",
 			Agent:  "developer",
@@ -384,7 +384,7 @@ func TestQualityControlFlow(t *testing.T) {
 		qc := NewQualityController(mock)
 		qc.MaxRetries = 2
 		task := models.Task{
-			Number: 1,
+			Number: "1",
 			Name:   "Fix bug",
 			Prompt: "Fix the bug",
 		}

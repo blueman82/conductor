@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/harrison/conductor/internal/models"
 )
@@ -17,11 +18,16 @@ type TaskExecutor interface {
 // WaveExecutor coordinates sequential wave execution with bounded parallelism per wave.
 type WaveExecutor struct {
 	taskExecutor TaskExecutor
+	logger       Logger
 }
 
 // NewWaveExecutor constructs a WaveExecutor with the provided task executor implementation.
-func NewWaveExecutor(taskExecutor TaskExecutor) *WaveExecutor {
-	return &WaveExecutor{taskExecutor: taskExecutor}
+// The logger parameter is optional and can be nil to disable logging.
+func NewWaveExecutor(taskExecutor TaskExecutor, logger Logger) *WaveExecutor {
+	return &WaveExecutor{
+		taskExecutor: taskExecutor,
+		logger:       logger,
+	}
 }
 
 // ExecutePlan runs the plan's waves sequentially while executing tasks within each wave in parallel.
@@ -72,6 +78,13 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		return []models.TaskResult{}, nil
 	}
 
+	// Log wave start
+	if w.logger != nil {
+		w.logger.LogWaveStart(wave)
+	}
+
+	waveStartTime := time.Now()
+
 	maxConcurrency := wave.MaxConcurrency
 	if maxConcurrency <= 0 || maxConcurrency > taskCount {
 		maxConcurrency = taskCount
@@ -94,7 +107,7 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 
 		task, ok := taskMap[taskNumber]
 		if !ok {
-			launchErr = fmt.Errorf("%s: task %d not found", wave.Name, taskNumber)
+			launchErr = fmt.Errorf("%s: task %s not found", wave.Name, taskNumber)
 			break
 		}
 
@@ -151,6 +164,12 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 	} else if execErr != nil && errors.Is(execErr, context.Canceled) {
 		// Propagate context cancellation explicitly
 		execErr = context.Canceled
+	}
+
+	// Log wave completion
+	waveDuration := time.Since(waveStartTime)
+	if w.logger != nil {
+		w.logger.LogWaveComplete(wave, waveDuration)
 	}
 
 	return waveResults, execErr

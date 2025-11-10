@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	markdownCheckboxPattern = `^(?P<prefix>\s*[-*+]\s+\[)(?P<mark>[ xX])(?P<suffix>\]\s+Task\s+%d\b.*)$`
+	markdownCheckboxPattern = `^(?P<prefix>\s*[-*+]\s+\[)(?P<mark>[ xX])(?P<suffix>\]\s+Task\s+%s\b.*)$`
 )
 
 var (

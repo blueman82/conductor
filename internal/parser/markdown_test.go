@@ -39,8 +39,8 @@ Implementation details here
 	}
 
 	task := plan.Tasks[0]
-	if task.Number != 1 {
-		t.Errorf("Expected task number 1, got %d", task.Number)
+	if task.Number != "1" {
+		t.Errorf("Expected task number 1, got %s", task.Number)
 	}
 	if task.Name != "First Task" {
 		t.Errorf("Expected task name 'First Task', got '%s'", task.Name)
@@ -201,7 +201,7 @@ func TestParseTaskMetadata(t *testing.T) {
 		name          string
 		content       string
 		expectedFiles []string
-		expectedDeps  []int
+		expectedDeps  []string
 		expectedTime  time.Duration
 		expectedAgent string
 	}{
@@ -212,7 +212,7 @@ func TestParseTaskMetadata(t *testing.T) {
 **Estimated time**: 2h
 **Agent**: godev`,
 			expectedFiles: []string{"file1.go", "file2.go"},
-			expectedDeps:  []int{1, 2},
+			expectedDeps:  []string{"1", "2"},
 			expectedTime:  2 * time.Hour,
 			expectedAgent: "godev",
 		},
@@ -222,7 +222,7 @@ func TestParseTaskMetadata(t *testing.T) {
 **Depends on**: None
 **Estimated time**: 30m`,
 			expectedFiles: []string{"file1.go"},
-			expectedDeps:  []int{},
+			expectedDeps:  []string{},
 			expectedTime:  30 * time.Minute,
 			expectedAgent: "",
 		},
@@ -232,7 +232,7 @@ func TestParseTaskMetadata(t *testing.T) {
 **Depends on**: 3, 5
 **Estimated time**: 1h`,
 			expectedFiles: []string{"file1.go"},
-			expectedDeps:  []int{3, 5},
+			expectedDeps:  []string{"3", "5"},
 			expectedTime:  1 * time.Hour,
 			expectedAgent: "",
 		},
@@ -243,7 +243,7 @@ func TestParseTaskMetadata(t *testing.T) {
 **Estimated time**: 2h30m
 **Agent**: testdev`,
 			expectedFiles: []string{"internal/parser/markdown.go", "internal/parser/markdown_test.go"},
-			expectedDeps:  []int{3},
+			expectedDeps:  []string{"3"},
 			expectedTime:  150 * time.Minute, // 2h30m
 			expectedAgent: "testdev",
 		},
@@ -279,7 +279,7 @@ func TestParseTaskMetadata(t *testing.T) {
 					break
 				}
 				if task.DependsOn[i] != expected {
-					t.Errorf("Dependency %d: expected %d, got %d", i, expected, task.DependsOn[i])
+					t.Errorf("Dependency %d: expected %s, got %s", i, expected, task.DependsOn[i])
 				}
 			}
 
@@ -379,16 +379,16 @@ func TestExample(t *testing.T) {
 	if len(plan.Tasks) != 2 {
 		t.Errorf("Expected 2 tasks (ignoring code block), got %d", len(plan.Tasks))
 		for i, task := range plan.Tasks {
-			t.Logf("Task %d: Number=%d, Name=%s", i, task.Number, task.Name)
+			t.Logf("Task %d: Number=%s, Name=%s", i, task.Number, task.Name)
 		}
 	}
 
 	// Verify tasks are 1 and 3, not 2
-	if len(plan.Tasks) >= 1 && plan.Tasks[0].Number != 1 {
-		t.Errorf("First task should be number 1, got %d", plan.Tasks[0].Number)
+	if len(plan.Tasks) >= 1 && plan.Tasks[0].Number != "1" {
+		t.Errorf("First task should be number 1, got %s", plan.Tasks[0].Number)
 	}
-	if len(plan.Tasks) >= 2 && plan.Tasks[1].Number != 3 {
-		t.Errorf("Second task should be number 3, got %d", plan.Tasks[1].Number)
+	if len(plan.Tasks) >= 2 && plan.Tasks[1].Number != "3" {
+		t.Errorf("Second task should be number 3, got %s", plan.Tasks[1].Number)
 	}
 }
 
@@ -476,7 +476,7 @@ More content after code block.
 		t.Errorf("Expected files ['real-file.go'], got %v (should not extract from code block)", task.Files)
 	}
 
-	if len(task.DependsOn) != 1 || task.DependsOn[0] != 1 {
+	if len(task.DependsOn) != 1 || task.DependsOn[0] != "1" {
 		t.Errorf("Expected dependencies [1], got %v (should not extract from code block)", task.DependsOn)
 	}
 
@@ -586,17 +586,17 @@ Second code block:
 	if len(plan.Tasks) != 3 {
 		t.Errorf("Expected 3 tasks (ignoring code blocks), got %d", len(plan.Tasks))
 		for i, task := range plan.Tasks {
-			t.Logf("Task %d: Number=%d, Name=%s", i, task.Number, task.Name)
+			t.Logf("Task %d: Number=%s, Name=%s", i, task.Number, task.Name)
 		}
 	}
 
-	expectedNumbers := []int{1, 2, 3}
+	expectedNumbers := []string{"1", "2", "3"}
 	for i, expected := range expectedNumbers {
 		if i >= len(plan.Tasks) {
 			break
 		}
 		if plan.Tasks[i].Number != expected {
-			t.Errorf("Task %d: expected number %d, got %d", i, expected, plan.Tasks[i].Number)
+			t.Errorf("Task %d: expected number %s, got %s", i, expected, plan.Tasks[i].Number)
 		}
 	}
 }

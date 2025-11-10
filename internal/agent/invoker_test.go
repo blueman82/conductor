@@ -67,7 +67,7 @@ func TestBuildCommandArgs(t *testing.T) {
 		{
 			name: "basic task without agent",
 			task: models.Task{
-				Number:        1,
+				Number:        "1",
 				Name:          "Test Task",
 				Prompt:        "Do something",
 				Agent:         "",
@@ -136,7 +136,7 @@ func TestBuildCommandArgs(t *testing.T) {
 		{
 			name: "task with agent that exists in registry",
 			task: models.Task{
-				Number:        2,
+				Number:        "2",
 				Name:          "Swift Task",
 				Prompt:        "Build iOS app",
 				Agent:         "swiftdev",
@@ -193,7 +193,7 @@ Swift agent content
 		{
 			name: "task with agent that doesn't exist",
 			task: models.Task{
-				Number: 3,
+				Number: "3",
 				Name:   "Task with nonexistent agent",
 				Prompt: "Do work",
 				Agent:  "nonexistent-agent",
@@ -216,7 +216,7 @@ Swift agent content
 		{
 			name: "task with agent but no registry",
 			task: models.Task{
-				Number: 4,
+				Number: "4",
 				Name:   "Task with agent but no registry",
 				Prompt: "Do work",
 				Agent:  "some-agent",
@@ -334,7 +334,7 @@ func TestInvokeWithTimeout(t *testing.T) {
 		{
 			name: "basic invocation structure",
 			task: models.Task{
-				Number: 1,
+				Number: "1",
 				Name:   "Test Task",
 				Prompt: "print 'hello'",
 			},
@@ -393,7 +393,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "successful invocation",
 			task: models.Task{
-				Number: 1,
+				Number: "1",
 				Name:   "Test Task",
 				Prompt: "respond with 'ok'",
 			},
@@ -440,7 +440,7 @@ func TestInvokeSuccess(t *testing.T) {
 	inv.ClaudePath = "/opt/homebrew/bin/claude"
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Simple Test",
 		Prompt: "say 'test'",
 	}
@@ -496,7 +496,7 @@ func TestInvokeTimeout(t *testing.T) {
 	inv.ClaudePath = "/opt/homebrew/bin/claude"
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Timeout Test",
 		Prompt: "count to 1000 slowly, taking at least 5 seconds",
 	}
@@ -529,7 +529,7 @@ func TestInvokeContextCancellation(t *testing.T) {
 	inv.ClaudePath = "/opt/homebrew/bin/claude"
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Cancellation Test",
 		Prompt: "perform a long task",
 	}
@@ -561,7 +561,7 @@ func TestInvokeExitCode(t *testing.T) {
 	inv.ClaudePath = "/opt/homebrew/bin/claude"
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Exit Code Test",
 		Prompt: "test",
 	}
@@ -603,7 +603,7 @@ func TestInvokeOutput(t *testing.T) {
 	inv.ClaudePath = "/opt/homebrew/bin/claude"
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Output Test",
 		Prompt: "respond with exactly: EXPECTED_OUTPUT",
 	}
@@ -669,7 +669,7 @@ This is a test agent for integration testing.
 	inv := NewInvokerWithRegistry(registry)
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Test with agent",
 		Prompt: "perform task",
 		Agent:  "test-agent",
@@ -710,7 +710,7 @@ func TestInvokeWithTimeoutShort(t *testing.T) {
 	inv.ClaudePath = "/opt/homebrew/bin/claude"
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Short Timeout",
 		Prompt: "take a very long time to respond",
 	}
@@ -758,7 +758,7 @@ func TestInvokeWithDifferentPrompts(t *testing.T) {
 			inv.ClaudePath = "/opt/homebrew/bin/claude"
 
 			task := models.Task{
-				Number: 1,
+				Number: "1",
 				Name:   tt.name,
 				Prompt: tt.prompt,
 			}
@@ -846,7 +846,7 @@ func TestInvokeInvalidPath(t *testing.T) {
 	inv.ClaudePath = "/nonexistent/path/to/claude"
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Test Task",
 		Prompt: "test",
 	}
@@ -904,7 +904,7 @@ exit 42
 	inv.ClaudePath = scriptPath // Use our script instead of claude
 
 	task := models.Task{
-		Number: 1,
+		Number: "1",
 		Name:   "Test Task",
 		Prompt: "anything", // Script ignores this
 	}

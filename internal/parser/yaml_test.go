@@ -38,8 +38,8 @@ plan:
 	}
 
 	task := plan.Tasks[0]
-	if task.Number != 1 {
-		t.Errorf("Expected task number 1, got %d", task.Number)
+	if task.Number != "1" {
+		t.Errorf("Expected task number 1, got %s", task.Number)
 	}
 	if task.Name != "First Task" {
 		t.Errorf("Expected task name 'First Task', got '%s'", task.Name)
@@ -84,8 +84,8 @@ plan:
 	if len(task2.DependsOn) != 1 {
 		t.Errorf("Expected 1 dependency, got %d", len(task2.DependsOn))
 	}
-	if task2.DependsOn[0] != 1 {
-		t.Errorf("Expected dependency on task 1, got %d", task2.DependsOn[0])
+	if task2.DependsOn[0] != "1" {
+		t.Errorf("Expected dependency on task 1, got %s", task2.DependsOn[0])
 	}
 }
 

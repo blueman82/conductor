@@ -29,7 +29,7 @@ func TestUpdateMarkdownTaskStatusCompleted(t *testing.T) {
 
 	completedAt := time.Date(2025, time.November, 8, 0, 0, 0, 0, time.UTC)
 
-	if err := UpdateTaskStatus(planPath, 12, "completed", &completedAt); err != nil {
+	if err := UpdateTaskStatus(planPath, "12", "completed", &completedAt); err != nil {
 		t.Fatalf("UpdateTaskStatus failed: %v", err)
 	}
 
@@ -52,7 +52,7 @@ func TestUpdateMarkdownAddsStatusWhenMissing(t *testing.T) {
 - [ ] Task 12: Implement Plan Updater`
 	writeFile(t, planPath, markdown)
 
-	if err := UpdateTaskStatus(planPath, 12, "in-progress", nil); err != nil {
+	if err := UpdateTaskStatus(planPath, "12", "in-progress", nil); err != nil {
 		t.Fatalf("UpdateTaskStatus failed: %v", err)
 	}
 
@@ -70,7 +70,7 @@ func TestUpdateMarkdownAlternateBullets(t *testing.T) {
 * [ ] Task 12: Implement Plan Updater`
 	writeFile(t, planPath, markdown)
 
-	if err := UpdateTaskStatus(planPath, 12, "completed", nil); err != nil {
+	if err := UpdateTaskStatus(planPath, "12", "completed", nil); err != nil {
 		t.Fatalf("UpdateTaskStatus failed: %v", err)
 	}
 
@@ -87,7 +87,7 @@ func TestUpdateMarkdownUnicode(t *testing.T) {
 	markdown := `- [ ] Task 12: Handle emojis 🚀`
 	writeFile(t, planPath, markdown)
 
-	if err := UpdateTaskStatus(planPath, 12, "completed", nil); err != nil {
+	if err := UpdateTaskStatus(planPath, "12", "completed", nil); err != nil {
 		t.Fatalf("UpdateTaskStatus failed: %v", err)
 	}
 
@@ -103,7 +103,7 @@ func TestUpdateMarkdownTaskNotFound(t *testing.T) {
 
 	writeFile(t, planPath, "- [ ] Task 5: Something else")
 
-	err := UpdateTaskStatus(planPath, 12, "completed", nil)
+	err := UpdateTaskStatus(planPath, "12", "completed", nil)
 	if !errors.Is(err, ErrTaskNotFound) {
 		t.Fatalf("expected ErrTaskNotFound, got %v", err)
 	}
@@ -129,7 +129,7 @@ func TestUpdateYAMLTaskStatusCompleted(t *testing.T) {
 
 	completedAt := time.Date(2025, time.November, 8, 0, 0, 0, 0, time.UTC)
 
-	if err := UpdateTaskStatus(planPath, 12, "completed", &completedAt); err != nil {
+	if err := UpdateTaskStatus(planPath, "12", "completed", &completedAt); err != nil {
 		t.Fatalf("UpdateTaskStatus failed: %v", err)
 	}
 
@@ -159,7 +159,7 @@ func TestUpdateYAMLTaskStatusReopenRemovesCompletedDate(t *testing.T) {
 `
 	writeFile(t, planPath, yamlContent)
 
-	if err := UpdateTaskStatus(planPath, 12, "pending", nil); err != nil {
+	if err := UpdateTaskStatus(planPath, "12", "pending", nil); err != nil {
 		t.Fatalf("UpdateTaskStatus failed: %v", err)
 	}
 
@@ -188,7 +188,7 @@ func TestUpdateTaskStatusUnknownTask(t *testing.T) {
 `
 	writeFile(t, planPath, yamlContent)
 
-	err := UpdateTaskStatus(planPath, 12, "completed", nil)
+	err := UpdateTaskStatus(planPath, "12", "completed", nil)
 	if !errors.Is(err, ErrTaskNotFound) {
 		t.Fatalf("expected ErrTaskNotFound, got %v", err)
 	}
@@ -199,7 +199,7 @@ func TestUpdateTaskStatusUnsupportedFormat(t *testing.T) {
 	planPath := filepath.Join(tmpDir, "plan.txt")
 	writeFile(t, planPath, "irrelevant")
 
-	err := UpdateTaskStatus(planPath, 12, "completed", nil)
+	err := UpdateTaskStatus(planPath, "12", "completed", nil)
 	if !errors.Is(err, ErrUnsupportedFormat) {
 		t.Fatalf("expected ErrUnsupportedFormat, got %v", err)
 	}
@@ -210,7 +210,7 @@ func TestUpdateTaskStatusInvalidYAML(t *testing.T) {
 	planPath := filepath.Join(tmpDir, "plan.yaml")
 	writeFile(t, planPath, "not: [valid")
 
-	err := UpdateTaskStatus(planPath, 12, "completed", nil)
+	err := UpdateTaskStatus(planPath, "12", "completed", nil)
 	if !errors.Is(err, ErrInvalidPlan) {
 		t.Fatalf("expected ErrInvalidPlan, got %v", err)
 	}
@@ -230,7 +230,7 @@ func TestUpdateTaskStatusPermissionDenied(t *testing.T) {
 	}
 	defer os.Chmod(tmpDir, 0755)
 
-	err := UpdateTaskStatus(planPath, 12, "completed", nil)
+	err := UpdateTaskStatus(planPath, "12", "completed", nil)
 	if err == nil {
 		t.Fatal("expected permission error, got nil")
 	}
@@ -254,7 +254,7 @@ func TestUpdateTaskStatusMonitorReceivesMetrics(t *testing.T) {
 		metricsCh <- metrics
 	}
 
-	if err := UpdateTaskStatus(planPath, 12, "completed", nil, WithMonitor(monitor)); err != nil {
+	if err := UpdateTaskStatus(planPath, "12", "completed", nil, WithMonitor(monitor)); err != nil {
 		t.Fatalf("UpdateTaskStatus failed: %v", err)
 	}
 
@@ -283,7 +283,7 @@ func TestUpdateTaskStatusMonitorReceivesErrorMetrics(t *testing.T) {
 		metricsCh <- metrics
 	}
 
-	err := UpdateTaskStatus("plan.txt", 12, "completed", nil, WithMonitor(monitor))
+	err := UpdateTaskStatus("plan.txt", "12", "completed", nil, WithMonitor(monitor))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -312,7 +312,7 @@ func TestUpdateTaskStatusTimeout(t *testing.T) {
 	}
 	defer lock.Unlock()
 
-	err := UpdateTaskStatus(planPath, 12, "completed", nil, WithTimeout(100*time.Millisecond))
+	err := UpdateTaskStatus(planPath, "12", "completed", nil, WithTimeout(100*time.Millisecond))
 	if !errors.Is(err, filelock.ErrLockTimeout) {
 		t.Fatalf("expected lock timeout error, got %v", err)
 	}
@@ -332,7 +332,7 @@ func TestConcurrentMarkdownUpdates(t *testing.T) {
 		status := statuses[i%len(statuses)]
 		go func() {
 			defer wg.Done()
-			if err := UpdateTaskStatus(planPath, 12, status, nil); err != nil {
+			if err := UpdateTaskStatus(planPath, "12", status, nil); err != nil {
 				t.Errorf("UpdateTaskStatus failed: %v", err)
 			}
 		}()
@@ -371,7 +371,7 @@ func TestConcurrentYAMLUpdates(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			time.Sleep(delay)
-			if err := UpdateTaskStatus(planPath, 12, status, nil); err != nil {
+			if err := UpdateTaskStatus(planPath, "12", status, nil); err != nil {
 				t.Errorf("UpdateTaskStatus failed: %v", err)
 			}
 		}()
@@ -410,7 +410,7 @@ func TestMonitorReceivesTimeoutMetrics(t *testing.T) {
 		}
 	}
 
-	UpdateTaskStatus(planPath, 12, "completed", nil, WithTimeout(50*time.Millisecond), WithMonitor(monitor))
+	UpdateTaskStatus(planPath, "12", "completed", nil, WithTimeout(50*time.Millisecond), WithMonitor(monitor))
 
 	if atomic.LoadInt32(&count) == 0 {
 		t.Fatal("expected monitor invocation")

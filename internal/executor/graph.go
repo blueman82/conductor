@@ -1,12 +1,12 @@
 package executor
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
-    "strings"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
-    "github.com/harrison/conductor/internal/models"
+	"github.com/harrison/conductor/internal/models"
 )
 
 const (
@@ -216,7 +216,7 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 		inDegree[k] = v
 	}
 
-    for len(inDegree) > 0 {
+	for len(inDegree) > 0 {
 		// Find all tasks with in-degree 0 (current wave)
 		var currentWave []string
 		for taskNum, degree := range inDegree {
@@ -248,7 +248,7 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 				}
 			}
 		}
-    }
+	}
 
 	// Validate file overlaps in waves
 	taskMap := make(map[string]*models.Task)
@@ -259,5 +259,5 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 		return nil, err
 	}
 
-    return waves, nil
+	return waves, nil
 }

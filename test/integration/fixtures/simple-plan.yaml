@@ -1,0 +1,22 @@
+conductor:
+  max_concurrency: 2
+  timeout: "5m"
+  default_agent: "general-purpose"
+
+plan:
+  metadata:
+    name: "Simple YAML Plan"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 1
+      name: "First YAML Task"
+      prompt: "This is the first task in YAML format"
+      files: ["config.yaml"]
+      depends_on: []
+      estimated_time: "10m"
+    - task_number: 2
+      name: "Second YAML Task"
+      prompt: "This is the second task, depends on first"
+      files: ["output.yaml"]
+      depends_on: [1]
+      estimated_time: "10m"

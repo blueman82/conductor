@@ -29,14 +29,14 @@ type yamlPlan struct {
 
 // yamlTask represents a single task in the YAML plan
 type yamlTask struct {
-	TaskNumber    interface{} `yaml:"task_number"` // Accepts int, float, or string
-	Name          string      `yaml:"name"`
-	Files         []string    `yaml:"files"`
+	TaskNumber    interface{}   `yaml:"task_number"` // Accepts int, float, or string
+	Name          string        `yaml:"name"`
+	Files         []string      `yaml:"files"`
 	DependsOn     []interface{} `yaml:"depends_on"` // Accepts int, float, or string
-	EstimatedTime string      `yaml:"estimated_time"`
-	Agent         string      `yaml:"agent"`
-	Status        string      `yaml:"status"`
-	Description   string      `yaml:"description"`
+	EstimatedTime string        `yaml:"estimated_time"`
+	Agent         string        `yaml:"agent"`
+	Status        string        `yaml:"status"`
+	Description   string        `yaml:"description"`
 	TestFirst     struct {
 		TestFile        string   `yaml:"test_file"`
 		Structure       []string `yaml:"structure"`

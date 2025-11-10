@@ -58,6 +58,9 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 
 	args = append(args, prompt)
 
+	// Skip permissions for automation (allow file creation)
+	args = append(args, "--dangerously-skip-permissions")
+
 	// Disable hooks for automation
 	args = append(args, "--settings", `{"disableAllHooks": true}`)
 
