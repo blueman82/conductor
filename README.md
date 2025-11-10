@@ -1,5 +1,10 @@
 # Conductor
 
+[![CI](https://github.com/blueman82/conductor/actions/workflows/ci.yml/badge.svg)](https://github.com/blueman82/conductor/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/blueman82/conductor/branch/main/graph/badge.svg)](https://codecov.io/gh/blueman82/conductor)
+[![Go Report Card](https://goreportcard.com/badge/github.com/blueman82/conductor)](https://goreportcard.com/report/github.com/blueman82/conductor)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/blueman82/conductor)](https://github.com/blueman82/conductor)
+
 **Autonomous Multi-Agent Orchestration for Claude Code**
 
 Conductor is a production-ready Go CLI tool that executes implementation plans by orchestrating multiple Claude Code agents in coordinated parallel waves. It parses plan files, calculates task dependencies using graph algorithms, and manages parallel execution with quality control reviews.
