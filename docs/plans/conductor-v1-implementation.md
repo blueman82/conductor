@@ -2389,24 +2389,150 @@ Quality control system that reviews task outputs using a Claude Code agent, pars
 
 ---
 
-## Tasks 11-25 Summary
+## Task 11: Implement File Locking for Plan Updates
 
-**Task 10**: ✅ COMPLETE (see above)
+**Status**: pending
+**File(s)**: `internal/updater/lock.go`, `internal/updater/lock_test.go`
+**Depends on**: Task 3 (models)
+**Estimated time**: 45m
 
-**Task 11**: Implement File Locking for Plan Updates (45m)
-- Use github.com/gofrs/flock
-- Atomic file writes with temp file + rename
-- Update checkboxes or YAML status fields
+### What you're building
 
-**Task 12**: ✅ COMPLETE - Implement Plan Updater (1h)
+Use github.com/gofrs/flock for file locking, atomic file writes with temp file + rename, update checkboxes or YAML status fields.
+
+### Test First (TDD)
+
+**Test file**: `internal/updater/lock_test.go`
+
+**Test structure**:
+```
+Tests to be defined during implementation
+```
+
+**Test specifics**:
+- Tests to be defined during implementation
+
+**Example test skeleton**:
+```go
+// To be defined during implementation
+```
+
+### Implementation
+
+**Approach**:
+Use flock library for cross-process file locking, write to temp file first, then atomically rename to target file, ensuring concurrent updates are safe.
+
+**Code structure**:
+```go
+// To be defined during implementation
+```
+
+**Key points**:
+- Use github.com/gofrs/flock for cross-process file locking
+- Atomic file writes with temp file + rename to prevent partial writes
+- Update checkboxes or YAML status fields to modify plan file safely
+
+**Integration points**:
+- To be defined during implementation
+
+### Verification
+
+**Manual testing**:
+- Manual testing steps from summary
+
+**Automated tests**:
+```bash
+go test ./...
+```
+
+**Expected output**:
+```
+Tests passing
+```
+
+**Success criteria**:
+- File locking works
+- Atomic writes implemented
+- Concurrent updates safe
+
+### Commit
+
+**Type**: feat
+**Message**: implement file locking for plan updates
+**Files**: internal/updater/lock.go, internal/updater/lock_test.go
+
+---
+
+## Task 12: Implement Plan Updater
+
+**Status**: COMPLETE
 **Completed**: 2025-11-08
 **Git Commit**: pending
-**QA Status**: GREEN (17 focused unit tests, concurrency + error coverage)
+**QA Status**: GREEN (17 unit tests covering concurrency, malformed plans, permissions, unicode)
 
 **File(s)**: `internal/updater/updater.go`, `internal/updater/updater_test.go`
 **Depends on**: Task 11 (file locking)
 **Estimated time**: 1h
 **Actual time**: ~2h (includes production hardening)
+
+### What was built
+
+Production-ready plan updater that atomically updates Markdown checkboxes and YAML status fields. Provides typed errors, monitoring hooks, timeout-aware locking, and metrics emission aligned with Task 11's file locking capabilities.
+
+### Test First (TDD)
+
+**Test file**: `internal/updater/updater_test.go`
+
+**Test structure**:
+```
+TestUpdateMarkdownTaskStatusCompleted
+TestUpdateYAMLTaskStatusCompleted
+TestConcurrentMarkdownUpdates
+TestConcurrentYAMLUpdates
+TestUpdateTaskStatusMonitorReceivesMetrics
+TestUpdateTaskStatusTimeout
+```
+
+**Test specifics**:
+- Markdown checkboxes toggle correctly
+- YAML status and completion dates update accurately
+- Typed errors returned for unsupported formats and missing tasks
+- Monitor receives success and error metrics
+
+**Edge cases covered**:
+- Permission denied writes
+- Malformed YAML
+- Unicode content
+
+**Example usage**:
+```go
+err := UpdateTaskStatus(path, taskNumber, status, completedAt,
+  WithTimeout(500*time.Millisecond),
+  WithMonitor(func(m UpdateMetrics) { log.Println(m) }))
+```
+
+### Implementation
+
+**Approach**:
+Detect plan format, acquire a timeout-aware file lock, mutate plan content, emit update metrics, and persist via atomic write. Provide functional options for monitoring and leverage typed errors for clearer diagnostics.
+
+**Code structure**:
+```
+internal/updater/
+  updater.go      # UpdateTaskStatus with options, metrics, typed errors
+  updater_test.go # Extensive coverage: concurrency, malformed input, permissions
+```
+
+**Key points**:
+- Typed errors for common failure modes: ErrUnsupportedFormat, ErrTaskNotFound, ErrInvalidPlan
+- Functional options: WithTimeout and WithMonitor for production observability
+- Metrics emission: Records bytes read/written, duration, status transitions
+- Comprehensive tests: 17 scenarios covering edge cases and concurrent updates
+
+**Integration points**:
+- Uses `github.com/harrison/conductor/internal/filelock`
+- Uses `github.com/harrison/conductor/internal/parser`
+- Error handling: Propagate typed errors with context, monitor callback invoked with final error state
 
 ### Implementation Summary
 - ✅ Package-level docs outlining `.lock` usage and format support
@@ -2416,8 +2542,38 @@ Quality control system that reviews task outputs using a Claude Code agent, pars
 - ✅ 17 tests covering concurrency, malformed plans, Unicode, permissions
 
 ### Verification
-- `go test ./internal/updater` (unit suite, race-safe)
-- Integrated with `internal/filelock` timeout metrics
+
+**Manual testing**:
+- Simulate concurrent updates - Expected: No race conditions; final status consistent
+- Exercise monitor callback - Expected: Metrics emitted with duration and status changes
+
+**Automated tests**:
+```bash
+go test ./internal/updater -v
+```
+
+**Expected output**:
+```
+ok   github.com/harrison/conductor/internal/updater  0.6s
+```
+
+**Success criteria**:
+- Markdown and YAML updates verified
+- Typed errors surfaced for invalid inputs
+- Monitor/timeout options validated
+- All 17 unit tests passing
+
+### Commit
+
+**Type**: feat
+**Message**: implement plan updater with monitoring and typed errors
+**Body**:
+```
+- Add documented UpdateTaskStatus with timeout/monitor options
+- Emit metrics and typed errors for updater operations
+- Expand test coverage for concurrency, malformed input, permissions, unicode
+```
+**Files**: internal/updater/updater.go, internal/updater/updater_test.go
 
 ---
 
@@ -2726,15 +2882,62 @@ feat: implement wave executor
 - `internal/executor/wave.go`
 - `internal/executor/wave_test.go`
 
-**Task 14**: ✅ COMPLETE - Implement Task Executor (1.5h)
+---
+
+## Task 14: Implement Task Executor ✅
+
+**Status**: COMPLETE
 **Completed**: 2025-11-09
 **Git Commit**: pending
 **QA Status**: GREEN (84.5% test coverage, 12 comprehensive test functions, all critical paths covered)
+**Test Coverage**: 84.5% (34% improvement from initial 50.5%)
 
 **File(s)**: `internal/executor/task.go`, `internal/executor/task_test.go`
 **Depends on**: Task 9 (invoker), Task 10 (QC), Task 12 (updater)
 **Estimated time**: 1.5h
-**Actual time**: ~3h (includes comprehensive test suite and refactoring)
+**Actual time**: 3h
+
+**Notes**: Completed with comprehensive test suite (12 test functions). All critical gaps addressed: YELLOW flag handling, context cancellation, review errors, plan update failures. Status strings refactored to constants. Coverage improved from 50.5% to 84.5% (+34%).
+
+### What was built
+
+Execute single task: invoke → review → retry, handle RED flags with retry logic, update plan file on completion, return TaskResult.
+
+### Test First (TDD)
+
+**Test file**: `internal/executor/task_test.go`
+
+**Test structure**:
+```
+Tests to be defined during implementation
+```
+
+**Test specifics**:
+- Tests to be defined during implementation
+
+**Example test skeleton**:
+```go
+// To be defined during implementation
+```
+
+### Implementation
+
+**Approach**:
+Invoke agent for task, if quality control enabled invoke review agent, if RED and retries available retry task, update plan file with status, return TaskResult with all metadata.
+
+**Code structure**:
+```go
+// To be defined during implementation
+```
+
+**Key points**:
+- Execute single task: invoke → review → retry (full task execution pipeline)
+- Handle RED flags with retry logic (retry on quality control failure)
+- Update plan file on completion (mark task complete in plan)
+- Return TaskResult (complete result metadata)
+
+**Integration points**:
+- To be defined during implementation
 
 ### Implementation Summary
 - ✅ Single task execution pipeline: invoke → review → retry
@@ -2747,15 +2950,17 @@ feat: implement wave executor
 - ✅ Status constants refactored (no magic strings)
 
 ### Test Coverage Achievements
+
 **Coverage**: 84.5% (34% improvement from initial 50.5%)
+
 **Test Functions**: 12 comprehensive test cases covering:
 1. Basic execution without QC
 2. RED flag retry logic (RED → retry → GREEN)
 3. Max retries exceeded (RED → RED → FAILED)
-4. **YELLOW flag handling** (completes without retry)
-5. **Context cancellation** (graceful shutdown mid-execution)
-6. **Review errors** (QC service failure handling)
-7. **Plan update failures** (3 scenarios: initial, GREEN success, YELLOW success)
+4. YELLOW flag handling (completes without retry)
+5. Context cancellation (graceful shutdown mid-execution)
+6. Review errors (QC service failure handling)
+7. Plan update failures (3 scenarios: initial, GREEN success, YELLOW success)
 8. Default agent assignment
 9. Invalid review flags (3 scenarios: unknown, empty, nil)
 10. JSON parsing edge cases (5 scenarios: malformed, empty fields, plaintext)
@@ -2768,6 +2973,34 @@ feat: implement wave executor
 - QC flags as constants (QCFlagGreen, QCFlagRed, QCFlagYellow)
 - Comprehensive error path coverage
 - Thread-safe implementation verified
+
+### Verification
+
+**Manual testing**:
+- Manual testing steps from summary
+
+**Automated tests**:
+```bash
+go test ./...
+```
+
+**Expected output**:
+```
+Tests passing
+```
+
+**Success criteria**:
+- Task execution pipeline works
+- Retry logic works
+- Plan updates on completion
+
+### Commit
+
+**Type**: feat
+**Message**: implement task executor
+**Files**: internal/executor/task.go, internal/executor/task_test.go
+
+---
 
 ## Task 15: Implement Main Orchestration Engine ✅
 
@@ -5145,7 +5378,7 @@ go test ./internal/executor/ -v
 
 **Status**: pending
 **File(s)**: `internal/cmd/testdata/split-*.md`, `internal/parser/testdata/split-*.yaml`, test files
-**Depends on**: Tasks 26-31
+**Depends on**: Task 26, Task 27, Task 28, Task 29, Task 30, Task 31
 **Estimated time**: 1h 30m
 
 ### What you're building
@@ -5244,7 +5477,7 @@ go tool cover -html=coverage.out
 
 **Status**: pending
 **File(s)**: `CLAUDE.md`, `README.md`, `docs/plans/phase-2a-guide.md`
-**Depends on**: Tasks 26-32
+**Depends on**: Task 26, Task 27, Task 28, Task 29, Task 30, Task 31, Task 32
 **Estimated time**: 45m
 
 ### What you're building
