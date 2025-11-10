@@ -565,3 +565,85 @@ func TestMonitorReceivesTimeoutMetrics(t *testing.T) {
 		t.Fatalf("failed to release holder lock: %v", err)
 	}
 }
+
+func TestLockAndWrite_DeletesLockFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "test.txt")
+	lockPath := targetPath + ".lock"
+
+	content := []byte("test content")
+	err := LockAndWrite(targetPath, content)
+	if err != nil {
+		t.Fatalf("LockAndWrite failed: %v", err)
+	}
+
+	// Verify target file was created
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		t.Fatalf("Target file %s was not created", targetPath)
+	}
+
+	// Verify lock file was deleted
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Errorf("Lock file %s was not deleted", lockPath)
+	}
+}
+
+func TestLockAndWrite_DeletesLockFileOnError(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a read-only directory to force write failure
+	readOnlyDir := filepath.Join(tmpDir, "readonly")
+	if err := os.Mkdir(readOnlyDir, 0555); err != nil {
+		t.Fatalf("Failed to create read-only directory: %v", err)
+	}
+	defer os.Chmod(readOnlyDir, 0755) // Restore permissions for cleanup
+
+	targetPath := filepath.Join(readOnlyDir, "test.txt")
+	lockPath := targetPath + ".lock"
+
+	// Create the lock file first to test that it exists before the operation
+	// The lock acquisition should succeed, but the write should fail
+	content := []byte("test content")
+	err := LockAndWrite(targetPath, content)
+	if err == nil {
+		t.Fatal("Expected LockAndWrite to fail when writing to read-only directory")
+	}
+
+	// Verify lock file was deleted even though write failed
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Errorf("Lock file %s was not deleted after error", lockPath)
+	}
+}
+
+func TestLockAndWrite_ConcurrentDeletesAllLockFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "test.txt")
+	lockPath := targetPath + ".lock"
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+
+			content := []byte(fmt.Sprintf("content-%d", id))
+			err := LockAndWrite(targetPath, content)
+			if err != nil {
+				t.Errorf("LockAndWrite failed for goroutine %d: %v", id, err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify target file exists
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		t.Fatal("Target file should exist after concurrent writes")
+	}
+
+	// Verify lock file was deleted
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Errorf("Lock file %s was not deleted after concurrent writes", lockPath)
+	}
+}

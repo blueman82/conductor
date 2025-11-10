@@ -417,6 +417,65 @@ func TestMonitorReceivesTimeoutMetrics(t *testing.T) {
 	}
 }
 
+func TestUpdateTaskStatus_DeletesLockFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	planPath := filepath.Join(tmpDir, "plan.md")
+	lockPath := planPath + ".lock"
+
+	markdown := `# Test Plan
+- [ ] Task 12: Test lock cleanup`
+
+	writeFile(t, planPath, markdown)
+
+	completedAt := time.Date(2025, time.November, 10, 0, 0, 0, 0, time.UTC)
+	err := UpdateTaskStatus(planPath, "12", "completed", &completedAt)
+	if err != nil {
+		t.Fatalf("UpdateTaskStatus failed: %v", err)
+	}
+
+	// Verify the plan was updated
+	content := readFile(t, planPath)
+	if !strings.Contains(content, "- [x] Task 12") {
+		t.Fatalf("expected Task 12 checkbox to be checked, got:\n%s", content)
+	}
+
+	// Verify lock file was deleted
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Errorf("Lock file %s was not deleted", lockPath)
+	}
+}
+
+func TestUpdateTaskStatus_DeletesLockFileYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	planPath := filepath.Join(tmpDir, "plan.yaml")
+	lockPath := planPath + ".lock"
+
+	yaml := `plan:
+  tasks:
+    - task_number: "12"
+      name: "Test lock cleanup"
+      status: "pending"`
+
+	writeFile(t, planPath, yaml)
+
+	completedAt := time.Date(2025, time.November, 10, 0, 0, 0, 0, time.UTC)
+	err := UpdateTaskStatus(planPath, "12", "completed", &completedAt)
+	if err != nil {
+		t.Fatalf("UpdateTaskStatus failed: %v", err)
+	}
+
+	// Verify the plan was updated
+	content := readFile(t, planPath)
+	if !strings.Contains(content, `status: "completed"`) {
+		t.Fatalf("expected Task 12 status to be completed, got:\n%s", content)
+	}
+
+	// Verify lock file was deleted
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Errorf("Lock file %s was not deleted", lockPath)
+	}
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {

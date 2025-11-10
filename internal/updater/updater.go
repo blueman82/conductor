@@ -120,7 +120,8 @@ func UpdateTaskStatus(planPath string, taskNumber string, status string, complet
 		return err
 	}
 
-	lock := filelock.NewFileLock(planPath + ".lock")
+	lockPath := planPath + ".lock"
+	lock := filelock.NewFileLock(lockPath)
 	var lockErr error
 	if config.timeout > 0 {
 		lockErr = lock.LockWithTimeout(config.timeout)
@@ -131,7 +132,10 @@ func UpdateTaskStatus(planPath string, taskNumber string, status string, complet
 		metrics.Err = lockErr
 		return lockErr
 	}
-	defer lock.Unlock()
+	defer func() {
+		lock.Unlock()
+		os.Remove(lockPath)
+	}()
 
 	content, err := os.ReadFile(planPath)
 	if err != nil {

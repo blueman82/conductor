@@ -219,6 +219,9 @@ func AtomicWrite(path string, data []byte) error {
 //
 // The lock path is derived by appending ".lock" to the target path.
 // Example: writing to "plan.md" uses lock file "plan.md.lock"
+//
+// The lock file is automatically deleted after the lock is released, ensuring
+// that lock files do not persist on the filesystem after the operation completes.
 func LockAndWrite(path string, data []byte) error {
 	lockPath := path + ".lock"
 	lock := NewFileLock(lockPath)
@@ -227,7 +230,10 @@ func LockAndWrite(path string, data []byte) error {
 	if err := lock.Lock(); err != nil {
 		return err
 	}
-	defer lock.Unlock()
+	defer func() {
+		lock.Unlock()
+		os.Remove(lockPath)
+	}()
 
 	// Perform atomic write while holding lock
 	return AtomicWrite(path, data)
