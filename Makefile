@@ -104,20 +104,54 @@ clean:
 	$(RMDIR) dist 2>/dev/null || true
 	@echo "Clean complete"
 
-## install: Install to $GOPATH/bin
+## install: Install to $GOPATH/bin with optional PATH configuration
 install:
 	@echo "Installing $(BINARY_NAME) to \$$GOPATH/bin..."
 	$(GOINSTALL) $(LDFLAGS) $(CMD_PATH)
-	@echo "Install complete"
+	@echo "Install complete: $$(go env GOPATH)/bin/$(BINARY_NAME)"
 	@echo ""
-	@echo "To use conductor globally, add \$$GOPATH/bin to your PATH:"
-	@echo ""
-	@echo "  Add to ~/.zshrc or ~/.bash_profile:"
-	@echo "  export PATH=\$$PATH:\$$GOPATH/bin"
-	@echo ""
-	@echo "Then reload: source ~/.zshrc"
-	@echo ""
-	@echo "Or run directly: $$(go env GOPATH)/bin/$(BINARY_NAME)"
+	@bash -c '\
+		GOPATH=$$(go env GOPATH); \
+		GOBIN=$$GOPATH/bin; \
+		if echo $$PATH | grep -q "$$GOBIN"; then \
+			echo "✓ $$GOBIN is already in your PATH"; \
+		else \
+			echo "✗ $$GOBIN is NOT in your PATH"; \
+			echo ""; \
+			read -p "Would you like to add it? (y/n) " -n 1 -r; \
+			echo ""; \
+			if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+				SHELL_RC=""; \
+				if [ -f ~/.zshrc ]; then \
+					SHELL_RC=~/.zshrc; \
+				elif [ -f ~/.bash_profile ]; then \
+					SHELL_RC=~/.bash_profile; \
+				elif [ -f ~/.bashrc ]; then \
+					SHELL_RC=~/.bashrc; \
+				fi; \
+				if [ -z "$$SHELL_RC" ]; then \
+					echo "Could not find shell config file. Please add manually:"; \
+					echo "  export PATH=\$$PATH:$$GOBIN"; \
+				else \
+					if ! grep -q "$$GOBIN" "$$SHELL_RC"; then \
+						echo "export PATH=\$$PATH:$$GOBIN" >> "$$SHELL_RC"; \
+						echo "✓ Added to $$SHELL_RC"; \
+						echo ""; \
+						echo "Reload your shell:"; \
+						echo "  source $$SHELL_RC"; \
+					else \
+						echo "✓ Already configured in $$SHELL_RC"; \
+					fi; \
+				fi; \
+			else \
+				echo ""; \
+				echo "To use conductor globally, add this to your shell config:"; \
+				echo "  export PATH=\$$PATH:$$GOBIN"; \
+				echo ""; \
+				echo "Or use the full path: $$GOBIN/$(BINARY_NAME)"; \
+			fi; \
+		fi; \
+	'
 
 ## fmt: Format code with gofmt
 fmt:
