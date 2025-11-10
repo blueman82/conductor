@@ -1,0 +1,59 @@
+---
+name: conductor-tools
+version: "1.0.0"
+description: "Design and planning commands for Conductor - autonomous multi-agent orchestration"
+author: "harrison"
+
+commands:
+  - name: doc
+    description: "Generate comprehensive Markdown implementation plan from design document"
+    file: commands/doc.md
+    
+  - name: doc-yaml
+    description: "Generate YAML format implementation plan from design document"
+    file: commands/doc-yaml.md
+    
+  - name: cook-auto
+    description: "Automated plan generation with validation via ai-counsel MCP (optional)"
+    file: commands/cook-auto.md
+    
+  - name: cook-man
+    description: "Interactive guided plan generation (no MCP required)"
+    file: commands/cook-man.md
+
+features:
+  - Design document analysis
+  - Plan generation (Markdown and YAML)
+  - Automatic plan validation
+  - Interactive planning guidance
+  - Integration with Conductor binary
+
+dependencies:
+  required:
+    - Claude Code CLI
+    - Conductor binary (for execution)
+  
+  optional:
+    - ai-counsel MCP server (for /cook-auto command only)
+
+documentation:
+  - docs/README.md
+  - docs/SETUP.md
+  - docs/USAGE.md
+  - docs/REFERENCE.md
+  - docs/ARCHITECTURE.md
+  - docs/ACCESSIBILITY.md
+  - docs/NAVIGATION.md
+
+templates:
+  - templates/example-plan.yaml
+  - templates/example-design.md
+
+keywords:
+  - conductor
+  - orchestration
+  - planning
+  - multi-agent
+  - design
+  - implementation
+  - automation

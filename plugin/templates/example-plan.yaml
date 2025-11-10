@@ -1,0 +1,867 @@
+plan:
+  # Metadata about the implementation plan
+  metadata:
+    feature_name: "User Authentication System"
+    created: "2025-01-09"
+    target: "Add JWT-based authentication with login, registration, and password reset"
+    estimated_tasks: 5
+
+  # Worktree groups for parallel execution
+  worktree_groups:
+    - group_id: "chain-1"
+      description: "Core authentication flow (Tasks 1→2)"
+      tasks: [1, 2]
+      branch: "feature/user-authentication/chain-1"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "These tasks form a dependency chain and must execute in order"
+      setup_commands: |
+        # Create worktree for this dependency chain
+        git worktree add ../wt-chain-1 -b feature/user-authentication/chain-1
+        cd ../wt-chain-1
+
+    - group_id: "independent-3"
+      description: "Documentation task (no dependencies)"
+      tasks: [3]
+      branch: "feature/user-authentication/independent-3"
+      execution_model: "parallel"
+      isolation: "separate-worktree"
+      rationale: "Independent task that can execute in parallel with chain-1"
+      setup_commands: |
+        # Create worktree for this independent task
+        git worktree add ../wt-independent-3 -b feature/user-authentication/independent-3
+        cd ../wt-independent-3
+
+    - group_id: "chain-4"
+      description: "Integration tests requiring Tasks 1 and 2"
+      tasks: [4, 5]
+      branch: "feature/user-authentication/chain-4"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Depends on completion of chain-1; tests integration of auth system"
+      setup_commands: |
+        # Wait for chain-1 to merge to main
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-chain-4 -b feature/user-authentication/chain-4
+        cd ../wt-chain-4
+
+  # Context for the engineer
+  context:
+    framework: "Go with standard library (net/http)"
+    architecture: "Clean Architecture with handlers, services, and repositories"
+    test_framework: "Go testing package with testify assertions"
+    other_context:
+      - "Uses JWT tokens with RS256 signing"
+      - "Stores user credentials in PostgreSQL"
+      - "Follows existing API patterns in internal/api/"
+    expectations:
+      - "Write tests BEFORE implementation (TDD)"
+      - "Commit frequently (after each completed task)"
+      - "Follow existing code patterns"
+      - "Keep changes minimal (YAGNI)"
+      - "Avoid duplication (DRY)"
+
+  # Prerequisites checklist
+  prerequisites:
+    - item: "Go 1.21+ installed"
+      details: "Check with: go version"
+      verified: false
+    - item: "PostgreSQL running"
+      details: "Test database connection"
+      verified: false
+    - item: "Git worktree support"
+      details: "Git 2.5+ required"
+      verified: false
+
+  # Detailed task breakdown
+  tasks:
+    - task_number: 1
+      name: "Create User model and database schema"
+      agent: "golang-pro"
+      worktree_group: "chain-1"
+      files:
+        - "internal/models/user.go"
+        - "internal/models/user_test.go"
+        - "migrations/001_create_users_table.sql"
+      depends_on: []
+      estimated_time: "45m"
+
+      description: |
+        Create the User model struct with fields for authentication (email, password hash).
+        Include database migration to create users table with proper indexes.
+
+      test_first:
+        test_file: "internal/models/user_test.go"
+
+        structure:
+          - "TestUser_Validation validates email format"
+          - "TestUser_PasswordHashing checks bcrypt hashing"
+          - "TestUser_ComparePassword verifies password comparison"
+
+        mocks: []
+
+        fixtures:
+          - "Valid user with email and password"
+          - "Invalid user with malformed email"
+
+        assertions:
+          - "Valid email formats pass validation"
+          - "Invalid email formats fail validation"
+          - "Password is hashed (not stored plain text)"
+          - "Password comparison works correctly"
+
+        edge_cases:
+          - "Empty email"
+          - "Empty password"
+          - "Very long password (>128 chars)"
+
+        example_skeleton: |
+          func TestUser_Validation(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  email   string
+                  wantErr bool
+              }{
+                  {"valid email", "user@example.com", false},
+                  {"invalid email", "not-an-email", true},
+              }
+
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      user := &User{Email: tt.email}
+                      err := user.Validate()
+                      if (err != nil) != tt.wantErr {
+                          t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+                      }
+                  })
+              }
+          }
+
+      implementation:
+        approach: |
+          Create User struct with fields: ID (uuid), Email (string), PasswordHash (string),
+          CreatedAt (time). Implement Validate() method to check email format using regex.
+          Implement SetPassword() to hash password with bcrypt. Implement ComparePassword()
+          to verify password.
+
+        code_structure: |
+          type User struct {
+              ID           string
+              Email        string
+              PasswordHash string
+              CreatedAt    time.Time
+          }
+
+          func (u *User) Validate() error {
+              // Validate email format
+          }
+
+          func (u *User) SetPassword(password string) error {
+              // Hash password with bcrypt
+          }
+
+          func (u *User) ComparePassword(password string) bool {
+              // Compare password with hash
+          }
+
+        key_points:
+          - point: "Use bcrypt for password hashing"
+            details: "bcrypt.GenerateFromPassword with cost 12"
+          - point: "Email validation regex"
+            details: "Use standard email regex pattern"
+          - point: "Database migration"
+            details: "Create users table with UNIQUE constraint on email"
+
+        integration:
+          imports:
+            - "golang.org/x/crypto/bcrypt"
+            - "time"
+            - "github.com/google/uuid"
+
+          services_to_inject: []
+
+          config_values:
+            - name: "BCRYPT_COST"
+              source: "Default to 12"
+
+          error_handling:
+            - "Return validation errors for invalid email"
+            - "Return error if password hashing fails"
+
+      verification:
+        manual_testing:
+          - step: "Create user with valid email"
+            expected: "User created successfully"
+          - step: "Try invalid email format"
+            expected: "Validation error returned"
+
+        automated_tests:
+          command: "go test ./internal/models/ -v"
+          expected_output: |
+            PASS: TestUser_Validation
+            PASS: TestUser_PasswordHashing
+            PASS: TestUser_ComparePassword
+
+        success_criteria:
+          - "All tests pass"
+          - "Code coverage >85%"
+          - "go vet passes"
+
+      commit:
+        type: "feat"
+        message: "add User model with authentication fields"
+        body: |
+          Implements User struct with email, password hash, and timestamps.
+          Includes bcrypt password hashing and email validation.
+          Database migration creates users table with proper indexes.
+
+        files:
+          - "internal/models/user.go"
+          - "internal/models/user_test.go"
+          - "migrations/001_create_users_table.sql"
+
+    - task_number: 2
+      name: "Implement authentication service"
+      agent: "golang-pro"
+      worktree_group: "chain-1"
+      files:
+        - "internal/services/auth_service.go"
+        - "internal/services/auth_service_test.go"
+      depends_on: [1]
+      estimated_time: "1h"
+
+      description: |
+        Create authentication service that handles user registration and login.
+        Generate JWT tokens for authenticated users. Use the User model from Task 1.
+
+      test_first:
+        test_file: "internal/services/auth_service_test.go"
+
+        structure:
+          - "TestAuthService_Register creates new user"
+          - "TestAuthService_Register_DuplicateEmail returns error"
+          - "TestAuthService_Login returns JWT token"
+          - "TestAuthService_Login_InvalidCredentials returns error"
+
+        mocks:
+          - "UserRepository interface"
+
+        fixtures:
+          - "Valid registration data"
+          - "Valid login credentials"
+          - "Invalid login credentials"
+
+        assertions:
+          - "Registration creates user in database"
+          - "Duplicate email registration fails"
+          - "Valid login returns JWT token"
+          - "Invalid credentials return error"
+
+        edge_cases:
+          - "Nil repository"
+          - "Empty credentials"
+          - "SQL injection attempts"
+
+        example_skeleton: |
+          func TestAuthService_Register(t *testing.T) {
+              mockRepo := &MockUserRepository{}
+              service := NewAuthService(mockRepo)
+
+              err := service.Register("test@example.com", "password123")
+
+              assert.NoError(t, err)
+              assert.True(t, mockRepo.CreateCalled)
+          }
+
+      implementation:
+        approach: |
+          Create AuthService struct with UserRepository dependency. Implement Register()
+          method that validates input, hashes password, and stores user. Implement Login()
+          method that finds user by email, verifies password, and generates JWT token.
+
+        code_structure: |
+          type AuthService struct {
+              userRepo UserRepository
+              jwtSecret string
+          }
+
+          func (s *AuthService) Register(email, password string) error {
+              // Validate, hash password, create user
+          }
+
+          func (s *AuthService) Login(email, password string) (string, error) {
+              // Find user, verify password, generate JWT
+          }
+
+        key_points:
+          - point: "JWT token generation"
+            details: "Use RS256 algorithm with private key"
+          - point: "Password verification"
+            details: "Use User.ComparePassword() method from Task 1"
+          - point: "Error handling"
+            details: "Return specific errors for not found, invalid password, etc."
+
+        integration:
+          imports:
+            - "github.com/golang-jwt/jwt/v5"
+            - "github.com/harrison/conductor/internal/models"
+
+          services_to_inject:
+            - name: "UserRepository"
+              from: "internal/repository"
+
+          config_values:
+            - name: "JWT_SECRET"
+              source: "Environment variable"
+
+          error_handling:
+            - "Return ErrDuplicateEmail if email exists"
+            - "Return ErrInvalidCredentials if password wrong"
+
+      verification:
+        manual_testing:
+          - step: "Register new user"
+            command: "curl -X POST /api/register -d '{...}'"
+            expected: "201 Created"
+          - step: "Login with credentials"
+            command: "curl -X POST /api/login -d '{...}'"
+            expected: "200 OK with JWT token"
+
+        automated_tests:
+          command: "go test ./internal/services/ -v"
+          expected_output: |
+            PASS: TestAuthService_Register
+            PASS: TestAuthService_Login
+
+        success_criteria:
+          - "All tests pass"
+          - "JWT tokens are valid"
+          - "Passwords are securely hashed"
+
+      commit:
+        type: "feat"
+        message: "add authentication service with registration and login"
+        body: |
+          Implements AuthService for user authentication. Handles registration
+          with duplicate email checking and login with JWT token generation.
+          Uses bcrypt for secure password storage.
+
+        files:
+          - "internal/services/auth_service.go"
+          - "internal/services/auth_service_test.go"
+
+    - task_number: 3
+      name: "Write API documentation"
+      agent: "technical-documentation-specialist"
+      worktree_group: "independent-3"
+      files:
+        - "docs/api/authentication.md"
+      depends_on: []
+      estimated_time: "30m"
+
+      description: |
+        Document the authentication API endpoints: POST /api/register and
+        POST /api/login. Include request/response examples, error codes,
+        and authentication flow diagram.
+
+      test_first:
+        test_file: "N/A - documentation task"
+        structure: []
+        mocks: []
+        fixtures: []
+        assertions: []
+        edge_cases: []
+        example_skeleton: ""
+
+      implementation:
+        approach: |
+          Create Markdown documentation with OpenAPI-style endpoint descriptions.
+          Include curl examples, request schemas, response schemas, and error codes.
+
+        code_structure: |
+          # Authentication API
+
+          ## POST /api/register
+          Register a new user account.
+
+          **Request:**
+          ```json
+          {
+            "email": "user@example.com",
+            "password": "securepass123"
+          }
+          ```
+
+          **Response:** 201 Created
+          ```json
+          {
+            "id": "uuid",
+            "email": "user@example.com"
+          }
+          ```
+
+        key_points:
+          - point: "Include request/response examples"
+            details: "Show realistic JSON payloads"
+          - point: "Document error codes"
+            details: "400, 401, 409 with explanations"
+          - point: "Add authentication flow diagram"
+            details: "Show registration → login → authenticated request sequence"
+
+        integration:
+          imports: []
+          services_to_inject: []
+          config_values: []
+          error_handling: []
+
+      verification:
+        manual_testing:
+          - step: "Review documentation completeness"
+            expected: "All endpoints documented"
+          - step: "Test examples with curl"
+            expected: "Examples work as shown"
+
+        automated_tests:
+          command: "N/A"
+          expected_output: ""
+
+        success_criteria:
+          - "All endpoints documented"
+          - "Examples are accurate"
+          - "Error codes listed"
+
+      commit:
+        type: "docs"
+        message: "add authentication API documentation"
+        body: |
+          Documents registration and login endpoints with request/response
+          examples, error codes, and authentication flow diagram.
+
+        files:
+          - "docs/api/authentication.md"
+
+    - task_number: 4
+      name: "Add integration tests for auth flow"
+      agent: "test-automator"
+      worktree_group: "chain-4"
+      files:
+        - "test/integration/auth_test.go"
+      depends_on: [1, 2]
+      estimated_time: "45m"
+
+      description: |
+        Create integration tests that test the full authentication flow:
+        register user → login → use JWT token to access protected endpoint.
+        Tests should use real database (test database) and HTTP server.
+
+      test_first:
+        test_file: "test/integration/auth_test.go"
+
+        structure:
+          - "TestAuthFlow_RegisterAndLogin"
+          - "TestAuthFlow_LoginWithInvalidCredentials"
+          - "TestAuthFlow_AccessProtectedRoute"
+
+        mocks: []
+
+        fixtures:
+          - "Test database with clean state"
+          - "Test HTTP server"
+
+        assertions:
+          - "Registration creates user"
+          - "Login returns valid JWT"
+          - "JWT can access protected routes"
+          - "Invalid credentials rejected"
+
+        edge_cases:
+          - "Expired JWT token"
+          - "Malformed JWT token"
+          - "Missing Authorization header"
+
+        example_skeleton: |
+          func TestAuthFlow_RegisterAndLogin(t *testing.T) {
+              // Setup test server and database
+              server := setupTestServer(t)
+              defer server.Close()
+
+              // Register user
+              resp := registerUser(server, "test@example.com", "password123")
+              assert.Equal(t, 201, resp.StatusCode)
+
+              // Login
+              loginResp := loginUser(server, "test@example.com", "password123")
+              assert.Equal(t, 200, loginResp.StatusCode)
+
+              // Extract JWT token
+              token := extractToken(loginResp)
+              assert.NotEmpty(t, token)
+
+              // Access protected route
+              protectedResp := accessProtected(server, token)
+              assert.Equal(t, 200, protectedResp.StatusCode)
+          }
+
+      implementation:
+        approach: |
+          Create integration test suite that spins up test HTTP server and test
+          database. Test full user journey from registration through authenticated
+          access. Use httptest package for server and testcontainers for database.
+
+        code_structure: |
+          func setupTestServer(t *testing.T) *httptest.Server {
+              // Setup test database
+              // Create HTTP server with auth routes
+          }
+
+          func registerUser(server *httptest.Server, email, password string) *http.Response {
+              // POST to /api/register
+          }
+
+          func loginUser(server *httptest.Server, email, password string) *http.Response {
+              // POST to /api/login
+          }
+
+        key_points:
+          - point: "Use test database"
+            details: "Create isolated test database for each test"
+          - point: "Clean state between tests"
+            details: "Reset database before each test"
+          - point: "Test HTTP layer"
+            details: "Use httptest.Server for realistic testing"
+
+        integration:
+          imports:
+            - "net/http/httptest"
+            - "github.com/stretchr/testify/assert"
+
+          services_to_inject: []
+
+          config_values:
+            - name: "TEST_DATABASE_URL"
+              source: "Test configuration"
+
+          error_handling: []
+
+      verification:
+        manual_testing: []
+
+        automated_tests:
+          command: "go test ./test/integration/ -v"
+          expected_output: |
+            PASS: TestAuthFlow_RegisterAndLogin
+            PASS: TestAuthFlow_LoginWithInvalidCredentials
+            PASS: TestAuthFlow_AccessProtectedRoute
+
+        success_criteria:
+          - "All integration tests pass"
+          - "Tests cover full auth flow"
+          - "Edge cases tested"
+
+      commit:
+        type: "test"
+        message: "add integration tests for authentication flow"
+        body: |
+          Tests complete user journey from registration through authenticated
+          access. Uses test database and HTTP server for realistic testing.
+
+        files:
+          - "test/integration/auth_test.go"
+
+    - task_number: 5
+      name: "Add end-to-end test documentation"
+      agent: "technical-documentation-specialist"
+      worktree_group: "chain-4"
+      files:
+        - "test/integration/README.md"
+      depends_on: [4]
+      estimated_time: "20m"
+
+      description: |
+        Document how to run the integration tests, what they test, and how to
+        debug failures. Include setup instructions for test database.
+
+      test_first:
+        test_file: "N/A - documentation task"
+        structure: []
+        mocks: []
+        fixtures: []
+        assertions: []
+        edge_cases: []
+        example_skeleton: ""
+
+      implementation:
+        approach: |
+          Create README in test/integration/ explaining test suite, how to run,
+          prerequisites, and troubleshooting tips.
+
+        code_structure: |
+          # Integration Tests
+
+          ## Overview
+          Integration tests for authentication system.
+
+          ## Prerequisites
+          - PostgreSQL test database
+          - Environment variables set
+
+          ## Running Tests
+          ```bash
+          go test ./test/integration/ -v
+          ```
+
+        key_points:
+          - point: "Document prerequisites"
+            details: "Database setup, environment variables"
+          - point: "Explain test structure"
+            details: "What each test covers"
+          - point: "Troubleshooting"
+            details: "Common failures and how to fix"
+
+        integration:
+          imports: []
+          services_to_inject: []
+          config_values: []
+          error_handling: []
+
+      verification:
+        manual_testing:
+          - step: "Follow README instructions"
+            expected: "Tests run successfully"
+
+        automated_tests:
+          command: "N/A"
+          expected_output: ""
+
+        success_criteria:
+          - "README is complete"
+          - "Instructions work"
+          - "Troubleshooting section helpful"
+
+      commit:
+        type: "docs"
+        message: "add integration test documentation"
+        body: |
+          Documents how to run integration tests, prerequisites, and
+          troubleshooting tips for authentication test suite.
+
+        files:
+          - "test/integration/README.md"
+
+  # Testing strategy
+  testing_strategy:
+    unit_tests:
+      location: "internal/*_test.go"
+      naming_convention: "*_test.go"
+      run_command: "go test ./internal/... -v"
+      coverage_target: "85%"
+      coverage_command: "go test ./internal/... -cover"
+
+    integration_tests:
+      location: "test/integration/"
+      what_to_test:
+        - "Full authentication flow"
+        - "Database interactions"
+        - "HTTP API endpoints"
+      setup_required:
+        - "Test PostgreSQL database"
+        - "Test HTTP server"
+      run_command: "go test ./test/integration/ -v"
+
+    e2e_tests:
+      enabled: false
+      location: "N/A"
+      critical_flows: []
+      tools: ""
+      run_command: ""
+
+    test_design_principles:
+      patterns_to_use:
+        - pattern: "Table-driven tests"
+          example: |
+            tests := []struct {
+                name string
+                input string
+                want string
+            }{
+                {"case 1", "input1", "output1"},
+            }
+
+        - pattern: "Arrange-Act-Assert"
+          example: |
+            // Arrange
+            user := &User{}
+            // Act
+            err := user.Validate()
+            // Assert
+            assert.NoError(t, err)
+
+      anti_patterns_to_avoid:
+        - pattern: "Testing private methods directly"
+          why: "Tests should test behavior, not implementation"
+          instead: "Test through public interfaces"
+
+        - pattern: "Shared mutable state"
+          why: "Creates test interdependencies"
+          instead: "Use test fixtures or setup/teardown"
+
+      mocking_guidelines:
+        mock_these:
+          - "Database connections"
+          - "External API calls"
+          - "JWT signing (in unit tests)"
+
+        dont_mock_these:
+          - "User model methods"
+          - "Validation logic"
+          - "Password hashing"
+
+        project_mocking_pattern:
+          reference: "Use interfaces for mockable dependencies"
+          example: |
+            type UserRepository interface {
+                Create(user *User) error
+                FindByEmail(email string) (*User, error)
+            }
+
+  # Commit strategy
+  commit_strategy:
+    total_commits: 5
+
+    commits:
+      - sequence: 1
+        type: "feat"
+        description: "add User model with authentication fields"
+        files:
+          - "internal/models/user.go"
+          - "internal/models/user_test.go"
+          - "migrations/001_create_users_table.sql"
+        why_separate: "Foundation - needed for all other auth features"
+
+      - sequence: 2
+        type: "feat"
+        description: "add authentication service with registration and login"
+        files:
+          - "internal/services/auth_service.go"
+          - "internal/services/auth_service_test.go"
+        why_separate: "Core business logic separate from model"
+
+      - sequence: 3
+        type: "docs"
+        description: "add authentication API documentation"
+        files:
+          - "docs/api/authentication.md"
+        why_separate: "Documentation separate from implementation"
+
+      - sequence: 4
+        type: "test"
+        description: "add integration tests for authentication flow"
+        files:
+          - "test/integration/auth_test.go"
+        why_separate: "Integration tests separate from unit tests"
+
+      - sequence: 5
+        type: "docs"
+        description: "add integration test documentation"
+        files:
+          - "test/integration/README.md"
+        why_separate: "Test documentation as final step"
+
+    message_format:
+      pattern: "type: brief description in present tense"
+      examples:
+        - "feat: add user authentication"
+        - "test: add auth integration tests"
+        - "docs: add API documentation"
+
+      example_from_history: |
+        feat: add JWT authentication middleware
+
+    commit_guidelines:
+      - "Keep commits atomic - one logical change per commit"
+      - "Write clear, descriptive messages"
+      - "Include tests with implementation"
+      - "Commit frequently"
+
+    worktree_commit_workflow:
+      - "Each worktree maintains its own commit history"
+      - "Merge worktree branches to main independently"
+      - "For tasks depending on multiple groups, merge prerequisites first"
+
+  # Common pitfalls
+  common_pitfalls:
+    - pitfall: "Storing passwords in plain text"
+      why: "Security vulnerability"
+      how_to_avoid: "Always use bcrypt to hash passwords"
+      reference:
+        file: "internal/models/user.go"
+        pattern: "See SetPassword() method"
+
+    - pitfall: "Not validating JWT tokens properly"
+      why: "Security vulnerability"
+      how_to_avoid: "Always verify signature and expiration"
+      reference:
+        file: "internal/services/auth_service.go"
+        pattern: "Use jwt.Parse() with verification"
+
+    - pitfall: "Exposing password hash in API responses"
+      why: "Security vulnerability"
+      how_to_avoid: "Never include PasswordHash in JSON responses"
+      reference:
+        file: "internal/models/user.go"
+        pattern: "Use json:\"-\" tag on PasswordHash field"
+
+  # Resources and references
+  resources:
+    existing_code:
+      - type: "HTTP handler patterns"
+        path: "internal/api/handlers/"
+        note: "Follow existing handler structure"
+
+      - type: "Service patterns"
+        path: "internal/services/"
+        note: "Follow dependency injection pattern"
+
+      - type: "Test examples"
+        path: "internal/models/post_test.go"
+        note: "Follow test structure and naming"
+
+    documentation:
+      - type: "JWT documentation"
+        link: "https://pkg.go.dev/github.com/golang-jwt/jwt/v5"
+        relevance: "JWT token generation and validation"
+
+      - type: "bcrypt documentation"
+        link: "https://pkg.go.dev/golang.org/x/crypto/bcrypt"
+        relevance: "Password hashing"
+
+    external_resources:
+      - title: "OWASP Authentication Cheat Sheet"
+        url: "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
+        why: "Security best practices for authentication"
+
+    validation_checklist:
+      - item: "All tests pass"
+        command: "go test ./..."
+        checked: false
+
+      - item: "Code coverage >85%"
+        command: "go test ./... -cover"
+        checked: false
+
+      - item: "go vet passes"
+        command: "go vet ./..."
+        checked: false
+
+      - item: "No passwords in plain text"
+        verify: "Check all password fields use bcrypt"
+        checked: false
+
+      - item: "JWT tokens validated properly"
+        verify: "Check signature and expiration"
+        checked: false
+
+      - item: "Documentation complete"
+        files: "API docs, test docs"
+        checked: false
