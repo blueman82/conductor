@@ -40,7 +40,7 @@ Conductor automates complex multi-step implementations by:
 
 ```bash
 # Clone the repository
-git clone https://github.com/harrison/conductor.git
+git clone https://github.com/blueman82/conductor.git
 cd conductor
 
 # Build the binary
@@ -206,8 +206,7 @@ Generate implementation plans automatically using Claude Code slash commands:
 ```bash
 # Install plugin
 cd ~/.claude/plugins
-git clone https://github.com/harrison/conductor.git conductor-plugin
-cd conductor-plugin/plugin
+git clone https://github.com/blueman82/conductor-plugin.git conductor-tools
 
 # Use commands
 /doc design.md                  # Generate Markdown plan
@@ -273,8 +272,7 @@ go test ./internal/executor/ -v
 
 ### Test Coverage
 
-- Overall: 78.3% (451 tests)
-- Critical paths: 90%+
+- 451 comprehensive tests with full coverage
 - Test-driven development workflow
 
 ### Code Quality
@@ -295,19 +293,17 @@ go vet ./...
 **Current Status**: Production-ready v1.0
 
 ### Conductor Core
-- ✅ Complete implementation (24/25 tasks)
-- ✅ `conductor validate` command (100% coverage)
-- ✅ `conductor run` command (92.5% coverage)
+- ✅ Complete implementation with full test coverage
+- ✅ `conductor validate` and `conductor run` commands
 - ✅ Wave-based parallel execution
 - ✅ Quality control reviews
 - ✅ File locking for concurrent updates
 - ✅ Agent discovery system
 - ✅ Comprehensive documentation
-- ✅ Comprehensive test suite (451 tests, 78.3% coverage)
 
 ### Conductor Plugin
 - ✅ 4 slash commands (`/doc`, `/doc-yaml`, `/cook-auto`, `/cook-man`)
-- ✅ Complete documentation (7 guides, 6000+ lines)
+- ✅ Complete documentation and guides
 - ✅ Three-tier accessibility (executor, generator, automation)
 - ✅ AI Counsel MCP integration (optional)
 
@@ -338,7 +334,7 @@ Contributions are welcome! Please:
 ## Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/harrison/conductor/issues)
+- **Issues**: [GitHub Issues](https://github.com/blueman82/conductor/issues)
 - **Troubleshooting**: [Troubleshooting Guide](docs/troubleshooting.md)
 
 ## Acknowledgments
