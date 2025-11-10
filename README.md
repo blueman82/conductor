@@ -199,11 +199,36 @@ plan:
 
 For complete format specifications, see [Plan Format Guide](docs/plan-format.md).
 
+## Conductor Plugin (Optional)
+
+Generate implementation plans automatically using Claude Code slash commands:
+
+```bash
+# Install plugin
+cd ~/.claude/plugins
+git clone https://github.com/harrison/conductor.git conductor-plugin
+cd conductor-plugin/plugin
+
+# Use commands
+/doc design.md                  # Generate Markdown plan
+/doc-yaml design.md            # Generate YAML plan
+/cook-man design.md            # Interactive plan generation
+/cook-auto design.md           # Automated plan generation (optional MCP)
+```
+
+See [plugin/docs](plugin/docs) for complete plugin documentation.
+
+**What it does:**
+- Design → Plan conversion (Markdown & YAML)
+- Interactive or automated plan generation
+- Integrates seamlessly with conductor binary
+
 ## Documentation
 
 - **[Usage Guide](docs/usage.md)** - Detailed CLI reference and examples
 - **[Plan Format Guide](docs/plan-format.md)** - Plan format specifications
 - **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
+- **[Plugin Docs](plugin/docs)** - Plan generation & design tools
 
 ## Architecture Overview
 
@@ -269,6 +294,7 @@ go vet ./...
 
 **Current Status**: Production-ready v1.0
 
+### Conductor Core
 - ✅ Complete implementation (24/25 tasks)
 - ✅ `conductor validate` command (100% coverage)
 - ✅ `conductor run` command (92.5% coverage)
@@ -276,9 +302,14 @@ go vet ./...
 - ✅ Quality control reviews
 - ✅ File locking for concurrent updates
 - ✅ Agent discovery system
-- ✅ Comprehensive documentation (Task 24)
-- ✅ Comprehensive test suite (451 tests)
-- ⏳ Final integration testing (Task 25)
+- ✅ Comprehensive documentation
+- ✅ Comprehensive test suite (451 tests, 78.3% coverage)
+
+### Conductor Plugin
+- ✅ 4 slash commands (`/doc`, `/doc-yaml`, `/cook-auto`, `/cook-man`)
+- ✅ Complete documentation (7 guides, 6000+ lines)
+- ✅ Three-tier accessibility (executor, generator, automation)
+- ✅ AI Counsel MCP integration (optional)
 
 ## Dependencies
 
