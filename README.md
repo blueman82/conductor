@@ -265,11 +265,14 @@ See [plugin/docs](plugin/docs) for complete plugin documentation.
 
 - **[Usage Guide](docs/usage.md)** - Detailed CLI reference and examples
 - **[Plan Format Guide](docs/plan-format.md)** - Plan format specifications
+- **[Phase 2A Guide](docs/phase-2a-guide.md)** - Multi-file plans and plan splitting
 - **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
+- **[Split Plan Examples](docs/examples/split-plan-README.md)** - Example split plans
 - **[Plugin Docs](plugin/docs)** - Plan generation & design tools
 
 ## Architecture Overview
 
+### Phase 1 (v1.0) - Single-File Plans
 ```
 Plan File (.md/.yaml)
   → Parser (auto-detects format)
@@ -282,14 +285,27 @@ Plan File (.md/.yaml)
   → Plan Updater (marks tasks complete)
 ```
 
+### Phase 2A - Multi-File Plans (Extended)
+```
+Multiple Plan Files (.md/.yaml)
+  → Multi-File Loader (auto-detects format per file)
+  → Plan Merger (validates, deduplicates, merges)
+  → Dependency Graph (cross-file dependencies)
+  → Wave Calculator (respects worktree groups)
+  → [Rest of pipeline as above]
+  → Plan Updater (file-aware task tracking)
+```
+
 **Key Components:**
 
-- **Parser**: Auto-detects and parses Markdown/YAML plan files
-- **Graph Builder**: Calculates dependencies using Kahn's algorithm
+- **Parser**: Auto-detects and parses Markdown/YAML plan files (per file in Phase 2A)
+- **Multi-File Loader**: Loads and merges multiple plans with validation (Phase 2A)
+- **Graph Builder**: Calculates dependencies using Kahn's algorithm (cross-file in Phase 2A)
 - **Orchestrator**: Coordinates wave-based execution with bounded concurrency
 - **Task Executor**: Spawns Claude CLI agents with timeout and retry logic
 - **Quality Control**: Reviews task outputs using dedicated QC agent
-- **Plan Updater**: Thread-safe updates to plan files with file locking
+- **Plan Updater**: Thread-safe updates to plan files with file locking (file-aware in Phase 2A)
+- **Worktree Groups**: Organize tasks into execution groups with isolation levels (Phase 2A)
 
 ## Development
 
@@ -328,11 +344,33 @@ golangci-lint run
 go vet ./...
 ```
 
+## Multi-File Plans (Phase 2A)
+
+Conductor supports splitting large implementation plans across multiple files with automatic merging and dependency management:
+
+```bash
+# Load and execute multiple plan files
+conductor run setup.md features.md deployment.md
+
+# Validate split plans before execution
+conductor validate *.md
+```
+
+**Features:**
+- ✅ Multi-file plan loading with auto-format detection
+- ✅ Objective plan splitting by feature/component/service
+- ✅ Cross-file dependency management
+- ✅ Worktree groups for execution control
+- ✅ File-to-task mapping for resume operations
+- ✅ 100% backward compatible with v1.0 single-file plans
+
+See [Phase 2A Guide](docs/phase-2a-guide.md) for detailed documentation and examples.
+
 ## Project Status
 
-**Current Status**: Production-ready v1.0
+**Current Status**: Production-ready v1.0 + Phase 2A (Multi-File Plans)
 
-### Conductor Core
+### Conductor Core (Phase 1)
 - ✅ Complete implementation with full test coverage
 - ✅ `conductor validate` and `conductor run` commands
 - ✅ Wave-based parallel execution
@@ -340,6 +378,14 @@ go vet ./...
 - ✅ File locking for concurrent updates
 - ✅ Agent discovery system
 - ✅ Comprehensive documentation
+
+### Phase 2A Extensions
+- ✅ Multi-file plan loading and merging
+- ✅ Objective plan splitting with logical grouping
+- ✅ Worktree group organization (parallel/sequential, isolation levels)
+- ✅ FileToTaskMap tracking for resume operations
+- ✅ 37 integration tests for Phase 2A features
+- ✅ 100% backward compatible with v1.0
 
 ### Conductor Plugin
 - ✅ 4 slash commands (`/doc`, `/doc-yaml`, `/cook-auto`, `/cook-man`)

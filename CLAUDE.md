@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews.
 
-**Current Status**: ✅ **ALL 25 TASKS COMPLETE**. Conductor is fully implemented, tested, and production-ready. All core functionality, logging, configuration, error handling, integration tests, build tooling, and documentation complete. Latest updates: Task 21 (error types integrated into executor) and Task 25 (15 E2E tests implemented).
+**Current Status**: ✅ **PHASE 1 (25 TASKS) COMPLETE** + **PHASE 2A (Multi-File Plans) IMPLEMENTED**. Conductor v1 fully implemented, tested, and production-ready. All core functionality, logging, configuration, error handling, integration tests, build tooling, and documentation complete. Phase 2A adds multi-file plan support with objective plan splitting and worktree group organization.
 
 ## Development Commands
 
@@ -271,7 +271,159 @@ All critical components now implemented and production-ready:
 - Log file creation and symlink verification tests
 - Test file grew from 604 to 1,193 lines
 
-**Current Status**: **✅ PRODUCTION READY** - All 25 tasks complete. The conductor binary is fully functional with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → execution → logging → completion. All documentation, tooling, and error handling in place. Ready for production deployment.**
+**Current Status**: **✅ PRODUCTION READY** - All 25 tasks complete. The conductor binary is fully functional with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → execution → logging → completion. All documentation, tooling, and error handling in place. Ready for production deployment.
+
+## Phase 2A: Multi-File Plans & Objective Plan Splitting
+
+**Status**: ✅ Fully implemented with 37 new integration tests and 100% backward compatibility.
+
+Phase 2A extends Conductor to support splitting large implementation plans across multiple files with objective grouping of related tasks.
+
+### Key Phase 2A Features
+
+**1. Multi-File Plan Loading**
+- Load and automatically merge multiple plan files (.md or .yaml)
+- Auto-detect format per file (each file can be Markdown or YAML)
+- Maintain cross-file task dependencies
+- Track which file each task originated from
+
+**2. Objective Plan Splitting**
+- Split complex plans into logical phases or components
+- Each file represents a cohesive unit (e.g., frontend, backend, deployment)
+- Related tasks stay together with clear file organization
+- Smaller files = easier to review and understand
+
+**3. Worktree Group Organization**
+- Group related tasks into logical units (worktree groups)
+- Define execution model: `parallel` or `sequential`
+- Set isolation levels: `none`, `weak`, or `strong`
+- Capture rationale for each group's organization
+
+**4. FileToTaskMap Tracking**
+- Every task knows which file it came from
+- Maps file paths to task numbers for quick lookup
+- Enables resume operations on split plans
+- Supports partial plan re-execution
+
+### Phase 2A Use Cases
+
+1. **Large Projects**: Split a 20+ task plan into 2-3 focused files
+2. **Team Collaboration**: Different teams own different plan files
+3. **Phased Delivery**: Setup → Core Implementation → Testing → Deployment
+4. **Microservices**: Separate plans per service, merged for orchestration
+5. **Feature Flags**: Optional features in separate plan files
+
+### Phase 2A Architecture
+
+**Multi-File Merging Pipeline**:
+```
+Multiple Plan Files (.md/.yaml)
+  → Parser (auto-detects format per file)
+  → MergePlans (validate, deduplicate, merge)
+  → Dependency Graph Builder (cross-file dependencies)
+  → Wave Calculator (respects worktree groups)
+  → Orchestrator (maintains file origins)
+  → Execution & Logging (file-aware tracking)
+```
+
+**Models Integration**:
+- `Plan.WorktreeGroups` - Define task groups and execution rules
+- `Plan.FileToTaskMap` - Track task origins
+- `Task.WorktreeGroup` - Assign task to group
+- `Wave.GroupInfo` - Group-aware wave execution
+
+**Backward Compatibility**:
+- Single-file plans work unchanged
+- No breaking changes to existing API
+- All Phase 1 (v1.0) features fully preserved
+- 100% test coverage for compatibility
+
+### Phase 2A Examples
+
+**Example 1: Split Backend Plan**
+
+Part 1 (setup.md):
+```markdown
+## Task 1: Database Setup
+**Files**: infrastructure/db.tf
+**Depends on**: None
+
+Initialize PostgreSQL and migrations.
+
+## Task 2: API Server Setup
+**Files**: cmd/api/main.go
+**Depends on**: Task 1
+**WorktreeGroup**: backend-core
+
+Set up web server framework.
+```
+
+Part 2 (features.md):
+```markdown
+## Task 3: Auth Service
+**Files**: internal/auth/auth.go
+**Depends on**: Task 1, Task 2
+**WorktreeGroup**: backend-features
+
+Implement JWT authentication.
+
+## Task 4: User API
+**Files**: internal/api/users.go
+**Depends on**: Task 3
+**WorktreeGroup**: backend-features
+
+Create user CRUD endpoints.
+```
+
+Execute together:
+```bash
+conductor run setup.md features.md --max-concurrency 3
+```
+
+Or validate first:
+```bash
+conductor validate setup.md features.md
+```
+
+**Example 2: Microservices Plan**
+
+Three separate plans:
+- `auth-service-plan.md` - Authentication service (6 tasks)
+- `api-service-plan.md` - Main API (8 tasks)
+- `deployment-plan.md` - Infrastructure & deployment (5 tasks)
+
+With worktree groups:
+- `auth-service` group → sequential execution (isolation: strong)
+- `api-service` group → parallel where possible (isolation: weak)
+- `deployment` group → sequential (isolation: strong)
+
+**Best Practices**
+
+1. **File Organization**
+   - 1 file per feature/module/service
+   - Aim for 5-20 tasks per file
+   - Clear, descriptive filenames
+
+2. **Cross-File Dependencies**
+   - Keep intra-file dependencies tight
+   - Minimize cross-file dependencies where possible
+   - Document file execution order if strict
+
+3. **Worktree Groups**
+   - Use groups for execution control
+   - `sequential` for state-dependent tasks
+   - `parallel` for independent tasks
+   - `strong` isolation for infrastructure tasks
+
+4. **Task Naming**
+   - Prefix with module name: "Backend: Setup DB"
+   - Clear task boundaries
+   - File mappings should be obvious
+
+5. **Testing Split Plans**
+   - Validate all files together: `conductor validate *.md`
+   - Dry-run before actual execution
+   - Check dependency graph for cross-file links
 
 ## Module Path
 

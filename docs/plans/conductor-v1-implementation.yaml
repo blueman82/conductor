@@ -476,7 +476,7 @@ plan:
         - "Various test files"
       depends_on: [26, 27, 28, 29, 30, 31]
       estimated_time: "1h 30m"
-      status: "in-progress"
+      status: "completed"
       description: |
         Create test fixtures for split plans, write comprehensive tests for multi-file
         merging, cross-file dependencies, worktree group validation, and integration scenarios.
@@ -543,6 +543,7 @@ plan:
         files:
           - "internal/cmd/testdata/split-*.md"
           - "internal/parser/testdata/split-*.yaml"
+      completed_date: "2025-11-11"
     - task_number: 33
       name: "Update Documentation for Phase 2A"
       files:
@@ -551,7 +552,7 @@ plan:
         - "docs/plans/phase-2a-guide.md"
       depends_on: [32]
       estimated_time: "45m"
-      status: "pending"
+      status: "in-progress"
       description: |
         Document Phase 2A features, add examples of split plans, explain worktree group
         assignments, update architecture diagrams to show multi-file support.
