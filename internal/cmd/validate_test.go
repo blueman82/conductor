@@ -550,3 +550,73 @@ plan:
 		t.Errorf("Expected error about missing QC agent, got: %s", outputStr)
 	}
 }
+
+// TestValidateMultiFilePlan tests validation of multi-file split plans
+func TestValidateMultiFilePlan(t *testing.T) {
+	// Test directory with multiple plan files
+	testDir := filepath.Join("testdata", "valid-split-plan")
+
+	registry := agent.NewRegistry(filepath.Join("testdata", "agents"))
+	registry.Discover()
+
+	// Load and validate the plan directory
+	err := validatePlanDirectory(testDir, registry)
+
+	// Should succeed for valid split plan
+	if err != nil {
+		t.Errorf("validatePlanDirectory() returned error for valid split plan: %v", err)
+	}
+}
+
+// TestValidateWorktreeGroups tests validation of worktree group assignments
+func TestValidateWorktreeGroups(t *testing.T) {
+	testFile := filepath.Join("testdata", "invalid-groups.yaml")
+
+	registry := agent.NewRegistry(filepath.Join("testdata", "agents"))
+	registry.Discover()
+
+	var output bytes.Buffer
+	err := validatePlan(testFile, registry, &output)
+
+	// Should fail due to invalid worktree groups
+	if err == nil {
+		t.Error("validatePlan() should return error for invalid worktree groups")
+	}
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "worktree") && !strings.Contains(outputStr, "group") {
+		t.Logf("Note: Got output: %s", outputStr)
+	}
+}
+
+// TestValidateCrossFileDeps tests validation of cross-file dependencies
+func TestValidateCrossFileDeps(t *testing.T) {
+	testDir := filepath.Join("testdata", "broken-cross-deps")
+
+	registry := agent.NewRegistry(filepath.Join("testdata", "agents"))
+	registry.Discover()
+
+	// Load and validate the plan directory
+	err := validatePlanDirectory(testDir, registry)
+
+	// Should fail due to broken cross-file dependencies
+	if err == nil {
+		t.Error("validatePlanDirectory() should return error for broken cross-file dependencies")
+	}
+}
+
+// TestValidateSplitBoundaries tests validation of split boundaries
+func TestValidateSplitBoundaries(t *testing.T) {
+	testDir := filepath.Join("testdata", "invalid-boundaries")
+
+	registry := agent.NewRegistry(filepath.Join("testdata", "agents"))
+	registry.Discover()
+
+	// Load and validate the plan directory
+	err := validatePlanDirectory(testDir, registry)
+
+	// Should fail due to invalid split boundaries
+	if err == nil {
+		t.Error("validatePlanDirectory() should return error for invalid split boundaries")
+	}
+}

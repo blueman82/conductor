@@ -1,0 +1,24 @@
+conductor:
+  worktree_groups:
+    - group_id: "group-a"
+      description: "Group A tasks"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Can run in parallel"
+
+plan:
+  tasks:
+    - task_number: 1
+      name: "Setup Infrastructure"
+      files: ["setup.go"]
+      depends_on: []
+      agent: "golang-pro"
+      description: "Initialize infrastructure for group A"
+      worktree_group: "group-a"
+    - task_number: 2
+      name: "Deploy Services"
+      files: ["services.go"]
+      depends_on: [1]
+      agent: "golang-pro"
+      description: "Deploy services after setup"
+      worktree_group: "group-a"

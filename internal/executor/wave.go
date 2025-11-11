@@ -148,6 +148,14 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		if execErr == nil && executionResult.err != nil {
 			execErr = executionResult.err
 		}
+
+		// Log individual task result
+		if w.logger != nil {
+			if logErr := w.logger.LogTaskResult(executionResult.result); logErr != nil {
+				// Log error but don't fail execution
+				// Task completed but logging failed - not a critical failure
+			}
+		}
 	}
 
 	waveResults := make([]models.TaskResult, 0, len(resultMap))

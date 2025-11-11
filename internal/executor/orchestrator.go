@@ -28,12 +28,12 @@ import (
 )
 
 // Logger interface for orchestrator progress reporting.
-// Task-level logging is deferred to CLI implementation (Task 16/18).
-// The orchestrator operates at wave/summary granularity.
+// Supports wave-level, task-level, and summary logging.
 // Implementations can log to console, file, or other destinations.
 type Logger interface {
 	LogWaveStart(wave models.Wave)
 	LogWaveComplete(wave models.Wave, duration time.Duration)
+	LogTaskResult(result models.TaskResult) error
 	LogSummary(result models.ExecutionResult)
 }
 
@@ -44,8 +44,9 @@ type WaveExecutorInterface interface {
 
 // Orchestrator coordinates plan execution, handles graceful shutdown, and aggregates results.
 type Orchestrator struct {
-	waveExecutor WaveExecutorInterface
-	logger       Logger
+	waveExecutor      WaveExecutorInterface
+	logger            Logger
+	FileToTaskMapping map[string]string // task number -> file path mapping
 }
 
 // NewOrchestrator creates a new Orchestrator instance.
@@ -144,4 +145,91 @@ func isCompleted(result models.TaskResult) bool {
 // This includes RED (quality control failed), FAILED (execution error), or presence of Error field.
 func isFailed(result models.TaskResult) bool {
 	return result.Status == models.StatusRed || result.Status == models.StatusFailed || result.Error != nil
+}
+
+// MergePlans combines multiple plan files into a single plan with validation.
+// It merges tasks, waves, and tracks file-to-task ownership.
+// Returns an error if there are conflicting task numbers or invalid merged state.
+func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
+	if len(plans) == 0 {
+		return nil, fmt.Errorf("no plans provided")
+	}
+
+	// Single plan: return as-is
+	if len(plans) == 1 {
+		return plans[0], nil
+	}
+
+	// Track seen task numbers to detect conflicts
+	seenTasks := make(map[string]bool)
+
+	// Merged result
+	merged := &models.Plan{
+		Name:           "Merged Plan",
+		Tasks:          []models.Task{},
+		Waves:          []models.Wave{},
+		FileToTaskMap:  make(map[string][]string), // file path -> task numbers
+		WorktreeGroups: []models.WorktreeGroup{},
+	}
+
+	// Merge all plans
+	for _, plan := range plans {
+		if plan == nil {
+			continue
+		}
+
+		// Check for conflicting task numbers
+		for _, task := range plan.Tasks {
+			if seenTasks[task.Number] {
+				return nil, fmt.Errorf("conflicting task number %q from %s", task.Number, plan.FilePath)
+			}
+			seenTasks[task.Number] = true
+		}
+
+		// Add tasks
+		merged.Tasks = append(merged.Tasks, plan.Tasks...)
+
+		// Track file-to-task mapping
+		if plan.FilePath != "" {
+			for _, task := range plan.Tasks {
+				merged.FileToTaskMap[plan.FilePath] = append(merged.FileToTaskMap[plan.FilePath], task.Number)
+			}
+		}
+
+		// Merge waves
+		merged.Waves = append(merged.Waves, plan.Waves...)
+
+		// Merge worktree groups (dedup by GroupID)
+		groupMap := make(map[string]models.WorktreeGroup)
+		for _, group := range merged.WorktreeGroups {
+			groupMap[group.GroupID] = group
+		}
+		for _, group := range plan.WorktreeGroups {
+			groupMap[group.GroupID] = group
+		}
+		merged.WorktreeGroups = make([]models.WorktreeGroup, 0, len(groupMap))
+		for _, group := range groupMap {
+			merged.WorktreeGroups = append(merged.WorktreeGroups, group)
+		}
+
+		// Inherit first plan's defaults
+		if merged.DefaultAgent == "" && plan.DefaultAgent != "" {
+			merged.DefaultAgent = plan.DefaultAgent
+		}
+		if merged.QualityControl.ReviewAgent == "" && plan.QualityControl.ReviewAgent != "" {
+			merged.QualityControl = plan.QualityControl
+		}
+	}
+
+	// Validate merged plan
+	if len(merged.Tasks) == 0 {
+		return nil, fmt.Errorf("merged plan has no tasks")
+	}
+
+	// Detect cycles in merged plan
+	if models.HasCyclicDependencies(merged.Tasks) {
+		return nil, fmt.Errorf("merged plan contains circular dependencies")
+	}
+
+	return merged, nil
 }

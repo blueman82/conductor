@@ -1,0 +1,24 @@
+conductor:
+  worktree_groups:
+    - group_id: "group-b"
+      description: "Group B tasks"
+      execution_model: "sequential"
+      isolation: "strong"
+      rationale: "Must run sequentially"
+
+plan:
+  tasks:
+    - task_number: 3
+      name: "Testing Phase"
+      files: ["tests.go"]
+      depends_on: [2]
+      agent: "golang-pro"
+      description: "Run tests for deployed services"
+      worktree_group: "group-b"
+    - task_number: 4
+      name: "Documentation"
+      files: ["docs.md"]
+      depends_on: [3]
+      agent: "golang-pro"
+      description: "Create final documentation"
+      worktree_group: "group-b"

@@ -262,6 +262,50 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 	cl.writer.Write([]byte(message))
 }
 
+// LogTaskResult logs the completion of a task at DEBUG level.
+// Format: "[HH:MM:SS] Task <number> (<name>): <status>"
+// Returns nil for successful logging, or an error if logging failed.
+func (cl *ConsoleLogger) LogTaskResult(result models.TaskResult) error {
+	if cl.writer == nil {
+		return nil
+	}
+
+	// Task result logging is at DEBUG level
+	if !cl.shouldLog("debug") {
+		return nil
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+	taskInfo := fmt.Sprintf("Task %s (%s)", result.Task.Number, result.Task.Name)
+
+	var message string
+	if cl.colorOutput {
+		// Color code based on status
+		var statusText string
+		switch result.Status {
+		case models.StatusGreen:
+			statusText = color.New(color.FgGreen).Sprint("GREEN")
+		case models.StatusRed:
+			statusText = color.New(color.FgRed).Sprint("RED")
+		case models.StatusYellow:
+			statusText = color.New(color.FgYellow).Sprint("YELLOW")
+		case models.StatusFailed:
+			statusText = color.New(color.FgRed).Sprint("FAILED")
+		default:
+			statusText = string(result.Status)
+		}
+		message = fmt.Sprintf("[%s] %s: %s\n", ts, taskInfo, statusText)
+	} else {
+		message = fmt.Sprintf("[%s] %s: %s\n", ts, taskInfo, result.Status)
+	}
+
+	_, err := cl.writer.Write([]byte(message))
+	return err
+}
+
 // LogSummary logs the execution summary with completion statistics at INFO level.
 // Format: "[HH:MM:SS] === Execution Summary ===\n[HH:MM:SS] Total tasks: <n>\n[HH:MM:SS] Completed: <n>\n[HH:MM:SS] Failed: <n>\n[HH:MM:SS] Duration: <d>\n"
 func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
@@ -379,6 +423,11 @@ func (n *NoOpLogger) LogWaveStart(wave models.Wave) {
 
 // LogWaveComplete is a no-op implementation.
 func (n *NoOpLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+}
+
+// LogTaskResult is a no-op implementation.
+func (n *NoOpLogger) LogTaskResult(result models.TaskResult) error {
+	return nil
 }
 
 // LogSummary is a no-op implementation.

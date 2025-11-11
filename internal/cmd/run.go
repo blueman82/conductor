@@ -339,6 +339,17 @@ func (ml *multiLogger) LogWaveComplete(wave models.Wave, duration time.Duration)
 	}
 }
 
+// LogTaskResult forwards to all loggers
+func (ml *multiLogger) LogTaskResult(result models.TaskResult) error {
+	var lastErr error
+	for _, logger := range ml.loggers {
+		if err := logger.LogTaskResult(result); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
 // LogSummary forwards to all loggers
 func (ml *multiLogger) LogSummary(result models.ExecutionResult) {
 	for _, logger := range ml.loggers {

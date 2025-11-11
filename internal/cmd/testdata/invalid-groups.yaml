@@ -1,0 +1,24 @@
+conductor:
+  worktree_groups:
+    - group_id: "group-a"
+      description: "Group A tasks"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Can run in parallel"
+
+plan:
+  tasks:
+    - task_number: 1
+      name: "Task One"
+      files: ["file1.go"]
+      depends_on: []
+      agent: "golang-pro"
+      description: "Task without group assignment"
+      # Missing worktree_group assignment!
+    - task_number: 2
+      name: "Task Two"
+      files: ["file2.go"]
+      depends_on: [1]
+      agent: "golang-pro"
+      description: "Task with invalid group"
+      worktree_group: "nonexistent-group"

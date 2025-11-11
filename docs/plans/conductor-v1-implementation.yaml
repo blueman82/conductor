@@ -3874,7 +3874,7 @@ plan:
         - "internal/parser/parser_test.go"
       depends_on: [26]
       estimated_time: "1h 30m"
-      status: "pending"
+      status: "completed"
       description: |
         Enhance parser to detect directory input for split plans, implement ParseDirectory function
         to load all numbered files, auto-detect numbering pattern, and merge multiple parsed plans.
@@ -3938,6 +3938,7 @@ plan:
           - "internal/parser/parser.go"
           - "internal/parser/markdown.go"
           - "internal/parser/yaml.go"
+      completed_date: "2025-11-11"
     - task_number: 28
       name: "Enhance Plan Validation for Multi-File Plans"
       files:
@@ -3945,7 +3946,7 @@ plan:
         - "internal/cmd/validate_test.go"
       depends_on: [27]
       estimated_time: "1h 30m"
-      status: "pending"
+      status: "failed"
       description: |
         Enhance validate command to handle multi-file plans, validate worktree groups,
         validate cross-file dependencies, and validate split boundaries.
@@ -4082,7 +4083,7 @@ plan:
         - "internal/executor/orchestrator_test.go"
       depends_on: [27, 29]
       estimated_time: "1h"
-      status: "pending"
+      status: "failed"
       description: |
         Before building dependency graph, merge all loaded plan files, validate merged plan
         consistency, track file-to-task mapping for later updates.

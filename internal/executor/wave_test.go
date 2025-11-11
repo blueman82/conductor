@@ -394,3 +394,121 @@ func (m *mockFailingExecutor) Execute(ctx context.Context, task models.Task) (mo
 		Status: models.StatusGreen,
 	}, nil
 }
+
+// TestWaveExecutor_LogsTaskResults verifies that LogTaskResult is called for each task result.
+// This test ensures that individual task execution results are logged to .conductor/logs/tasks/
+func TestWaveExecutor_LogsTaskResults(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	mockLog := &mockLoggerWithTaskLogging{}
+	waveExecutor := NewWaveExecutor(mockExecutor, mockLog)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	// Verify LogTaskResult was called for each task
+	if len(mockLog.taskResultCalls) != 2 {
+		t.Errorf("expected LogTaskResult called 2 times, got %d", len(mockLog.taskResultCalls))
+	}
+
+	// Verify task numbers match
+	taskNumbersSeen := make(map[string]bool)
+	for _, result := range mockLog.taskResultCalls {
+		taskNumbersSeen[result.Task.Number] = true
+	}
+	if !taskNumbersSeen["1"] || !taskNumbersSeen["2"] {
+		t.Errorf("expected to see tasks 1 and 2, got %v", taskNumbersSeen)
+	}
+}
+
+// TestWaveExecutor_LogsAllTasksInWave verifies all N tasks in a wave get logged.
+func TestWaveExecutor_LogsAllTasksInWave(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+			{Number: "3", Name: "Task 3", Prompt: "Do task 3"},
+			{Number: "4", Name: "Task 4", Prompt: "Do task 4"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2", "3", "4"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newConcurrencyMockExecutor(5 * time.Millisecond)
+	mockLog := &mockLoggerWithTaskLogging{}
+	waveExecutor := NewWaveExecutor(mockExecutor, mockLog)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(results))
+	}
+
+	// Verify LogTaskResult was called for all 4 tasks
+	if len(mockLog.taskResultCalls) != 4 {
+		t.Errorf("expected LogTaskResult called 4 times, got %d", len(mockLog.taskResultCalls))
+	}
+}
+
+// TestWaveExecutor_LogsTaskResultsAcrossMultipleWaves verifies task logging across multiple waves.
+func TestWaveExecutor_LogsTaskResultsAcrossMultipleWaves(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+			{Number: "3", Name: "Task 3", Prompt: "Do task 3"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+			{Name: "Wave 2", TaskNumbers: []string{"3"}, MaxConcurrency: 1},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	mockLog := &mockLoggerWithTaskLogging{}
+	waveExecutor := NewWaveExecutor(mockExecutor, mockLog)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+
+	// Verify LogTaskResult was called for all 3 tasks across both waves
+	if len(mockLog.taskResultCalls) != 3 {
+		t.Errorf("expected LogTaskResult called 3 times, got %d", len(mockLog.taskResultCalls))
+	}
+}
+
+// mockLoggerWithTaskLogging extends mockLogger with task result logging.
+type mockLoggerWithTaskLogging struct {
+	mockLogger
+	taskResultCalls []models.TaskResult
+}
+
+func (m *mockLoggerWithTaskLogging) LogTaskResult(result models.TaskResult) error {
+	m.taskResultCalls = append(m.taskResultCalls, result)
+	return nil
+}
