@@ -54,7 +54,7 @@ func TestLogWaveStart(t *testing.T) {
 				TaskNumbers:    []string{"1"},
 				MaxConcurrency: 1,
 			},
-			expectedText: "Starting Wave Wave 1: 1 tasks",
+			expectedText: "Starting Wave 1: 1 tasks",
 		},
 		{
 			name: "multiple tasks",
@@ -63,7 +63,7 @@ func TestLogWaveStart(t *testing.T) {
 				TaskNumbers:    []string{"2", "3", "4"},
 				MaxConcurrency: 3,
 			},
-			expectedText: "Starting Wave Wave 2: 3 tasks",
+			expectedText: "Starting Wave 2: 3 tasks",
 		},
 		{
 			name: "empty tasks",
@@ -72,7 +72,7 @@ func TestLogWaveStart(t *testing.T) {
 				TaskNumbers:    []string{},
 				MaxConcurrency: 1,
 			},
-			expectedText: "Starting Wave Wave 3: 0 tasks",
+			expectedText: "Starting Wave 3: 0 tasks",
 		},
 	}
 
@@ -112,7 +112,7 @@ func TestLogWaveComplete(t *testing.T) {
 				MaxConcurrency: 1,
 			},
 			duration:     5 * time.Second,
-			expectedText: "Wave Wave 1 complete (5s)",
+			expectedText: "Wave 1 complete (5s)",
 		},
 		{
 			name: "90 seconds (1m30s)",
@@ -122,7 +122,7 @@ func TestLogWaveComplete(t *testing.T) {
 				MaxConcurrency: 2,
 			},
 			duration:     90 * time.Second,
-			expectedText: "Wave Wave 2 complete (1m30s)",
+			expectedText: "Wave 2 complete (1m30s)",
 		},
 		{
 			name: "zero duration",
@@ -132,7 +132,7 @@ func TestLogWaveComplete(t *testing.T) {
 				MaxConcurrency: 1,
 			},
 			duration:     0 * time.Second,
-			expectedText: "Wave Wave 3 complete (0s)",
+			expectedText: "Wave 3 complete (0s)",
 		},
 	}
 

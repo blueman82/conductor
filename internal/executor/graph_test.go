@@ -497,3 +497,182 @@ func captureStderr(t *testing.T, fn func()) string {
 
 	return buf.String()
 }
+
+func TestGraphNodeGroups(t *testing.T) {
+	tests := []struct {
+		name          string
+		tasks         []models.Task
+		wantGroups    map[int]string // task number (as string) -> group ID
+		wantErr       bool
+	}{
+		{
+			name: "single group",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}, WorktreeGroup: "group-a"},
+				{Number: "2", Name: "Task 2", DependsOn: []string{"1"}, WorktreeGroup: "group-a"},
+			},
+			wantGroups: map[int]string{1: "group-a", 2: "group-a"},
+			wantErr:    false,
+		},
+		{
+			name: "multiple groups",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}, WorktreeGroup: "group-a"},
+				{Number: "2", Name: "Task 2", DependsOn: []string{}, WorktreeGroup: "group-b"},
+				{Number: "3", Name: "Task 3", DependsOn: []string{"1"}, WorktreeGroup: "group-c"},
+			},
+			wantGroups: map[int]string{1: "group-a", 2: "group-b", 3: "group-c"},
+			wantErr:    false,
+		},
+		{
+			name: "mixed with empty group",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}, WorktreeGroup: "group-a"},
+				{Number: "2", Name: "Task 2", DependsOn: []string{}, WorktreeGroup: ""},
+				{Number: "3", Name: "Task 3", DependsOn: []string{"1", "2"}, WorktreeGroup: "group-a"},
+			},
+			wantGroups: map[int]string{1: "group-a", 2: "", 3: "group-a"},
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			graph := BuildDependencyGraph(tt.tasks)
+
+			if graph == nil {
+				t.Fatal("Graph should not be nil")
+			}
+
+			if len(graph.Groups) != len(tt.wantGroups) {
+				t.Fatalf("Expected %d group mappings, got %d", len(tt.wantGroups), len(graph.Groups))
+			}
+
+			for taskNum, expectedGroup := range tt.wantGroups {
+				actualGroup, exists := graph.Groups[taskNum]
+				if !exists {
+					t.Errorf("Task %d not in Groups map", taskNum)
+					continue
+				}
+				if actualGroup != expectedGroup {
+					t.Errorf("Task %d: expected group %q, got %q", taskNum, expectedGroup, actualGroup)
+				}
+			}
+		})
+	}
+}
+
+func TestWaveGroupMetadata(t *testing.T) {
+	tests := []struct {
+		name                  string
+		tasks                 []models.Task
+		wantWaveCount         int
+		wantErr               bool
+		validateGroupMetadata func(*testing.T, []models.Wave)
+	}{
+		{
+			name: "single group wave",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}, WorktreeGroup: "group-a"},
+				{Number: "2", Name: "Task 2", DependsOn: []string{"1"}, WorktreeGroup: "group-a"},
+			},
+			wantWaveCount: 2,
+			wantErr:       false,
+			validateGroupMetadata: func(t *testing.T, waves []models.Wave) {
+				// Wave 1: [1] from group-a
+				if len(waves[0].GroupInfo) != 1 {
+					t.Errorf("Wave 1: expected 1 group, got %d", len(waves[0].GroupInfo))
+				}
+				if _, exists := waves[0].GroupInfo["group-a"]; !exists {
+					t.Error("Wave 1: expected group-a in GroupInfo")
+				}
+				if len(waves[0].GroupInfo["group-a"]) != 1 {
+					t.Errorf("Wave 1: expected 1 task in group-a, got %d", len(waves[0].GroupInfo["group-a"]))
+				}
+
+				// Wave 2: [2] from group-a
+				if len(waves[1].GroupInfo) != 1 {
+					t.Errorf("Wave 2: expected 1 group, got %d", len(waves[1].GroupInfo))
+				}
+				if _, exists := waves[1].GroupInfo["group-a"]; !exists {
+					t.Error("Wave 2: expected group-a in GroupInfo")
+				}
+				if len(waves[1].GroupInfo["group-a"]) != 1 {
+					t.Errorf("Wave 2: expected 1 task in group-a, got %d", len(waves[1].GroupInfo["group-a"]))
+				}
+			},
+		},
+		{
+			name: "mixed groups in wave",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}, WorktreeGroup: "group-a"},
+				{Number: "2", Name: "Task 2", DependsOn: []string{}, WorktreeGroup: "group-b"},
+				{Number: "3", Name: "Task 3", DependsOn: []string{"1", "2"}, WorktreeGroup: "group-c"},
+			},
+			wantWaveCount: 2,
+			wantErr:       false,
+			validateGroupMetadata: func(t *testing.T, waves []models.Wave) {
+				// Wave 1: [1, 2] from group-a and group-b
+				if len(waves[0].GroupInfo) != 2 {
+					t.Errorf("Wave 1: expected 2 groups, got %d", len(waves[0].GroupInfo))
+				}
+				if _, exists := waves[0].GroupInfo["group-a"]; !exists {
+					t.Error("Wave 1: expected group-a in GroupInfo")
+				}
+				if _, exists := waves[0].GroupInfo["group-b"]; !exists {
+					t.Error("Wave 1: expected group-b in GroupInfo")
+				}
+
+				// Wave 2: [3] from group-c
+				if len(waves[1].GroupInfo) != 1 {
+					t.Errorf("Wave 2: expected 1 group, got %d", len(waves[1].GroupInfo))
+				}
+				if _, exists := waves[1].GroupInfo["group-c"]; !exists {
+					t.Error("Wave 2: expected group-c in GroupInfo")
+				}
+			},
+		},
+		{
+			name: "empty group strings",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}, WorktreeGroup: ""},
+				{Number: "2", Name: "Task 2", DependsOn: []string{}, WorktreeGroup: ""},
+				{Number: "3", Name: "Task 3", DependsOn: []string{"1", "2"}, WorktreeGroup: ""},
+			},
+			wantWaveCount: 2,
+			wantErr:       false,
+			validateGroupMetadata: func(t *testing.T, waves []models.Wave) {
+				// Wave 1: [1, 2] both with empty group
+				if len(waves[0].GroupInfo) != 1 {
+					t.Errorf("Wave 1: expected 1 entry in GroupInfo (empty string key), got %d", len(waves[0].GroupInfo))
+				}
+				if val, exists := waves[0].GroupInfo[""]; !exists || len(val) != 2 {
+					t.Error("Wave 1: expected 2 tasks under empty group key")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			waves, err := CalculateWaves(tt.tasks)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CalculateWaves() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if err != nil {
+				return
+			}
+
+			if len(waves) != tt.wantWaveCount {
+				t.Errorf("Expected %d waves, got %d", tt.wantWaveCount, len(waves))
+			}
+
+			if tt.validateGroupMetadata != nil {
+				tt.validateGroupMetadata(t, waves)
+			}
+		})
+	}
+}

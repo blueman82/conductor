@@ -260,6 +260,26 @@ func parseTaskMetadata(task *models.Task, content string) {
 	// Strip code blocks to prevent extracting metadata from code examples
 	contentWithoutCode := removeCodeBlocks(content)
 
+	// Parse **Status**: inline annotation (takes precedence)
+	statusRegex := regexp.MustCompile(`\*\*Status\*\*:\s*(\w+)`)
+	if matches := statusRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
+		task.Status = strings.TrimSpace(matches[1])
+	} else {
+		// Parse checkbox [x] or [ ] or [X] as fallback
+		checkboxRegex := regexp.MustCompile(`\[([xX ])\]`)
+		if matches := checkboxRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
+			checkbox := strings.ToLower(matches[1])
+			if checkbox == "x" {
+				task.Status = "completed"
+			} else {
+				task.Status = "pending"
+			}
+		} else {
+			// Default to pending if no status found
+			task.Status = "pending"
+		}
+	}
+
 	// Parse **File(s)**:
 	fileRegex := regexp.MustCompile(`\*\*File\(s\)\*\*:\s*(.+)`)
 	if matches := fileRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {

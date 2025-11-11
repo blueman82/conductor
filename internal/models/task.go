@@ -14,6 +14,9 @@ type Task struct {
 	EstimatedTime time.Duration // Estimated time to complete
 	Agent         string        // Agent to use (optional)
 	Prompt        string        // Full task description/prompt
+	WorktreeGroup string        // Worktree group this task belongs to (optional)
+	Status        string        // Task status: pending, in_progress, completed, skipped
+	CompletedAt   *time.Time    // Timestamp when task was completed (nil if not completed)
 }
 
 // Validate checks if the task has all required fields
@@ -28,6 +31,17 @@ func (t *Task) Validate() error {
 		return errors.New("task prompt is required")
 	}
 	return nil
+}
+
+// IsCompleted returns true if the task status is "completed"
+func (t *Task) IsCompleted() bool {
+	return t.Status == "completed"
+}
+
+// CanSkip returns true if the task can be skipped in execution
+// (i.e., it's already completed or marked as skipped)
+func (t *Task) CanSkip() bool {
+	return t.Status == "completed" || t.Status == "skipped"
 }
 
 // HasCyclicDependencies detects circular dependencies in a list of tasks

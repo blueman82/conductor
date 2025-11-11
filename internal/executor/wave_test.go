@@ -394,3 +394,370 @@ func (m *mockFailingExecutor) Execute(ctx context.Context, task models.Task) (mo
 		Status: models.StatusGreen,
 	}, nil
 }
+
+// TestWaveExecutor_LogsTaskResults verifies that LogTaskResult is called for each task result.
+// This test ensures that individual task execution results are logged to .conductor/logs/tasks/
+func TestWaveExecutor_LogsTaskResults(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	mockLog := &mockLoggerWithTaskLogging{}
+	waveExecutor := NewWaveExecutor(mockExecutor, mockLog)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	// Verify LogTaskResult was called for each task
+	if len(mockLog.taskResultCalls) != 2 {
+		t.Errorf("expected LogTaskResult called 2 times, got %d", len(mockLog.taskResultCalls))
+	}
+
+	// Verify task numbers match
+	taskNumbersSeen := make(map[string]bool)
+	for _, result := range mockLog.taskResultCalls {
+		taskNumbersSeen[result.Task.Number] = true
+	}
+	if !taskNumbersSeen["1"] || !taskNumbersSeen["2"] {
+		t.Errorf("expected to see tasks 1 and 2, got %v", taskNumbersSeen)
+	}
+}
+
+// TestWaveExecutor_LogsAllTasksInWave verifies all N tasks in a wave get logged.
+func TestWaveExecutor_LogsAllTasksInWave(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+			{Number: "3", Name: "Task 3", Prompt: "Do task 3"},
+			{Number: "4", Name: "Task 4", Prompt: "Do task 4"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2", "3", "4"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newConcurrencyMockExecutor(5 * time.Millisecond)
+	mockLog := &mockLoggerWithTaskLogging{}
+	waveExecutor := NewWaveExecutor(mockExecutor, mockLog)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(results))
+	}
+
+	// Verify LogTaskResult was called for all 4 tasks
+	if len(mockLog.taskResultCalls) != 4 {
+		t.Errorf("expected LogTaskResult called 4 times, got %d", len(mockLog.taskResultCalls))
+	}
+}
+
+// TestWaveExecutor_LogsTaskResultsAcrossMultipleWaves verifies task logging across multiple waves.
+func TestWaveExecutor_LogsTaskResultsAcrossMultipleWaves(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+			{Number: "3", Name: "Task 3", Prompt: "Do task 3"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+			{Name: "Wave 2", TaskNumbers: []string{"3"}, MaxConcurrency: 1},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	mockLog := &mockLoggerWithTaskLogging{}
+	waveExecutor := NewWaveExecutor(mockExecutor, mockLog)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+
+	// Verify LogTaskResult was called for all 3 tasks across both waves
+	if len(mockLog.taskResultCalls) != 3 {
+		t.Errorf("expected LogTaskResult called 3 times, got %d", len(mockLog.taskResultCalls))
+	}
+}
+
+// mockLoggerWithTaskLogging extends mockLogger with task result logging.
+type mockLoggerWithTaskLogging struct {
+	mockLogger
+	taskResultCalls []models.TaskResult
+}
+
+func (m *mockLoggerWithTaskLogging) LogTaskResult(result models.TaskResult) error {
+	m.taskResultCalls = append(m.taskResultCalls, result)
+	return nil
+}
+
+// TestWaveExecutor_NoCancellationLoggingIfNoTasks verifies that when a context is
+// pre-cancelled before ExecutePlan is called, no wave logging occurs because no tasks
+// are launched. This tests the tasksLaunched counter fix in wave.go.
+func TestWaveExecutor_NoCancellationLoggingIfNoTasks(t *testing.T) {
+	// Create a pre-cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately before any execution
+
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	mockLog := &mockLogger{}
+	waveExecutor := NewWaveExecutor(mockExecutor, mockLog)
+
+	// Execute with pre-cancelled context
+	results, err := waveExecutor.ExecutePlan(ctx, plan)
+
+	// Verify error is context.Canceled
+	if err == nil {
+		t.Fatalf("expected context cancellation error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled error, got %v", err)
+	}
+
+	// Verify no results were returned (no tasks launched)
+	if len(results) != 0 {
+		t.Errorf("expected 0 results when context pre-cancelled, got %d", len(results))
+	}
+
+	// Critical verification: LogWaveStart should NOT be called
+	if len(mockLog.waveStartCalls) != 0 {
+		t.Errorf("expected 0 LogWaveStart calls when context pre-cancelled, got %d", len(mockLog.waveStartCalls))
+	}
+
+	// Critical verification: LogWaveComplete should NOT be called
+	if len(mockLog.waveCompleteCalls) != 0 {
+		t.Errorf("expected 0 LogWaveComplete calls when context pre-cancelled, got %d", len(mockLog.waveCompleteCalls))
+	}
+}
+
+// TestWaveExecutor_SkipsCompletedTasks verifies that completed tasks are skipped when skipCompleted is true.
+func TestWaveExecutor_SkipsCompletedTasks(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1", Status: "completed"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+			{Number: "3", Name: "Task 3", Prompt: "Do task 3", Status: "completed"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2", "3"}, MaxConcurrency: 3},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	mockLog := &mockLoggerWithTaskLogging{}
+	waveExecutor := NewWaveExecutorWithConfig(mockExecutor, mockLog, true, false)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+
+	// Verify skipped tasks have GREEN status and "Skipped" output
+	if results[0].Status != models.StatusGreen {
+		t.Errorf("expected skipped task 1 status GREEN, got %s", results[0].Status)
+	}
+	if results[0].Output != "Skipped" {
+		t.Errorf("expected skipped task 1 output 'Skipped', got %s", results[0].Output)
+	}
+
+	// Verify task 2 was executed (GREEN status but not "Skipped")
+	if results[1].Status != models.StatusGreen {
+		t.Errorf("expected executed task 2 status GREEN, got %s", results[1].Status)
+	}
+	if results[1].Output == "Skipped" {
+		t.Errorf("expected task 2 not to be marked as skipped")
+	}
+
+	// Verify skipped task 3
+	if results[2].Status != models.StatusGreen {
+		t.Errorf("expected skipped task 3 status GREEN, got %s", results[2].Status)
+	}
+	if results[2].Output != "Skipped" {
+		t.Errorf("expected skipped task 3 output 'Skipped', got %s", results[2].Output)
+	}
+}
+
+// TestWaveExecutor_DoesNotSkipFailedStatus verifies that failed tasks are not skipped by CanSkip.
+func TestWaveExecutor_DoesNotSkipFailedStatus(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1", Status: "failed"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	waveExecutor := NewWaveExecutorWithConfig(mockExecutor, nil, true, false)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	// Verify failed task is NOT skipped (CanSkip returns false for failed status)
+	if results[0].Output == "Skipped" {
+		t.Errorf("expected failed task NOT to be skipped")
+	}
+}
+
+// TestWaveExecutor_DoesNotSkipWhenDisabled verifies that skipCompleted=false prevents skipping.
+func TestWaveExecutor_DoesNotSkipWhenDisabled(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1", Status: "completed"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	waveExecutor := NewWaveExecutorWithConfig(mockExecutor, nil, false, false) // skipCompleted=false
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	// Both tasks should be executed (not skipped)
+	// We check that both executed (they won't have "Skipped" output)
+	for i, result := range results {
+		if result.Output == "Skipped" {
+			t.Errorf("task %d should not be skipped when skipCompleted=false", i+1)
+		}
+	}
+}
+
+// TestWaveExecutor_AllTasksSkipped verifies behavior when all tasks in a wave are skipped.
+func TestWaveExecutor_AllTasksSkipped(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1", Status: "completed"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2", Status: "completed"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	mockLog := &mockLoggerWithTaskLogging{}
+	waveExecutor := NewWaveExecutorWithConfig(mockExecutor, mockLog, true, false)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	// All results should be GREEN with "Skipped" output
+	for i, result := range results {
+		if result.Status != models.StatusGreen {
+			t.Errorf("task %d should be GREEN, got %s", i+1, result.Status)
+		}
+		if result.Output != "Skipped" {
+			t.Errorf("task %d should be marked as Skipped, got %s", i+1, result.Output)
+		}
+	}
+
+	// LogTaskResult should still be called for skipped tasks
+	if len(mockLog.taskResultCalls) != 2 {
+		t.Errorf("expected LogTaskResult called 2 times for skipped tasks, got %d", len(mockLog.taskResultCalls))
+	}
+}
+
+// TestWaveExecutor_MixedSkippedAndExecuted verifies ordering of skipped and executed tasks.
+func TestWaveExecutor_MixedSkippedAndExecuted(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1", Status: "completed"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+			{Number: "3", Name: "Task 3", Prompt: "Do task 3", Status: "completed"},
+			{Number: "4", Name: "Task 4", Prompt: "Do task 4"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2", "3", "4"}, MaxConcurrency: 4},
+		},
+	}
+
+	mockExecutor := newConcurrencyMockExecutor(1 * time.Millisecond)
+	waveExecutor := NewWaveExecutorWithConfig(mockExecutor, nil, true, false)
+
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("ExecutePlan returned error: %v", err)
+	}
+
+	if len(results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(results))
+	}
+
+	// Verify task 1 is skipped
+	if results[0].Output != "Skipped" {
+		t.Errorf("expected task 1 to be skipped")
+	}
+
+	// Verify task 3 is skipped
+	if results[2].Output != "Skipped" {
+		t.Errorf("expected task 3 to be skipped")
+	}
+
+	// Verify tasks 2 and 4 are executed (no "Skipped" output)
+	if results[1].Output == "Skipped" {
+		t.Errorf("expected task 2 to be executed, not skipped")
+	}
+	if results[3].Output == "Skipped" {
+		t.Errorf("expected task 4 to be executed, not skipped")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/harrison/conductor/internal/models"
@@ -19,6 +20,7 @@ type DependencyGraph struct {
 	Tasks    map[string]*models.Task
 	Edges    map[string][]string // task -> tasks that depend on it (adjacency list: prerequisite -> dependents)
 	InDegree map[string]int      // task -> number of dependencies
+	Groups   map[int]string      // task number (parsed as int from string) -> group ID
 }
 
 // ValidateTasks checks that all task dependencies are valid
@@ -112,12 +114,18 @@ func BuildDependencyGraph(tasks []models.Task) *DependencyGraph {
 		Tasks:    make(map[string]*models.Task),
 		Edges:    make(map[string][]string),
 		InDegree: make(map[string]int),
+		Groups:   make(map[int]string),
 	}
 
 	// Build task map and initialize in-degree
 	for i := range tasks {
 		g.Tasks[tasks[i].Number] = &tasks[i]
 		g.InDegree[tasks[i].Number] = 0
+
+		// Tag node with group info - convert task number to int
+		if taskNum, err := strconv.Atoi(tasks[i].Number); err == nil {
+			g.Groups[taskNum] = tasks[i].WorktreeGroup
+		}
 	}
 
 	// Build edges and calculate in-degree
@@ -229,11 +237,25 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 			return nil, fmt.Errorf("graph error: no tasks with zero in-degree")
 		}
 
+		// Build group metadata for this wave
+		groupInfo := make(map[string][]string)
+		for _, taskNum := range currentWave {
+			// Look up group from graph
+			var groupID string
+			if taskNumInt, err := strconv.Atoi(taskNum); err == nil {
+				groupID = graph.Groups[taskNumInt]
+			}
+
+			// Add task to the group
+			groupInfo[groupID] = append(groupInfo[groupID], taskNum)
+		}
+
 		// Create wave
 		wave := models.Wave{
 			Name:           fmt.Sprintf("Wave %d", len(waves)+1),
 			TaskNumbers:    currentWave,
 			MaxConcurrency: DefaultMaxConcurrency,
+			GroupInfo:      groupInfo,
 		}
 		waves = append(waves, wave)
 

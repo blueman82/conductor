@@ -286,7 +286,7 @@ func TestNewRunCommand(t *testing.T) {
 	}
 
 	// Verify flags exist
-	flags := []string{"dry-run", "max-concurrency", "timeout", "verbose"}
+	flags := []string{"dry-run", "max-concurrency", "timeout", "verbose", "skip-completed", "no-skip-completed", "retry-failed", "no-retry-failed"}
 	for _, flagName := range flags {
 		flag := cmd.Flags().Lookup(flagName)
 		if flag == nil {
@@ -1189,5 +1189,133 @@ Another test task.
 
 	if !strings.Contains(output, "Wave 2") {
 		t.Error("Expected Wave 2 information in output")
+	}
+}
+
+// TestRunCommand_SkipCompletedFlag verifies --skip-completed flag is accepted
+func TestRunCommand_SkipCompletedFlag(t *testing.T) {
+	simplePlan := `# Test Plan
+
+## Task 1: Test task
+**Status**: pending
+
+Test skip completed flag.
+`
+
+	planFile := createTestPlanFile(t, simplePlan)
+	args := []string{"run", "--dry-run", "--skip-completed", planFile}
+
+	_, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Errorf("Unexpected error with --skip-completed flag: %v", err)
+	}
+}
+
+// TestRunCommand_RetryFailedFlag verifies --retry-failed flag is accepted
+func TestRunCommand_RetryFailedFlag(t *testing.T) {
+	simplePlan := `# Test Plan
+
+## Task 1: Test task
+**Status**: pending
+
+Test retry failed flag.
+`
+
+	planFile := createTestPlanFile(t, simplePlan)
+	args := []string{"run", "--dry-run", "--retry-failed", planFile}
+
+	_, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Errorf("Unexpected error with --retry-failed flag: %v", err)
+	}
+}
+
+// TestRunCommand_NoSkipCompletedFlag verifies --no-skip-completed flag is accepted
+func TestRunCommand_NoSkipCompletedFlag(t *testing.T) {
+	simplePlan := `# Test Plan
+
+## Task 1: Test task
+**Status**: pending
+
+Test no-skip-completed flag.
+`
+
+	planFile := createTestPlanFile(t, simplePlan)
+	args := []string{"run", "--dry-run", "--no-skip-completed", planFile}
+
+	_, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Errorf("Unexpected error with --no-skip-completed flag: %v", err)
+	}
+}
+
+// TestRunCommand_NoRetryFailedFlag verifies --no-retry-failed flag is accepted
+func TestRunCommand_NoRetryFailedFlag(t *testing.T) {
+	simplePlan := `# Test Plan
+
+## Task 1: Test task
+**Status**: pending
+
+Test no-retry-failed flag.
+`
+
+	planFile := createTestPlanFile(t, simplePlan)
+	args := []string{"run", "--dry-run", "--no-retry-failed", planFile}
+
+	_, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Errorf("Unexpected error with --no-retry-failed flag: %v", err)
+	}
+}
+
+// TestRunCommand_ConflictingSkipCompletedFlags verifies conflicting flags are rejected
+func TestRunCommand_ConflictingSkipCompletedFlags(t *testing.T) {
+	simplePlan := `# Test Plan
+
+## Task 1: Test task
+**Status**: pending
+
+Test conflicting skip-completed flags.
+`
+
+	planFile := createTestPlanFile(t, simplePlan)
+	args := []string{"run", "--dry-run", "--skip-completed", "--no-skip-completed", planFile}
+
+	_, err := executeRunCommand(t, args)
+
+	if err == nil {
+		t.Error("Expected error for conflicting --skip-completed and --no-skip-completed flags")
+	}
+
+	if !strings.Contains(err.Error(), "cannot use both") {
+		t.Errorf("Expected error about conflicting flags, got: %v", err)
+	}
+}
+
+// TestRunCommand_ConflictingRetryFailedFlags verifies conflicting flags are rejected
+func TestRunCommand_ConflictingRetryFailedFlags(t *testing.T) {
+	simplePlan := `# Test Plan
+
+## Task 1: Test task
+**Status**: pending
+
+Test conflicting retry-failed flags.
+`
+
+	planFile := createTestPlanFile(t, simplePlan)
+	args := []string{"run", "--dry-run", "--retry-failed", "--no-retry-failed", planFile}
+
+	_, err := executeRunCommand(t, args)
+
+	if err == nil {
+		t.Error("Expected error for conflicting --retry-failed and --no-retry-failed flags")
+	}
+
+	if !strings.Contains(err.Error(), "cannot use both") {
+		t.Errorf("Expected error about conflicting flags, got: %v", err)
 	}
 }

@@ -28,12 +28,12 @@ import (
 )
 
 // Logger interface for orchestrator progress reporting.
-// Task-level logging is deferred to CLI implementation (Task 16/18).
-// The orchestrator operates at wave/summary granularity.
+// Supports wave-level, task-level, and summary logging.
 // Implementations can log to console, file, or other destinations.
 type Logger interface {
 	LogWaveStart(wave models.Wave)
 	LogWaveComplete(wave models.Wave, duration time.Duration)
+	LogTaskResult(result models.TaskResult) error
 	LogSummary(result models.ExecutionResult)
 }
 
@@ -44,8 +44,11 @@ type WaveExecutorInterface interface {
 
 // Orchestrator coordinates plan execution, handles graceful shutdown, and aggregates results.
 type Orchestrator struct {
-	waveExecutor WaveExecutorInterface
-	logger       Logger
+	waveExecutor      WaveExecutorInterface
+	logger            Logger
+	FileToTaskMapping map[string]string // task number -> file path mapping
+	skipCompleted     bool               // Skip tasks that are already completed
+	retryFailed       bool               // Retry tasks that have failed status
 }
 
 // NewOrchestrator creates a new Orchestrator instance.
@@ -57,17 +60,51 @@ func NewOrchestrator(waveExecutor WaveExecutorInterface, logger Logger) *Orchest
 	}
 
 	return &Orchestrator{
-		waveExecutor: waveExecutor,
-		logger:       logger,
+		waveExecutor:      waveExecutor,
+		logger:            logger,
+		FileToTaskMapping: make(map[string]string),
 	}
 }
 
-// ExecutePlan orchestrates the execution of a plan with graceful shutdown support.
-// It handles SIGINT/SIGTERM signals, coordinates wave execution, logs progress,
-// and aggregates results into an ExecutionResult.
-func (o *Orchestrator) ExecutePlan(ctx context.Context, plan *models.Plan) (*models.ExecutionResult, error) {
-	if plan == nil {
-		return nil, fmt.Errorf("plan cannot be nil")
+// NewOrchestratorWithConfig creates a new Orchestrator instance with skip/retry configuration.
+// The logger parameter is optional and can be nil to disable logging.
+// The waveExecutor is required and must not be nil.
+func NewOrchestratorWithConfig(waveExecutor WaveExecutorInterface, logger Logger, skipCompleted, retryFailed bool) *Orchestrator {
+	if waveExecutor == nil {
+		panic("wave executor cannot be nil")
+	}
+
+	return &Orchestrator{
+		waveExecutor:      waveExecutor,
+		logger:            logger,
+		skipCompleted:     skipCompleted,
+		retryFailed:       retryFailed,
+		FileToTaskMapping: make(map[string]string),
+	}
+}
+
+// ExecutePlan orchestrates the execution of one or more plans with graceful shutdown support.
+// It merges multiple plans, handles SIGINT/SIGTERM signals, coordinates wave execution,
+// logs progress, and aggregates results into an ExecutionResult.
+// For file-to-task mapping, it populates the FileToTaskMapping field from the merged plan.
+func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (*models.ExecutionResult, error) {
+	if len(plans) == 0 {
+		return nil, fmt.Errorf("at least one plan is required")
+	}
+
+	// Merge all plans
+	mergedPlan, err := MergePlans(plans...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge plans: %w", err)
+	}
+
+	// Populate FileToTaskMapping from merged plan
+	if mergedPlan.FileToTaskMap != nil {
+		for filePath, taskNumbers := range mergedPlan.FileToTaskMap {
+			for _, taskNum := range taskNumbers {
+				o.FileToTaskMapping[taskNum] = filePath
+			}
+		}
 	}
 
 	// Set up context with cancellation for signal handling
@@ -96,12 +133,12 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plan *models.Plan) (*mod
 	startTime := time.Now()
 
 	// Execute the plan through the wave executor
-	results, err := o.waveExecutor.ExecutePlan(ctx, plan)
+	results, err := o.waveExecutor.ExecutePlan(ctx, mergedPlan)
 
 	duration := time.Since(startTime)
 
 	// Aggregate results
-	executionResult := o.aggregateResults(plan, results, duration)
+	executionResult := o.aggregateResults(mergedPlan, results, duration)
 
 	// Log summary
 	if o.logger != nil {
@@ -144,4 +181,91 @@ func isCompleted(result models.TaskResult) bool {
 // This includes RED (quality control failed), FAILED (execution error), or presence of Error field.
 func isFailed(result models.TaskResult) bool {
 	return result.Status == models.StatusRed || result.Status == models.StatusFailed || result.Error != nil
+}
+
+// MergePlans combines multiple plan files into a single plan with validation.
+// It merges tasks, waves, and tracks file-to-task ownership.
+// Returns an error if there are conflicting task numbers or invalid merged state.
+func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
+	if len(plans) == 0 {
+		return nil, fmt.Errorf("no plans provided")
+	}
+
+	// Single plan: return as-is
+	if len(plans) == 1 {
+		return plans[0], nil
+	}
+
+	// Track seen task numbers to detect conflicts
+	seenTasks := make(map[string]bool)
+
+	// Merged result
+	merged := &models.Plan{
+		Name:           "Merged Plan",
+		Tasks:          []models.Task{},
+		Waves:          []models.Wave{},
+		FileToTaskMap:  make(map[string][]string), // file path -> task numbers
+		WorktreeGroups: []models.WorktreeGroup{},
+	}
+
+	// Merge all plans
+	for _, plan := range plans {
+		if plan == nil {
+			continue
+		}
+
+		// Check for conflicting task numbers
+		for _, task := range plan.Tasks {
+			if seenTasks[task.Number] {
+				return nil, fmt.Errorf("conflicting task number %q from %s", task.Number, plan.FilePath)
+			}
+			seenTasks[task.Number] = true
+		}
+
+		// Add tasks
+		merged.Tasks = append(merged.Tasks, plan.Tasks...)
+
+		// Track file-to-task mapping
+		if plan.FilePath != "" {
+			for _, task := range plan.Tasks {
+				merged.FileToTaskMap[plan.FilePath] = append(merged.FileToTaskMap[plan.FilePath], task.Number)
+			}
+		}
+
+		// Merge waves
+		merged.Waves = append(merged.Waves, plan.Waves...)
+
+		// Merge worktree groups (dedup by GroupID)
+		groupMap := make(map[string]models.WorktreeGroup)
+		for _, group := range merged.WorktreeGroups {
+			groupMap[group.GroupID] = group
+		}
+		for _, group := range plan.WorktreeGroups {
+			groupMap[group.GroupID] = group
+		}
+		merged.WorktreeGroups = make([]models.WorktreeGroup, 0, len(groupMap))
+		for _, group := range groupMap {
+			merged.WorktreeGroups = append(merged.WorktreeGroups, group)
+		}
+
+		// Inherit first plan's defaults
+		if merged.DefaultAgent == "" && plan.DefaultAgent != "" {
+			merged.DefaultAgent = plan.DefaultAgent
+		}
+		if merged.QualityControl.ReviewAgent == "" && plan.QualityControl.ReviewAgent != "" {
+			merged.QualityControl = plan.QualityControl
+		}
+	}
+
+	// Validate merged plan
+	if len(merged.Tasks) == 0 {
+		return nil, fmt.Errorf("merged plan has no tasks")
+	}
+
+	// Detect cycles in merged plan
+	if models.HasCyclicDependencies(merged.Tasks) {
+		return nil, fmt.Errorf("merged plan contains circular dependencies")
+	}
+
+	return merged, nil
 }

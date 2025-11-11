@@ -51,7 +51,7 @@ dry_run: false
 	maxConcurrency := 12
 	timeout := 5 * time.Hour
 
-	cfg.MergeWithFlags(&maxConcurrency, &timeout, nil, nil)
+	cfg.MergeWithFlags(&maxConcurrency, &timeout, nil, nil, nil, nil)
 
 	// Verify flags override config
 	if cfg.MaxConcurrency != 12 {
@@ -162,7 +162,7 @@ log_level: info
 	maxConcurrency := 10
 	dryRun := true
 
-	cfg.MergeWithFlags(&maxConcurrency, nil, nil, &dryRun)
+	cfg.MergeWithFlags(&maxConcurrency, nil, nil, &dryRun, nil, nil)
 
 	// Verify merge
 	if cfg.MaxConcurrency != 10 {

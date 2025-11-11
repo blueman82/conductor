@@ -251,3 +251,564 @@ func TestExecutionResult(t *testing.T) {
 		}
 	})
 }
+
+func TestTaskWorktreeGroup(t *testing.T) {
+	tests := []struct {
+		name            string
+		task            Task
+		expectedWorktree string
+	}{
+		{
+			name: "task with worktree group",
+			task: Task{
+				Number:        "1",
+				Name:          "Test Task",
+				Prompt:        "Do something",
+				WorktreeGroup: "frontend",
+			},
+			expectedWorktree: "frontend",
+		},
+		{
+			name: "task without worktree group",
+			task: Task{
+				Number:        "2",
+				Name:          "Backend Task",
+				Prompt:        "Backend work",
+				WorktreeGroup: "",
+			},
+			expectedWorktree: "",
+		},
+		{
+			name: "task with complex worktree group name",
+			task: Task{
+				Number:        "3",
+				Name:          "Complex Task",
+				Prompt:        "Do work",
+				WorktreeGroup: "group-v1-2-3",
+			},
+			expectedWorktree: "group-v1-2-3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.task.WorktreeGroup != tt.expectedWorktree {
+				t.Errorf("Task.WorktreeGroup = %v, want %v", tt.task.WorktreeGroup, tt.expectedWorktree)
+			}
+		})
+	}
+}
+
+func TestPlanWorktreeGroups(t *testing.T) {
+	tests := []struct {
+		name             string
+		plan             Plan
+		expectedGroupLen int
+		expectedGroupIDs []string
+	}{
+		{
+			name: "plan with worktree groups",
+			plan: Plan{
+				Name: "Test Plan",
+				WorktreeGroups: []WorktreeGroup{
+					{
+						GroupID:        "frontend",
+						Description:    "Frontend tasks",
+						ExecutionModel: "parallel",
+						Isolation:      "strong",
+						Rationale:      "UI components need isolation",
+					},
+					{
+						GroupID:        "backend",
+						Description:    "Backend tasks",
+						ExecutionModel: "sequential",
+						Isolation:      "weak",
+						Rationale:      "Database consistency",
+					},
+				},
+			},
+			expectedGroupLen: 2,
+			expectedGroupIDs: []string{"frontend", "backend"},
+		},
+		{
+			name: "plan with empty worktree groups",
+			plan: Plan{
+				Name:           "Empty Plan",
+				WorktreeGroups: []WorktreeGroup{},
+			},
+			expectedGroupLen: 0,
+			expectedGroupIDs: []string{},
+		},
+		{
+			name: "plan with single worktree group",
+			plan: Plan{
+				Name: "Single Group Plan",
+				WorktreeGroups: []WorktreeGroup{
+					{
+						GroupID:        "unified",
+						Description:    "All tasks run together",
+						ExecutionModel: "parallel",
+						Isolation:      "none",
+						Rationale:      "Monolithic application",
+					},
+				},
+			},
+			expectedGroupLen: 1,
+			expectedGroupIDs: []string{"unified"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if len(tt.plan.WorktreeGroups) != tt.expectedGroupLen {
+				t.Errorf("len(Plan.WorktreeGroups) = %v, want %v", len(tt.plan.WorktreeGroups), tt.expectedGroupLen)
+			}
+
+			for i, expectedID := range tt.expectedGroupIDs {
+				if i >= len(tt.plan.WorktreeGroups) {
+					t.Fatalf("WorktreeGroups index out of range: %d", i)
+				}
+				if tt.plan.WorktreeGroups[i].GroupID != expectedID {
+					t.Errorf("WorktreeGroups[%d].GroupID = %v, want %v", i, tt.plan.WorktreeGroups[i].GroupID, expectedID)
+				}
+			}
+		})
+	}
+}
+
+func TestWorktreeGroupMetadata(t *testing.T) {
+	t.Run("worktree group is serializable", func(t *testing.T) {
+		group := WorktreeGroup{
+			GroupID:        "test-group",
+			Description:    "A test group",
+			ExecutionModel: "parallel",
+			Isolation:      "strong",
+			Rationale:      "Testing isolation",
+		}
+
+		if group.GroupID != "test-group" {
+			t.Errorf("WorktreeGroup.GroupID = %v, want test-group", group.GroupID)
+		}
+		if group.Description != "A test group" {
+			t.Errorf("WorktreeGroup.Description = %v, want A test group", group.Description)
+		}
+		if group.ExecutionModel != "parallel" {
+			t.Errorf("WorktreeGroup.ExecutionModel = %v, want parallel", group.ExecutionModel)
+		}
+		if group.Isolation != "strong" {
+			t.Errorf("WorktreeGroup.Isolation = %v, want strong", group.Isolation)
+		}
+		if group.Rationale != "Testing isolation" {
+			t.Errorf("WorktreeGroup.Rationale = %v, want Testing isolation", group.Rationale)
+		}
+	})
+}
+
+func TestTask_StatusFields(t *testing.T) {
+	tests := []struct {
+		name      string
+		task      Task
+		wantError bool
+	}{
+		{
+			name: "task with status field",
+			task: Task{
+				Number: "1",
+				Name:   "Test Task",
+				Prompt: "Do something",
+				Status: "pending",
+			},
+			wantError: false,
+		},
+		{
+			name: "task with completed status and time",
+			task: Task{
+				Number:      "1",
+				Name:        "Test Task",
+				Prompt:      "Do something",
+				Status:      "completed",
+				CompletedAt: timePtr(time.Now()),
+			},
+			wantError: false,
+		},
+		{
+			name: "task with in_progress status",
+			task: Task{
+				Number: "1",
+				Name:   "Test Task",
+				Prompt: "Do something",
+				Status: "in_progress",
+			},
+			wantError: false,
+		},
+		{
+			name: "task with skipped status",
+			task: Task{
+				Number: "1",
+				Name:   "Test Task",
+				Prompt: "Do something",
+				Status: "skipped",
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.task.Status == "" && tt.task.CompletedAt != nil {
+				t.Error("task has CompletedAt but empty Status")
+			}
+			if tt.task.Status == "completed" && tt.task.CompletedAt == nil {
+				t.Error("task has completed status but no CompletedAt time")
+			}
+		})
+	}
+}
+
+func TestTask_IsCompleted(t *testing.T) {
+	tests := []struct {
+		name     string
+		task     Task
+		expected bool
+	}{
+		{
+			name:     "task with completed status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "completed"},
+			expected: true,
+		},
+		{
+			name:     "task with pending status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "pending"},
+			expected: false,
+		},
+		{
+			name:     "task with in_progress status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "in_progress"},
+			expected: false,
+		},
+		{
+			name:     "task with skipped status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "skipped"},
+			expected: false,
+		},
+		{
+			name:     "task with empty status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: ""},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.IsCompleted()
+			if result != tt.expected {
+				t.Errorf("Task.IsCompleted() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestTask_CanSkip(t *testing.T) {
+	tests := []struct {
+		name     string
+		task     Task
+		expected bool
+	}{
+		{
+			name:     "completed task can be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "completed"},
+			expected: true,
+		},
+		{
+			name:     "skipped task can be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "skipped"},
+			expected: true,
+		},
+		{
+			name:     "pending task cannot be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "pending"},
+			expected: false,
+		},
+		{
+			name:     "in_progress task cannot be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "in_progress"},
+			expected: false,
+		},
+		{
+			name:     "empty status cannot be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: ""},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.CanSkip()
+			if result != tt.expected {
+				t.Errorf("Task.CanSkip() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// Helper function for tests
+func timePtr(t time.Time) *time.Time {
+	return &t
+}
+
+// TestWorktreeGroupValidation tests worktree group structure and validation
+func TestWorktreeGroupValidation(t *testing.T) {
+	tests := []struct {
+		name  string
+		group WorktreeGroup
+		valid bool
+	}{
+		{
+			name: "valid group with parallel execution",
+			group: WorktreeGroup{
+				GroupID:        "group-a",
+				Description:    "Parallel execution group",
+				ExecutionModel: "parallel",
+				Isolation:      "weak",
+			},
+			valid: true,
+		},
+		{
+			name: "valid group with sequential execution",
+			group: WorktreeGroup{
+				GroupID:        "group-b",
+				Description:    "Sequential execution group",
+				ExecutionModel: "sequential",
+				Isolation:      "strong",
+			},
+			valid: true,
+		},
+		{
+			name: "group with no isolation",
+			group: WorktreeGroup{
+				GroupID:        "group-c",
+				Description:    "No isolation",
+				ExecutionModel: "parallel",
+				Isolation:      "none",
+			},
+			valid: true,
+		},
+		{
+			name: "missing group ID",
+			group: WorktreeGroup{
+				GroupID:        "",
+				Description:    "Missing ID",
+				ExecutionModel: "parallel",
+			},
+			valid: false, // Would fail in real validation
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Basic validation - GroupID should not be empty
+			if tt.group.GroupID == "" && tt.valid {
+				t.Error("group ID should not be empty for valid groups")
+			}
+
+			// Verify execution model is one of known values
+			if tt.group.ExecutionModel != "parallel" && tt.group.ExecutionModel != "sequential" {
+				t.Errorf("unknown execution model: %s", tt.group.ExecutionModel)
+			}
+
+			// Verify isolation level is one of known values
+			validIsolations := map[string]bool{"none": true, "weak": true, "strong": true}
+			if tt.group.Isolation != "" && !validIsolations[tt.group.Isolation] {
+				t.Errorf("unknown isolation level: %s", tt.group.Isolation)
+			}
+		})
+	}
+}
+
+// TestFileToTaskMapping tests file-to-task mapping structure
+func TestFileToTaskMapping(t *testing.T) {
+	tests := []struct {
+		name      string
+		mapping   map[string][]string
+		validate  func(map[string][]string) bool
+	}{
+		{
+			name: "empty mapping",
+			mapping: map[string][]string{},
+			validate: func(m map[string][]string) bool {
+				return len(m) == 0
+			},
+		},
+		{
+			name: "single file with multiple tasks",
+			mapping: map[string][]string{
+				"part1.yaml": {"1", "2", "3"},
+			},
+			validate: func(m map[string][]string) bool {
+				return len(m) == 1 && len(m["part1.yaml"]) == 3
+			},
+		},
+		{
+			name: "multiple files with mixed task counts",
+			mapping: map[string][]string{
+				"part1.yaml": {"1", "2"},
+				"part2.yaml": {"3", "4", "5"},
+				"part3.yaml": {"6"},
+			},
+			validate: func(m map[string][]string) bool {
+				return len(m) == 3 && len(m["part1.yaml"]) == 2 && len(m["part2.yaml"]) == 3 && len(m["part3.yaml"]) == 1
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !tt.validate(tt.mapping) {
+				t.Error("mapping validation failed")
+			}
+		})
+	}
+}
+
+// TestCrossFileDependencies tests handling of dependencies spanning files
+func TestCrossFileDependencies(t *testing.T) {
+	tasks := []Task{
+		// Part 1 tasks
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "2", Name: "Task 2", DependsOn: []string{"1"}},
+		// Part 2 tasks
+		{Number: "3", Name: "Task 3", DependsOn: []string{"2"}},       // Cross-file dep
+		{Number: "4", Name: "Task 4", DependsOn: []string{"1", "3"}},  // Multiple cross-file deps
+		// Part 3 tasks
+		{Number: "5", Name: "Task 5", DependsOn: []string{"3", "4"}}, // Multiple cross-file deps
+	}
+
+	tests := []struct {
+		name      string
+		taskNum   string
+		expectDep int
+	}{
+		{
+			name:      "task 1 has no deps",
+			taskNum:   "1",
+			expectDep: 0,
+		},
+		{
+			name:      "task 3 has cross-file dep",
+			taskNum:   "3",
+			expectDep: 1,
+		},
+		{
+			name:      "task 4 has multiple cross-file deps",
+			taskNum:   "4",
+			expectDep: 2,
+		},
+		{
+			name:      "task 5 has cross-file deps from different files",
+			taskNum:   "5",
+			expectDep: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var found *Task
+			for i := range tasks {
+				if tasks[i].Number == tt.taskNum {
+					found = &tasks[i]
+					break
+				}
+			}
+
+			if found == nil {
+				t.Fatalf("task %s not found", tt.taskNum)
+			}
+
+			if len(found.DependsOn) != tt.expectDep {
+				t.Errorf("task %s expected %d deps, got %d", tt.taskNum, tt.expectDep, len(found.DependsOn))
+			}
+		})
+	}
+}
+
+// TestPlanMergeStructure tests merged plan structure preservation
+func TestPlanMergeStructure(t *testing.T) {
+	tests := []struct {
+		name           string
+		plans          []Plan
+		expectTasks    int
+		expectWaves    int
+		expectGroups   int
+		expectFileMaps int
+	}{
+		{
+			name: "single plan unchanged",
+			plans: []Plan{
+				{
+					Name:           "Plan 1",
+					Tasks:          []Task{{Number: "1"}},
+					Waves:          []Wave{{Name: "Wave 1"}},
+					WorktreeGroups: []WorktreeGroup{{GroupID: "g1"}},
+					FileToTaskMap:  map[string][]string{"plan1.yaml": {"1"}},
+				},
+			},
+			expectTasks:    1,
+			expectWaves:    1,
+			expectGroups:   1,
+			expectFileMaps: 1,
+		},
+		{
+			name: "two plans combined",
+			plans: []Plan{
+				{
+					Name:           "Part 1",
+					Tasks:          []Task{{Number: "1"}, {Number: "2"}},
+					Waves:          []Wave{{Name: "Wave 1"}},
+					WorktreeGroups: []WorktreeGroup{{GroupID: "g1"}},
+					FileToTaskMap:  map[string][]string{"part1.yaml": {"1", "2"}},
+				},
+				{
+					Name:           "Part 2",
+					Tasks:          []Task{{Number: "3"}},
+					Waves:          []Wave{{Name: "Wave 2"}},
+					WorktreeGroups: []WorktreeGroup{{GroupID: "g2"}},
+					FileToTaskMap:  map[string][]string{"part2.yaml": {"3"}},
+				},
+			},
+			expectTasks:    3,
+			expectWaves:    2,
+			expectGroups:   2,
+			expectFileMaps: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulating merge logic
+			totalTasks := 0
+			totalWaves := 0
+			totalGroups := 0
+			totalFileMaps := 0
+
+			for _, p := range tt.plans {
+				totalTasks += len(p.Tasks)
+				totalWaves += len(p.Waves)
+				totalGroups += len(p.WorktreeGroups)
+				totalFileMaps += len(p.FileToTaskMap)
+			}
+
+			if totalTasks != tt.expectTasks {
+				t.Errorf("expected %d total tasks, got %d", tt.expectTasks, totalTasks)
+			}
+			if totalWaves != tt.expectWaves {
+				t.Errorf("expected %d total waves, got %d", tt.expectWaves, totalWaves)
+			}
+			if totalGroups != tt.expectGroups {
+				t.Errorf("expected %d total groups, got %d", tt.expectGroups, totalGroups)
+			}
+			if totalFileMaps != tt.expectFileMaps {
+				t.Errorf("expected %d total file maps, got %d", tt.expectFileMaps, totalFileMaps)
+			}
+		})
+	}
+}

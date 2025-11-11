@@ -1,0 +1,51 @@
+conductor:
+  worktree_groups:
+    - group_id: "microservices"
+      description: "Microservices development"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Services can be developed in parallel with shared infrastructure"
+
+plan:
+  name: "Large Scale System (Part 2/3)"
+  default_agent: "golang-pro"
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+    retry_on_red: 2
+  tasks:
+    - task_number: 6
+      name: "API Gateway"
+      files: ["services/gateway/main.go"]
+      depends_on: [4, 5]
+      agent: "golang-pro"
+      description: "Build API gateway with rate limiting and routing"
+      worktree_group: "microservices"
+    - task_number: 7
+      name: "Authentication Service"
+      files: ["services/auth/main.go"]
+      depends_on: [3, 4]
+      agent: "golang-pro"
+      description: "Implement authentication microservice"
+      worktree_group: "microservices"
+    - task_number: 8
+      name: "User Service"
+      files: ["services/user/main.go"]
+      depends_on: [7, 3]
+      agent: "golang-pro"
+      description: "Build user management microservice"
+      worktree_group: "microservices"
+    - task_number: 9
+      name: "Product Service"
+      files: ["services/product/main.go"]
+      depends_on: [3, 4]
+      agent: "golang-pro"
+      description: "Implement product catalog microservice"
+      worktree_group: "microservices"
+    - task_number: 10
+      name: "Order Service"
+      files: ["services/order/main.go"]
+      depends_on: [8, 9, 5]
+      agent: "golang-pro"
+      description: "Build order processing microservice"
+      worktree_group: "microservices"

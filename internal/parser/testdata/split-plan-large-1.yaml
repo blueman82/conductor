@@ -1,0 +1,51 @@
+conductor:
+  worktree_groups:
+    - group_id: "infrastructure"
+      description: "Infrastructure setup"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Infrastructure components can be set up in parallel after core setup"
+
+plan:
+  name: "Large Scale System (Part 1/3)"
+  default_agent: "devops-engineer"
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+    retry_on_red: 2
+  tasks:
+    - task_number: 1
+      name: "Core Platform Setup"
+      files: ["infrastructure/main.tf"]
+      depends_on: []
+      agent: "devops-engineer"
+      description: "Initialize core infrastructure"
+      worktree_group: "infrastructure"
+    - task_number: 2
+      name: "Networking Layer"
+      files: ["infrastructure/network.tf"]
+      depends_on: [1]
+      agent: "devops-engineer"
+      description: "Configure networking and security groups"
+      worktree_group: "infrastructure"
+    - task_number: 3
+      name: "Database Cluster"
+      files: ["infrastructure/database.tf"]
+      depends_on: [2]
+      agent: "devops-engineer"
+      description: "Set up managed database cluster"
+      worktree_group: "infrastructure"
+    - task_number: 4
+      name: "Cache Layer"
+      files: ["infrastructure/cache.tf"]
+      depends_on: [2]
+      agent: "devops-engineer"
+      description: "Deploy Redis cache infrastructure"
+      worktree_group: "infrastructure"
+    - task_number: 5
+      name: "Message Queue"
+      files: ["infrastructure/messaging.tf"]
+      depends_on: [2]
+      agent: "devops-engineer"
+      description: "Configure message broker for async processing"
+      worktree_group: "infrastructure"

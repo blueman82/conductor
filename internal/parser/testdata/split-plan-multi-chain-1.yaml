@@ -1,0 +1,49 @@
+conductor:
+  worktree_groups:
+    - group_id: "setup"
+      description: "Initial setup phase"
+      execution_model: "sequential"
+      isolation: "strong"
+      rationale: "Dependencies must be set up in order"
+    - group_id: "build-chain-a"
+      description: "First development chain"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Can run tasks in parallel within chain"
+
+plan:
+  name: "Multi-Chain Build (Part 1)"
+  default_agent: "golang-pro"
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+    retry_on_red: 2
+  tasks:
+    - task_number: 1
+      name: "Database Setup"
+      files: ["db/schema.sql", "db/init.go"]
+      depends_on: []
+      agent: "golang-pro"
+      description: "Initialize database schema and connection pool"
+      worktree_group: "setup"
+    - task_number: 2
+      name: "API Server Setup"
+      files: ["cmd/server/main.go", "internal/api/router.go"]
+      depends_on: [1]
+      agent: "golang-pro"
+      description: "Set up HTTP server with routing framework"
+      worktree_group: "setup"
+    - task_number: 3
+      name: "User Service Implementation"
+      files: ["internal/service/user.go", "internal/repository/user.go"]
+      depends_on: [2]
+      agent: "golang-pro"
+      description: "Implement user CRUD operations and persistence layer"
+      worktree_group: "build-chain-a"
+    - task_number: 4
+      name: "Authentication Service"
+      files: ["internal/service/auth.go", "internal/auth/jwt.go"]
+      depends_on: [3]
+      agent: "golang-pro"
+      description: "Add JWT-based authentication system"
+      worktree_group: "build-chain-a"

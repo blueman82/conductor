@@ -4,7 +4,6 @@ plan:
     created: "2025-11-07"
     target: "Build autonomous multi-agent orchestration system in Go for executing implementation plans with Claude Code agents"
     estimated_tasks: 25
-
   context:
     framework: "Go 1.21+"
     architecture: "Standard Go project layout with cobra CLI framework"
@@ -21,7 +20,6 @@ plan:
       - "Follow Go idioms and conventions"
       - "Keep changes minimal (YAGNI - You Aren't Gonna Need It)"
       - "Avoid duplication (DRY - Don't Repeat Yourself)"
-
   prerequisites:
     - item: "Go 1.21 or later installed"
       details: "Run `go version` to verify"
@@ -35,4272 +33,7 @@ plan:
     - item: "Editor with Go support"
       details: "VS Code + Go extension recommended"
       verified: false
-
   tasks:
-    - task_number: 1
-      name: "Initialize Go Module and Project Structure"
-      files:
-        - "go.mod"
-        - "cmd/conductor/main.go"
-        - "cmd/conductor/main_test.go"
-        - "README.md"
-        - ".gitignore"
-      depends_on: []
-      estimated_time: "15m"
-      status: "completed"
-
-      description: |
-        Create the foundational Go module structure with proper directory organization following Go project layout standards.
-        This establishes the base structure for the entire application.
-
-      test_first:
-        test_file: "cmd/conductor/main_test.go"
-
-        structure:
-          - "TestVersionConstant - verify main.go compiles"
-          - "TestMainExists - verify main function exists"
-
-        mocks: []
-
-        fixtures: []
-
-        assertions:
-          - "Version constant should not be empty"
-          - "Main package should compile without errors"
-
-        edge_cases: []
-
-        example_skeleton: |
-          package main
-
-          import (
-              "testing"
-          )
-
-          func TestVersionConstant(t *testing.T) {
-              if Version == "" {
-                  t.Error("Version constant should not be empty")
-              }
-          }
-
-      implementation:
-        approach: |
-          Initialize Go module, create directory structure following standard Go project layout, set up basic main.go entry point.
-
-        code_structure: |
-          conductor/
-          ├── cmd/
-          │   └── conductor/
-          │       └── main.go          # CLI entry point
-          ├── internal/
-          │   ├── parser/              # Plan file parsing
-          │   ├── executor/            # Task execution engine
-          │   ├── agent/               # Agent discovery and invocation
-          │   └── models/              # Data structures
-          ├── pkg/                     # Public packages (if any)
-          ├── docs/
-          │   └── plans/               # Implementation plans
-          ├── go.mod
-          ├── go.sum
-          ├── README.md
-          └── Makefile
-
-        key_points:
-          - point: "Use go mod init"
-            details: "Run `go mod init github.com/yourusername/conductor`"
-          - point: "Version format"
-            details: "const Version = \"1.0.0\""
-          - point: "Follow standard layout"
-            reference: "https://github.com/golang-standards/project-layout"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "No error handling needed at this stage"
-
-      verification:
-        manual_testing:
-          - step: "Run go mod init"
-            command: "go mod init github.com/yourusername/conductor"
-            expected: "Creates go.mod file"
-          - step: "Run go build"
-            command: "go build ./cmd/conductor"
-            expected: "Compiles without errors"
-          - step: "Run the binary"
-            command: "./conductor"
-            expected: "Should compile without errors"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            ok      github.com/yourusername/conductor    0.001s
-
-        success_criteria:
-          - "go.mod file exists"
-          - "Directory structure created"
-          - "Code compiles without errors"
-          - "Tests pass"
-
-      commit:
-        type: "feat"
-        message: "initialize Go module and project structure"
-        body: |
-          - Create go.mod with Go 1.21
-          - Set up standard Go project layout
-          - Add basic main.go with version constant
-          - Create directory structure for internal packages
-
-        files:
-          - "go.mod"
-          - "cmd/conductor/main.go"
-          - "README.md"
-          - ".gitignore"
-
-    - task_number: 2
-      name: "Install and Configure Cobra CLI Framework"
-      files:
-        - "go.mod"
-        - "go.sum"
-        - "cmd/conductor/main.go"
-        - "internal/cmd/root.go"
-        - "internal/cmd/root_test.go"
-      depends_on: [1]
-      estimated_time: "30m"
-      status: "completed"
-
-      description: |
-        Set up cobra CLI framework to handle commands like `conductor run`, `conductor validate`, with proper flag parsing.
-        Cobra is the industry standard for Go CLI applications.
-
-      test_first:
-        test_file: "internal/cmd/root_test.go"
-
-        structure:
-          - "TestRootCommand - verify root command can be created"
-          - "TestRootCommandHasSubcommands - verify run/validate subcommands exist"
-          - "TestVersionFlag - verify --version flag works"
-
-        mocks:
-          - "cobra.Command execution"
-
-        fixtures: []
-
-        assertions:
-          - "Root command should not be nil"
-          - "Help text should contain 'Conductor'"
-          - "Version flag should display version"
-
-        edge_cases:
-          - "Empty args"
-          - "Invalid flags"
-
-        example_skeleton: |
-          package cmd
-
-          import (
-              "bytes"
-              "testing"
-          )
-
-          func TestRootCommand(t *testing.T) {
-              cmd := NewRootCommand()
-              if cmd == nil {
-                  t.Fatal("Root command should not be nil")
-              }
-
-              buf := new(bytes.Buffer)
-              cmd.SetOut(buf)
-              cmd.SetArgs([]string{"--help"})
-
-              err := cmd.Execute()
-              if err != nil {
-                  t.Fatalf("Root command execution failed: %v", err)
-              }
-
-              output := buf.String()
-              if !bytes.Contains([]byte(output), []byte("Conductor")) {
-                  t.Error("Help text should contain 'Conductor'")
-              }
-          }
-
-      implementation:
-        approach: |
-          Install cobra package, create root command with version flag, prepare subcommand structure.
-
-        code_structure: |
-          // internal/cmd/root.go
-          package cmd
-
-          import (
-              "fmt"
-              "github.com/spf13/cobra"
-          )
-
-          const Version = "1.0.0"
-
-          func NewRootCommand() *cobra.Command {
-              cmd := &cobra.Command{
-                  Use:   "conductor",
-                  Short: "Autonomous multi-agent orchestration system",
-                  Long: `Conductor executes implementation plans by spawning and managing
-          multiple Claude Code CLI agents in coordinated waves.`,
-                  Version: Version,
-              }
-
-              return cmd
-          }
-
-        key_points:
-          - point: "Use cobra generator or manual setup"
-            details: "Manual setup preferred for simplicity"
-          - point: "Add persistent flags for global options"
-            details: "--verbose, --config, etc."
-          - point: "Set up proper help text"
-            details: "Follow cobra best practices"
-          - point: "Follow cobra best practices"
-            reference: "https://github.com/spf13/cobra"
-
-        integration:
-          imports:
-            - "github.com/spf13/cobra"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Cobra handles command errors automatically"
-
-      verification:
-        manual_testing:
-          - step: "Install cobra"
-            command: "go get github.com/spf13/cobra@latest"
-            expected: "Dependency added to go.mod"
-          - step: "Build the binary"
-            command: "go build ./cmd/conductor"
-            expected: "Compiles successfully"
-          - step: "Run help command"
-            command: "./conductor --help"
-            expected: "Displays help text with 'Conductor'"
-          - step: "Run version command"
-            command: "./conductor --version"
-            expected: "Displays version number"
-
-        automated_tests:
-          command: "go test ./internal/cmd/..."
-          expected_output: |
-            Conductor v1.0.0
-            Autonomous multi-agent orchestration system
-            ...
-
-        success_criteria:
-          - "Cobra dependency installed"
-          - "Root command works"
-          - "Help text displays correctly"
-          - "Tests pass"
-
-      commit:
-        type: "feat"
-        message: "add cobra CLI framework"
-        body: |
-          - Install cobra dependency
-          - Create root command with version flag
-          - Set up command structure for future subcommands
-          - Add comprehensive help text
-
-        files:
-          - "go.mod"
-          - "go.sum"
-          - "internal/cmd/root.go"
-          - "internal/cmd/root_test.go"
-          - "cmd/conductor/main.go"
-
-    - task_number: 3
-      name: "Define Core Data Models"
-      files:
-        - "internal/models/task.go"
-        - "internal/models/plan.go"
-        - "internal/models/result.go"
-        - "internal/models/models_test.go"
-      depends_on: [1]
-      estimated_time: "45m"
-      status: "completed"
-
-      description: |
-        Define Go structs for Plan, Task, Wave, Result, and Agent that will be used throughout the application.
-        These are the core data structures that represent the domain model.
-
-      test_first:
-        test_file: "internal/models/models_test.go"
-
-        structure:
-          - "TestTaskValidation - verify task validation logic"
-          - "TestDependencyCycleDetection - verify circular dependency detection"
-          - "TestWaveCalculation - test dependency graph to wave conversion"
-
-        mocks: []
-
-        fixtures: []
-
-        assertions:
-          - "Valid task should pass validation"
-          - "Invalid task should return error"
-          - "Circular dependencies should be detected"
-
-        edge_cases:
-          - "Empty dependencies"
-          - "Self-referencing tasks"
-          - "Missing required fields"
-
-        example_skeleton: |
-          package models
-
-          import (
-              "testing"
-          )
-
-          func TestTaskValidation(t *testing.T) {
-              tests := []struct {
-                  name    string
-                  task    Task
-                  wantErr bool
-              }{
-                  {
-                      name: "valid task",
-                      task: Task{
-                          Number: 1,
-                          Name:   "Test Task",
-                          Prompt: "Do something",
-                      },
-                      wantErr: false,
-                  },
-                  {
-                      name: "missing name",
-                      task: Task{
-                          Number: 1,
-                          Prompt: "Do something",
-                      },
-                      wantErr: true,
-                  },
-              }
-
-              for _, tt := range tests {
-                  t.Run(tt.name, func(t *testing.T) {
-                      err := tt.task.Validate()
-                      if (err != nil) != tt.wantErr {
-                          t.Errorf("Task.Validate() error = %v, wantErr %v", err, tt.wantErr)
-                      }
-                  })
-              }
-          }
-
-          func TestDetectCycles(t *testing.T) {
-              tasks := []Task{
-                  {Number: 1, DependsOn: []int{2}},
-                  {Number: 2, DependsOn: []int{1}}, // Circular!
-              }
-
-              if !HasCyclicDependencies(tasks) {
-                  t.Error("Should detect circular dependency")
-              }
-          }
-
-      implementation:
-        approach: |
-          Create clean data structures with validation methods, dependency checking, and helper functions.
-
-        code_structure: |
-          // internal/models/task.go
-          package models
-
-          import (
-              "errors"
-              "time"
-          )
-
-          type Task struct {
-              Number        int
-              Name          string
-              Files         []string
-              DependsOn     []int
-              EstimatedTime time.Duration
-              Agent         string
-              Prompt        string
-          }
-
-          func (t *Task) Validate() error {
-              if t.Number <= 0 {
-                  return errors.New("task number must be positive")
-              }
-              if t.Name == "" {
-                  return errors.New("task name is required")
-              }
-              if t.Prompt == "" {
-                  return errors.New("task prompt is required")
-              }
-              return nil
-          }
-
-          // internal/models/plan.go
-          package models
-
-          type Plan struct {
-              Name          string
-              Tasks         []Task
-              Waves         []Wave
-              DefaultAgent  string
-              QualityControl QualityControlConfig
-          }
-
-          type Wave struct {
-              Name           string
-              TaskNumbers    []int
-              MaxConcurrency int
-          }
-
-          type QualityControlConfig struct {
-              Enabled      bool
-              ReviewAgent  string
-              RetryOnRed   int
-          }
-
-          // internal/models/result.go
-          package models
-
-          type TaskResult struct {
-              Task          Task
-              Status        string // "GREEN", "RED", "TIMEOUT", "FAILED"
-              Output        string
-              Error         error
-              Duration      time.Duration
-              RetryCount    int
-              ReviewFeedback string
-          }
-
-          type ExecutionResult struct {
-              TotalTasks    int
-              Completed     int
-              Failed        int
-              Duration      time.Duration
-              FailedTasks   []TaskResult
-          }
-
-        key_points:
-          - point: "Use time.Duration for time fields"
-            details: "Standard library type for durations"
-          - point: "Implement Validate() methods"
-            details: "Validation logic on each struct"
-          - point: "Add helper functions for common operations"
-            details: "Like HasCyclicDependencies()"
-          - point: "Use exported fields for JSON/YAML marshaling"
-            details: "All fields start with capital letter"
-
-        integration:
-          imports:
-            - "time"
-            - "errors"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Return descriptive errors from Validate() methods"
-
-      verification:
-        manual_testing:
-          - step: "Create sample instances of each struct"
-            command: "In Go code, instantiate Task, Plan, etc."
-            expected: "Should compile"
-          - step: "Call Validate() methods"
-            command: "task.Validate()"
-            expected: "Should return nil for valid, error for invalid"
-          - step: "Verify errors are returned correctly"
-            command: "Check error messages"
-            expected: "Clear, descriptive error messages"
-
-        automated_tests:
-          command: "go test ./internal/models/..."
-          expected_output: |
-            ok      github.com/yourusername/conductor/internal/models    0.002s
-
-        success_criteria:
-          - "All struct types defined"
-          - "Validation methods implemented"
-          - "Tests pass"
-          - "No compilation errors"
-
-      commit:
-        type: "feat"
-        message: "define core data models"
-        body: |
-          - Add Task struct with validation
-          - Add Plan and Wave structs
-          - Add Result structs for execution tracking
-          - Implement dependency cycle detection helpers
-
-        files:
-          - "internal/models/task.go"
-          - "internal/models/plan.go"
-          - "internal/models/result.go"
-          - "internal/models/models_test.go"
-
-    - task_number: 4
-      name: "Implement Markdown Plan Parser"
-      files:
-        - "internal/parser/markdown.go"
-        - "internal/parser/markdown_test.go"
-        - "internal/parser/testdata/sample-plan.md"
-        - "go.mod"
-        - "go.sum"
-      depends_on: [3]
-      estimated_time: "2h"
-      status: "completed"
-
-      description: |
-        Parse Markdown files generated by `/doc` command, extracting tasks with metadata, dependencies, and optional conductor frontmatter.
-        This is a critical component for reading implementation plans.
-
-      test_first:
-        test_file: "internal/parser/markdown_test.go"
-
-        structure:
-          - "TestParseMarkdownPlan - parse valid markdown"
-          - "TestExtractTasks - extract task sections"
-          - "TestParseFrontmatter - parse YAML frontmatter"
-          - "TestParseTaskMetadata - extract File(s), Depends on, Estimated time"
-          - "TestParseTaskPrompt - extract full task content as prompt"
-
-        mocks: []
-
-        fixtures:
-          - "testdata/sample-plan.md"
-
-        assertions:
-          - "Task count matches expected"
-          - "Dependencies parsed correctly"
-          - "Prompt extracted from full task content"
-          - "Metadata fields extracted correctly"
-
-        edge_cases:
-          - "No frontmatter"
-          - "Missing metadata fields"
-          - "Empty task sections"
-
-        example_skeleton: |
-          package parser
-
-          import (
-              "strings"
-              "testing"
-
-              "github.com/yourusername/conductor/internal/models"
-          )
-
-          func TestParseMarkdownPlan(t *testing.T) {
-              markdown := `# Implementation Plan: Test Plan
-
-          **Created**: 2025-11-07
-          **Estimated Tasks**: 2
-
-          ## Task 1: First Task
-
-          **File(s)**: ` + "`file1.go`" + `
-          **Depends on**: None
-          **Estimated time**: 30m
-
-          ### What you're building
-          Test task description
-
-          ### Implementation
-          Implementation details here
-          `
-
-              parser := NewMarkdownParser()
-              plan, err := parser.Parse(strings.NewReader(markdown))
-              if err != nil {
-                  t.Fatalf("Failed to parse markdown: %v", err)
-              }
-
-              if len(plan.Tasks) != 1 {
-                  t.Errorf("Expected 1 task, got %d", len(plan.Tasks))
-              }
-
-              task := plan.Tasks[0]
-              if task.Number != 1 {
-                  t.Errorf("Expected task number 1, got %d", task.Number)
-              }
-              if task.Name != "First Task" {
-                  t.Errorf("Expected task name 'First Task', got '%s'", task.Name)
-              }
-          }
-
-      implementation:
-        approach: |
-          Use goldmark markdown parser library to parse markdown, extract task sections based on `## Task N:` headings,
-          parse metadata fields with regex, combine full task section as prompt.
-
-        code_structure: |
-          // internal/parser/markdown.go
-          package parser
-
-          import (
-              "bufio"
-              "fmt"
-              "io"
-              "regexp"
-              "strconv"
-              "strings"
-              "time"
-
-              "github.com/yuin/goldmark"
-              "github.com/yuin/goldmark/ast"
-              "github.com/yuin/goldmark/text"
-              "gopkg.in/yaml.v3"
-
-              "github.com/yourusername/conductor/internal/models"
-          )
-
-          type MarkdownParser struct {
-              markdown goldmark.Markdown
-          }
-
-          func NewMarkdownParser() *MarkdownParser {
-              return &MarkdownParser{
-                  markdown: goldmark.New(),
-              }
-          }
-
-          func (p *MarkdownParser) Parse(r io.Reader) (*models.Plan, error) {
-              // Read full content
-              content, err := io.ReadAll(r)
-              if err != nil {
-                  return nil, err
-              }
-
-              // Extract frontmatter if present
-              plan := &models.Plan{}
-              content, frontmatter := extractFrontmatter(content)
-              if frontmatter != nil {
-                  if err := parseConductorConfig(frontmatter, plan); err != nil {
-                      return nil, err
-                  }
-              }
-
-              // Parse markdown AST
-              doc := p.markdown.Parser().Parse(text.NewReader(content))
-
-              // Extract tasks
-              tasks, err := p.extractTasks(doc, content)
-              if err != nil {
-                  return nil, err
-              }
-
-              plan.Tasks = tasks
-              return plan, nil
-          }
-
-        key_points:
-          - point: "Use goldmark for robust markdown parsing"
-            details: "goldmark is the standard Go markdown parser"
-          - point: "Regex for metadata extraction"
-            details: "Fields like **File(s)**: are parsed with regex"
-          - point: "Full task section becomes the prompt"
-            details: "Everything from ## Task N: to next ## heading"
-          - point: "Handle optional YAML frontmatter"
-            details: "Conductor config can be in frontmatter"
-
-        integration:
-          imports:
-            - "github.com/yuin/goldmark"
-            - "gopkg.in/yaml.v3"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Return error if markdown parsing fails"
-            - "Return error if task extraction fails"
-
-      verification:
-        manual_testing:
-          - step: "Create test markdown file"
-            command: "Create testdata/sample-plan.md with /doc output"
-            expected: "File created"
-          - step: "Run parser on file"
-            command: "parser.ParseFile(path)"
-            expected: "Tasks extracted"
-          - step: "Print extracted tasks and verify"
-            command: "Print task details"
-            expected: "All fields populated correctly"
-
-        automated_tests:
-          command: "go test ./internal/parser/ -v"
-          expected_output: |
-            === RUN   TestParseMarkdownPlan
-            --- PASS: TestParseMarkdownPlan (0.00s)
-            === RUN   TestExtractTasks
-            --- PASS: TestExtractTasks (0.00s)
-            PASS
-
-        success_criteria:
-          - "Markdown parsing works"
-          - "Tasks extracted correctly"
-          - "Metadata parsed"
-          - "Tests pass with 80%+ coverage"
-
-      commit:
-        type: "feat"
-        message: "implement markdown plan parser"
-        body: |
-          - Add goldmark dependency for markdown parsing
-          - Extract tasks from ## Task N: headings
-          - Parse metadata fields (File(s), Depends on, Estimated time, Agent)
-          - Extract full task content as prompt
-          - Support optional YAML frontmatter for conductor config
-
-        files:
-          - "internal/parser/markdown.go"
-          - "internal/parser/markdown_test.go"
-          - "internal/parser/testdata/sample-plan.md"
-          - "go.mod"
-          - "go.sum"
-
-    - task_number: 5
-      name: "Implement YAML Plan Parser"
-      files:
-        - "internal/parser/yaml.go"
-        - "internal/parser/yaml_test.go"
-        - "internal/parser/testdata/sample-plan.yaml"
-      depends_on: [3]
-      estimated_time: "1h"
-      status: "completed"
-      completed_date: "2025-11-07"
-      git_commits:
-        - "c933989 (initial implementation)"
-        - "5b6586b (enhanced for real YAML schema)"
-      qa_status: "GREEN"
-      test_coverage: "63.8%"
-      notes: "Successfully handles real conductor-v1-implementation.yaml with complex nested structures. All 8 test functions passing. Supports both simple and complex YAML schemas."
-
-      description: |
-        Parse YAML files generated by `/doc-yaml` command, extracting structured task definitions with full metadata.
-        This provides an alternative to Markdown format with more structure.
-
-      test_first:
-        test_file: "internal/parser/yaml_test.go"
-
-        structure:
-          - "TestParseYAMLPlan - parse valid YAML"
-          - "TestExtractYAMLTasks - extract tasks array"
-          - "TestParseDependencies - parse depends_on field"
-          - "TestParseConductorConfig - parse optional conductor section"
-
-        mocks: []
-
-        fixtures:
-          - "testdata/sample-plan.yaml"
-
-        assertions:
-          - "Tasks array extracted"
-          - "Dependencies parsed correctly"
-          - "Conductor config parsed"
-
-        edge_cases:
-          - "Missing optional fields"
-          - "Empty arrays"
-          - "Nested YAML structures"
-
-        example_skeleton: |
-          package parser
-
-          import (
-              "strings"
-              "testing"
-          )
-
-          func TestParseYAMLPlan(t *testing.T) {
-              yaml := `
-          plan:
-            metadata:
-              feature_name: "Test Plan"
-              estimated_tasks: 2
-            tasks:
-              - task_number: 1
-                name: "First Task"
-                estimated_time: "30m"
-                depends_on: []
-                description: "Test description"
-          `
-
-              parser := NewYAMLParser()
-              plan, err := parser.Parse(strings.NewReader(yaml))
-              if err != nil {
-                  t.Fatalf("Failed to parse YAML: %v", err)
-              }
-
-              if len(plan.Tasks) != 1 {
-                  t.Errorf("Expected 1 task, got %d", len(plan.Tasks))
-              }
-
-              task := plan.Tasks[0]
-              if task.Number != 1 {
-                  t.Errorf("Expected task number 1, got %d", task.Number)
-              }
-          }
-
-      implementation:
-        approach: |
-          Use gopkg.in/yaml.v3 to unmarshal YAML structure, map YAML schema to models.Plan/Task structs,
-          build prompt from description + implementation + test_first sections.
-
-        code_structure: |
-          // internal/parser/yaml.go
-          package parser
-
-          import (
-              "fmt"
-              "io"
-              "time"
-
-              "gopkg.in/yaml.v3"
-
-              "github.com/yourusername/conductor/internal/models"
-          )
-
-          type YAMLParser struct{}
-
-          type yamlPlan struct {
-              Conductor *conductorConfig `yaml:"conductor"`
-              Plan      struct {
-                  Metadata struct {
-                      FeatureName    string `yaml:"feature_name"`
-                      EstimatedTasks int    `yaml:"estimated_tasks"`
-                  } `yaml:"metadata"`
-                  Tasks []yamlTask `yaml:"tasks"`
-              } `yaml:"plan"`
-          }
-
-          type yamlTask struct {
-              TaskNumber    int      `yaml:"task_number"`
-              Name          string   `yaml:"name"`
-              Files         []string `yaml:"files"`
-              DependsOn     []int    `yaml:"depends_on"`
-              EstimatedTime string   `yaml:"estimated_time"`
-              Description   string   `yaml:"description"`
-              TestFirst     struct {
-                  TestFile string `yaml:"test_file"`
-                  Example  string `yaml:"example_skeleton"`
-              } `yaml:"test_first"`
-              Implementation struct {
-                  Approach string `yaml:"approach"`
-                  Code     string `yaml:"code_structure"`
-              } `yaml:"implementation"`
-          }
-
-          func NewYAMLParser() *YAMLParser {
-              return &YAMLParser{}
-          }
-
-          func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
-              var yp yamlPlan
-              decoder := yaml.NewDecoder(r)
-              if err := decoder.Decode(&yp); err != nil {
-                  return nil, fmt.Errorf("failed to decode YAML: %w", err)
-              }
-
-              plan := &models.Plan{
-                  Name: yp.Plan.Metadata.FeatureName,
-              }
-
-              // Parse conductor config if present
-              if yp.Conductor != nil {
-                  parseConductorConfigYAML(yp.Conductor, plan)
-              }
-
-              // Convert YAML tasks to models.Task
-              for _, yt := range yp.Plan.Tasks {
-                  task := models.Task{
-                      Number:    yt.TaskNumber,
-                      Name:      yt.Name,
-                      Files:     yt.Files,
-                      DependsOn: yt.DependsOn,
-                  }
-
-                  // Parse estimated time
-                  if dur, err := parseTimeString(yt.EstimatedTime); err == nil {
-                      task.EstimatedTime = dur
-                  }
-
-                  // Build comprehensive prompt from all sections
-                  task.Prompt = buildPromptFromYAML(&yt)
-
-                  plan.Tasks = append(plan.Tasks, task)
-              }
-
-              return plan, nil
-          }
-
-        key_points:
-          - point: "Define YAML schema structs"
-            details: "Matching /doc-yaml output"
-          - point: "Use struct tags for YAML field mapping"
-            details: "`yaml:\"field_name\"`"
-          - point: "Combine multiple YAML sections into prompt"
-            details: "description + test_first + implementation"
-          - point: "Handle missing optional fields gracefully"
-            details: "Check for nil before accessing"
-
-        integration:
-          imports:
-            - "gopkg.in/yaml.v3"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Return error if YAML unmarshaling fails"
-            - "Handle missing required fields"
-
-      verification:
-        manual_testing:
-          - step: "Create test YAML file"
-            command: "Create testdata/sample-plan.yaml"
-            expected: "File created"
-          - step: "Run parser on file"
-            command: "parser.Parse(reader)"
-            expected: "Plan parsed"
-          - step: "Verify all fields extracted correctly"
-            command: "Check task fields"
-            expected: "All fields populated"
-
-        automated_tests:
-          command: "go test ./internal/parser/ -run TestYAML -v"
-          expected_output: |
-            === RUN   TestParseYAMLPlan
-            --- PASS: TestParseYAMLPlan (0.00s)
-            PASS
-
-        success_criteria:
-          - "YAML parsing works"
-          - "All fields extracted"
-          - "Prompt built correctly"
-          - "Tests pass"
-
-      commit:
-        type: "feat"
-        message: "implement YAML plan parser"
-        body: |
-          - Parse /doc-yaml format with structured schema
-          - Extract tasks from plan.tasks array
-          - Build comprehensive prompts from description/test/implementation sections
-          - Support optional conductor configuration block
-
-        files:
-          - "internal/parser/yaml.go"
-          - "internal/parser/yaml_test.go"
-          - "internal/parser/testdata/sample-plan.yaml"
-
-    - task_number: 6
-      name: "Implement Plan Parser Interface and Auto-Detection"
-      files:
-        - "internal/parser/parser.go"
-        - "internal/parser/parser_test.go"
-      depends_on: [4, 5]
-      estimated_time: "30m"
-      actual_time: "30m"
-      status: "completed"
-      completed_date: "2025-11-08"
-      git_commit: "5d6bd14"
-      qa_status: "GREEN"
-      test_coverage: "68.2%"
-      tests_passing: "25/25"
-      quality_score: "95/100"
-
-      description: |
-        Unified Parser interface that auto-detects plan format (Markdown vs YAML) based on file extension or content, returning parsed models.Plan.
-
-      test_first:
-        test_file: "internal/parser/parser_test.go"
-
-        structure:
-          - "TestAutoDetectMarkdown - verify .md extension triggers markdown parser"
-          - "TestAutoDetectYAML - verify .yaml/.yml extension triggers YAML parser"
-          - "TestParseFromFile - integration test for file reading and parsing"
-
-        mocks: []
-
-        fixtures:
-          - "testdata/ files"
-
-        assertions:
-          - "Correct parser selected for .md files"
-          - "Correct parser selected for .yaml files"
-          - "ParseFile returns valid plan"
-
-        edge_cases:
-          - "Unknown file extensions"
-          - "Missing files"
-
-        example_skeleton: |
-          package parser
-
-          import (
-              "os"
-              "path/filepath"
-              "testing"
-          )
-
-          func TestAutoDetectFormat(t *testing.T) {
-              tests := []struct {
-                  filename string
-                  want     Format
-              }{
-                  {"plan.md", FormatMarkdown},
-                  {"plan.yaml", FormatYAML},
-                  {"plan.yml", FormatYAML},
-                  {"unknown.txt", FormatUnknown},
-              }
-
-              for _, tt := range tests {
-                  t.Run(tt.filename, func(t *testing.T) {
-                      got := DetectFormat(tt.filename)
-                      if got != tt.want {
-                          t.Errorf("DetectFormat(%s) = %v, want %v", tt.filename, got, tt.want)
-                      }
-                  })
-              }
-          }
-
-          func TestParseFromFile(t *testing.T) {
-              mdPath := filepath.Join("testdata", "sample-plan.md")
-              plan, err := ParseFile(mdPath)
-              if err != nil {
-                  t.Fatalf("ParseFile failed: %v", err)
-              }
-
-              if len(plan.Tasks) == 0 {
-                  t.Error("Expected tasks to be parsed")
-              }
-          }
-
-      implementation:
-        approach: |
-          Create Parser interface, implement auto-detection based on file extension, provide convenient ParseFile() function.
-
-        code_structure: |
-          // internal/parser/parser.go
-          package parser
-
-          import (
-              "fmt"
-              "io"
-              "os"
-              "path/filepath"
-              "strings"
-
-              "github.com/yourusername/conductor/internal/models"
-          )
-
-          type Format int
-
-          const (
-              FormatUnknown Format = iota
-              FormatMarkdown
-              FormatYAML
-          )
-
-          type Parser interface {
-              Parse(r io.Reader) (*models.Plan, error)
-          }
-
-          func DetectFormat(filename string) Format {
-              ext := strings.ToLower(filepath.Ext(filename))
-              switch ext {
-              case ".md", ".markdown":
-                  return FormatMarkdown
-              case ".yaml", ".yml":
-                  return FormatYAML
-              default:
-                  return FormatUnknown
-              }
-          }
-
-          func NewParser(format Format) (Parser, error) {
-              switch format {
-              case FormatMarkdown:
-                  return NewMarkdownParser(), nil
-              case FormatYAML:
-                  return NewYAMLParser(), nil
-              default:
-                  return nil, fmt.Errorf("unsupported format: %v", format)
-              }
-          }
-
-          func ParseFile(path string) (*models.Plan, error) {
-              format := DetectFormat(path)
-              if format == FormatUnknown {
-                  return nil, fmt.Errorf("unknown file format: %s", path)
-              }
-
-              parser, err := NewParser(format)
-              if err != nil {
-                  return nil, err
-              }
-
-              file, err := os.Open(path)
-              if err != nil {
-                  return nil, fmt.Errorf("failed to open file: %w", err)
-              }
-              defer file.Close()
-
-              plan, err := parser.Parse(file)
-              if err != nil {
-                  return nil, fmt.Errorf("failed to parse plan: %w", err)
-              }
-
-              // Set plan file path for later updates
-              plan.FilePath = path
-
-              return plan, nil
-          }
-
-        key_points:
-          - point: "Use interface for polymorphism"
-            details: "Parser interface allows different implementations"
-          - point: "Auto-detection makes CLI usage simple"
-            details: "Users don't need to specify format"
-          - point: "Store original file path in plan"
-            details: "Needed for updating task status later"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Return error for unknown formats"
-            - "Return error if file doesn't exist"
-
-      verification:
-        manual_testing:
-          - step: "Call ParseFile with .md file"
-            expected: "Markdown parser used, tasks extracted"
-          - step: "Call ParseFile with .yaml file"
-            expected: "YAML parser used, tasks extracted"
-
-        automated_tests:
-          command: "go test ./internal/parser/ -v"
-          expected_output: |
-            PASS
-            ok      github.com/yourusername/conductor/internal/parser    0.003s
-
-        success_criteria:
-          - "Auto-detection works"
-          - "Both parsers accessible via interface"
-          - "Tests pass"
-
-      commit:
-        type: "feat"
-        message: "add unified parser interface with auto-detection"
-        body: |
-          - Create Parser interface for both formats
-          - Implement auto-detection based on file extension
-          - Add convenient ParseFile() function
-          - Store file path in plan for later updates
-
-        files:
-          - "internal/parser/parser.go"
-          - "internal/parser/parser_test.go"
-
-    - task_number: 7
-      name: "Implement Dependency Graph and Wave Calculator"
-      files:
-        - "internal/executor/graph.go"
-        - "internal/executor/graph_test.go"
-      depends_on: [3]
-      estimated_time: "1.5h"
-      actual_time: "1.5h"
-      status: "completed"
-      completed_at: "2025-11-08"
-      git_commit: "3b2db76"
-      test_coverage: "94.4%"
-      tests_passing: "31/31"
-      qa_status: "GREEN"
-
-      description: |
-        Build dependency graph from tasks, detect cycles, calculate execution waves using topological sort (Kahn's algorithm).
-
-      test_first:
-        test_file: "internal/executor/graph_test.go"
-
-        structure:
-          - "TestBuildGraph - verify graph construction from tasks"
-          - "TestDetectCycle - detect circular dependencies"
-          - "TestCalculateWaves - calculate execution waves from DAG"
-          - "TestTopologicalSort - verify Kahn's algorithm implementation"
-          - "TestIndependentTasks - tasks with no deps go in Wave 1"
-
-        mocks: []
-
-        fixtures: []
-
-        assertions:
-          - "Graph built correctly from tasks"
-          - "Cycles detected"
-          - "Waves calculated correctly"
-          - "Independent tasks in first wave"
-
-        edge_cases:
-          - "No dependencies"
-          - "Complex dependency chains"
-          - "Self-referencing tasks"
-
-        example_skeleton: |
-          package executor
-
-          import (
-              "testing"
-
-              "github.com/yourusername/conductor/internal/models"
-          )
-
-          func TestDetectCycle(t *testing.T) {
-              tests := []struct {
-                  name      string
-                  tasks     []models.Task
-                  wantCycle bool
-              }{
-                  {
-                      name: "no cycle",
-                      tasks: []models.Task{
-                          {Number: 1, DependsOn: []int{}},
-                          {Number: 2, DependsOn: []int{1}},
-                      },
-                      wantCycle: false,
-                  },
-                  {
-                      name: "simple cycle",
-                      tasks: []models.Task{
-                          {Number: 1, DependsOn: []int{2}},
-                          {Number: 2, DependsOn: []int{1}},
-                      },
-                      wantCycle: true,
-                  },
-                  {
-                      name: "self reference",
-                      tasks: []models.Task{
-                          {Number: 1, DependsOn: []int{1}},
-                      },
-                      wantCycle: true,
-                  },
-              }
-
-              for _, tt := range tests {
-                  t.Run(tt.name, func(t *testing.T) {
-                      graph := BuildDependencyGraph(tt.tasks)
-                      hasCycle := graph.HasCycle()
-                      if hasCycle != tt.wantCycle {
-                          t.Errorf("HasCycle() = %v, want %v", hasCycle, tt.wantCycle)
-                      }
-                  })
-              }
-          }
-
-          func TestCalculateWaves(t *testing.T) {
-              tasks := []models.Task{
-                  {Number: 1, Name: "Task 1", DependsOn: []int{}},
-                  {Number: 2, Name: "Task 2", DependsOn: []int{1}},
-                  {Number: 3, Name: "Task 3", DependsOn: []int{1}},
-                  {Number: 4, Name: "Task 4", DependsOn: []int{2, 3}},
-              }
-
-              waves, err := CalculateWaves(tasks)
-              if err != nil {
-                  t.Fatalf("CalculateWaves failed: %v", err)
-              }
-
-              // Expected: Wave 1: [1], Wave 2: [2,3], Wave 3: [4]
-              if len(waves) != 3 {
-                  t.Errorf("Expected 3 waves, got %d", len(waves))
-              }
-
-              if len(waves[0].TaskNumbers) != 1 || waves[0].TaskNumbers[0] != 1 {
-                  t.Errorf("Wave 1 should contain task 1")
-              }
-
-              if len(waves[1].TaskNumbers) != 2 {
-                  t.Errorf("Wave 2 should contain 2 tasks")
-              }
-          }
-
-      implementation:
-        approach: |
-          Build adjacency list representation of task dependencies, implement DFS for cycle detection, use Kahn's algorithm for topological sort and wave grouping.
-
-        code_structure: |
-          // internal/executor/graph.go
-          package executor
-
-          import (
-              "fmt"
-
-              "github.com/yourusername/conductor/internal/models"
-          )
-
-          type DependencyGraph struct {
-              Tasks    map[int]*models.Task
-              Edges    map[int][]int // task -> dependencies
-              InDegree map[int]int   // task -> number of dependencies
-          }
-
-          func BuildDependencyGraph(tasks []models.Task) *DependencyGraph {
-              g := &DependencyGraph{
-                  Tasks:    make(map[int]*models.Task),
-                  Edges:    make(map[int][]int),
-                  InDegree: make(map[int]int),
-              }
-
-              // Build task map and initialize in-degree
-              for i := range tasks {
-                  g.Tasks[tasks[i].Number] = &tasks[i]
-                  g.InDegree[tasks[i].Number] = 0
-              }
-
-              // Build edges and calculate in-degree
-              for _, task := range tasks {
-                  for _, dep := range task.DependsOn {
-                      g.Edges[dep] = append(g.Edges[dep], task.Number)
-                      g.InDegree[task.Number]++
-                  }
-              }
-
-              return g
-          }
-
-          func (g *DependencyGraph) HasCycle() bool {
-              // Use DFS with color marking
-              white := 0 // not visited
-              gray := 1  // visiting
-              black := 2 // visited
-
-              colors := make(map[int]int)
-              for taskNum := range g.Tasks {
-                  colors[taskNum] = white
-              }
-
-              var dfs func(int) bool
-              dfs = func(node int) bool {
-                  colors[node] = gray
-
-                  for _, neighbor := range g.Edges[node] {
-                      if colors[neighbor] == gray {
-                          return true // back edge = cycle
-                      }
-                      if colors[neighbor] == white && dfs(neighbor) {
-                          return true
-                      }
-                  }
-
-                  colors[node] = black
-                  return false
-              }
-
-              for taskNum := range g.Tasks {
-                  if colors[taskNum] == white {
-                      if dfs(taskNum) {
-                          return true
-                      }
-                  }
-              }
-
-              return false
-          }
-
-          func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
-              graph := BuildDependencyGraph(tasks)
-
-              // Check for cycles first
-              if graph.HasCycle() {
-                  return nil, fmt.Errorf("circular dependency detected")
-              }
-
-              // Kahn's algorithm for topological sort + wave grouping
-              var waves []models.Wave
-              inDegree := make(map[int]int)
-              for k, v := range graph.InDegree {
-                  inDegree[k] = v
-              }
-
-              for len(inDegree) > 0 {
-                  // Find all tasks with in-degree 0 (current wave)
-                  var currentWave []int
-                  for taskNum, degree := range inDegree {
-                      if degree == 0 {
-                          currentWave = append(currentWave, taskNum)
-                      }
-                  }
-
-                  if len(currentWave) == 0 {
-                      return nil, fmt.Errorf("graph error: no tasks with zero in-degree")
-                  }
-
-                  // Create wave
-                  wave := models.Wave{
-                      Name:           fmt.Sprintf("Wave %d", len(waves)+1),
-                      TaskNumbers:    currentWave,
-                      MaxConcurrency: 10, // default
-                  }
-                  waves = append(waves, wave)
-
-                  // Remove current wave tasks and update in-degrees
-                  for _, taskNum := range currentWave {
-                      delete(inDegree, taskNum)
-
-                      // Decrease in-degree for dependent tasks
-                      for _, dependent := range graph.Edges[taskNum] {
-                          if _, exists := inDegree[dependent]; exists {
-                              inDegree[dependent]--
-                          }
-                      }
-                  }
-              }
-
-              return waves, nil
-          }
-
-        key_points:
-          - point: "Use DFS with color marking for cycle detection"
-            details: "White-gray-black algorithm"
-          - point: "Kahn's algorithm groups independent tasks"
-            details: "Tasks with zero in-degree can run in parallel"
-          - point: "Tasks with zero dependencies go in Wave 1"
-            details: "These can start immediately"
-          - point: "Each wave's tasks can run in parallel"
-            details: "Within a wave, no dependencies exist"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Return error if circular dependency detected"
-            - "Return error if graph is invalid"
-
-      verification:
-        manual_testing:
-          - step: "Create sample task lists with dependencies"
-            expected: "Graph built correctly"
-          - step: "Call CalculateWaves"
-            expected: "Waves calculated correctly"
-
-        automated_tests:
-          command: "go test ./internal/executor/ -run TestGraph -v"
-          expected_output: |
-            === RUN   TestDetectCycle
-            --- PASS: TestDetectCycle (0.00s)
-            === RUN   TestCalculateWaves
-            --- PASS: TestCalculateWaves (0.00s)
-            PASS
-
-        success_criteria:
-          - "Cycle detection works"
-          - "Wave calculation correct"
-          - "Tests pass"
-
-      commit:
-        type: "feat"
-        message: "implement dependency graph and wave calculator"
-        body: |
-          - Build adjacency list dependency graph from tasks
-          - Implement DFS-based cycle detection
-          - Implement Kahn's algorithm for topological sort
-          - Calculate execution waves grouping independent tasks
-
-        files:
-          - "internal/executor/graph.go"
-          - "internal/executor/graph_test.go"
-
-    - task_number: 7.5
-      name: "Implement Static File Overlap Validation"
-      files:
-        - "internal/executor/graph.go"
-        - "internal/executor/graph_test.go"
-      depends_on: [7]
-      estimated_time: "1h"
-      actual_time: "1.5h"
-      status: "completed"
-      completed_date: "2025-11-09"
-
-      description: |
-        Add validation to detect when multiple tasks in the same wave attempt to modify the same files concurrently.
-        This implements Phase 1 of the git worktree deliberation recommendations: fail-fast validation without worktree complexity.
-
-      test_first:
-        test_file: "internal/executor/graph_test.go"
-
-        structure:
-          - "TestValidateFileOverlaps - comprehensive table-driven tests"
-          - "  - No overlaps with different files"
-          - "  - Overlap in same wave (should error)"
-          - "  - Same file in different waves (should pass)"
-          - "  - Path normalization (./config.go == config.go)"
-          - "  - Empty Files field handling (warning + skip)"
-          - "  - Partial overlaps"
-          - "  - Multiple tasks with single overlap pair"
-
-        mocks: []
-
-        fixtures: []
-
-        assertions:
-          - "7-8 table-driven test scenarios"
-          - "Error messages include task names, numbers, wave name"
-          - "Path normalization works correctly"
-          - "Warning output for empty Files"
-
-      implementation:
-        approach: |
-          Add standalone package-level function ValidateFileOverlaps() matching the existing ValidateTasks() pattern.
-          Integrate into CalculateWaves() after cycle detection. Use filepath.Clean() for path normalization.
-
-        code_structure: |
-          // internal/executor/graph.go
-
-          import (
-              "fmt"
-              "os"
-              "path/filepath"
-              "github.com/harrison/conductor/internal/models"
-          )
-
-          // ValidateFileOverlaps checks that tasks within the same wave do not modify the same files.
-          // Tasks in different waves (sequential execution) are allowed to modify the same files.
-          // If any task has empty Files, validation is skipped for that wave with a warning.
-          func ValidateFileOverlaps(waves []models.Wave, tasks map[int]*models.Task) error {
-              for _, wave := range waves {
-                  // Check if any task has empty Files - if so, skip wave validation
-                  hasEmptyFiles := false
-                  for _, taskNum := range wave.TaskNumbers {
-                      if task := tasks[taskNum]; task != nil && len(task.Files) == 0 {
-                          fmt.Fprintf(os.Stderr, "Warning: wave '%s' skipped file overlap validation (task %d has no Files specified)\n", wave.Name, taskNum)
-                          hasEmptyFiles = true
-                          break
-                      }
-                  }
-                  if hasEmptyFiles {
-                      continue
-                  }
-
-                  // Build file ownership map with normalized paths
-                  fileOwners := make(map[string][]int)
-                  for _, taskNum := range wave.TaskNumbers {
-                      task := tasks[taskNum]
-                      for _, file := range task.Files {
-                          normalized := filepath.Clean(file)
-                          fileOwners[normalized] = append(fileOwners[normalized], taskNum)
-                      }
-                  }
-
-                  // Check for conflicts
-                  for file, owners := range fileOwners {
-                      if len(owners) > 1 {
-                          task1 := tasks[owners[0]]
-                          task2 := tasks[owners[1]]
-                          return fmt.Errorf("wave '%s': file '%s' modified by multiple tasks - %s (task %d) and %s (task %d). Add dependency between tasks or ensure they modify different files",
-                              wave.Name, file, task1.Name, task1.Number, task2.Name, task2.Number)
-                      }
-                  }
-              }
-              return nil
-          }
-
-        key_points:
-          - point: "Standalone function matches ValidateTasks() pattern"
-            details: ""
-            reference: ""
-          - point: "Use filepath.Clean() for OS-aware path normalization"
-            details: ""
-            reference: ""
-          - point: "Warnings to stderr match agent/discovery.go:69 pattern"
-            details: ""
-            reference: ""
-          - point: "Fail-fast with detailed single error"
-            details: ""
-            reference: ""
-          - point: "Conservative handling: skip validation if ANY task has empty Files"
-            details: ""
-            reference: ""
-
-        integration:
-          imports:
-            - "path/filepath"
-            - "os"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Called from CalculateWaves() after wave calculation"
-            - "Uses models.Wave, models.Task"
-
-      verification:
-        manual_steps:
-          - "Create plan with file overlaps in same wave"
-          - "Run CalculateWaves() and verify error message"
-          - "Test with normalized paths (./config.go vs config.go)"
-          - "Verify sequential wave reuse works correctly"
-
-        automated_tests:
-          command: "go test ./internal/executor/ -run TestValidateFileOverlaps -v"
-          expected_output: "PASS"
-
-        success_criteria:
-          - "All test scenarios pass"
-          - "Error messages are clear and actionable"
-          - "Path normalization works correctly"
-          - "Empty Files handling produces warnings"
-          - "Coverage target: 90%+"
-
-      commit:
-        type: "feat"
-        message: "add static file overlap validation for parallel tasks"
-        body: |
-          - Implement ValidateFileOverlaps() to detect conflicts within waves
-          - Use filepath.Clean() for OS-aware path normalization
-          - Skip validation with warning if tasks have empty Files
-          - Fail-fast with detailed error including task names and remediation hints
-          - Integrate into CalculateWaves() after cycle detection
-          - Add comprehensive table-driven test coverage
-
-          Implements Phase 1 recommendation from git worktree deliberation
-
-        files:
-          - "internal/executor/graph.go"
-          - "internal/executor/graph_test.go"
-
-    - task_number: 8
-      name: "Implement Agent Discovery"
-      files:
-        - "internal/agent/discovery.go"
-        - "internal/agent/discovery_test.go"
-        - "internal/agent/testdata/sample-agent.md"
-      depends_on: [3]
-      estimated_time: "45m"
-      status: "completed"
-      completed: "2025-11-08"
-      git_commit: "231ac7a"
-      qa_status: "YELLOW (91.3% test coverage, 10/10 tests passing, 1 spec clarification needed)"
-      actual_time: "45m"
-
-      description: |
-        Implement agent discovery registry that scans ~/.claude/agents/ for available agents, parse agent metadata files, and provide fast agent lookup.
-
-        Uses directory whitelisting (Strategy B) to reduce false warnings from non-agent files:
-        - Scans root-level .md files (agent definitions)
-        - Scans numbered subdirectories: 01-*, 02-*, ..., 10-* (categorized agents)
-        - Skips special directories: examples/, transcripts/, logs/ (documentation/metadata)
-        - Skips non-agent files: README.md, *-framework.md (category documentation)
-
-      test_first:
-        test_file: "internal/agent/discovery_test.go"
-
-        structure:
-          - "TestScanAgentsDirectory - verify directory scanning"
-          - "TestParseAgentFile - parse .md agent definition"
-          - "TestAgentExists - check if agent name exists"
-          - "TestFallbackToGeneralPurpose - verify fallback logic"
-
-        mocks: []
-
-        fixtures:
-          - "testdata/agents/"
-
-        assertions:
-          - "Agents discovered from directory"
-          - "Agent metadata parsed correctly"
-          - "Agent lookup works"
-
-        edge_cases:
-          - "Missing agents directory"
-          - "Invalid agent files"
-          - "Empty directory"
-
-        example_skeleton: |
-          package agent
-
-          import (
-              "os"
-              "path/filepath"
-              "testing"
-          )
-
-          func TestDiscoverAgents(t *testing.T) {
-              // Create temp directory with test agent files
-              tmpDir := t.TempDir()
-
-              // Write sample agent file
-              agentContent := `---
-          name: test-agent
-          description: Test agent
-          tools: Read, Write
-          ---
-          Test agent prompt
-          `
-              err := os.WriteFile(filepath.Join(tmpDir, "test-agent.md"), []byte(agentContent), 0644)
-              if err != nil {
-                  t.Fatal(err)
-              }
-
-              registry := NewRegistry(tmpDir)
-              agents, err := registry.Discover()
-              if err != nil {
-                  t.Fatalf("Discover failed: %v", err)
-              }
-
-              if len(agents) != 1 {
-                  t.Errorf("Expected 1 agent, got %d", len(agents))
-              }
-
-              if _, exists := agents["test-agent"]; !exists {
-                  t.Error("Expected test-agent to exist")
-              }
-          }
-
-          func TestAgentExists(t *testing.T) {
-              registry := NewRegistry("testdata/agents")
-              registry.Discover()
-
-              if !registry.Exists("swiftdev") {
-                  t.Error("swiftdev agent should exist")
-              }
-
-              if registry.Exists("nonexistent-agent") {
-                  t.Error("nonexistent-agent should not exist")
-              }
-          }
-
-      implementation:
-        approach: |
-          Walk ~/.claude/agents/ directory, parse .md files with YAML frontmatter, extract agent name and metadata, store in registry map.
-
-        code_structure: |
-          // internal/agent/discovery.go
-          package agent
-
-          import (
-              "fmt"
-              "os"
-              "path/filepath"
-              "strings"
-
-              "gopkg.in/yaml.v3"
-          )
-
-          type Agent struct {
-              Name        string
-              Description string
-              Tools       []string
-              FilePath    string
-          }
-
-          type Registry struct {
-              AgentsDir string
-              agents    map[string]*Agent
-          }
-
-          func NewRegistry(agentsDir string) *Registry {
-              if agentsDir == "" {
-                  // Default to ~/.claude/agents
-                  home, _ := os.UserHomeDir()
-                  agentsDir = filepath.Join(home, ".claude", "agents")
-              }
-
-              return &Registry{
-                  AgentsDir: agentsDir,
-                  agents:    make(map[string]*Agent),
-              }
-          }
-
-          func (r *Registry) Discover() (map[string]*Agent, error) {
-              // Check if directory exists
-              if _, err := os.Stat(r.AgentsDir); os.IsNotExist(err) {
-                  // No agents directory - return empty map, not an error
-                  return r.agents, nil
-              }
-
-              // Walk directory
-              err := filepath.Walk(r.AgentsDir, func(path string, info os.FileInfo, err error) error {
-                  if err != nil {
-                      return err
-                  }
-
-                  if info.IsDir() {
-                      return nil
-                  }
-
-                  // Only process .md files
-                  if !strings.HasSuffix(path, ".md") {
-                      return nil
-                  }
-
-                  agent, err := parseAgentFile(path)
-                  if err != nil {
-                      // Log warning but continue
-                      fmt.Fprintf(os.Stderr, "Warning: failed to parse %s: %v\n", path, err)
-                      return nil
-                  }
-
-                  r.agents[agent.Name] = agent
-                  return nil
-              })
-
-              return r.agents, err
-          }
-
-          func (r *Registry) Exists(agentName string) bool {
-              _, exists := r.agents[agentName]
-              return exists
-          }
-
-          func (r *Registry) Get(agentName string) (*Agent, bool) {
-              agent, exists := r.agents[agentName]
-              return agent, exists
-          }
-
-        key_points:
-          - point: "Handle missing agents directory gracefully"
-            details: "Return empty map, not error"
-          - point: "Parse YAML frontmatter from .md files"
-            details: "Agent metadata in frontmatter"
-          - point: "Store agents in map for fast lookup"
-            details: "O(1) lookup by name"
-          - point: "Default to ~/.claude/agents if not specified"
-            details: "Standard location"
-
-        integration:
-          imports:
-            - "gopkg.in/yaml.v3"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Log warnings for unparseable files"
-            - "Continue on individual file errors"
-
-      verification:
-        manual_testing:
-          - step: "Point to ~/.claude/agents directory"
-            expected: "Agents discovered"
-          - step: "Call Discover"
-            expected: "All agents found and parsed"
-
-        automated_tests:
-          command: "go test ./internal/agent/ -v"
-          expected_output: |
-            === RUN   TestDiscoverAgents
-            --- PASS: TestDiscoverAgents (0.00s)
-            PASS
-
-        success_criteria:
-          - "Directory scanning works"
-          - "Agent parsing works"
-          - "Lookup works"
-          - "Tests pass"
-
-      commit:
-        type: "feat"
-        message: "implement agent discovery"
-        body: |
-          - Scan ~/.claude/agents/ directory for agent definitions
-          - Parse agent metadata from YAML frontmatter
-          - Store agents in registry map for lookup
-          - Handle missing directory gracefully
-
-        files:
-          - "internal/agent/discovery.go"
-          - "internal/agent/discovery_test.go"
-          - "internal/agent/testdata/sample-agent.md"
-
-    - task_number: 9
-      name: "Implement Claude CLI Agent Invocation"
-      files:
-        - "internal/agent/invoker.go"
-        - "internal/agent/invoker_test.go"
-      depends_on: [3, 8]
-      estimated_time: "1h"
-      status: "completed"
-      completed_at: "2025-11-08"
-      git_commits:
-        - "fc718f8"
-        - "1c2dd6c"
-        - "365a24f"
-      qa_status: "GREEN"
-      coverage: "94.5%"
-      function_coverage: "100%"
-      tests_passing: "31/31"
-
-      description: |
-        Build and execute claude CLI commands with proper flags (--settings, -p, --output-format json), capture output, handle timeouts.
-
-      test_first:
-        test_file: "internal/agent/invoker_test.go"
-
-        structure:
-          - "TestBuildCommand - verify command construction"
-          - "TestInvokeAgent - test agent invocation (mock claude CLI)"
-          - "TestTimeout - verify timeout handling"
-          - "TestOutputCapture - verify stdout/stderr capture"
-
-        mocks:
-          - "exec.Command (for testing)"
-
-        fixtures: []
-
-        assertions:
-          - "Command built with correct flags"
-          - "Timeout handled correctly"
-          - "Output captured"
-
-        edge_cases:
-          - "Command timeout"
-          - "Non-zero exit code"
-          - "Missing claude binary"
-
-        example_skeleton: |
-          package agent
-
-          import (
-              "context"
-              "testing"
-              "time"
-
-              "github.com/yourusername/conductor/internal/models"
-          )
-
-          func TestBuildCommand(t *testing.T) {
-              task := models.Task{
-                  Number: 1,
-                  Name:   "Test Task",
-                  Prompt: "Do something",
-                  Agent:  "swiftdev",
-                  EstimatedTime: 30 * time.Minute,
-              }
-
-              invoker := NewInvoker()
-              args := invoker.BuildCommandArgs(task)
-
-              // Verify required flags
-              hasP := false
-              hasSettings := false
-
-              for i, arg := range args {
-                  if arg == "-p" {
-                      hasP = true
-                  }
-                  if arg == "--settings" && i+1 < len(args) {
-                      if strings.Contains(args[i+1], "disableAllHooks") {
-                          hasSettings = true
-                      }
-                  }
-              }
-
-              if !hasP {
-                  t.Error("Command should have -p flag")
-              }
-              if !hasSettings {
-                  t.Error("Command should have --settings with disableAllHooks")
-              }
-          }
-
-      implementation:
-        approach: |
-          Use os/exec to spawn claude CLI subprocess, construct args with required flags, use context.WithTimeout for timeout handling, capture stdout/stderr.
-
-        code_structure: |
-          // internal/agent/invoker.go
-          package agent
-
-          import (
-              "context"
-              "encoding/json"
-              "fmt"
-              "os/exec"
-              "strings"
-              "time"
-
-              "github.com/yourusername/conductor/internal/models"
-          )
-
-          type Invoker struct {
-              ClaudePath string
-              Registry   *Registry
-          }
-
-          type InvocationResult struct {
-              Output   string
-              ExitCode int
-              Duration time.Duration
-              Error    error
-          }
-
-          func NewInvoker() *Invoker {
-              return &Invoker{
-                  ClaudePath: "claude", // assume in PATH
-              }
-          }
-
-          func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationResult, error) {
-              startTime := time.Now()
-
-              // Build command args
-              args := inv.BuildCommandArgs(task)
-
-              // Create command with context (for timeout)
-              cmd := exec.CommandContext(ctx, inv.ClaudePath, args...)
-
-              // Capture output
-              output, err := cmd.CombinedOutput()
-
-              result := &InvocationResult{
-                  Output:   string(output),
-                  Duration: time.Since(startTime),
-              }
-
-              if err != nil {
-                  if exitErr, ok := err.(*exec.ExitError); ok {
-                      result.ExitCode = exitErr.ExitCode()
-                  } else {
-                      result.Error = err
-                  }
-              }
-
-              return result, nil
-          }
-
-          func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
-              args := []string{
-                  "-p", // Print mode (non-interactive)
-              }
-
-              // Build prompt with agent reference if specified
-              prompt := task.Prompt
-              if task.Agent != "" && inv.Registry != nil && inv.Registry.Exists(task.Agent) {
-                  // Reference agent in prompt
-                  prompt = fmt.Sprintf("use the %s subagent to: %s", task.Agent, task.Prompt)
-              }
-
-              args = append(args, prompt)
-
-              // Disable hooks for automation
-              args = append(args, "--settings", `{"disableAllHooks": true}`)
-
-              // JSON output for easier parsing
-              args = append(args, "--output-format", "json")
-
-              return args
-          }
-
-          func (inv *Invoker) InvokeWithTimeout(task models.Task, timeout time.Duration) (*InvocationResult, error) {
-              ctx, cancel := context.WithTimeout(context.Background(), timeout)
-              defer cancel()
-
-              return inv.Invoke(ctx, task)
-          }
-
-        key_points:
-          - point: "Always use -p flag for non-interactive mode"
-            details: "Required for automation"
-          - point: "Always use --settings with disableAllHooks"
-            details: "Prevents interactive prompts"
-          - point: "Use context for timeout propagation"
-            details: "Graceful timeout handling"
-          - point: "Capture both stdout and stderr"
-            details: "Get all output"
-          - point: "Parse JSON output if available"
-            details: "Structured output format"
-
-        integration:
-          imports:
-            - "os/exec"
-            - "context"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Handle command timeout"
-            - "Handle non-zero exit codes"
-            - "Handle missing binary"
-
-      verification:
-        manual_testing:
-          - step: "Create test task"
-            expected: "Task created"
-          - step: "Call Invoke (requires claude in PATH)"
-            expected: "Command executed"
-
-        automated_tests:
-          command: "go test ./internal/agent/ -run TestBuild -v"
-          expected_output: |
-            === RUN   TestBuildCommand
-            --- PASS: TestBuildCommand (0.00s)
-            PASS
-
-        success_criteria:
-          - "Command building works"
-          - "Flags correct"
-          - "Tests pass"
-
-      commit:
-        type: "feat"
-        message: "implement Claude CLI agent invocation"
-        body: |
-          - Build claude CLI commands with required flags
-          - Add context-based timeout handling
-          - Capture stdout/stderr output
-          - Parse JSON output format
-          - Support agent-specific prompt construction
-
-        files:
-          - "internal/agent/invoker.go"
-          - "internal/agent/invoker_test.go"
-
-    - task_number: 10
-      name: "Implement Quality Control Review Agent"
-      files:
-        - "internal/executor/review.go"
-        - "internal/executor/review_test.go"
-      depends_on: [9]
-      estimated_time: "1h"
-      status: "pending"
-
-      description: |
-        Build review prompts with task output, parse GREEN/RED responses, retry logic with attempt tracking.
-        Quality control ensures tasks are completed correctly before proceeding.
-
-      test_first:
-        test_file: "internal/executor/review_test.go"
-        structure:
-          - "Tests to be defined during implementation"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          // To be defined during implementation
-
-      implementation:
-        approach: |
-          Build review prompts that include task output, invoke review agent, parse GREEN/RED status from response,
-          implement retry logic for RED responses up to configured max attempts.
-
-        code_structure: |
-          // To be defined during implementation
-
-        key_points:
-          - point: "Build review prompts with task output"
-            details: "Include original task and agent output"
-          - point: "Parse GREEN/RED responses"
-            details: "Extract status from review agent output"
-          - point: "Retry logic with attempt tracking"
-            details: "Retry RED tasks up to max attempts"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
-
-      verification:
-        manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            Tests passing
-
-        success_criteria:
-          - "Review prompts built correctly"
-          - "GREEN/RED parsing works"
-          - "Retry logic implemented"
-
-      commit:
-        type: "feat"
-        message: "implement quality control review agent"
-        body: ""
-        files:
-          - "internal/executor/review.go"
-          - "internal/executor/review_test.go"
-
-    - task_number: 11
-      name: "Implement File Locking for Plan Updates"
-      files:
-        - "internal/updater/lock.go"
-        - "internal/updater/lock_test.go"
-      depends_on: [3]
-      estimated_time: "45m"
-      status: "pending"
-
-      description: |
-        Use github.com/gofrs/flock for file locking, atomic file writes with temp file + rename,
-        update checkboxes or YAML status fields.
-
-      test_first:
-        test_file: "internal/updater/lock_test.go"
-        structure:
-          - "Tests to be defined during implementation"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          // To be defined during implementation
-
-      implementation:
-        approach: |
-          Use flock library for cross-process file locking, write to temp file first,
-          then atomically rename to target file, ensuring concurrent updates are safe.
-
-        code_structure: |
-          // To be defined during implementation
-
-        key_points:
-          - point: "Use github.com/gofrs/flock"
-            details: "Cross-process file locking"
-          - point: "Atomic file writes with temp file + rename"
-            details: "Prevents partial writes"
-          - point: "Update checkboxes or YAML status fields"
-            details: "Modify plan file safely"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
-
-      verification:
-        manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            Tests passing
-
-        success_criteria:
-          - "File locking works"
-          - "Atomic writes implemented"
-          - "Concurrent updates safe"
-
-      commit:
-        type: "feat"
-        message: "implement file locking for plan updates"
-        body: ""
-        files:
-          - "internal/updater/lock.go"
-          - "internal/updater/lock_test.go"
-
-    - task_number: 12
-      name: "Implement Plan Updater"
-      files:
-        - "internal/updater/updater.go"
-        - "internal/updater/updater_test.go"
-      depends_on: [11]
-      estimated_time: "1h"
-      status: "completed"
-      completed_date: "2025-11-08"
-      git_commit: "pending"
-      qa_status: "GREEN"
-      qa_details: "17 unit tests covering concurrency, malformed plans, permissions, unicode"
-
-      description: |
-        Production-ready plan updater that atomically updates Markdown checkboxes and YAML status
-        fields. Provides typed errors, monitoring hooks, timeout-aware locking, and metrics emission
-        aligned with Task 11's file locking capabilities.
-
-      test_first:
-        test_file: "internal/updater/updater_test.go"
-        structure:
-          - "TestUpdateMarkdownTaskStatusCompleted"
-          - "TestUpdateYAMLTaskStatusCompleted"
-          - "TestConcurrentMarkdownUpdates"
-          - "TestConcurrentYAMLUpdates"
-          - "TestUpdateTaskStatusMonitorReceivesMetrics"
-          - "TestUpdateTaskStatusTimeout"
-        mocks: []
-        fixtures:
-          - "Temporary Markdown/YAML plan files"
-        assertions:
-          - "Markdown checkboxes toggle correctly"
-          - "YAML status and completion dates update accurately"
-          - "Typed errors returned for unsupported formats and missing tasks"
-          - "Monitor receives success and error metrics"
-        edge_cases:
-          - "Permission denied writes"
-          - "Malformed YAML"
-          - "Unicode content"
-        example_skeleton: |
-          err := UpdateTaskStatus(path, taskNumber, status, completedAt,
-            WithTimeout(500*time.Millisecond),
-            WithMonitor(func(m UpdateMetrics) { log.Println(m) }))
-
-      implementation:
-        approach: |
-          Detect plan format, acquire a timeout-aware file lock, mutate plan content, emit update
-          metrics, and persist via atomic write. Provide functional options for monitoring and
-          leverage typed errors for clearer diagnostics.
-
-        code_structure: |
-          internal/updater/
-            updater.go      # UpdateTaskStatus with options, metrics, typed errors
-            updater_test.go # Extensive coverage: concurrency, malformed input, permissions
-
-        key_points:
-          - point: "Typed errors for common failure modes"
-            details: "ErrUnsupportedFormat, ErrTaskNotFound, ErrInvalidPlan"
-          - point: "Functional options"
-            details: "WithTimeout and WithMonitor for production observability"
-          - point: "Metrics emission"
-            details: "Records bytes read/written, duration, status transitions"
-          - point: "Comprehensive tests"
-            details: "17 scenarios covering edge cases and concurrent updates"
-
-        integration:
-          imports:
-            - "github.com/harrison/conductor/internal/filelock"
-            - "github.com/harrison/conductor/internal/parser"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Propagate typed errors with context"
-            - "Monitor callback invoked with final error state"
-
-      verification:
-        manual_testing:
-          - step: "Simulate concurrent updates"
-            expected: "No race conditions; final status consistent"
-          - step: "Exercise monitor callback"
-            expected: "Metrics emitted with duration and status changes"
-
-        automated_tests:
-          command: "go test ./internal/updater -v"
-          expected_output: |
-            ok   github.com/harrison/conductor/internal/updater  0.6s
-
-        success_criteria:
-          - "Markdown and YAML updates verified"
-          - "Typed errors surfaced for invalid inputs"
-          - "Monitor/timeout options validated"
-          - "All 17 unit tests passing"
-
-      commit:
-        type: "feat"
-        message: "implement plan updater with monitoring and typed errors"
-        body: |
-          - Add documented UpdateTaskStatus with timeout/monitor options
-          - Emit metrics and typed errors for updater operations
-          - Expand test coverage for concurrency, malformed input, permissions, unicode
-          - Integrate with filelock timeout and metrics support
-        files:
-          - "internal/updater/updater.go"
-          - "internal/updater/updater_test.go"
-
-    - task_number: 13
-      name: "Implement Wave Executor"
-      files:
-        - "internal/executor/wave.go"
-        - "internal/executor/wave_test.go"
-      depends_on: [7]
-      estimated_time: "2h"
-      actual_time: "2h"
-      status: "completed"
-      completed_at: "2025-11-08"
-      git_commit: "pending"
-      qa_status: "GREEN"
-      test_coverage: "Comprehensive"
-      quality_score: "92/100"
-      notes: "Excellent implementation with robust concurrency management and comprehensive testing."
-
-      description: |
-        Execute waves sequentially, spawn goroutines for parallel tasks within wave,
-        bounded concurrency with semaphore pattern, collect results via channels.
-
-      test_first:
-        test_file: "internal/executor/wave_test.go"
-        structure:
-          - "TestWaveExecutor_WavesExecuteSequentially - verify wave order"
-          - "TestWaveExecutor_RespectsMaxConcurrency - verify semaphore limits parallelism"
-          - "TestWaveExecutor_ContextCancellation - verify graceful shutdown"
-          - "TestWaveExecutor_ErrorsOnMissingTask - verify error handling"
-        mocks:
-          - "TaskExecutor interface mock for controlled testing"
-        fixtures: []
-        assertions:
-          - "Wave execution follows sequential order"
-          - "Concurrency limits are respected"
-          - "Context cancellation propagates correctly"
-          - "Missing tasks handled gracefully"
-        edge_cases:
-          - "Empty waves"
-          - "Zero concurrency limits"
-          - "Context cancellation"
-          - "Missing task references"
-        example_skeleton: |
-          func TestWaveExecutor_WavesExecuteSequentially(t *testing.T) {
-              plan := &models.Plan{
-                  Tasks: []models.Task{
-                      {Number: 1, Name: "Task 1", Prompt: "Do task 1"},
-                      {Number: 2, Name: "Task 2", Prompt: "Do task 2"},
-                      {Number: 3, Name: "Task 3", Prompt: "Do task 3"},
-                      {Number: 4, Name: "Task 4", Prompt: "Do task 4"},
-                  },
-                  Waves: []models.Wave{
-                      {Name: "Wave 1", TaskNumbers: []int{1, 2}, MaxConcurrency: 2},
-                      {Name: "Wave 2", TaskNumbers: []int{3, 4}, MaxConcurrency: 2},
-                  },
-              }
-              
-              mockExecutor := newSequentialMockExecutor()
-              waveExecutor := NewWaveExecutor(mockExecutor)
-              
-              results, err := waveExecutor.ExecutePlan(context.Background(), plan)
-              if err != nil {
-                  t.Fatalf("ExecutePlan returned error: %v", err)
-              }
-              
-              if len(results) != len(plan.Tasks) {
-                  t.Fatalf("expected %d results, got %d", len(plan.Tasks), len(results))
-              }
-          }
-
-      implementation:
-        approach: |
-          For each wave, spawn goroutines for tasks (up to max concurrency), use semaphore/channel
-          to limit concurrent execution, collect results via result channel, wait for wave completion
-          before starting next wave.
-
-        code_structure: |
-          type WaveExecutor struct {
-              taskExecutor TaskExecutor
-          }
-
-          func (w *WaveExecutor) ExecutePlan(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
-              // Validate inputs and build task map
-              // Execute waves sequentially
-              // Return aggregated results
-          }
-
-          func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMap map[int]models.Task) ([]models.TaskResult, error) {
-              // Create semaphore for bounded concurrency
-              semaphore := make(chan struct{}, maxConcurrency)
-              resultsCh := make(chan taskExecutionResult, taskCount)
-              
-              // Launch goroutines for each task
-              // Use sync.WaitGroup for coordination
-              // Collect results via channels
-          }
-
-        key_points:
-          - point: "Execute waves sequentially"
-            details: "Wait for wave to complete before next"
-          - point: "Spawn goroutines for parallel tasks within wave"
-            details: "Concurrent execution within wave"
-          - point: "Bounded concurrency with semaphore pattern"
-            details: "Limit max parallel tasks"
-          - point: "Collect results via channels"
-            details: "Goroutine-safe result collection"
-          - point: "Context cancellation propagation"
-            details: "Graceful shutdown support"
-          - point: "Comprehensive error handling"
-            details: "Nil checks, missing tasks, cancellation"
-
-        integration:
-          imports:
-            - "context"
-            - "errors"
-            - "fmt"
-            - "sync"
-          services_to_inject:
-            - "TaskExecutor interface implementation from Task 14"
-          config_values: []
-          error_handling:
-            - "Input validation (nil checks, missing tasks)"
-            - "Context cancellation propagation"
-            - "Early termination on first error"
-            - "Descriptive error messages"
-
-        implementation_quality:
-          architecture_excellence:
-            - "Clean interface-based design with dependency injection"
-            - "Proper concurrency control with semaphore pattern"
-            - "Sequential wave execution enforced"
-            - "Thread-safe result collection via channels"
-          
-          concurrency_safety:
-            - "sync.WaitGroup ensures proper goroutine coordination"
-            - "Buffered channels prevent blocking"
-            - "Context cancellation properly propagated"
-            - "Bounded parallelism prevents resource exhaustion"
-          
-          error_handling:
-            - "Comprehensive validation (nil checks, missing tasks)"
-            - "Context cancellation handled"
-            - "Early termination on first error"
-            - "Proper error propagation with descriptive messages"
-
-        critical_issues:
-          dependency_order_error:
-            issue: "Task 13 depends on Task 14, but Task 14 comes later numerically"
-            impact: "Circular dependency - Wave Executor uses TaskExecutor from Task 14"
-            resolution_options:
-              - "Complete Task 14 before Task 13 (recommended)"
-              - "Update Task 13 dependencies to [7, 12] instead of [7, 14]"
-
-      verification:
-        manual_testing:
-          - step: "Create plan with multiple waves and dependencies"
-            command: "Execute waves and verify sequential order"
-            expected: "Waves execute in proper sequence with correct task coordination"
-          - step: "Test concurrency limits with parallel task counting"
-            command: "Monitor concurrent task execution"
-            expected: "Max concurrent tasks never exceeds configured limit"
-          - step: "Test context cancellation during execution"
-            command: "Cancel context mid-execution"
-            expected: "Graceful shutdown with proper cleanup"
-          - step: "Test error handling with missing tasks"
-            command: "Execute wave with invalid task references"
-            expected: "Descriptive error returned, no deadlock"
-
-        automated_tests:
-          command: "go test ./internal/executor/ -run TestWave -v"
-          expected_output: |
-            === RUN   TestWaveExecutor_WavesExecuteSequentially
-            --- PASS: TestWaveExecutor_WavesExecuteSequentially (0.03s)
-            === RUN   TestWaveExecutor_RespectsMaxConcurrency
-            --- PASS: TestWaveExecutor_RespectsMaxConcurrency (0.02s)
-            === RUN   TestWaveExecutor_ContextCancellation
-            --- PASS: TestWaveExecutor_ContextCancellation (0.01s)
-            === RUN   TestWaveExecutor_ErrorsOnMissingTask
-            --- PASS: TestWaveExecutor_ErrorsOnMissingTask (0.00s)
-            PASS
-
-        success_criteria:
-          - "Wave execution sequential (✅)"
-          - "Tasks execute in parallel within wave (✅)"
-          - "Concurrency bounded correctly (✅)"
-          - "Context cancellation handled (✅)"
-          - "Error handling comprehensive (✅)"
-          - "Test coverage thorough (✅)"
-
-      commit:
-        type: "feat"
-        message: "implement wave executor"
-        body: |
-          - Add sequential wave execution with bounded concurrency
-          - Implement semaphore pattern for parallel task execution
-          - Add comprehensive test coverage for concurrency and edge cases
-          - Handle context cancellation and error propagation
-          - Thread-safe result collection via channels
-          - Clean interface-based architecture with dependency injection
-        files:
-          - "internal/executor/wave.go"
-          - "internal/executor/wave_test.go"
-
-    - task_number: 14
-      name: "Implement Task Executor"
-      files:
-        - "internal/executor/task.go"
-        - "internal/executor/task_test.go"
-      depends_on: [9, 10, 12]
-      estimated_time: "1.5h"
-      actual_time: "3h"
-      status: "completed"
-      completed_date: "2025-11-09"
-      git_commit: "pending"
-      qa_status: "GREEN"
-      test_coverage: "84.5%"
-      notes: |
-        Completed with comprehensive test suite (12 test functions).
-        All critical gaps addressed: YELLOW flag handling, context cancellation,
-        review errors, plan update failures. Status strings refactored to constants.
-        Coverage improved from 50.5% to 84.5% (+34%).
-
-      description: |
-        Execute single task: invoke → review → retry, handle RED flags with retry logic,
-        update plan file on completion, return TaskResult.
-
-      test_first:
-        test_file: "internal/executor/task_test.go"
-        structure:
-          - "Tests to be defined during implementation"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          // To be defined during implementation
-
-      implementation:
-        approach: |
-          Invoke agent for task, if quality control enabled invoke review agent, if RED and retries available
-          retry task, update plan file with status, return TaskResult with all metadata.
-
-        code_structure: |
-          // To be defined during implementation
-
-        key_points:
-          - point: "Execute single task: invoke → review → retry"
-            details: "Full task execution pipeline"
-          - point: "Handle RED flags with retry logic"
-            details: "Retry on quality control failure"
-          - point: "Update plan file on completion"
-            details: "Mark task complete in plan"
-          - point: "Return TaskResult"
-            details: "Complete result metadata"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
-
-      verification:
-        manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            Tests passing
-
-        success_criteria:
-          - "Task execution pipeline works"
-          - "Retry logic works"
-          - "Plan updates on completion"
-
-      commit:
-        type: "feat"
-        message: "implement task executor"
-        body: ""
-        files:
-          - "internal/executor/task.go"
-          - "internal/executor/task_test.go"
-
-    - task_number: 15
-      name: "Implement Main Orchestration Engine"
-      files:
-        - "internal/executor/orchestrator.go"
-        - "internal/executor/orchestrator_test.go"
-        - "internal/models/result.go"
-      depends_on: [13]
-      estimated_time: "2h"
-      actual_time: "2h"
-      status: "completed"
-      completed_date: "2025-11-09"
-      git_commit: "74701cb"
-      qa_status: "GREEN"
-      test_coverage: "84.8%"
-      tests_passing: "6/6"
-      quality_score: "9.5/10"
-
-      description: |
-        Main orchestration engine that coordinates plan execution, handles graceful shutdown,
-        aggregates results, and orchestrates the entire task execution pipeline.
-
-      implementation_summary: |
-        Completed main orchestration engine coordinating wave execution with graceful shutdown.
-        
-        Key Components Built:
-        - Orchestrator struct with WaveExecutor delegation
-        - Graceful SIGINT/SIGTERM shutdown with context cancellation
-        - Result aggregation (counts completed/failed, collects failed tasks)
-        - Optional Logger interface (3 methods: Info, Error, Debug)
-        - 84.8% test coverage with 100% pass rate
-        
-        Architecture:
-        - Coordinates with WaveExecutor (Task 13) for sequential wave processing
-        - Uses DependencyGraph/Wave structure from Task 7
-        - Aggregates TaskResult from executor (Task 14)
-        - Ready for CLI integration (Tasks 16-17)
-        
-        Quality Improvements:
-        - Centralized status constants (removed string magic)
-        - Simplified Logger interface (removed unnecessary methods)
-        - Added comprehensive package documentation
-        - Removed flaky signal handling test
-        - Resolved 6 code review issues
-        
-        Test Coverage (6 test functions):
-        - ✅ Successful plan execution
-        - ✅ Failed task handling
-        - ✅ Graceful shutdown and context cancellation
-        - ✅ Result aggregation accuracy
-        - ✅ Error propagation
-        - ✅ Nil input validation
-
-      test_first:
-        test_file: "internal/executor/orchestrator_test.go"
-        structure:
-          - "TestNewOrchestrator - verify initialization"
-          - "TestExecutePlanSuccess - successful execution with all GREEN tasks"
-          - "TestExecutePlanWithFailures - handle RED and failed tasks"
-          - "TestGracefulShutdown - graceful context cancellation on signal"
-          - "TestResultAggregation - verify counts and failed task collection"
-          - "TestNilInputValidation - handle nil pointers gracefully"
-        mocks:
-          - "WaveExecutor mock for controlled result simulation"
-        fixtures: []
-        assertions:
-          - "Plan execution follows orchestrator contract"
-          - "Failed tasks properly collected and returned"
-          - "Context cancellation properly propagated"
-          - "Result aggregation counts accurate"
-          - "All status constants used correctly"
-        edge_cases:
-          - "Nil plan input"
-          - "Context already cancelled"
-          - "SIGINT signal during execution"
-          - "Empty task list"
-
-      implementation:
-        approach: |
-          Build Orchestrator struct with WaveExecutor dependency, implement graceful shutdown
-          via signal handling and context cancellation, aggregate results from wave executor,
-          provide optional logging interface for observability.
-
-        code_structure: |
-          // internal/executor/orchestrator.go
-          package executor
-
-          import (
-              "context"
-              "fmt"
-              "os"
-              "os/signal"
-              "sync"
-              "syscall"
-
-              "github.com/harrison/conductor/internal/models"
-          )
-
-          // Status constants (added to models/result.go)
-          const (
-              StatusGreen   = "GREEN"
-              StatusRed     = "RED"
-              StatusYellow  = "YELLOW"
-              StatusTimeout = "TIMEOUT"
-              StatusFailed  = "FAILED"
-          )
-
-          type Logger interface {
-              Info(msg string)
-              Error(msg string)
-              Debug(msg string)
-          }
-
-          type Orchestrator struct {
-              waveExecutor WaveExecutor
-              logger       Logger
-          }
-
-          type WaveExecutor interface {
-              ExecutePlan(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error)
-          }
-
-          func NewOrchestrator(waveExecutor WaveExecutor, logger Logger) *Orchestrator {
-              if logger == nil {
-                  logger = &noOpLogger{}
-              }
-              return &Orchestrator{
-                  waveExecutor: waveExecutor,
-                  logger:       logger,
-              }
-          }
-
-          func (o *Orchestrator) ExecutePlan(ctx context.Context, plan *models.Plan) (*models.ExecutionResult, error) {
-              if plan == nil {
-                  return nil, fmt.Errorf("plan cannot be nil")
-              }
-
-              // Create context with signal handling for graceful shutdown
-              ctx, cancel := context.WithCancel(ctx)
-              defer cancel()
-
-              // Setup signal handling
-              sigChan := make(chan os.Signal, 1)
-              signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-              
-              go func() {
-                  <-sigChan
-                  o.logger.Info("Received shutdown signal, cancelling execution...")
-                  cancel()
-              }()
-
-              // Execute waves
-              o.logger.Info(fmt.Sprintf("Starting execution of plan: %s", plan.Name))
-              results, err := o.waveExecutor.ExecutePlan(ctx, plan)
-              if err != nil {
-                  return nil, fmt.Errorf("wave execution failed: %w", err)
-              }
-
-              // Aggregate results
-              execResult := o.aggregateResults(results)
-              o.logger.Info(fmt.Sprintf("Plan execution completed: %d tasks, %d completed, %d failed",
-                  execResult.TotalTasks, execResult.Completed, execResult.Failed))
-
-              return execResult, nil
-          }
-
-          func (o *Orchestrator) aggregateResults(results []models.TaskResult) *models.ExecutionResult {
-              result := &models.ExecutionResult{
-                  TotalTasks: len(results),
-                  FailedTasks: make([]models.TaskResult, 0),
-              }
-
-              for _, tr := range results {
-                  if tr.Status == StatusGreen || tr.Status == StatusYellow {
-                      result.Completed++
-                  } else {
-                      result.Failed++
-                      result.FailedTasks = append(result.FailedTasks, tr)
-                  }
-              }
-
-              return result
-          }
-
-          type noOpLogger struct{}
-          func (n *noOpLogger) Info(msg string)   {}
-          func (n *noOpLogger) Error(msg string)  {}
-          func (n *noOpLogger) Debug(msg string)  {}
-
-        key_points:
-          - point: "Coordinate wave executor"
-            details: "Top-level execution coordination"
-          - point: "Handle graceful shutdown (SIGINT)"
-            details: "Cancel context on signal with cleanup"
-          - point: "Collect and aggregate results"
-            details: "Gather all task results, count successes/failures"
-          - point: "Optional Logger interface"
-            details: "Observability without mandatory dependency"
-          - point: "Status constants"
-            details: "Centralized status definitions"
-
-        integration:
-          imports:
-            - "context"
-            - "os"
-            - "os/signal"
-            - "syscall"
-            - "fmt"
-            - "github.com/harrison/conductor/internal/models"
-          services_to_inject:
-            - "WaveExecutor interface"
-            - "Logger interface (optional)"
-          config_values: []
-          error_handling:
-            - "Return error for nil plan"
-            - "Propagate wave executor errors"
-            - "Handle context cancellation"
-            - "Graceful shutdown on signal"
-
-      verification:
-        manual_testing:
-          - step: "Create plan with multiple waves"
-            command: "ExecutePlan(ctx, plan)"
-            expected: "All waves execute, results aggregated"
-          - step: "Send SIGINT during execution"
-            command: "Kill -INT <pid>"
-            expected: "Graceful shutdown, context cancelled"
-          - step: "Monitor result aggregation"
-            command: "Check ExecutionResult counts"
-            expected: "Correct completed/failed counts"
-
-        automated_tests:
-          command: "go test ./internal/executor/ -run TestOrchestrator -v"
-          expected_output: |
-            === RUN   TestNewOrchestrator
-            --- PASS: TestNewOrchestrator (0.00s)
-            === RUN   TestExecutePlanSuccess
-            --- PASS: TestExecutePlanSuccess (0.02s)
-            === RUN   TestExecutePlanWithFailures
-            --- PASS: TestExecutePlanWithFailures (0.01s)
-            === RUN   TestGracefulShutdown
-            --- PASS: TestGracefulShutdown (0.03s)
-            === RUN   TestResultAggregation
-            --- PASS: TestResultAggregation (0.00s)
-            === RUN   TestNilInputValidation
-            --- PASS: TestNilInputValidation (0.00s)
-            PASS
-            ok      github.com/harrison/conductor/internal/executor  0.06s
-
-        success_criteria:
-          - "✅ Orchestration coordinates waves sequentially"
-          - "✅ Graceful shutdown works (context cancellation on signal)"
-          - "✅ Result aggregation accurate (counts and failed task collection)"
-          - "✅ Logger interface optional (nil-safe)"
-          - "✅ All 6 tests passing with 84.8% coverage"
-          - "✅ Status constants centralized in models/result.go"
-          - "✅ Ready for CLI integration"
-
-      commit:
-        type: "feat"
-        message: "implement main orchestration engine"
-        body: |
-          - Create Orchestrator struct coordinating wave execution
-          - Add graceful shutdown via SIGINT/SIGTERM signal handling
-          - Implement result aggregation (counts, failed tasks collection)
-          - Add optional Logger interface for observability
-          - Centralize status constants (GREEN, RED, YELLOW, TIMEOUT, FAILED)
-          - Add comprehensive error handling and validation
-          - Achieve 84.8% test coverage with 6 test functions
-        files:
-          - "internal/executor/orchestrator.go"
-          - "internal/executor/orchestrator_test.go"
-          - "internal/models/result.go"
-
-    - task_number: 16
-      name: "Implement `conductor run` Command"
-      files:
-        - "internal/cmd/run.go"
-        - "internal/cmd/run_test.go"
-        - "internal/cmd/root.go"
-      depends_on: [15]
-      estimated_time: "1h"
-      actual_time: "1.5h"
-      status: "completed"
-      completed_date: "2025-11-09"
-      qa_status: "GREEN - PRODUCTION READY"
-
-      description: |
-        Implement complete `conductor run` command that executes implementation plans with:
-        - CLI flag parsing (--dry-run, --max-concurrency, --timeout, --verbose)
-        - Plan file loading with auto-format detection (.md/.yaml)
-        - Orchestrator engine integration with proper context/timeout handling
-        - Real-time progress logging with console output
-        - Execution summary display
-        - Proper error handling and exit codes
-
-      test_first:
-        test_file: "internal/cmd/run_test.go"
-        structure:
-          - "TestRunCommand_Exists - Command registration"
-          - "TestRunCommand_Flags - Flag validation"
-          - "TestRunCommand_RequiresPlanFile - Argument validation"
-          - "TestRunCommand_LoadsPlanFile - Plan loading"
-          - "TestRunCommand_InvalidPlanFile - Error handling"
-          - "TestRunCommand_WithDryRun - Dry-run mode"
-          - "TestRunCommand_WithMaxConcurrency - Concurrency handling"
-          - "TestRunCommand_WithTimeout - Timeout parsing"
-          - "TestRunCommand_InvalidTimeout - Timeout validation"
-          - "TestRunCommand_DisplaysProgress - Output formatting"
-          - "TestRunCommand_HandlesExecutorError - Error handling"
-          - "TestRunCommand_HandlesPartialFailure - Partial failures"
-          - "TestRunCommand_VerboseOutput - Verbose mode"
-          - "TestRunCommand_YAMLFormat - YAML format support"
-          - "Plus 3 additional edge case tests"
-        test_count: 17
-        mocks:
-          - "mockWaveExecutor for isolated testing"
-          - "Test fixture plan files (Markdown and YAML)"
-        coverage: "92.5% for run.go, 78.3% overall"
-        all_pass: true
-
-      implementation:
-        approach: |
-          Create cobra command for 'run' with TDD methodology.
-          1. Write comprehensive tests first covering all scenarios
-          2. Implement run command with CLI flags and handlers
-          3. Create plan file loader with auto-format detection
-          4. Create console logger implementing Logger interface
-          5. Integrate with orchestrator engine
-          6. Handle all error scenarios with user-friendly messages
-          7. Register command in root command
-
-        code_structure: |
-          - NewRunCommand(): Factory returning *cobra.Command
-          - runCommand(): Main execution logic
-          - loadPlanFile(): Plan file loader
-          - displayResults(): Result formatter
-          - consoleLogger: Logger implementation
-
-        files_created:
-          - "internal/cmd/run.go (267 lines)"
-          - "internal/cmd/run_test.go (580 lines)"
-
-        files_modified:
-          - "internal/cmd/root.go (add command registration)"
-
-        key_points:
-          - point: "--dry-run flag"
-            details: "Parse and validate plan without execution"
-          - point: "--max-concurrency flag"
-            details: "Limit parallel tasks per wave (0 = unlimited)"
-          - point: "--timeout flag"
-            details: "Overall execution timeout with duration parsing"
-          - point: "--verbose flag"
-            details: "Show detailed task-level information"
-          - point: "Plan file loading"
-            details: "Auto-detect Markdown vs YAML format"
-          - point: "Orchestrator integration"
-            details: "Pass context with deadline for timeout handling"
-          - point: "Console logger"
-            details: "Real-time progress output with timestamps"
-          - point: "Error handling"
-            details: "User-friendly messages for all failure modes"
-
-        integration:
-          imports:
-            - "github.com/harrison/conductor/internal/executor"
-            - "github.com/harrison/conductor/internal/models"
-            - "github.com/harrison/conductor/internal/parser"
-            - "github.com/spf13/cobra"
-          services_to_inject:
-            - "executor.WaveExecutor (via constructor)"
-            - "executor.Logger (optional, for progress tracking)"
-          config_values:
-            - "Plan file path (required argument)"
-            - "Timeout duration (default: 10h)"
-            - "Max concurrency (default: 0/unlimited)"
-
-      verification:
-        manual_testing:
-          - step: "Run dry-run: conductor run --dry-run plan.md"
-            expected: "Plan validates without execution, exit 0"
-          - step: "Run with timeout: conductor run --timeout 5m plan.md"
-            expected: "Creates context with 5-minute deadline"
-          - step: "Run with invalid timeout: conductor run --timeout invalid plan.md"
-            expected: "Error: invalid timeout format, exit 1"
-          - step: "Run missing file: conductor run nonexistent.md"
-            expected: "Error: file not found, exit 1"
-          - step: "Verbose output: conductor run --verbose plan.md"
-            expected: "Shows task-level details in output"
-
-        automated_tests:
-          command: "go test ./internal/cmd/... -v -cover"
-          coverage_target: "90%"
-          coverage_actual: "92.5%"
-          test_count: 17
-          expected_output: |
-            PASS
-            coverage: 92.5% for run.go
-            All 17 tests pass
-            Overall project coverage: 78.3%
-
-        success_criteria:
-          - "Command registered in root command"
-          - "All 4 flags (--dry-run, --max-concurrency, --timeout, --verbose) work"
-          - "Plan files load correctly (both .md and .yaml)"
-          - "Dry-run mode prevents execution"
-          - "Timeout flag creates context with deadline"
-          - "Error messages are user-friendly"
-          - "Progress is displayed in real-time"
-          - "Binary compiles: go build ./cmd/conductor"
-          - "All 451 project tests pass"
-          - "Coverage >= 90% for run.go"
-          - "Zero race conditions"
-          - "QA verification: GREEN"
-
-      results:
-        build_status: "SUCCESS"
-        test_pass_rate: "100% (17/17 tests pass)"
-        coverage: "92.5% (run.go), 78.3% (overall)"
-        race_conditions: "0"
-        linting_issues: "0"
-        binary_size: "8.2 MB"
-        cli_integration: "Complete"
-        production_ready: true
-
-      commit:
-        type: "feat"
-        message: "implement conductor run command with full TDD"
-        body: |
-          Implement complete 'conductor run' command for plan execution.
-
-          Features:
-          - CLI flags: --dry-run, --max-concurrency, --timeout, --verbose
-          - Plan file loading with auto-format detection (.md/.yaml)
-          - Orchestrator integration with proper timeout handling
-          - Real-time progress logging with console output
-          - Comprehensive error handling and user-friendly messages
-
-          Testing:
-          - 17 comprehensive test cases
-          - 92.5% code coverage for run.go
-          - All tests pass, zero race conditions
-
-          Integration:
-          - Seamlessly integrates with executor, parser, and models packages
-          - Console logger implements executor.Logger interface
-          - Context properly propagated for cancellation
-
-          Production Ready: GREEN - QA verified and approved for production use.
-        files:
-          - "internal/cmd/run.go"
-          - "internal/cmd/run_test.go"
-          - "internal/cmd/root.go"
-
-    - task_number: 17
-      name: "Implement `conductor validate` Command"
-      files:
-        - "internal/cmd/validate.go"
-        - "internal/cmd/validate_test.go"
-      depends_on: [6, 7]
-      estimated_time: "45m"
-      status: "completed"
-      completed_date: "2025-11-09"
-
-      description: |
-        Parse plan file, run validation checks, display validation report, return appropriate exit code.
-
-      test_first:
-        test_file: "internal/cmd/validate_test.go"
-        structure:
-          - "Tests to be defined during implementation"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          // To be defined during implementation
-
-      implementation:
-        approach: |
-          Create cobra command for 'validate', load plan file, run validations (task validation, cycle detection),
-          display report, exit with appropriate code.
-
-        code_structure: |
-          // To be defined during implementation
-
-        key_points:
-          - point: "Parse plan file"
-            details: "Load and parse plan"
-          - point: "Run validation checks"
-            details: "Task validation, cycle detection"
-          - point: "Display validation report"
-            details: "User-friendly output"
-          - point: "Return appropriate exit code"
-            details: "0 for valid, 1 for invalid"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
-
-      verification:
-        manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            Tests passing
-
-        success_criteria:
-          - "Validate command works"
-          - "All validations run"
-          - "Report displayed correctly"
-
-      commit:
-        type: "feat"
-        message: "implement conductor validate command"
-        body: ""
-        files:
-          - "internal/cmd/validate.go"
-          - "internal/cmd/validate_test.go"
-
-      completion_notes: |
-        ✅ COMPLETED 2025-11-09
-
-        Implementation Summary:
-        - Implemented NewValidateCommand() with full Cobra integration
-        - Created validatePlan() with 6 validation checks:
-          1. Plan file parsing (auto-detects .md/.yaml)
-          2. Task validation (names, prompts, positive numbers)
-          3. Circular dependency detection (DFS algorithm)
-          4. File overlap detection (parallel tasks)
-          5. Agent existence validation
-          6. Task dependency validation
-        - Comprehensive test suite: 20 test cases, 100% coverage
-        - 7 test fixtures covering all validation scenarios
-        - Integrated into root command
-
-        Testing Results:
-        - Unit tests: 23/23 PASSING (100%)
-        - Integration tests: 8/8 PASSING on real plans
-        - Code coverage: 100% (validate.go), 100% (cmd package)
-        - Project coverage: 77.2% (exceeds 70% target)
-        - No breaking changes, no race conditions
-        - Real-world testing passed on both implementation plans
-
-        Quality Metrics:
-        - Code quality: ⭐⭐⭐⭐⭐
-        - Test coverage: 100%
-        - Performance: < 500ms for full validation
-        - Exit codes: Correct (0=valid, 1=error)
-
-        All specification requirements met. Production ready.
-
-    - task_number: 18
-      name: "Implement Console Logger"
-      files:
-        - "internal/logger/console.go"
-        - "internal/logger/console_test.go"
-      depends_on: [3]
-      estimated_time: "1h"
-      status: "completed"
-      completed_at: "2025-11-10"
-      git_commit: "07b195b50fd6277945c5199eab47954011a4efb1"
-      test_coverage: "91.5%"
-      tests_passing: "16/16"
-
-      description: |
-        Timestamp-prefixed log messages, task start/complete/fail messages,
-        wave progress tracking, color coding (optional).
-
-      test_first:
-        test_file: "internal/logger/console_test.go"
-        structure:
-          - "TestNewConsoleLogger - Constructor validation with valid/nil writers"
-          - "TestLogWaveStart - Wave start messages with task counts"
-          - "TestLogWaveComplete - Wave complete messages with duration"
-          - "TestLogSummary - Summary formatting with succeeded/failed tasks"
-          - "TestTimestampFormat - RFC3339 timestamp validation"
-          - "TestConcurrentLogging - Thread-safety validation"
-          - "TestNilWriter - Safe handling of nil writer"
-          - "TestDurationFormatting - Human-readable duration formatting"
-          - "TestNoOpLogger - No-op logger implementation"
-          - "TestLogSummaryWithFailedTasks - Failed task reporting"
-          - "TestConsoleLoggerSatisfiesInterface - Interface compliance"
-          - "TestNoOpLoggerSatisfiesInterface - No-op interface compliance"
-        mocks: []
-        fixtures: []
-        assertions:
-          - "Timestamp prefix format validation"
-          - "Message content verification"
-          - "Concurrent write safety"
-          - "Duration formatting accuracy"
-        edge_cases:
-          - "Nil writer handling"
-          - "Empty wave logging"
-          - "Concurrent writes from multiple goroutines"
-          - "Zero duration formatting"
-        example_skeleton: |
-          // Table-driven tests with subtests
-          tests := []struct {
-              name         string
-              wave         models.Wave
-              expectedText string
-          }{ /* test cases */ }
-          for _, tt := range tests {
-              t.Run(tt.name, func(t *testing.T) {
-                  buf := &bytes.Buffer{}
-                  logger := NewConsoleLogger(buf)
-                  logger.LogWaveStart(tt.wave)
-                  // Verify output and timestamp
-              })
-          }
-
-      implementation:
-        approach: |
-          Create console logger with timestamp formatting, methods for different log levels,
-          task lifecycle logging, wave progress indicators.
-
-        code_structure: |
-          // To be defined during implementation
-
-        key_points:
-          - point: "Timestamp-prefixed log messages"
-            details: "All logs have timestamps"
-          - point: "Task start/complete/fail messages"
-            details: "Lifecycle logging"
-          - point: "Wave progress tracking"
-            details: "Show wave completion"
-          - point: "Color coding (optional)"
-            details: "Use terminal colors if supported"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
-
-      verification:
-        manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            Tests passing
-
-        success_criteria:
-          - "Console logging works"
-          - "Timestamps added"
-          - "Progress tracking visible"
-
-      commit:
-        type: "feat"
-        message: "implement console logger"
-        body: ""
-        files:
-          - "internal/logger/console.go"
-          - "internal/logger/console_test.go"
-
-    - task_number: 19
-      name: "Implement File Logger"
-      files:
-        - "internal/logger/file.go"
-        - "internal/logger/file_test.go"
-      depends_on: [18]
-      estimated_time: "45m"
-      status: "completed"
-      completed_at: "2025-11-10"
-      git_commit: "07b195b50fd6277945c5199eab47954011a4efb1"
-
-      description: |
-        Create .conductor/logs/ directory, write per-run log files, write per-task detailed logs,
-        create latest.log symlink.
-
-      test_first:
-        test_file: "internal/logger/file_test.go"
-        structure:
-          - "Tests to be defined during implementation"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          // To be defined during implementation
-
-      implementation:
-        approach: |
-          Create log directory if not exists, generate timestamped log file for run,
-          write task outputs to individual files, symlink latest run log.
-
-        code_structure: |
-          // To be defined during implementation
-
-        key_points:
-          - point: "Create .conductor/logs/ directory"
-            details: "Ensure directory exists"
-          - point: "Write per-run log files"
-            details: "Timestamped log files"
-          - point: "Write per-task detailed logs"
-            details: "Individual task logs"
-          - point: "Create latest.log symlink"
-            details: "Always points to latest run"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
-
-      verification:
-        manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            Tests passing
-
-        success_criteria:
-          - "File logging works"
-          - "Log directory created"
-          - "Symlink created correctly"
-
-      commit:
-        type: "feat"
-        message: "implement file logger"
-        body: ""
-        files:
-          - "internal/logger/file.go"
-          - "internal/logger/file_test.go"
-
-    - task_number: 20
-      name: "Add Configuration File Support"
-      files:
-        - "internal/config/config.go"
-        - "internal/config/config_test.go"
-        - ".conductor/config.yaml.example"
-      depends_on: [2]
-      estimated_time: "1h"
-      actual_time: "1h"
-      status: "completed"
-      completed_date: "2025-11-10"
-      qa_verdict: "GREEN"
-      test_coverage: "100%"
-
-      description: |
-        Parse .conductor/config.yaml, merge config with CLI flags, default values.
-
-        **COMPLETED**: Configuration file support fully implemented with:
-        - YAML parsing and loading (.conductor/config.yaml)
-        - CLI flag merging with proper precedence
-        - Sensible defaults for all options
-        - 100% test coverage with 18 tests
-        - Zero race conditions
-        - Production-ready quality
-
-      test_first:
-        test_file: "internal/config/config_test.go"
-        structure:
-          - "TestLoadConfig - load config from .conductor/config.yaml"
-          - "TestConfigParsing - parse YAML config correctly"
-          - "TestMergeWithFlags - CLI flags override config values"
-          - "TestGetDefaults - provide sensible defaults"
-          - "TestApplyDefaults - apply defaults to missing values"
-          - "TestValidateTimeout - validate timeout format"
-          - "TestParseTimeout - parse timeout string to duration"
-          - "TestConfigFileLocation - test config file location handling"
-        mocks: []
-        fixtures:
-          - "testdata/valid-config.yaml"
-          - "testdata/invalid-config.yaml"
-          - "testdata/partial-config.yaml"
-        test_count: 18
-        test_cases_total: 27
-        coverage: "100%"
-        assertions:
-          - "Config file loading works"
-          - "YAML parsing handles valid and invalid input"
-          - "CLI flags override config values correctly"
-          - "Missing config returns defaults"
-          - "Invalid YAML returns error"
-        edge_cases:
-          - "Missing config file"
-          - "Empty config file"
-          - "Invalid YAML syntax"
-          - "Partial config (some fields missing)"
-          - "Flag precedence (flags override config)"
-          - "Timeout format validation"
-
-      implementation:
-        approach: |
-          Load .conductor/config.yaml if exists, parse YAML config, merge with CLI flags
-          (CLI flags take precedence), provide default values for missing config.
-
-          **IMPLEMENTED**:
-          - Config struct with MaxConcurrency, Timeout, LogLevel, LogDir, DryRun fields
-          - LoadConfig() function returns defaults if file missing
-          - ParseConfigFile() for YAML parsing using gopkg.in/yaml.v3
-          - GetDefaults() with sensible default values
-          - ApplyDefaults() method fills in missing values
-          - MergeWithFlags() merges CLI flags with config (precedence: flags > config > defaults)
-          - Validate() method validates config values
-          - ParseTimeout() converts timeout string to time.Duration
-
-        code_structure: |
-          type Config struct {
-              MaxConcurrency int    // Default: 0
-              Timeout        string // Default: ""
-              LogLevel       string // Default: "info"
-              LogDir         string // Default: ".conductor/logs"
-              DryRun         bool   // Default: false
-          }
-
-          func LoadConfig() (*Config, error)
-          func ParseConfigFile(path string) (*Config, error)
-          func GetDefaults() *Config
-          func (c *Config) ApplyDefaults()
-          func (c *Config) MergeWithFlags(cmd *cobra.Command) error
-          func (c *Config) Validate() error
-          func (c *Config) ParseTimeout() (time.Duration, error)
-
-        key_points:
-          - point: "Parse .conductor/config.yaml"
-            details: "Load config from file, gracefully handle missing files"
-          - point: "Merge config with CLI flags"
-            details: "CLI flags override config file using cobra.Flags().Changed()"
-          - point: "Default values"
-            details: "Sensible defaults: MaxConcurrency=0, Timeout='', LogLevel='info', LogDir='.conductor/logs', DryRun=false"
-          - point: "YAML parsing"
-            details: "Use gopkg.in/yaml.v3 with struct tags"
-          - point: "Timeout validation"
-            details: "Validate timeout format using time.ParseDuration()"
-          - point: "Error handling"
-            details: "Wrap errors with context using fmt.Errorf with %w"
-
-        integration:
-          imports:
-            - "gopkg.in/yaml.v3"
-            - "github.com/spf13/cobra"
-            - "fmt, os, path/filepath, time"
-          services_to_inject:
-            - "cobra.Command for flag merging"
-          config_values:
-            - "MaxConcurrency: for parallel task limiting"
-            - "Timeout: for execution timeout"
-            - "LogLevel: for logging configuration"
-            - "LogDir: for log file directory"
-            - "DryRun: for validation-only mode"
-          error_handling:
-            - "Missing config file: no error, return defaults"
-            - "Invalid YAML: return error with context"
-            - "Timeout format validation: use time.ParseDuration"
-
-      verification:
-        manual_testing:
-          - step: "Create .conductor/config.yaml with test values"
-            expected: "File created successfully"
-          - step: "Run conductor with config file"
-            expected: "Config values loaded and applied"
-          - step: "Override config with CLI flags"
-            expected: "CLI flags take precedence over config file"
-          - step: "Run without config file"
-            expected: "Defaults applied, no error"
-
-        automated_tests:
-          command: "go test ./internal/config/ -v"
-          expected_output: |
-            18 tests with 27 test cases - ALL PASSING
-          coverage_command: "go test ./internal/config/ -cover"
-          coverage_expected: "100% coverage"
-          race_detection_command: "go test -race ./internal/config/ -v"
-          race_detection_result: "Zero race conditions detected"
-
-        success_criteria:
-          - "✅ Config file loading works (.conductor/config.yaml)"
-          - "✅ Config merging works (CLI flags override config)"
-          - "✅ Defaults applied correctly"
-          - "✅ 100% test coverage achieved"
-          - "✅ All 18 tests passing"
-          - "✅ No race conditions"
-          - "✅ Full test suite passes (451/451)"
-          - "✅ Overall coverage maintained at 78.3%"
-
-      commit:
-        type: "feat"
-        message: "add configuration file support"
-        body: |
-          Configuration file support for Conductor CLI:
-          - Load .conductor/config.yaml if exists
-          - YAML parsing with proper struct tags
-          - CLI flag merging with precedence (flags override config)
-          - Sensible defaults for all options
-          - Graceful handling of missing files
-          - 100% test coverage with 18 tests
-          - Production-ready quality
-        files:
-          - "internal/config/config.go"
-          - "internal/config/config_test.go"
-          - ".conductor/config.yaml.example"
-        lines_added: 706
-        lines_deleted: 0
-        test_coverage: "100%"
-        qa_verdict: "GREEN"
-
-    - task_number: 21
-      name: "Add Error Handling and Recovery"
-      files:
-        - "internal/executor/errors.go"
-        - "internal/executor/errors_test.go"
-        - "internal/executor/wave.go"
-        - "internal/executor/task.go"
-        - "internal/executor/orchestrator.go"
-      depends_on: [15]
-      estimated_time: "1h"
-      actual_time: "1.5h"
-      status: "completed"
-      completed_date: "2025-11-11"
-      git_commit: "b901df6"
-      qa_status: "GREEN"
-      test_coverage: "86.4%"
-      notes: "Custom error types (TaskError, TimeoutError, ExecutionError) successfully integrated into wave.go, task.go, and orchestrator.go. 6 new integration tests added. Coverage improved from 76.7% to 86.4%. All error paths now use typed errors with proper wrapping and context."
-
-      description: |
-        Graceful error handling throughout, continue-on-error strategy, timeout handling,
-        resource cleanup.
-
-      test_first:
-        test_file: "internal/executor/errors_test.go"
-        structure:
-          - "Tests to be defined during implementation"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          // To be defined during implementation
-
-      implementation:
-        approach: |
-          Add error wrapping throughout, implement continue-on-error for task failures,
-          proper context timeout handling, defer cleanup for resources.
-
-        code_structure: |
-          // To be defined during implementation
-
-        key_points:
-          - point: "Graceful error handling throughout"
-            details: "Proper error wrapping and logging"
-          - point: "Continue-on-error strategy"
-            details: "Don't stop on single task failure"
-          - point: "Timeout handling"
-            details: "Handle context timeouts gracefully"
-          - point: "Resource cleanup"
-            details: "Defer cleanup, close channels"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling: []
-
-      verification:
-        manual_testing:
-          - step: "Manual testing steps from summary"
-            expected: "Expected outcome"
-
-        automated_tests:
-          command: "go test ./..."
-          expected_output: |
-            Tests passing
-
-        success_criteria:
-          - "Error handling robust"
-          - "Continue-on-error works"
-          - "Resources cleaned up"
-
-      commit:
-        type: "feat"
-        message: "add error handling and recovery"
-        body: ""
-        files:
-          - "internal/executor/errors.go"
-          - "internal/executor/errors_test.go"
-
-    - task_number: 22
-      name: "Add Integration Tests"
-      files:
-        - "test/integration/conductor_test.go"
-        - "test/integration/fixtures/"
-      depends_on: [16, 17]
-      estimated_time: "2h"
-      actual_time: "1.5h"
-      status: "complete"
-      completed_date: "2025-11-10"
-      qa_verdict: "GREEN"
-      summary: "Integration test suite with 12 test functions covering E2E workflows, all formats, error handling, and performance"
-
-      metrics:
-        test_functions: 12
-        pass_rate: "100%"
-        test_fixtures: 5
-        execution_time: "1.047s"
-        race_conditions: 0
-        total_lines: 420
-        regressions: 0
-        project_test_count: 463
-
-      files_created:
-        - "test/integration/conductor_test.go (420 lines, 12 test functions)"
-        - "test/integration/fixtures/simple-plan.md (44 lines)"
-        - "test/integration/fixtures/simple-plan.yaml (34 lines)"
-        - "test/integration/fixtures/multi-wave.md (78 lines)"
-        - "test/integration/fixtures/cyclic.md (59 lines)"
-        - "test/integration/fixtures/invalid.md (42 lines)"
-
-      test_coverage:
-        - "Markdown parsing (E2E)"
-        - "YAML parsing (E2E)"
-        - "Wave calculation with complex dependencies"
-        - "Cycle detection in dependency graphs"
-        - "Error handling for malformed plans"
-        - "Dry-run mode validation"
-        - "Timeout handling and context cancellation"
-        - "Invalid dependency detection"
-        - "Format parity (Markdown vs YAML)"
-        - "Wave execution order"
-        - "Graph structure verification"
-
-      description: |
-        End-to-end test with sample plan, test both Markdown and YAML formats,
-        test failure scenarios, test --dry-run mode.
-
-      test_first:
-        test_file: "test/integration/conductor_test.go"
-        structure:
-          - "TestParseMarkdownPlan - Validate Markdown parser"
-          - "TestParseYAMLPlan - Validate YAML parser"
-          - "TestCalculateWaves - Multi-wave dependency calculation"
-          - "TestDetectCycle - Cyclic dependency detection"
-          - "TestDryRun - Dry-run validation"
-          - "TestInvalidPlan - Error handling for malformed plans"
-          - "TestMultipleFormats - Format parity (Markdown/YAML)"
-          - "TestTimeoutHandling - Context timeout enforcement"
-          - "TestContextCancellation - Graceful shutdown"
-          - "TestParseWithInvalidDependency - Invalid dependency detection"
-          - "TestWaveExecutionOrder - Execution order validation"
-          - "TestBuildGraph - Graph structure verification"
-        mocks: []
-        fixtures:
-          - "simple-plan.md - Linear 3-task plan"
-          - "simple-plan.yaml - Same in YAML format"
-          - "multi-wave.md - 6 tasks across 3 waves"
-          - "cyclic.md - Cycle detection test"
-          - "invalid.md - Error handling test"
-        assertions:
-          - "All 12 tests PASS (100% pass rate)"
-          - "Zero race conditions detected"
-          - "Zero regressions (463/463 project tests pass)"
-          - "Execution time: 1.047s"
-        edge_cases:
-          - "Cyclic dependencies"
-          - "Invalid task references"
-          - "Malformed plan files"
-          - "Timeout scenarios"
-          - "Context cancellation"
-        example_skeleton: |
-          // All 12 test functions implemented and passing
-          // Table-driven tests with t.Run() for subtests
-          // Clean fixtures with realistic content
-
-      implementation:
-        approach: |
-          Create integration test suite with sample plans, test full execution flow,
-          test both formats, test error scenarios, test dry-run mode. Implemented
-          12 comprehensive test functions with 5 test fixtures covering all major
-          workflows and edge cases.
-
-        code_structure: |
-          test/integration/conductor_test.go (420 lines)
-          - 12 test functions with table-driven approach
-          - Helper functions for test setup and validation
-          - Clean test fixtures in fixtures/ directory
-          - Comprehensive error scenario coverage
-
-        key_points:
-          - point: "End-to-end test with sample plan"
-            details: "Full workflow test - Both Markdown and YAML tested"
-          - point: "Test both Markdown and YAML formats"
-            details: "Format compatibility - TestMultipleFormats validates parity"
-          - point: "Test failure scenarios"
-            details: "Error handling verification - Cycle detection, invalid deps, malformed plans"
-          - point: "Test --dry-run mode"
-            details: "Dry-run functionality - TestDryRun validates non-execution mode"
-          - point: "Test timeout handling"
-            details: "Context timeout enforcement - TestTimeoutHandling and TestContextCancellation"
-
-        integration:
-          imports:
-            - "github.com/harrison/conductor/internal/parser"
-            - "github.com/harrison/conductor/internal/executor"
-            - "github.com/harrison/conductor/internal/models"
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Graceful handling of parse errors"
-            - "Cycle detection with clear error messages"
-            - "Invalid dependency reporting"
-            - "Timeout and cancellation handling"
-
-      verification:
-        manual_testing:
-          - step: "Run integration tests with verbose output"
-            command: "go test ./test/integration/ -v -timeout 10m"
-            expected: "All 12 tests PASS in ~1s"
-
-        automated_tests:
-          command: "go test ./test/integration/"
-          expected_output: |
-            ok    github.com/harrison/conductor/test/integration  1.047s
-
-            All 12 tests PASS:
-            - TestParseMarkdownPlan
-            - TestParseYAMLPlan
-            - TestCalculateWaves
-            - TestDetectCycle
-            - TestDryRun
-            - TestInvalidPlan
-            - TestMultipleFormats
-            - TestTimeoutHandling
-            - TestContextCancellation
-            - TestParseWithInvalidDependency
-            - TestWaveExecutionOrder
-            - TestBuildGraph
-
-        success_criteria:
-          - "✅ Integration tests pass (12/12)"
-          - "✅ Both formats tested (Markdown and YAML)"
-          - "✅ Error scenarios covered (cycles, invalid deps, malformed)"
-          - "✅ Dry-run mode tested"
-          - "✅ Performance acceptable (1.047s)"
-          - "✅ Zero regressions (463/463 project tests pass)"
-          - "✅ Zero race conditions"
-
-      commit:
-        type: "test"
-        message: "add integration tests"
-        body: |
-          Integration test suite with 12 test functions:
-          - E2E Markdown and YAML workflows
-          - Complex dependency graphs
-          - Cycle detection
-          - Error scenarios
-          - Timeout handling
-          - Context cancellation
-
-          Test Results:
-          - 12/12 tests PASS (100%)
-          - Execution time: 1.047s
-          - Zero race conditions
-          - Zero regressions
-
-          QA Verdict: GREEN - Production Ready
-        files:
-          - "test/integration/conductor_test.go"
-          - "test/integration/fixtures/"
-
-    - task_number: 23
-      name: "Add Makefile and Build Script"
-      files:
-        - "Makefile"
-        - "scripts/build.sh"
-      depends_on: [16]
-      estimated_time: "30m"
-      status: "complete"
-      completed_date: "2025-11-10"
-
-      description: |
-        make build - compile binary, make test - run all tests, make install - install to PATH,
-        cross-compilation targets.
-
-      test_first:
-        test_file: "N/A"
-        structure:
-          - "Manual verification testing"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          # All 13 Makefile targets tested and working
-          # Build script tested for all 5 platforms
-
-      implementation:
-        approach: |
-          Create Makefile with common targets, build script for cross-compilation,
-          install target to copy binary to PATH.
-
-        code_structure: |
-          Makefile (1.6KB):
-          - 13 targets: build, test, test-verbose, coverage, clean, install, fmt, vet, lint, tidy, deps, all, help
-          - PHONY targets for all commands
-          - Proper dependency management
-
-          scripts/build.sh (2.7KB):
-          - Cross-compilation for 5 platforms
-          - Version detection from git tags
-          - LDFLAGS version injection
-          - Colored output (INFO/WARNING/ERROR)
-          - dist/ directory output
-
-        key_points:
-          - point: "13 Makefile targets implemented"
-            details: "build, test, test-verbose, coverage, clean, install, fmt, vet, lint, tidy, deps, all, help"
-          - point: "Cross-compilation build script"
-            details: "Supports Linux/macOS/Windows × x86_64/ARM64 (5 platforms total)"
-          - point: "Version injection from git tags"
-            details: "Automatic version detection and LDFLAGS injection"
-          - point: "Colored output and error handling"
-            details: "User-friendly INFO/WARNING/ERROR messages"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "Build script handles missing git tags gracefully"
-            - "Makefile targets fail cleanly with proper error messages"
-            - "Cross-compilation errors reported with colored output"
-
-      verification:
-        manual_testing:
-          - step: "Test all 13 Makefile targets"
-            expected: "All targets execute successfully"
-          - step: "Test cross-compilation with build script"
-            expected: "Binaries created for all 5 platforms"
-          - step: "Verify version injection"
-            expected: "Binary shows correct version from git tags"
-          - step: "Test install target"
-            expected: "Binary installed to $GOPATH/bin"
-
-        automated_tests:
-          command: "make all && scripts/build.sh"
-          expected_output: |
-            All 40+ verification checks passed
-            All 13 Makefile targets working
-            Build script compiles for all 5 platforms
-            Coverage reports generated correctly
-
-        success_criteria:
-          - "✅ Makefile works correctly"
-          - "✅ All 13 targets functional"
-          - "✅ Build produces binary"
-          - "✅ Install works"
-          - "✅ Coverage report generated"
-          - "✅ Cross-compilation successful"
-          - "✅ Version injection working"
-
-      qa_status:
-        status: "GREEN"
-        verdict: "Production Ready"
-        completed_date: "2025-11-10"
-        results:
-          functionality_score: 100
-          error_handling_score: 98
-          documentation_score: 100
-          testing_score: 100
-          integration_score: 100
-          overall_confidence: 98
-          recommendation: "APPROVED FOR PRODUCTION"
-        key_achievements:
-          - "Comprehensive Makefile with 13 development targets"
-          - "Production-ready cross-compilation build script"
-          - "Full platform support (Linux, macOS, Windows)"
-          - "Proper version injection from git tags"
-          - "Clean error handling and colored output"
-          - "All verification checks passed"
-        test_summary:
-          total_checks: "40+"
-          passed_checks: "40+"
-          failed_checks: 0
-          platforms_tested: 5
-          makefile_targets_tested: 13
-
-      commit:
-        type: "chore"
-        message: "add Makefile and build script"
-        body: |
-          Comprehensive build tooling for Conductor CLI:
-          - Makefile with 13 development targets
-          - Cross-compilation script for 5 platforms
-          - Version injection from git tags
-          - All verification checks passed (40+)
-          - QA Status: GREEN - Production Ready
-        files:
-          - "Makefile"
-          - "scripts/build.sh"
-
-    - task_number: 24
-      name: "Write README and Documentation"
-      files:
-        - "README.md"
-        - "docs/usage.md"
-        - "docs/plan-format.md"
-        - "docs/troubleshooting.md"
-      depends_on: [23]
-      estimated_time: "1h"
-      actual_time: "~2h"
-      status: "completed"
-      completed_date: "2025-11-10"
-      git_commit: "8573095"
-      qa_status: "GREEN"
-
-      description: |
-        Comprehensive production-ready documentation for Conductor users and developers.
-
-        **Deliverables**:
-        - README.md: 313 lines with project overview, quick start, installation, features
-        - docs/usage.md: 418 lines with CLI reference, configuration, real-world examples
-        - docs/plan-format.md: 478 lines with format specifications, examples, validation rules
-        - docs/troubleshooting.md: 571 lines with common errors, solutions, performance tuning
-
-        **Coverage**:
-        - 100% CLI command coverage (validate, run, version, help)
-        - 100% CLI flag coverage (--dry-run, --max-concurrency, --timeout, --verbose, --log-dir)
-        - Both Markdown and YAML plan formats fully documented
-        - 15+ common errors with clear solutions
-        - 30+ real-world code examples
-        - 3+ complete implementation examples
-
-      test_first:
-        test_file: "N/A - Documentation review process"
-        structure:
-          - "Manual review of all documentation files"
-          - "Verification of all cross-references"
-          - "Validation of code examples"
-        mocks: []
-        fixtures: []
-        assertions: []
-        edge_cases: []
-        example_skeleton: |
-          Documentation quality checklist:
-          - All files created with correct structure
-          - All examples accurate and tested
-          - Cross-references valid
-          - Professional quality maintained
-
-      implementation:
-        approach: |
-          1. README.md: Project overview, quick start, installation, features, architecture
-          2. docs/usage.md: Complete CLI reference with configuration and real-world examples
-          3. docs/plan-format.md: Format specifications with complete examples and validation rules
-          4. docs/troubleshooting.md: Common errors, solutions, debug mode, performance tuning
-
-        actual_deliverables: |
-          README.md (313 lines, 7.6KB):
-          - Project overview and key features
-          - Prerequisites, installation, quick start
-          - Basic usage with all major flags
-          - Configuration examples
-          - Architecture overview
-          - Development section with commands
-
-          docs/usage.md (418 lines, 9.4KB):
-          - Installation guide (Go 1.21+, Claude CLI)
-          - Complete command reference
-          - Configuration file schema
-          - Plan execution flow
-          - Output interpretation
-          - 3+ real-world examples
-          - Best practices and performance tuning
-
-          docs/plan-format.md (478 lines, 9.9KB):
-          - Format overview (Markdown vs YAML)
-          - Complete format specifications
-          - Task metadata documentation
-          - Dependency syntax and rules
-          - Validation rules
-          - Best practices
-          - 3+ complete example plans
-
-          docs/troubleshooting.md (571 lines, 10KB):
-          - Common errors with solutions (15+ scenarios)
-          - Validation issues
-          - Execution problems
-          - Agent issues
-          - Debug mode and logging
-          - Performance tuning
-          - Getting help (FAQ, GitHub links)
-
-        key_points:
-          - point: "1,780 total lines of documentation"
-            details: "4 files with professional quality"
-          - point: "100% CLI coverage"
-            details: "All commands and flags documented"
-          - point: "15+ common errors solved"
-            details: "With clear solutions and examples"
-          - point: "30+ code examples"
-            details: "Verified against actual implementation"
-          - point: "Both format types documented"
-            details: "Markdown and YAML with specifications"
-          - point: "Production-ready quality"
-            details: "Enterprise-grade documentation"
-
-        integration:
-          imports: []
-          services_to_inject: []
-          config_values: []
-          error_handling:
-            - "No code integration needed - pure documentation"
-
-      verification:
-        manual_testing:
-          - step: "Read all 4 documentation files"
-            expected: "Files exist, readable, well-formatted"
-          - step: "Verify cross-references between docs"
-            expected: "All links valid and working"
-          - step: "Check code examples accuracy"
-            expected: "Examples match actual implementation"
-          - step: "Review professional quality"
-            expected: "Ready for public release"
-
-        automated_tests:
-          command: "Manual review and QA verification"
-          expected_output: |
-            ✅ All files created and committed
-            ✅ Documentation quality GREEN verdict
-            ✅ Production-ready for release
-
-        success_criteria:
-          - "✅ README complete with quick start"
-          - "✅ Usage docs comprehensive with examples"
-          - "✅ Format docs detailed with specs"
-          - "✅ Troubleshooting covers 15+ errors"
-          - "✅ All examples verified"
-          - "✅ Professional quality maintained"
-          - "✅ Cross-references validated"
-          - "✅ Ready for public documentation site"
-
-      commit:
-        type: "docs"
-        message: "write README and documentation"
-        body: |
-          Comprehensive documentation for Conductor CLI:
-          - Installation and setup instructions
-          - Usage guide with examples
-          - Configuration file documentation (references .conductor/config.yaml.example from Task 20)
-          - Plan format specifications
-          - Troubleshooting guide
-        files:
-          - "README.md"
-          - "docs/usage.md"
-          - "docs/plan-format.md"
-          - "docs/troubleshooting.md"
-
-    - task_number: 25
-      name: "Final Integration and Testing"
-      files:
-        - "internal/cmd/run.go"
-        - "internal/executor/orchestrator.go"
-        - "internal/cmd/run_test.go"
-      depends_on: [16, 17, 18, 19, 22, 23, 24]
-      estimated_time: "3h"
-      actual_time: "2h"
-      status: "completed"
-      completed_date: "2025-11-11"
-      git_commit: "HEAD"
-      qa_status: "GREEN"
-      test_coverage: "86.4%"
-      tests_added: 15
-      notes: "Implemented all 15 required E2E test functions: FileLogger integration (3 tests), log file verification (4 tests), plan execution E2E tests (8 tests). Test file grew from 604 to 1,193 lines. All tests use fixtures (simple-plan.md/.yaml, complex-dependencies.md, large-plan.md, with-failure.md). All tests passing. Full pipeline validation complete."
-
-      description: |
-        Run full end-to-end Conductor workflows with real implementation plans, test various error scenarios,
-        performance testing, integrate FileLogger with conductor run command, and final bug fixes/polish before release.
-
-      test_first:
-        test_file: "internal/cmd/run_test.go"
-        structure:
-          - "TestRunWithFileLogger - executor uses FileLogger for logging"
-          - "TestRunWithConsoleLogger - executor uses ConsoleLogger for logging"
-          - "TestRunWithBothLoggers - executor can use both loggers"
-          - "TestLogFilesCreated - log files exist after run completes"
-          - "TestLatestSymlinkUpdated - latest.log symlink points to current run"
-          - "TestLogsContainExecutionDetails - log content includes task results"
-          - "TestLogDirFlag - --log-dir flag sets custom log directory"
-          - "TestNoLogFileIfDryRun - dry-run doesn't create log files"
-          - "TestE2E_SimpleMarkdownPlan - full execution with Markdown plan"
-          - "TestE2E_SimpleYamlPlan - full execution with YAML plan"
-          - "TestE2E_FailureHandling - handle task failures gracefully"
-          - "TestE2E_ComplexDependencies - complex dependency graph execution"
-          - "TestE2E_DryRunMode - --dry-run shows plan without executing"
-          - "TestE2E_TimeoutHandling - timeout cancels remaining tasks"
-          - "TestE2E_LargePlan - performance test with many tasks"
-        mocks: []
-        fixtures:
-          - "test/integration/fixtures/simple-plan.md"
-          - "test/integration/fixtures/simple-plan.yaml"
-          - "test/integration/fixtures/with-failures.md"
-          - "test/integration/fixtures/complex-dependencies.md"
-          - "test/integration/fixtures/large-plan.md"
-        assertions:
-          - "Logger instance passed to Orchestrator"
-          - "Log files created in .conductor/logs/"
-          - "Per-task logs created correctly"
-          - "Symlink management works correctly"
-        edge_cases:
-          - "Dry-run should not create log files"
-          - "Custom log directory handling"
-          - "Concurrent runs with different timestamps"
-
-      implementation:
-        approach: |
-          1. Integrate FileLogger with Orchestrator: Add logger field and parameter
-          2. Modify conductor run command to instantiate FileLogger
-          3. Pass FileLogger to Orchestrator constructor
-          4. Add --log-dir flag for custom log directory
-          5. Run comprehensive end-to-end tests with real plans
-          6. Test error scenarios and performance
-          7. Fix any remaining bugs
-          8. Polish and finalize
-
-        code_structure: |
-          // internal/executor/orchestrator.go
-          type Orchestrator struct {
-              // ... existing fields
-              logger Logger  // Add logger field
-          }
-
-          func NewOrchestrator(plan *Plan, logger Logger) *Orchestrator {
-              return &Orchestrator{
-                  plan:   plan,
-                  logger: logger,
-                  // ... other fields
-              }
-          }
-
-          // internal/cmd/run.go
-          fileLogger, err := logger.NewFileLogger()
-          if err != nil {
-              return fmt.Errorf("failed to create logger: %w", err)
-          }
-          defer fileLogger.Close()
-
-          orchestrator := executor.NewOrchestrator(plan, fileLogger)
-          result, err := orchestrator.Execute(ctx)
-
-        key_points:
-          - point: "FileLogger integration"
-            details: "Add logger field to Orchestrator, pass FileLogger from run command"
-          - point: "Log directory management"
-            details: ".conductor/logs/ with override via --log-dir flag"
-          - point: "End-to-end testing"
-            details: "Run conductor on real implementation plans"
-          - point: "Error scenario testing"
-            details: "Verify graceful failure handling"
-          - point: "Performance testing"
-            details: "Check performance with various plan sizes"
-          - point: "Bug fixes and polish"
-            details: "Final cleanup and optimization"
-
-        integration:
-          imports:
-            - "github.com/harrison/conductor/internal/logger"
-          services_to_inject:
-            - "FileLogger"
-          config_values:
-            - "log_dir"
-          error_handling:
-            - "Logger creation failures"
-            - "Log write errors"
-            - "Task failure handling"
-
-      verification:
-        manual_testing:
-          - step: "Run conductor with file logging"
-            command: "./conductor run docs/plans/test-plan.md"
-            expected: "Files created in .conductor/logs/"
-          - step: "Verify per-task logs"
-            command: "ls -la .conductor/logs/tasks/"
-            expected: "Task log files exist"
-          - step: "Check symlink"
-            command: "cat .conductor/logs/latest.log"
-            expected: "Latest run log content visible"
-          - step: "Custom log directory"
-            command: "./conductor run docs/plans/test-plan.md --log-dir /custom/logs"
-            expected: "Logs created in custom directory"
-          - step: "Dry-run mode"
-            command: "./conductor run docs/plans/test-plan.md --dry-run"
-            expected: "Plan shown without execution, no logs created"
-
-        automated_tests:
-          command: "go test ./... -v"
-          expected_output: |
-            All tests passing with >78% coverage
-
-        success_criteria:
-          - "FileLogger integrated with run command"
-          - "Log files created during execution"
-          - "Per-task logs created correctly"
-          - "Symlink updated on each run"
-          - "End-to-end tests pass"
-          - "Error scenarios handled gracefully"
-          - "Performance acceptable"
-          - "All tests pass with >78% coverage"
-          - "No known bugs"
-          - "Code ready for public release"
-
-      commit:
-        type: "feat/chore"
-        message: "final integration and testing with logger integration"
-        body: ""
-        files:
-          - "internal/cmd/run.go"
-          - "internal/executor/orchestrator.go"
-          - "internal/cmd/run_test.go"
-          - "test/integration/orchestrator_test.go"
-          - "Various files (bug fixes and polish)"
-
     # Phase 2A: Multi-File Plan Support & Objective Plan Splitting
     - task_number: 26
       name: "Add WorktreeGroup Support to Models"
@@ -4310,12 +43,10 @@ plan:
         - "internal/models/models_test.go"
       depends_on: []
       estimated_time: "30m"
-      status: "pending"
-
+      status: "completed"
       description: |
         Add WorktreeGroup field to Task struct and WorktreeGroups slice to Plan struct.
         Define WorktreeGroup type with metadata for group-based task organization.
-
       test_first:
         test_file: "internal/models/models_test.go"
         structure:
@@ -4330,13 +61,11 @@ plan:
         edge_cases:
           - "Empty WorktreeGroup"
           - "Invalid group references"
-
       implementation:
         approach: |
           Add WorktreeGroup string field to Task struct.
           Define WorktreeGroup type in plan.go with fields: GroupID, Description, ExecutionModel, Isolation, Rationale.
           Add WorktreeGroups []WorktreeGroup to Plan struct.
-
         code_structure: |
           type Task struct {
               Number        int
@@ -4358,20 +87,17 @@ plan:
               WorktreeGroups  []WorktreeGroup  // NEW
               // ... existing fields
           }
-
         key_points:
           - point: "WorktreeGroup is string field on Task"
             details: "References group ID from Plan.WorktreeGroups"
           - point: "New WorktreeGroup type"
             details: "Contains metadata for group definition"
-
         integration:
           imports: []
           services_to_inject: []
           config_values: []
           error_handling:
             - "Validate WorktreeGroup references exist"
-
       verification:
         manual_testing:
           - step: "Create task with WorktreeGroup"
@@ -4384,7 +110,6 @@ plan:
           - "Task has WorktreeGroup field"
           - "Plan has WorktreeGroups field"
           - "Tests pass"
-
       commit:
         type: "feat"
         message: "add worktree group support to models"
@@ -4392,7 +117,7 @@ plan:
           - "internal/models/task.go"
           - "internal/models/plan.go"
           - "internal/models/models_test.go"
-
+      completed_date: "2025-11-11"
     - task_number: 27
       name: "Implement Multi-File Plan Loading"
       files:
@@ -4402,12 +127,10 @@ plan:
         - "internal/parser/parser_test.go"
       depends_on: [26]
       estimated_time: "1h 30m"
-      status: "pending"
-
+      status: "completed"
       description: |
         Enhance parser to detect directory input for split plans, implement ParseDirectory function
         to load all numbered files, auto-detect numbering pattern, and merge multiple parsed plans.
-
       test_first:
         test_file: "internal/parser/parser_test.go"
         structure:
@@ -4427,18 +150,15 @@ plan:
           - "Missing index file"
           - "Gaps in numbering"
           - "Invalid file format"
-
       implementation:
         approach: |
           Extend ParseFile() to detect directory vs file input.
           Add ParseDirectory() function to discover and load all numbered plan files.
           Implement MergePlans() to combine multiple parsed plans while preserving dependencies.
-
         code_structure: |
           func ParseFile(filename string) (*Plan, error)
           func ParseDirectory(dirname string) (*Plan, error)
           func MergePlans(plans ...*Plan) (*Plan, error)
-
         key_points:
           - point: "Auto-detect file vs directory"
             details: "Check if input is directory path"
@@ -4446,7 +166,6 @@ plan:
             details: "Look for 1-*.md, 2-*.yaml, etc."
           - point: "Merge preserves dependencies"
             details: "Cross-file task references work"
-
         integration:
           imports: []
           services_to_inject: []
@@ -4454,7 +173,6 @@ plan:
           error_handling:
             - "Handle missing numbered files"
             - "Validate merge consistency"
-
       verification:
         manual_testing:
           - step: "Parse split plan directory"
@@ -4466,7 +184,6 @@ plan:
           - "MergePlans works"
           - "Cross-file dependencies resolved"
           - "Tests pass"
-
       commit:
         type: "feat"
         message: "implement multi-file plan loading"
@@ -4474,7 +191,7 @@ plan:
           - "internal/parser/parser.go"
           - "internal/parser/markdown.go"
           - "internal/parser/yaml.go"
-
+      completed_date: "2025-11-11"
     - task_number: 28
       name: "Enhance Plan Validation for Multi-File Plans"
       files:
@@ -4482,12 +199,10 @@ plan:
         - "internal/cmd/validate_test.go"
       depends_on: [27]
       estimated_time: "1h 30m"
-      status: "pending"
-
+      status: "completed"
       description: |
         Enhance validate command to handle multi-file plans, validate worktree groups,
         validate cross-file dependencies, and validate split boundaries.
-
       test_first:
         test_file: "internal/cmd/validate_test.go"
         structure:
@@ -4507,33 +222,28 @@ plan:
           - "Orphaned tasks without group"
           - "Invalid group references"
           - "Broken cross-file dependencies"
-
       implementation:
         approach: |
           Extend validate command to detect directory vs file input.
           Add function to validate worktree groups exist and are assigned to all tasks.
           Add function to validate cross-file task references.
           Add function to validate split boundaries.
-
         code_structure: |
           func ValidateMultiFilePlan(dir string) error
           func ValidateWorktreeGroups(plan *Plan) error
           func ValidateCrossFileDeps(plan *Plan) error
           func ValidateSplitBoundaries(dir string) error
-
         key_points:
           - point: "Validate group assignments"
             details: "Every task must have valid WorktreeGroup"
           - point: "Validate cross-file refs"
             details: "All task dependencies must exist"
-
         integration:
           imports: []
           services_to_inject: []
           config_values: []
           error_handling:
             - "Report detailed validation errors"
-
       verification:
         manual_testing:
           - step: "Validate valid split plan"
@@ -4547,14 +257,13 @@ plan:
           - "Group validation works"
           - "Cross-file dependency validation works"
           - "Tests pass"
-
       commit:
         type: "feat"
         message: "enhance plan validation for multi-file plans"
         files:
           - "internal/cmd/validate.go"
           - "internal/cmd/validate_test.go"
-
+      completed_date: "2025-11-11"
     - task_number: 29
       name: "Annotate Dependency Graph with Worktree Groups"
       files:
@@ -4562,12 +271,10 @@ plan:
         - "internal/executor/graph_test.go"
       depends_on: [26]
       estimated_time: "45m"
-      status: "pending"
-
+      status: "completed"
       description: |
         Tag dependency graph nodes with worktree group information during BuildDependencyGraph,
         enhance Wave struct to track group metadata, update CalculateWaves to include group info.
-
       test_first:
         test_file: "internal/executor/graph_test.go"
         structure:
@@ -4581,14 +288,12 @@ plan:
         edge_cases:
           - "Mixed groups in wave"
           - "Group isolation violations"
-
       implementation:
         approach: |
           Enhance DependencyGraph struct to include Groups map[int]string (task number to group ID).
           Tag nodes with group during BuildDependencyGraph.
           Enhance Wave struct to include GroupInfo field.
           Update CalculateWaves to populate group metadata.
-
         code_structure: |
           type DependencyGraph struct {
               // ... existing fields
@@ -4599,18 +304,15 @@ plan:
               // ... existing fields
               GroupInfo map[string][]int  // NEW: group ID -> task numbers
           }
-
         key_points:
           - point: "Tag nodes during graph build"
             details: "Store group ID for each node"
           - point: "Wave includes group metadata"
             details: "Track which groups are active in wave"
-
         integration:
           imports: []
           services_to_inject: []
           config_values: []
-
       verification:
         manual_testing:
           - step: "Build graph with groups"
@@ -4621,14 +323,13 @@ plan:
           - "Graph tagging works"
           - "Wave metadata correct"
           - "Tests pass"
-
       commit:
         type: "feat"
         message: "annotate dependency graph with worktree groups"
         files:
           - "internal/executor/graph.go"
           - "internal/executor/graph_test.go"
-
+      completed_date: "2025-11-11"
     - task_number: 30
       name: "Implement Multi-File Plan Merging in Orchestrator"
       files:
@@ -4636,12 +337,10 @@ plan:
         - "internal/executor/orchestrator_test.go"
       depends_on: [27, 29]
       estimated_time: "1h"
-      status: "pending"
-
+      status: "completed"
       description: |
         Before building dependency graph, merge all loaded plan files, validate merged plan
         consistency, track file-to-task mapping for later updates.
-
       test_first:
         test_file: "internal/executor/orchestrator_test.go"
         structure:
@@ -4656,13 +355,11 @@ plan:
         edge_cases:
           - "Conflicting task numbers"
           - "Circular deps after merge"
-
       implementation:
         approach: |
           Add MergePlans function call in Run method before BuildDependencyGraph.
           Add FileToTaskMapping map to Orchestrator.
           Validate merged plan before execution.
-
         code_structure: |
           type Orchestrator struct {
               // ... existing fields
@@ -4674,18 +371,15 @@ plan:
               o.FileToTaskMapping = merged.GetFileMapping()
               // ... rest of execution
           }
-
         key_points:
           - point: "Merge before graph building"
             details: "Combines all task lists"
           - point: "Track file ownership"
             details: "Know which file each task came from"
-
         integration:
           imports: []
           services_to_inject: []
           config_values: []
-
       verification:
         manual_testing:
           - step: "Run with split plans"
@@ -4696,14 +390,13 @@ plan:
           - "Multi-file merging works"
           - "File mapping maintained"
           - "Tests pass"
-
       commit:
         type: "feat"
         message: "implement multi-file plan merging in orchestrator"
         files:
           - "internal/executor/orchestrator.go"
           - "internal/executor/orchestrator_test.go"
-
+      completed_date: "2025-11-11"
     - task_number: 31
       name: "Add File Tracking to Task Executor"
       files:
@@ -4713,12 +406,10 @@ plan:
         - "internal/filelock/filelock_test.go"
       depends_on: [30]
       estimated_time: "1h"
-      status: "pending"
-
+      status: "completed"
       description: |
         Track which file each task belongs to, update correct plan file when task completes,
         implement per-file locking strategy for safe concurrent updates.
-
       test_first:
         test_file: "internal/executor/task_test.go"
         structure:
@@ -4735,14 +426,12 @@ plan:
           - "Multiple tasks in same file"
           - "Concurrent updates to same file"
           - "File deletion during update"
-
       implementation:
         approach: |
           Add SourceFile field to task context during execution.
           Modify task executor to use FileToTaskMapping to find source file.
           Implement per-file locking in filelock package.
           Update plan file only when task completes.
-
         code_structure: |
           func (te *TaskExecutor) Execute(ctx context.Context, task *Task) error {
               sourceFile := te.fileMapping[task.Number]
@@ -4751,18 +440,15 @@ plan:
               // ... execute task
               // ... update only sourceFile
           }
-
         key_points:
           - point: "Track source file"
             details: "Know where task came from"
           - point: "Per-file locking"
             details: "Lock only files being written"
-
         integration:
           imports: []
           services_to_inject: []
           config_values: []
-
       verification:
         manual_testing:
           - step: "Execute task from split plan"
@@ -4774,7 +460,6 @@ plan:
           - "Updates to correct file"
           - "Locking prevents conflicts"
           - "Tests pass"
-
       commit:
         type: "feat"
         message: "add file tracking to task executor"
@@ -4782,7 +467,7 @@ plan:
           - "internal/executor/task.go"
           - "internal/executor/task_test.go"
           - "internal/filelock/filelock.go"
-
+      completed_date: "2025-11-11"
     - task_number: 32
       name: "Comprehensive Testing for Phase 2A"
       files:
@@ -4791,12 +476,10 @@ plan:
         - "Various test files"
       depends_on: [26, 27, 28, 29, 30, 31]
       estimated_time: "1h 30m"
-      status: "pending"
-
+      status: "completed"
       description: |
         Create test fixtures for split plans, write comprehensive tests for multi-file
         merging, cross-file dependencies, worktree group validation, and integration scenarios.
-
       test_first:
         test_file: "Various test files"
         structure:
@@ -4817,14 +500,12 @@ plan:
           - "Empty split files"
           - "Large number of splits"
           - "Complex cross-file dependencies"
-
       implementation:
         approach: |
           Create realistic split plan test fixtures with multiple groups.
           Write integration tests covering full Phase 2A workflows.
           Verify backward compatibility with single-file plans.
           Add stress tests for large split plans.
-
         code_structure: |
           // Test fixtures in testdata/
           docs/plans/test-split/
@@ -4832,7 +513,6 @@ plan:
           ├── 2-chain-2.md
           ├── 3-independent.md
           └── README.md
-
         key_points:
           - point: "Realistic test fixtures"
             details: "Multi-file plans with real scenarios"
@@ -4840,12 +520,10 @@ plan:
             details: "Test full workflows"
           - point: "Backward compatibility"
             details: "Ensure V1 plans still work"
-
         integration:
           imports: []
           services_to_inject: []
           config_values: []
-
       verification:
         manual_testing:
           - step: "Run all Phase 2A tests"
@@ -4859,14 +537,13 @@ plan:
           - "V1 tests pass"
           - "Coverage maintained or improved"
           - "All edge cases covered"
-
       commit:
         type: "test"
         message: "add comprehensive testing for phase 2a"
         files:
           - "internal/cmd/testdata/split-*.md"
           - "internal/parser/testdata/split-*.yaml"
-
+      completed_date: "2025-11-11"
     - task_number: 33
       name: "Update Documentation for Phase 2A"
       files:
@@ -4875,12 +552,10 @@ plan:
         - "docs/plans/phase-2a-guide.md"
       depends_on: [32]
       estimated_time: "45m"
-      status: "pending"
-
+      status: "completed"
       description: |
         Document Phase 2A features, add examples of split plans, explain worktree group
         assignments, update architecture diagrams to show multi-file support.
-
       test_first:
         test_file: "N/A"
         structure: []
@@ -4890,14 +565,12 @@ plan:
           - "Documentation is clear and complete"
           - "Examples are correct and runnable"
         edge_cases: []
-
       implementation:
         approach: |
           Update CLAUDE.md with Phase 2A overview.
           Add Phase 2A section to architecture documentation.
           Create examples of split plans in README.
           Document worktree group best practices.
-
         code_structure: |
           docs/plans/
           ├── phase-2a-guide.md      # Phase 2A walkthrough
@@ -4907,7 +580,6 @@ plan:
           │   │   ├── 2-implementation.md
           │   │   └── README.md
           │   └── worktree-groups-example.yaml
-
         key_points:
           - point: "Clear Phase 2A documentation"
             details: "Explain feature, benefits, usage"
@@ -4915,12 +587,10 @@ plan:
             details: "Show split plan patterns"
           - point: "Best practices guide"
             details: "How to structure split plans"
-
         integration:
           imports: []
           services_to_inject: []
           config_values: []
-
       verification:
         manual_testing:
           - step: "Follow examples from docs"
@@ -4934,7 +604,6 @@ plan:
           - "Examples provided"
           - "Best practices explained"
           - "Architecture updated"
-
       commit:
         type: "docs"
         message: "add documentation for phase 2a features"
@@ -4942,7 +611,7 @@ plan:
           - "CLAUDE.md"
           - "README.md"
           - "docs/plans/phase-2a-guide.md"
-
+      completed_date: "2025-11-11"
   testing_strategy:
     unit_tests:
       location: "*_test.go files alongside implementation"
@@ -4950,7 +619,6 @@ plan:
       run_command: "go test ./..."
       coverage_target: "70%"
       coverage_command: "go test -cover ./..."
-
     integration_tests:
       location: "test/integration/"
       what_to_test:
@@ -4962,14 +630,12 @@ plan:
         - "Mock agent responses"
         - "Test fixtures"
       run_command: "go test ./test/integration/..."
-
     e2e_tests:
       enabled: false
       location: "N/A"
       critical_flows: []
       tools: "N/A"
       run_command: "N/A"
-
     test_design_principles:
       patterns_to_use:
         - pattern: "Table-driven tests"
@@ -4990,45 +656,37 @@ plan:
                     }
                 })
             }
-
         - pattern: "Subtests with t.Run()"
           example: |
             func TestFeature(t *testing.T) {
                 t.Run("scenario 1", func(t *testing.T) { ... })
                 t.Run("scenario 2", func(t *testing.T) { ... })
             }
-
         - pattern: "Test fixtures in testdata/"
           example: |
             testdata/
             ├── sample-plan.md
             ├── sample-plan.yaml
             └── invalid-plan.md
-
       anti_patterns_to_avoid:
         - pattern: "Testing implementation details"
           why: "Makes tests brittle and coupled to implementation"
           instead: "Test behavior and outcomes, not internals"
-
         - pattern: "Tests with external dependencies"
           why: "Makes tests slow and unreliable"
           instead: "Use mocks and test doubles"
-
         - pattern: "Brittle tests that break on refactoring"
           why: "Creates maintenance burden"
           instead: "Test public interfaces, not private functions"
-
       mocking_guidelines:
         mock_these:
           - "External claude CLI (use test scripts)"
           - "File system operations (when appropriate)"
           - "Network calls"
-
         dont_mock_these:
           - "Internal functions"
           - "Simple utilities"
           - "Data structures"
-
         project_mocking_pattern:
           reference: "Use interfaces for testability"
           example: |
@@ -5041,10 +699,8 @@ plan:
             type MockParser struct {
                 ParseFunc func(r io.Reader) (*Plan, error)
             }
-
   commit_strategy:
     total_commits: 25
-
     commits:
       - sequence: 1
         type: "feat"
@@ -5055,7 +711,6 @@ plan:
           - "README.md"
           - ".gitignore"
         why_separate: "Foundation must be established first"
-
       - sequence: 2
         type: "feat"
         description: "add cobra CLI framework"
@@ -5066,7 +721,6 @@ plan:
           - "internal/cmd/root_test.go"
           - "cmd/conductor/main.go"
         why_separate: "CLI framework is independent infrastructure"
-
       - sequence: 3
         type: "feat"
         description: "define core data models"
@@ -5076,7 +730,6 @@ plan:
           - "internal/models/result.go"
           - "internal/models/models_test.go"
         why_separate: "Core domain models are foundation for other features"
-
       - sequence: 4
         type: "feat"
         description: "implement markdown plan parser"
@@ -5087,7 +740,6 @@ plan:
           - "go.mod"
           - "go.sum"
         why_separate: "Parser is substantial feature, deserves own commit"
-
       - sequence: 5
         type: "feat"
         description: "implement YAML plan parser"
@@ -5096,7 +748,6 @@ plan:
           - "internal/parser/yaml_test.go"
           - "internal/parser/testdata/sample-plan.yaml"
         why_separate: "Alternative parser format, separate concern"
-
     message_format:
       pattern: "type: brief description in present tense"
       examples:
@@ -5104,16 +755,13 @@ plan:
         - "fix: resolve race condition in async handler"
         - "test: add edge case coverage for validation"
         - "refactor: extract common logic to utility"
-
       example_from_history: |
         feat: implement markdown plan parser
-
     commit_guidelines:
       - "Keep commits atomic - one logical change per commit"
       - "Write clear, descriptive messages in imperative mood"
       - "Commit after each completed task"
       - "Tests and implementation in same commit (after TDD red-green)"
-
   common_pitfalls:
     - pitfall: "Goroutine leaks"
       why: "Forgetting to close channels or wait for goroutines"
@@ -5121,128 +769,101 @@ plan:
       reference:
         file: "Standard Go concurrency patterns"
         pattern: "Always clean up goroutines"
-
     - pitfall: "Race conditions in plan updates"
       why: "Multiple goroutines writing to plan file"
       how_to_avoid: "Use flock file locking"
       reference:
         file: "github.com/gofrs/flock examples"
         pattern: "Lock before write, unlock after"
-
     - pitfall: "Timeout not propagating"
       why: "Not passing context through call chain"
       how_to_avoid: "Always pass context.Context as first parameter"
       reference:
         file: "Go context package documentation"
         pattern: "Context should be first parameter"
-
     - pitfall: "Circular dependencies not detected"
       why: "Incorrect graph traversal"
       how_to_avoid: "Implement proper DFS with color marking"
       reference:
         file: "Task 7 graph implementation"
         pattern: "Use white-gray-black coloring for cycle detection"
-
   resources:
     existing_code:
       - type: "Completed tasks"
         path: "internal/models/"
         note: "Study the models package structure"
-
       - type: "Test examples"
         path: "internal/parser/markdown_test.go"
         note: "Follow testing patterns used here"
-
       - type: "Go idioms"
         path: "All existing .go files"
         note: "Maintain consistent code style"
-
     documentation:
       - type: "Go Project Layout"
         link: "https://github.com/golang-standards/project-layout"
         relevance: "Standard project structure"
-
       - type: "Cobra CLI"
         link: "https://github.com/spf13/cobra"
         relevance: "CLI framework documentation"
-
       - type: "Effective Go"
         link: "https://go.dev/doc/effective_go"
         relevance: "Go best practices"
-
     external_resources:
       - title: "Goldmark documentation"
         url: "https://github.com/yuin/goldmark"
         why: "Markdown parsing library"
-
       - title: "YAML v3 for Go"
         url: "https://github.com/go-yaml/yaml"
         why: "YAML parsing library"
-
       - title: "File locking in Go"
         url: "https://github.com/gofrs/flock"
         why: "Concurrent file access"
-
     validation_checklist:
       - item: "All tests pass"
         command: "go test ./..."
         checked: false
-
       - item: "Code formatted correctly"
         command: "gofmt -w ."
         checked: false
-
       - item: "Linter passes"
         command: "golangci-lint run"
         checked: false
-
       - item: "No race conditions"
         command: "go test -race ./..."
         checked: false
-
       - item: "Build succeeds"
         command: "go build ./cmd/conductor"
         checked: false
-
       - item: "Binary works"
         command: "./conductor --help"
         checked: false
-
       - item: "Documentation updated"
         files: "README.md, relevant docs"
         checked: false
-
   progress_summary:
     last_updated: "2025-11-10"
     total_tasks: 25
     completed_tasks: 20
     completion_percentage: 80
-
     phases:
       - name: "Phase 1 (Foundation)"
         status: "COMPLETE"
         progress: "100%"
-
       - name: "Phase 2 (Core Execution)"
         status: "COMPLETE"
         progress: "100%"
-
       - name: "Phase 3 (Concurrency & Orchestration)"
         status: "COMPLETE"
         progress: "100%"
-
       - name: "Phase 4 (CLI Interface)"
         status: "COMPLETE"
         progress: "100%"
-
       - name: "Phase 5 (Advanced Features)"
         status: "IN PROGRESS"
         progress: "20%"
-
       - name: "Phase 6 (Robustness)"
         status: "PENDING"
         progress: "0%"
-
     latest_milestone:
       task_number: 20
       task_name: "Configuration File Support"
@@ -5252,7 +873,6 @@ plan:
       test_coverage: "100%"
       test_count: 18
       lines_of_code: 706
-
     quality_metrics:
       overall_test_coverage: "78.3%"
       total_tests: 451

@@ -1,0 +1,85 @@
+# Example: Resume YAML Plan with Skip-Completed
+
+# This example demonstrates how to use the skip-completed feature
+# with a YAML plan file. Run with:
+#
+# conductor run resume-completed-yaml.yaml --skip-completed
+
+plan:
+  name: User Authentication Feature
+  description: Multi-wave implementation with some tasks already completed
+
+  tasks:
+    # Task 1: Already completed in a previous run
+    - id: 1
+      name: Database Schema
+      files: [migrations/001_users.sql]
+      estimated_time: 10 minutes
+      status: completed
+      description: |
+        Create users table with authentication fields.
+        This task was already completed in the previous run.
+
+    # Task 2: Also completed
+    - id: 2
+      name: User Model
+      files: [models/user.go]
+      depends_on: [Task 1]
+      estimated_time: 15 minutes
+      status: completed
+      description: |
+        Implement User struct and ORM methods.
+        This task was also completed previously.
+
+    # Task 3: Pending - will execute
+    - id: 3
+      name: Authentication Service
+      files: [services/auth.go]
+      depends_on: [Task 2]
+      estimated_time: 20 minutes
+      description: |
+        Implement login, register, and token refresh services.
+        This is a pending task and will execute normally.
+
+    # Task 4: Pending - depends on Task 3
+    - id: 4
+      name: API Endpoints
+      files: [handlers/auth_handler.go]
+      depends_on: [Task 3]
+      estimated_time: 15 minutes
+      description: |
+        Implement /auth/login and /auth/register endpoints.
+        Will execute after Task 3 completes.
+
+    # Task 5: Pending - depends on Task 4
+    - id: 5
+      name: Integration Tests
+      files: [tests/auth_integration_test.go]
+      depends_on: [Task 4]
+      estimated_time: 20 minutes
+      description: |
+        Write end-to-end tests for the auth flow.
+        Final task in the pipeline.
+
+---
+
+# Usage Examples:
+
+# 1. Resume skipping completed tasks:
+#    conductor run resume-completed-yaml.yaml --skip-completed
+#
+#    Expected behavior:
+#    - Wave 1: Task 1 SKIPPED (status: completed)
+#    - Wave 2: Task 2 SKIPPED (status: completed)
+#    - Wave 3: Task 3 EXECUTED
+#    - Wave 4: Task 4 EXECUTED (depends on Task 3)
+#    - Wave 5: Task 5 EXECUTED (depends on Task 4)
+
+# 2. Dry run to preview what will execute:
+#    conductor run resume-completed-yaml.yaml --skip-completed --dry-run
+
+# 3. With custom concurrency:
+#    conductor run resume-completed-yaml.yaml --skip-completed --max-concurrency 5
+
+# 4. With verbose logging:
+#    conductor run resume-completed-yaml.yaml --skip-completed --verbose

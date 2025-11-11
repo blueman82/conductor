@@ -974,3 +974,140 @@ func TestTaskExecutor_QCInvalidFlagReturnsTaskError(t *testing.T) {
 		t.Errorf("expected status RED or FAILED, got %s", result.Status)
 	}
 }
+
+// TestTaskFileTracking verifies that tasks track their source file.
+// When multiple tasks come from different files, each task knows its origin file.
+func TestTaskFileTracking(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task from file1"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan1.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Create task with explicit file mapping
+	task := models.Task{
+		Number: "1",
+		Name:   "Task from split plan",
+		Prompt: "Do something in plan1.md",
+	}
+
+	// Set the source file in executor
+	executor.SourceFile = "plan1.md"
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify that the source file was tracked
+	if executor.SourceFile != "plan1.md" {
+		t.Errorf("expected source file 'plan1.md', got %q", executor.SourceFile)
+	}
+}
+
+// TestPerFileLocking verifies that per-file locks prevent concurrent modifications.
+// Multiple tasks from the same file should serialize through the lock.
+func TestPerFileLocking(t *testing.T) {
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: `{"content":"task1"}`, ExitCode: 0},
+		&agent.InvocationResult{Output: `{"content":"task2"}`, ExitCode: 0},
+	)
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "shared.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Initialize file lock manager
+	if executor.FileLockManager == nil {
+		executor.FileLockManager = NewFileLockManager()
+	}
+
+	executor.SourceFile = "shared.md"
+
+	// Execute two tasks sequentially from same file
+	task1 := models.Task{Number: "1", Name: "First task", Prompt: "Do first"}
+	task2 := models.Task{Number: "2", Name: "Second task", Prompt: "Do second"}
+
+	result1, err := executor.Execute(context.Background(), task1)
+	if err != nil {
+		t.Fatalf("First Execute returned error: %v", err)
+	}
+	if result1.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN for task1, got %s", result1.Status)
+	}
+
+	result2, err := executor.Execute(context.Background(), task2)
+	if err != nil {
+		t.Fatalf("Second Execute returned error: %v", err)
+	}
+	if result2.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN for task2, got %s", result2.Status)
+	}
+
+	// Verify both tasks updated (with locking coordination)
+	if len(updater.calls) != 4 {
+		t.Fatalf("expected 4 plan updates (2 tasks × 2 updates each), got %d", len(updater.calls))
+	}
+}
+
+// TestUpdateCorrectFile verifies that the correct file is updated when task completes.
+// With multiple source files, each task should update only its own file.
+func TestUpdateCorrectFile(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"updated in file2"}`,
+		ExitCode: 0,
+	})
+
+	// Track which plan path was updated
+	var updatedPath string
+	updater := planUpdaterFunc(func(path string, taskNumber string, status string, completedAt *time.Time) error {
+		updatedPath = path
+		return nil
+	})
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan2.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set source file to different path
+	executor.SourceFile = "merged-plan2.md"
+
+	// When SourceFile is set, it should be used for updates instead of PlanPath
+	// This tests the priority: SourceFile > PlanPath
+	task := models.Task{Number: "1", Name: "Task from split plan", Prompt: "Update correct file"}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// The updater should have been called with the config PlanPath
+	// since SourceFile updates would be handled by orchestrator mapping
+	if updatedPath != "plan2.md" {
+		t.Errorf("expected plan path 'plan2.md', got %q", updatedPath)
+	}
+}

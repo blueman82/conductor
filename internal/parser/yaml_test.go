@@ -259,3 +259,141 @@ plan:
 		t.Errorf("Expected agent 'swiftdev', got '%s'", plan.Tasks[0].Agent)
 	}
 }
+
+func TestParseYAMLWithStatus(t *testing.T) {
+	tests := []struct {
+		name           string
+		status         string
+		completedDate  string
+		expectedStatus string
+	}{
+		{"pending task", "pending", "", "pending"},
+		{"completed task", "completed", "2025-11-10", "completed"},
+		{"in-progress task", "in_progress", "", "in_progress"},
+		{"skipped task", "skipped", "", "skipped"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Test Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+      status: "` + tt.status + `"`
+
+			if tt.completedDate != "" {
+				yamlContent += `
+      completed_date: "` + tt.completedDate + `"`
+			}
+
+			parser := NewYAMLParser()
+			plan, err := parser.Parse(strings.NewReader(yamlContent))
+			if err != nil {
+				t.Fatalf("Failed to parse YAML: %v", err)
+			}
+
+			if plan.Tasks[0].Status != tt.expectedStatus {
+				t.Errorf("Expected status '%s', got '%s'", tt.expectedStatus, plan.Tasks[0].Status)
+			}
+		})
+	}
+}
+
+func TestParseYAMLStatusWithCompletedDate(t *testing.T) {
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Completed Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "This task was completed"
+      status: "completed"
+      completed_date: "2025-11-10"
+`
+
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	task := plan.Tasks[0]
+	if task.Status != "completed" {
+		t.Errorf("Expected status 'completed', got '%s'", task.Status)
+	}
+
+	if task.CompletedAt == nil {
+		t.Error("Expected CompletedAt to be set, but it was nil")
+	} else {
+		// Verify it's parsed as a date (at least the date part matches)
+		if task.CompletedAt.Format("2006-01-02") != "2025-11-10" {
+			t.Errorf("Expected completion date '2025-11-10', got '%s'", task.CompletedAt.Format("2006-01-02"))
+		}
+	}
+}
+
+func TestParseYAMLStatusWithCompletedAt(t *testing.T) {
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Completed Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "This task was completed"
+      status: "completed"
+      completed_at: "2025-11-10T14:30:00Z"
+`
+
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	task := plan.Tasks[0]
+	if task.Status != "completed" {
+		t.Errorf("Expected status 'completed', got '%s'", task.Status)
+	}
+
+	if task.CompletedAt == nil {
+		t.Error("Expected CompletedAt to be set, but it was nil")
+	} else {
+		if task.CompletedAt.Format("2006-01-02") != "2025-11-10" {
+			t.Errorf("Expected completion date '2025-11-10', got '%s'", task.CompletedAt.Format("2006-01-02"))
+		}
+	}
+}
+
+func TestParseYAMLStatusWithoutTimestamp(t *testing.T) {
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Pending Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "This task is pending"
+      status: "pending"
+`
+
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	task := plan.Tasks[0]
+	if task.Status != "pending" {
+		t.Errorf("Expected status 'pending', got '%s'", task.Status)
+	}
+
+	if task.CompletedAt != nil {
+		t.Errorf("Expected CompletedAt to be nil for pending task, but got %v", task.CompletedAt)
+	}
+}

@@ -1,0 +1,17 @@
+conductor:
+  worktree_groups:
+    - group_id: "group-1"
+      description: "Group 1"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Initial setup"
+
+plan:
+  tasks:
+    - task_number: 1
+      name: "Initialize"
+      files: ["init.go"]
+      depends_on: []
+      agent: "golang-pro"
+      description: "Initialize system"
+      worktree_group: "group-1"

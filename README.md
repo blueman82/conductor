@@ -27,6 +27,7 @@ Conductor automates complex multi-step implementations by:
 - **Dependency Management**: Automatic dependency graph calculation with cycle detection
 - **Quality Control**: Automated review of task outputs (GREEN/RED/YELLOW verdicts)
 - **Retry Logic**: Automatic retry on failures (up to 2 attempts per task)
+- **Skip Completed Tasks**: Resume interrupted plans by skipping already-completed tasks
 - **File Locking**: Safe concurrent updates to plan files
 - **Agent Discovery**: Automatic detection of available Claude agents
 - **Dual Format Support**: Both Markdown and YAML plan formats
@@ -125,6 +126,24 @@ conductor run plan.md --verbose
 
 # Custom log directory
 conductor run plan.md --log-dir ./execution-logs
+
+# Skip completed tasks and retry failed ones
+conductor run plan.md --skip-completed --retry-failed
+```
+
+### Resume Interrupted Plans
+
+Conductor supports resumable execution by skipping tasks marked as completed:
+
+```bash
+# Run plan, marking completed tasks in the file
+conductor run plan.md
+
+# Resume the plan later, skipping completed tasks
+conductor run plan.md --skip-completed
+
+# Retry failed tasks on resume
+conductor run plan.md --skip-completed --retry-failed
 ```
 
 ### Command-Line Flags
@@ -138,6 +157,8 @@ conductor run plan.md --log-dir ./execution-logs
 | `--timeout` | duration | 30m | Timeout for entire execution |
 | `--verbose` | bool | false | Enable detailed logging |
 | `--log-dir` | string | .conductor/logs | Directory for execution logs |
+| `--skip-completed` | bool | false | Skip tasks marked as completed in plan |
+| `--retry-failed` | bool | false | Retry tasks marked as failed in plan |
 
 **`conductor validate` flags:**
 
@@ -160,12 +181,12 @@ vim .conductor/config.yaml
 ```yaml
 # Execution settings
 max_concurrency: 3        # Parallel tasks per wave
-task_timeout: 5m          # Individual task timeout
-execution_timeout: 30m    # Total execution timeout
+timeout: 30m              # Total execution timeout
+dry_run: false            # Simulate without executing
 
-# Quality control settings
-qc_enabled: true          # Enable QC reviews
-max_retries: 2            # Retry attempts on RED
+# Resume & retry settings
+skip_completed: false     # Skip tasks marked as completed
+retry_failed: false       # Retry tasks marked as failed
 
 # Logging settings
 log_dir: .conductor/logs  # Log directory
@@ -244,11 +265,14 @@ See [plugin/docs](plugin/docs) for complete plugin documentation.
 
 - **[Usage Guide](docs/usage.md)** - Detailed CLI reference and examples
 - **[Plan Format Guide](docs/plan-format.md)** - Plan format specifications
+- **[Phase 2A Guide](docs/phase-2a-guide.md)** - Multi-file plans and plan splitting
 - **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
+- **[Split Plan Examples](docs/examples/split-plan-README.md)** - Example split plans
 - **[Plugin Docs](plugin/docs)** - Plan generation & design tools
 
 ## Architecture Overview
 
+### Phase 1 (v1.0) - Single-File Plans
 ```
 Plan File (.md/.yaml)
   → Parser (auto-detects format)
@@ -261,14 +285,27 @@ Plan File (.md/.yaml)
   → Plan Updater (marks tasks complete)
 ```
 
+### Phase 2A - Multi-File Plans (Extended)
+```
+Multiple Plan Files (.md/.yaml)
+  → Multi-File Loader (auto-detects format per file)
+  → Plan Merger (validates, deduplicates, merges)
+  → Dependency Graph (cross-file dependencies)
+  → Wave Calculator (respects worktree groups)
+  → [Rest of pipeline as above]
+  → Plan Updater (file-aware task tracking)
+```
+
 **Key Components:**
 
-- **Parser**: Auto-detects and parses Markdown/YAML plan files
-- **Graph Builder**: Calculates dependencies using Kahn's algorithm
+- **Parser**: Auto-detects and parses Markdown/YAML plan files (per file in Phase 2A)
+- **Multi-File Loader**: Loads and merges multiple plans with validation (Phase 2A)
+- **Graph Builder**: Calculates dependencies using Kahn's algorithm (cross-file in Phase 2A)
 - **Orchestrator**: Coordinates wave-based execution with bounded concurrency
 - **Task Executor**: Spawns Claude CLI agents with timeout and retry logic
 - **Quality Control**: Reviews task outputs using dedicated QC agent
-- **Plan Updater**: Thread-safe updates to plan files with file locking
+- **Plan Updater**: Thread-safe updates to plan files with file locking (file-aware in Phase 2A)
+- **Worktree Groups**: Organize tasks into execution groups with isolation levels (Phase 2A)
 
 ## Development
 
@@ -307,11 +344,33 @@ golangci-lint run
 go vet ./...
 ```
 
+## Multi-File Plans (Phase 2A)
+
+Conductor supports splitting large implementation plans across multiple files with automatic merging and dependency management:
+
+```bash
+# Load and execute multiple plan files
+conductor run setup.md features.md deployment.md
+
+# Validate split plans before execution
+conductor validate *.md
+```
+
+**Features:**
+- ✅ Multi-file plan loading with auto-format detection
+- ✅ Objective plan splitting by feature/component/service
+- ✅ Cross-file dependency management
+- ✅ Worktree groups for execution control
+- ✅ File-to-task mapping for resume operations
+- ✅ 100% backward compatible with v1.0 single-file plans
+
+See [Phase 2A Guide](docs/phase-2a-guide.md) for detailed documentation and examples.
+
 ## Project Status
 
-**Current Status**: Production-ready v1.0
+**Current Status**: Production-ready v1.0 + Phase 2A (Multi-File Plans)
 
-### Conductor Core
+### Conductor Core (Phase 1)
 - ✅ Complete implementation with full test coverage
 - ✅ `conductor validate` and `conductor run` commands
 - ✅ Wave-based parallel execution
@@ -319,6 +378,14 @@ go vet ./...
 - ✅ File locking for concurrent updates
 - ✅ Agent discovery system
 - ✅ Comprehensive documentation
+
+### Phase 2A Extensions
+- ✅ Multi-file plan loading and merging
+- ✅ Objective plan splitting with logical grouping
+- ✅ Worktree group organization (parallel/sequential, isolation levels)
+- ✅ FileToTaskMap tracking for resume operations
+- ✅ 37 integration tests for Phase 2A features
+- ✅ 100% backward compatible with v1.0
 
 ### Conductor Plugin
 - ✅ 4 slash commands (`/doc`, `/doc-yaml`, `/cook-auto`, `/cook-man`)

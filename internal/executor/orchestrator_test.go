@@ -43,6 +43,12 @@ func (m *mockLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
 	}{wave: wave, duration: duration})
 }
 
+func (m *mockLogger) LogTaskResult(result models.TaskResult) error {
+	// Base mockLogger doesn't track task results; this is a no-op.
+	// Use mockLoggerWithTaskLogging for tests that need task logging.
+	return nil
+}
+
 func (m *mockLogger) LogSummary(result models.ExecutionResult) {
 	m.summaryCalls = append(m.summaryCalls, result)
 }
@@ -171,6 +177,21 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 				t.Errorf("expected 1 summary log call, got %d", len(mockLog.summaryCalls))
 			}
 		})
+	}
+}
+
+// TestOrchestratorExecutePlanEmptyInput verifies error handling for no plans
+func TestOrchestratorExecutePlanEmptyInput(t *testing.T) {
+	mockWave := &mockWaveExecutor{}
+	mockLog := &mockLogger{}
+	orch := NewOrchestrator(mockWave, mockLog)
+
+	result, err := orch.ExecutePlan(context.Background())
+	if err == nil {
+		t.Error("expected error for empty plans, got nil")
+	}
+	if result != nil {
+		t.Error("expected nil result for empty plans")
 	}
 }
 
@@ -426,11 +447,18 @@ func TestOrchestratorNilInputs(t *testing.T) {
 			}
 
 			orch := NewOrchestrator(tt.waveExec, tt.logger)
-			_, err := orch.ExecutePlan(context.Background(), tt.plan)
+			var result *models.ExecutionResult
+			var err error
+			if tt.plan != nil {
+				result, err = orch.ExecutePlan(context.Background(), tt.plan)
+			} else {
+				result, err = orch.ExecutePlan(context.Background())
+			}
 
 			if !tt.expectPanic && tt.plan == nil && err == nil {
-				t.Error("expected error for nil plan")
+				t.Error("expected error for no plans")
 			}
+			_ = result // Suppress unused variable warning
 		})
 	}
 }
@@ -553,5 +581,235 @@ func TestOrchestratorTimeoutErrorHandling(t *testing.T) {
 	// Verify result still returned
 	if result == nil {
 		t.Error("expected non-nil result even on timeout")
+	}
+}
+
+// TestMergeMultiFilePlans verifies that multiple plan files are merged correctly
+func TestMergeMultiFilePlans(t *testing.T) {
+	tests := []struct {
+		name             string
+		plans            []*models.Plan
+		expectedTasks    int
+		expectedConflict bool
+		expectErr        bool
+	}{
+		{
+			name: "merge two simple plans",
+			plans: []*models.Plan{
+				{
+					Name:     "Plan 1",
+					FilePath: "plan1.yaml",
+					Tasks: []models.Task{
+						{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+						{Number: "2", Name: "Task 2", Prompt: "Do task 2", DependsOn: []string{"1"}},
+					},
+				},
+				{
+					Name:     "Plan 2",
+					FilePath: "plan2.yaml",
+					Tasks: []models.Task{
+						{Number: "3", Name: "Task 3", Prompt: "Do task 3"},
+						{Number: "4", Name: "Task 4", Prompt: "Do task 4", DependsOn: []string{"3"}},
+					},
+				},
+			},
+			expectedTasks:    4,
+			expectedConflict: false,
+			expectErr:        false,
+		},
+		{
+			name: "conflicting task numbers",
+			plans: []*models.Plan{
+				{
+					Name:     "Plan 1",
+					FilePath: "plan1.yaml",
+					Tasks: []models.Task{
+						{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+					},
+				},
+				{
+					Name:     "Plan 2",
+					FilePath: "plan2.yaml",
+					Tasks: []models.Task{
+						{Number: "1", Name: "Task 1 Duplicate", Prompt: "Do duplicate task"},
+					},
+				},
+			},
+			expectedTasks:    0,
+			expectedConflict: true,
+			expectErr:        true,
+		},
+		{
+			name: "single plan",
+			plans: []*models.Plan{
+				{
+					Name:     "Plan 1",
+					FilePath: "plan1.yaml",
+					Tasks: []models.Task{
+						{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+					},
+				},
+			},
+			expectedTasks:    1,
+			expectedConflict: false,
+			expectErr:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merged, err := MergePlans(tt.plans...)
+
+			if tt.expectErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.expectErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			if !tt.expectErr && merged == nil {
+				t.Fatal("expected non-nil merged plan")
+			}
+
+			if !tt.expectErr && len(merged.Tasks) != tt.expectedTasks {
+				t.Errorf("expected %d tasks, got %d", tt.expectedTasks, len(merged.Tasks))
+			}
+		})
+	}
+}
+
+// TestFileToTaskMapping verifies file-to-task ownership tracking
+func TestFileToTaskMapping(t *testing.T) {
+	mockWave := &mockWaveExecutor{
+		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+			return []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "2"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "3"}, Status: models.StatusGreen},
+			}, nil
+		},
+	}
+
+	orch := NewOrchestrator(mockWave, nil)
+
+	plans := []*models.Plan{
+		{
+			Name:     "Plan 1",
+			FilePath: "plan1.yaml",
+			Tasks: []models.Task{
+				{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+				{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+			},
+			Waves: []models.Wave{
+				{Name: "Wave 1", TaskNumbers: []string{"1", "2"}},
+			},
+		},
+		{
+			Name:     "Plan 2",
+			FilePath: "plan2.yaml",
+			Tasks: []models.Task{
+				{Number: "3", Name: "Task 3", Prompt: "Do task 3"},
+			},
+			Waves: []models.Wave{
+				{Name: "Wave 1", TaskNumbers: []string{"3"}},
+			},
+		},
+	}
+
+	result, err := orch.ExecutePlan(context.Background(), plans...)
+	if err != nil {
+		t.Fatalf("execution failed: %v", err)
+	}
+	_ = result // Suppress unused variable warning
+
+	// Verify file-to-task mapping is populated
+	if orch.FileToTaskMapping == nil {
+		t.Error("FileToTaskMapping not initialized")
+	}
+
+	tests := []struct {
+		taskNum      string
+		expectedFile string
+	}{
+		{"1", "plan1.yaml"},
+		{"2", "plan1.yaml"},
+		{"3", "plan2.yaml"},
+	}
+
+	for _, test := range tests {
+		if file, ok := orch.FileToTaskMapping[test.taskNum]; !ok {
+			t.Errorf("task %s not in mapping", test.taskNum)
+		} else if file != test.expectedFile {
+			t.Errorf("task %s mapped to %s, expected %s", test.taskNum, file, test.expectedFile)
+		}
+	}
+}
+
+// TestOrchestratorWithConfig verifies that skip/retry config is properly threaded through orchestrator
+func TestOrchestratorWithConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		skipCompleted bool
+		retryFailed   bool
+	}{
+		{
+			name:          "skip completed enabled",
+			skipCompleted: true,
+			retryFailed:   false,
+		},
+		{
+			name:          "retry failed enabled",
+			skipCompleted: false,
+			retryFailed:   true,
+		},
+		{
+			name:          "both enabled",
+			skipCompleted: true,
+			retryFailed:   true,
+		},
+		{
+			name:          "both disabled",
+			skipCompleted: false,
+			retryFailed:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockWave := &mockWaveExecutor{
+				executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+					return []models.TaskResult{
+						{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+					}, nil
+				},
+			}
+			mockLog := &mockLogger{}
+
+			plan := &models.Plan{
+				Name:  "Test Plan",
+				Tasks: []models.Task{{Number: "1", Name: "Task 1"}},
+				Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []string{"1"}}},
+			}
+
+			// Create orchestrator with config
+			orch := NewOrchestratorWithConfig(mockWave, mockLog, tt.skipCompleted, tt.retryFailed)
+
+			// Verify config fields are set
+			if orch.skipCompleted != tt.skipCompleted {
+				t.Errorf("expected skipCompleted=%v, got %v", tt.skipCompleted, orch.skipCompleted)
+			}
+			if orch.retryFailed != tt.retryFailed {
+				t.Errorf("expected retryFailed=%v, got %v", tt.retryFailed, orch.retryFailed)
+			}
+
+			// Execute plan
+			result, err := orch.ExecutePlan(context.Background(), plan)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if result == nil {
+				t.Fatal("expected non-nil result")
+			}
+		})
 	}
 }

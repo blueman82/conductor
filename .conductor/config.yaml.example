@@ -29,6 +29,14 @@ log_dir: .conductor/logs
 # When true, validates and shows what would run without executing (default: false)
 dry_run: false
 
+# Skip completed tasks
+# When true, skips tasks that are already marked as completed in the plan file (default: false)
+skip_completed: false
+
+# Retry failed tasks
+# When true, retries tasks that previously failed (default: false)
+retry_failed: false
+
 # ===== ADVANCED CONFIGURATION =====
 # The settings below are optional and have sensible defaults.
 # Uncomment and modify only if you need to change them.
@@ -47,3 +55,9 @@ dry_run: false
 
 # Example: Enable dry-run by default
 # dry_run: true
+
+# Example: Skip tasks that are already completed
+# skip_completed: true
+
+# Example: Retry tasks that failed in previous runs
+# retry_failed: true

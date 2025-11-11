@@ -1,10 +1,13 @@
 package parser
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/harrison/conductor/internal/models"
 )
 
 // TestDetectFormat tests format detection based on file extensions
@@ -361,25 +364,25 @@ func TestParseFile_ErrorHandling(t *testing.T) {
 		wantError string
 	}{
 		{
-			name: "directory instead of file",
+			name: "empty directory returns empty plan",
 			setup: func() string {
 				return tmpDir
 			},
-			wantError: "unknown file format",
+			wantError: "", // Should NOT error - directories are valid
 		},
 		{
-			name: "empty filename",
+			name: "nonexistent path returns error",
 			setup: func() string {
-				return ""
+				return filepath.Join(tmpDir, "nonexistent", "path.md")
 			},
-			wantError: "unknown file format",
+			wantError: "failed to access path",
 		},
 		{
 			name: "file with wrong extension",
 			setup: func() string {
-				filepath := filepath.Join(tmpDir, "test.json")
-				os.WriteFile(filepath, []byte(`{"test": true}`), 0644)
-				return filepath
+				filePath := filepath.Join(tmpDir, "test.json")
+				os.WriteFile(filePath, []byte(`{"test": true}`), 0644)
+				return filePath
 			},
 			wantError: "unknown file format",
 		},
@@ -387,9 +390,16 @@ func TestParseFile_ErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filepath := tt.setup()
+			filePath := tt.setup()
 
-			_, err := ParseFile(filepath)
+			_, err := ParseFile(filePath)
+
+			if tt.wantError == "" {
+				if err != nil {
+					t.Errorf("ParseFile() unexpected error: %v", err)
+				}
+				return
+			}
 
 			if err == nil {
 				t.Error("ParseFile() expected error, got nil")
@@ -438,5 +448,125 @@ Test task description.`
 	// Verify it's an absolute path
 	if !filepath.IsAbs(plan.FilePath) {
 		t.Errorf("plan.FilePath should be absolute, got %q", plan.FilePath)
+	}
+}
+
+// TestParseDirectory tests loading all numbered files from a directory
+func TestParseDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	plan1 := `# Test Plan Part 1
+
+## Task 1: First Task
+
+**File(s)**: test.go
+**Depends on**: None
+**Estimated time**: 30m
+
+Description.
+
+## Task 2: Second Task
+
+**File(s)**: test.go
+**Depends on**: Task 1
+**Estimated time**: 30m
+
+Description.`
+
+	plan2 := `# Test Plan Part 2
+
+## Task 3: Third Task
+
+**File(s)**: test.go
+**Depends on**: Task 2
+**Estimated time**: 30m
+
+Description.`
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "1-part1.md"), []byte(plan1), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "2-part2.md"), []byte(plan2), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	plan, err := ParseDirectory(tmpDir)
+	if err != nil {
+		t.Fatalf("ParseDirectory() error = %v", err)
+	}
+	if plan == nil {
+		t.Fatal("ParseDirectory() returned nil plan")
+	}
+	if len(plan.Tasks) != 3 {
+		t.Errorf("ParseDirectory() loaded %d tasks, want 3", len(plan.Tasks))
+	}
+}
+
+// TestMergePlans tests merging multiple parsed plans
+func TestMergePlans(t *testing.T) {
+	plan1 := &models.Plan{
+		Name: "Part 1",
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Prompt 1", DependsOn: []string{}},
+			{Number: "2", Name: "Task 2", Prompt: "Prompt 2", DependsOn: []string{"1"}},
+		},
+	}
+	plan2 := &models.Plan{
+		Name: "Part 2",
+		Tasks: []models.Task{
+			{Number: "3", Name: "Task 3", Prompt: "Prompt 3", DependsOn: []string{"2"}},
+		},
+	}
+
+	merged, err := MergePlans(plan1, plan2)
+	if err != nil {
+		t.Fatalf("MergePlans() error = %v", err)
+	}
+	if merged == nil {
+		t.Fatal("MergePlans() returned nil plan")
+	}
+	if len(merged.Tasks) != 3 {
+		t.Errorf("MergePlans() resulted in %d tasks, want 3", len(merged.Tasks))
+	}
+}
+
+// TestMergePlans_DuplicateTasks tests merging with duplicate task numbers
+func TestMergePlans_DuplicateTasks(t *testing.T) {
+	plan1 := &models.Plan{
+		Name:  "Part 1",
+		Tasks: []models.Task{{Number: "1", Name: "Task 1", Prompt: "Prompt"}},
+	}
+	plan2 := &models.Plan{
+		Name:  "Part 2",
+		Tasks: []models.Task{{Number: "1", Name: "Dup", Prompt: "Prompt"}},
+	}
+
+	_, err := MergePlans(plan1, plan2)
+	if err == nil {
+		t.Error("MergePlans() expected error for duplicate task numbers, got nil")
+	}
+}
+
+// TestDetectSplitPlan tests identifying split plan structure
+func TestDetectSplitPlan(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create numbered split plan files
+	for i := 1; i <= 2; i++ {
+		content := fmt.Sprintf(`# Part %d
+
+## Task %d: Task
+
+**File(s)**: test.go
+**Depends on**: None
+**Estimated time**: 30m
+
+Description.`, i, i)
+		if err := os.WriteFile(filepath.Join(tmpDir, fmt.Sprintf("%d-part%d.md", i, i)), []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+	}
+
+	if !IsSplitPlan(tmpDir) {
+		t.Error("IsSplitPlan() expected true for split plan, got false")
 	}
 }

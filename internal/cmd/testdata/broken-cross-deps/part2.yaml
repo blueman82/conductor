@@ -1,0 +1,17 @@
+conductor:
+  worktree_groups:
+    - group_id: "group-2"
+      description: "Group 2"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Secondary tasks"
+
+plan:
+  tasks:
+    - task_number: 2
+      name: "Process Data"
+      files: ["process.go"]
+      depends_on: [999]
+      agent: "golang-pro"
+      description: "Depends on non-existent task 999"
+      worktree_group: "group-2"

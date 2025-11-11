@@ -600,3 +600,138 @@ Second code block:
 		}
 	}
 }
+
+func TestParseStatusCheckbox(t *testing.T) {
+	tests := []struct {
+		name           string
+		content        string
+		expectedStatus string
+	}{
+		{
+			name:           "completed task with [x]",
+			content:        `[x] Task completed`,
+			expectedStatus: "completed",
+		},
+		{
+			name:           "pending task with [ ]",
+			content:        `[ ] Task pending`,
+			expectedStatus: "pending",
+		},
+		{
+			name:           "no checkbox defaults to pending",
+			content:        `Some content without checkbox`,
+			expectedStatus: "pending",
+		},
+		{
+			name:           "completed with uppercase [X]",
+			content:        `[X] Task completed`,
+			expectedStatus: "completed",
+		},
+		{
+			name:           "checkbox anywhere in content",
+			content:        `[x] Task is done`,
+			expectedStatus: "completed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := &models.Task{}
+			parseTaskMetadata(task, tt.content)
+
+			if task.Status != tt.expectedStatus {
+				t.Errorf("Expected status '%s', got '%s'", tt.expectedStatus, task.Status)
+			}
+		})
+	}
+}
+
+func TestParseStatusInlineAnnotation(t *testing.T) {
+	tests := []struct {
+		name           string
+		content        string
+		expectedStatus string
+	}{
+		{
+			name:           "status: completed",
+			content:        `**Status**: completed`,
+			expectedStatus: "completed",
+		},
+		{
+			name:           "status: pending",
+			content:        `**Status**: pending`,
+			expectedStatus: "pending",
+		},
+		{
+			name:           "status: in_progress",
+			content:        `**Status**: in_progress`,
+			expectedStatus: "in_progress",
+		},
+		{
+			name:           "status: skipped",
+			content:        `**Status**: skipped`,
+			expectedStatus: "skipped",
+		},
+		{
+			name:           "status with extra whitespace",
+			content:        `**Status**:   completed  `,
+			expectedStatus: "completed",
+		},
+		{
+			name:           "no status field defaults to pending",
+			content:        `**File(s)**: test.go`,
+			expectedStatus: "pending",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := &models.Task{}
+			parseTaskMetadata(task, tt.content)
+
+			if task.Status != tt.expectedStatus {
+				t.Errorf("Expected status '%s', got '%s'", tt.expectedStatus, task.Status)
+			}
+		})
+	}
+}
+
+func TestParseStatusPrecedence(t *testing.T) {
+	// Inline annotation should take precedence over checkbox
+	content := `[x] Some checkbox text
+**Status**: pending
+**File(s)**: test.go`
+
+	task := &models.Task{}
+	parseTaskMetadata(task, content)
+
+	// Inline annotation takes precedence
+	if task.Status != "pending" {
+		t.Errorf("Expected inline annotation to take precedence, got status '%s'", task.Status)
+	}
+}
+
+func TestParseCompleteTaskMetadata(t *testing.T) {
+	// Test that status extraction works alongside other metadata
+	content := `[x] Task is complete
+**File(s)**: ` + "`file1.go`, `file2.go`" + `
+**Depends on**: Task 1, Task 2
+**Estimated time**: 2h
+**Agent**: godev`
+
+	task := &models.Task{}
+	parseTaskMetadata(task, content)
+
+	if task.Status != "completed" {
+		t.Errorf("Expected status 'completed', got '%s'", task.Status)
+	}
+	if len(task.Files) != 2 {
+		t.Errorf("Expected 2 files, got %d", len(task.Files))
+	}
+	if len(task.DependsOn) != 2 {
+		t.Errorf("Expected 2 dependencies, got %d", len(task.DependsOn))
+	}
+	if task.Agent != "godev" {
+		t.Errorf("Expected agent 'godev', got '%s'", task.Agent)
+	}
+}
