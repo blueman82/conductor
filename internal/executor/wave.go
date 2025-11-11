@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/harrison/conductor/internal/models"
@@ -78,10 +79,10 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		return []models.TaskResult{}, nil
 	}
 
-	// Log wave start
-	if w.logger != nil {
-		w.logger.LogWaveStart(wave)
-	}
+	// Track how many task goroutines actually started to prevent logging
+	// wave start/completion for pre-cancelled contexts where no tasks launched.
+	var tasksLaunched int32
+	var waveLogged bool
 
 	waveStartTime := time.Now()
 
@@ -111,9 +112,25 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 			break
 		}
 
-		semaphore <- struct{}{}
+		// Check context again before acquiring semaphore to avoid blocking on a cancelled context
+		select {
+		case <-ctx.Done():
+			launchErr = ctx.Err()
+			goto launchComplete
+		case semaphore <- struct{}{}:
+			// Successfully acquired semaphore slot
+		}
+
 		wg.Add(1)
+
+		// Log wave start only once, when the first task successfully acquires a semaphore slot
+		if !waveLogged && w.logger != nil {
+			w.logger.LogWaveStart(wave)
+			waveLogged = true
+		}
+
 		go func(task models.Task) {
+			atomic.AddInt32(&tasksLaunched, 1)
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
@@ -135,6 +152,7 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		}(task)
 	}
 
+launchComplete:
 	go func() {
 		wg.Wait()
 		close(resultsCh)
@@ -174,9 +192,9 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		execErr = context.Canceled
 	}
 
-	// Log wave completion
+	// Log wave completion only if at least one task was actually launched
 	waveDuration := time.Since(waveStartTime)
-	if w.logger != nil {
+	if atomic.LoadInt32(&tasksLaunched) > 0 && w.logger != nil {
 		w.logger.LogWaveComplete(wave, waveDuration)
 	}
 

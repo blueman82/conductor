@@ -512,3 +512,52 @@ func (m *mockLoggerWithTaskLogging) LogTaskResult(result models.TaskResult) erro
 	m.taskResultCalls = append(m.taskResultCalls, result)
 	return nil
 }
+
+// TestWaveExecutor_NoCancellationLoggingIfNoTasks verifies that when a context is
+// pre-cancelled before ExecutePlan is called, no wave logging occurs because no tasks
+// are launched. This tests the tasksLaunched counter fix in wave.go.
+func TestWaveExecutor_NoCancellationLoggingIfNoTasks(t *testing.T) {
+	// Create a pre-cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately before any execution
+
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2"}, MaxConcurrency: 2},
+		},
+	}
+
+	mockExecutor := newSequentialMockExecutor()
+	mockLog := &mockLogger{}
+	waveExecutor := NewWaveExecutor(mockExecutor, mockLog)
+
+	// Execute with pre-cancelled context
+	results, err := waveExecutor.ExecutePlan(ctx, plan)
+
+	// Verify error is context.Canceled
+	if err == nil {
+		t.Fatalf("expected context cancellation error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled error, got %v", err)
+	}
+
+	// Verify no results were returned (no tasks launched)
+	if len(results) != 0 {
+		t.Errorf("expected 0 results when context pre-cancelled, got %d", len(results))
+	}
+
+	// Critical verification: LogWaveStart should NOT be called
+	if len(mockLog.waveStartCalls) != 0 {
+		t.Errorf("expected 0 LogWaveStart calls when context pre-cancelled, got %d", len(mockLog.waveStartCalls))
+	}
+
+	// Critical verification: LogWaveComplete should NOT be called
+	if len(mockLog.waveCompleteCalls) != 0 {
+		t.Errorf("expected 0 LogWaveComplete calls when context pre-cancelled, got %d", len(mockLog.waveCompleteCalls))
+	}
+}
