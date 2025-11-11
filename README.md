@@ -55,7 +55,9 @@ go build ./cmd/conductor
 ./conductor --version
 
 # Optional: Install the plugin for plan generation
-cp -r plugin ~/.claude/plugins/conductor-tools
+# In a Claude Code session, run: /plugin
+# Then select "Browse Plugins" to install conductor-tools
+# Or for development/testing: claude --plugin-dir ./plugin
 ```
 
 ### Your First Execution

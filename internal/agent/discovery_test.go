@@ -820,3 +820,145 @@ Numbered directory version content
 		t.Errorf("Unexpected description: %s", agent.Description)
 	}
 }
+
+func TestToolListCommaSeparated(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Test agent with comma-separated tools (Claude Code format)
+	agentContent := `---
+name: test-agent
+description: Test agent with comma-separated tools
+tools: Read, Write, Edit, MultiEdit, Bash, Bash(fd*), Bash(rg*), Grep, Glob, TodoWrite, Task
+---
+
+# Test Agent
+
+This agent uses comma-separated tools format.
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "test-agent.md"), []byte(agentContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry(tmpDir)
+	agents, err := registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	if len(agents) != 1 {
+		t.Errorf("Expected 1 agent, got %d", len(agents))
+	}
+
+	agent, exists := registry.Get("test-agent")
+	if !exists {
+		t.Fatal("test-agent should exist")
+	}
+
+	expectedTools := []string{"Read", "Write", "Edit", "MultiEdit", "Bash", "Bash(fd*)", "Bash(rg*)", "Grep", "Glob", "TodoWrite", "Task"}
+	if len(agent.Tools) != len(expectedTools) {
+		t.Errorf("Expected %d tools, got %d", len(expectedTools), len(agent.Tools))
+	}
+
+	for i, tool := range expectedTools {
+		if i >= len(agent.Tools) {
+			t.Errorf("Missing tool at index %d: %s", i, tool)
+			continue
+		}
+		if agent.Tools[i] != tool {
+			t.Errorf("Expected tool[%d] = '%s', got '%s'", i, tool, agent.Tools[i])
+		}
+	}
+}
+
+func TestToolListYAMLArray(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Test agent with YAML array tools (original format)
+	agentContent := `---
+name: test-agent
+description: Test agent with YAML array tools
+tools:
+  - Read
+  - Write
+  - Edit
+---
+
+# Test Agent
+
+This agent uses YAML array tools format.
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "test-agent.md"), []byte(agentContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry(tmpDir)
+	agents, err := registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	if len(agents) != 1 {
+		t.Errorf("Expected 1 agent, got %d", len(agents))
+	}
+
+	agent, exists := registry.Get("test-agent")
+	if !exists {
+		t.Fatal("test-agent should exist")
+	}
+
+	expectedTools := []string{"Read", "Write", "Edit"}
+	if len(agent.Tools) != len(expectedTools) {
+		t.Errorf("Expected %d tools, got %d", len(expectedTools), len(agent.Tools))
+	}
+
+	for i, tool := range expectedTools {
+		if agent.Tools[i] != tool {
+			t.Errorf("Expected tool[%d] = '%s', got '%s'", i, tool, agent.Tools[i])
+		}
+	}
+}
+
+func TestToolListWhitespaceHandling(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Test agent with comma-separated tools with extra whitespace
+	agentContent := `---
+name: test-agent
+description: Test agent with whitespace in tools
+tools: Read,  Write  , Edit ,  Bash
+---
+
+# Test Agent
+
+This agent has extra whitespace in tools list.
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "test-agent.md"), []byte(agentContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry(tmpDir)
+	_, err = registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	agent, exists := registry.Get("test-agent")
+	if !exists {
+		t.Fatal("test-agent should exist")
+	}
+
+	// Tools should have whitespace trimmed
+	expectedTools := []string{"Read", "Write", "Edit", "Bash"}
+	if len(agent.Tools) != len(expectedTools) {
+		t.Errorf("Expected %d tools, got %d", len(expectedTools), len(agent.Tools))
+	}
+
+	for i, tool := range expectedTools {
+		if agent.Tools[i] != tool {
+			t.Errorf("Expected tool[%d] = '%s', got '%s'", i, tool, agent.Tools[i])
+		}
+	}
+}

@@ -13,8 +13,42 @@ import (
 type Agent struct {
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description"`
-	Tools       []string `yaml:"tools"`
+	Tools       ToolList `yaml:"tools"`
 	FilePath    string   `yaml:"-"` // Not parsed from YAML
+}
+
+// ToolList is a custom type that handles both comma-separated strings
+// and YAML arrays for the tools field in agent frontmatter
+type ToolList []string
+
+// UnmarshalYAML implements custom unmarshaling for ToolList
+// Accepts both formats:
+// - Comma-separated string: "Read, Write, Edit"
+// - YAML array: [Read, Write, Edit]
+func (t *ToolList) UnmarshalYAML(value *yaml.Node) error {
+	// Try to unmarshal as string first (Claude Code format)
+	var str string
+	if err := value.Decode(&str); err == nil {
+		// Split by comma and trim whitespace
+		parts := strings.Split(str, ",")
+		*t = make(ToolList, 0, len(parts))
+		for _, part := range parts {
+			tool := strings.TrimSpace(part)
+			if tool != "" {
+				*t = append(*t, tool)
+			}
+		}
+		return nil
+	}
+
+	// Try to unmarshal as array (YAML array format)
+	var arr []string
+	if err := value.Decode(&arr); err == nil {
+		*t = ToolList(arr)
+		return nil
+	}
+
+	return fmt.Errorf("tools must be either a comma-separated string or an array")
 }
 
 // Registry manages discovered agents

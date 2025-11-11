@@ -16,7 +16,7 @@ import (
 func TestNewConsoleLogger(t *testing.T) {
 	t.Run("with valid writer", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		logger := NewConsoleLogger(buf)
+		logger := NewConsoleLogger(buf, "info")
 
 		if logger == nil {
 			t.Error("expected non-nil logger")
@@ -24,10 +24,13 @@ func TestNewConsoleLogger(t *testing.T) {
 		if logger.writer != buf {
 			t.Error("writer not set correctly")
 		}
+		if logger.logLevel != "info" {
+			t.Errorf("expected log level %q, got %q", "info", logger.logLevel)
+		}
 	})
 
 	t.Run("with nil writer", func(t *testing.T) {
-		logger := NewConsoleLogger(nil)
+		logger := NewConsoleLogger(nil, "info")
 		if logger == nil {
 			t.Error("expected non-nil logger even with nil writer")
 		}
@@ -76,7 +79,7 @@ func TestLogWaveStart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			logger := NewConsoleLogger(buf)
+			logger := NewConsoleLogger(buf, "info")
 
 			logger.LogWaveStart(tt.wave)
 
@@ -136,7 +139,7 @@ func TestLogWaveComplete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			logger := NewConsoleLogger(buf)
+			logger := NewConsoleLogger(buf, "info")
 
 			logger.LogWaveComplete(tt.wave, tt.duration)
 
@@ -234,7 +237,7 @@ func TestLogSummary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			logger := NewConsoleLogger(buf)
+			logger := NewConsoleLogger(buf, "info")
 
 			logger.LogSummary(tt.result)
 
@@ -290,7 +293,7 @@ func TestTimestampFormat(t *testing.T) {
 // TestConcurrentLogging verifies thread safety with concurrent logging.
 func TestConcurrentLogging(t *testing.T) {
 	buf := &bytes.Buffer{}
-	logger := NewConsoleLogger(buf)
+	logger := NewConsoleLogger(buf, "info")
 
 	// Track successful operations
 	var successCount int32 = 0
@@ -350,7 +353,7 @@ func TestConcurrentLogging(t *testing.T) {
 
 // TestNilWriter verifies that nil writer is handled gracefully.
 func TestNilWriter(t *testing.T) {
-	logger := NewConsoleLogger(nil)
+	logger := NewConsoleLogger(nil, "info")
 
 	// These should not panic
 	wave := models.Wave{
@@ -517,7 +520,7 @@ func TestNoOpLogger(t *testing.T) {
 // TestLogSummaryWithFailedTasks verifies failed task details are included.
 func TestLogSummaryWithFailedTasks(t *testing.T) {
 	buf := &bytes.Buffer{}
-	logger := NewConsoleLogger(buf)
+	logger := NewConsoleLogger(buf, "info")
 
 	result := models.ExecutionResult{
 		TotalTasks: 5,
@@ -582,7 +585,7 @@ func TestLogSummaryWithFailedTasks(t *testing.T) {
 // TestConsoleLoggerSatisfiesInterface verifies ConsoleLogger implements Logger interface.
 func TestConsoleLoggerSatisfiesInterface(t *testing.T) {
 	buf := &bytes.Buffer{}
-	logger := NewConsoleLogger(buf)
+	logger := NewConsoleLogger(buf, "info")
 
 	// This will fail to compile if ConsoleLogger doesn't implement Logger
 	var _ Logger = logger

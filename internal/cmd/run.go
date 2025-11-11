@@ -226,20 +226,26 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Full execution mode: set up orchestrator and execute
 	fmt.Fprintf(cmd.OutOrStdout(), "\nStarting execution...\n\n")
 
+	// Determine log level: verbose flag overrides config
+	logLevel := cfg.LogLevel
+	if verbose {
+		logLevel = "debug"
+	}
+
 	// Create console logger for real-time progress
-	consoleLog := logger.NewConsoleLogger(cmd.OutOrStdout())
+	consoleLog := logger.NewConsoleLogger(cmd.OutOrStdout(), logLevel)
 
 	// Create file logger for detailed logs (unless dry-run)
 	var fileLog *logger.FileLogger
 	if logDir != "" {
-		// Use custom log directory
-		fileLog, err = logger.NewFileLoggerWithDir(logDir)
+		// Use custom log directory with log level
+		fileLog, err = logger.NewFileLoggerWithDirAndLevel(logDir, logLevel)
 		if err != nil {
 			return fmt.Errorf("failed to create file logger: %w", err)
 		}
 	} else {
-		// Use default .conductor/logs directory
-		fileLog, err = logger.NewFileLogger()
+		// Use default .conductor/logs directory - need to set log level
+		fileLog, err = logger.NewFileLoggerWithDirAndLevel(".conductor/logs", logLevel)
 		if err != nil {
 			return fmt.Errorf("failed to create file logger: %w", err)
 		}

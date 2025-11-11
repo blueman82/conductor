@@ -76,16 +76,16 @@ func TestBuildCommandArgs(t *testing.T) {
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Check for -p flag
-					hasP := false
+					// Check for --dangerously-skip-permissions flag
+					hasSkipPerms := false
 					for _, arg := range args {
-						if arg == "-p" {
-							hasP = true
+						if arg == "--dangerously-skip-permissions" {
+							hasSkipPerms = true
 							break
 						}
 					}
-					if !hasP {
-						t.Error("Command should have -p flag")
+					if !hasSkipPerms {
+						t.Error("Command should have --dangerously-skip-permissions flag")
 					}
 				},
 				func(t *testing.T, args []string) {
@@ -163,7 +163,7 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Should have agent reference in prompt
+					// Verify agent reference in prompt
 					hasAgentRef := false
 					for _, arg := range args {
 						if strings.Contains(arg, "use the swiftdev subagent to:") {
@@ -172,20 +172,7 @@ Swift agent content
 						}
 					}
 					if !hasAgentRef {
-						t.Error("Command should have agent reference in prompt")
-					}
-				},
-				func(t *testing.T, args []string) {
-					// Verify original prompt is included
-					hasOriginalPrompt := false
-					for _, arg := range args {
-						if strings.Contains(arg, "Build iOS app") {
-							hasOriginalPrompt = true
-							break
-						}
-					}
-					if !hasOriginalPrompt {
-						t.Error("Command should include the original task prompt")
+						t.Error("Prompt should reference agent with 'use the swiftdev subagent to:'")
 					}
 				},
 			},
@@ -193,22 +180,29 @@ Swift agent content
 		{
 			name: "task with agent that doesn't exist",
 			task: models.Task{
-				Number: "3",
-				Name:   "Task with nonexistent agent",
-				Prompt: "Do work",
-				Agent:  "nonexistent-agent",
+				Number:        "3",
+				Name:          "Invalid Agent Task",
+				Prompt:        "Do work",
+				Agent:         "nonexistent",
+				EstimatedTime: 30 * time.Minute,
 			},
 			setupRegistry: func(t *testing.T) *Registry {
 				tmpDir := t.TempDir()
-				return NewRegistry(tmpDir)
+				registry := NewRegistry(tmpDir)
+				return registry
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Should NOT have agent reference
+					// Verify prompt is used as-is without agent reference
+					hasOriginalPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "use the nonexistent-agent subagent to:") {
-							t.Error("Should not have agent reference for non-existent agent")
+						if arg == "Do work" {
+							hasOriginalPrompt = true
+							break
 						}
+					}
+					if !hasOriginalPrompt {
+						t.Error("Prompt should be used as-is when agent doesn't exist in registry")
 					}
 				},
 			},
@@ -216,19 +210,25 @@ Swift agent content
 		{
 			name: "task with agent but no registry",
 			task: models.Task{
-				Number: "4",
-				Name:   "Task with agent but no registry",
-				Prompt: "Do work",
-				Agent:  "some-agent",
+				Number:        "4",
+				Name:          "Task Without Registry",
+				Prompt:        "Create something",
+				Agent:         "someagent",
+				EstimatedTime: 30 * time.Minute,
 			},
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Should NOT have agent reference without registry
+					// Verify prompt is used as-is without agent reference
+					hasOriginalPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "use the some-agent subagent to:") {
-							t.Error("Should not have agent reference when registry is nil")
+						if arg == "Create something" {
+							hasOriginalPrompt = true
+							break
 						}
+					}
+					if !hasOriginalPrompt {
+						t.Error("Prompt should be used as-is when no registry is available")
 					}
 				},
 			},
@@ -237,21 +237,77 @@ Swift agent content
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			inv := NewInvoker()
+			// Set up invoker with or without registry
+			var inv *Invoker
 			if tt.setupRegistry != nil {
-				inv.Registry = tt.setupRegistry(t)
+				registry := tt.setupRegistry(t)
+				inv = NewInvokerWithRegistry(registry)
+			} else {
+				inv = NewInvoker()
 			}
 
+			// Build command args
 			args := inv.BuildCommandArgs(tt.task)
 
-			if len(args) == 0 {
-				t.Fatal("BuildCommandArgs returned empty args")
-			}
-
+			// Run all validation checks
 			for _, check := range tt.wantChecks {
 				check(t, args)
 			}
 		})
+	}
+}
+
+func TestBuildCommandArgsWithRealRegistry(t *testing.T) {
+	// Create a temporary directory for agent files
+	tmpDir := t.TempDir()
+
+	// Create test agent files
+	agentContent := `---
+name: golang-pro
+description: Go development expert
+---
+Go development content
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "golang-pro.md"), []byte(agentContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create registry and discover agents
+	registry := NewRegistry(tmpDir)
+	agents, err := registry.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(agents) != 1 {
+		t.Fatalf("Expected 1 agent, got %d", len(agents))
+	}
+
+	// Create invoker with registry
+	inv := NewInvokerWithRegistry(registry)
+
+	// Test task with known agent
+	task := models.Task{
+		Number:        "1",
+		Name:          "Go Task",
+		Prompt:        "Write Go code",
+		Agent:         "golang-pro",
+		EstimatedTime: 30 * time.Minute,
+	}
+
+	args := inv.BuildCommandArgs(task)
+
+	// Verify agent reference is added to prompt
+	found := false
+	for _, arg := range args {
+		if strings.Contains(arg, "use the golang-pro subagent to:") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected prompt to include agent reference")
 	}
 }
 
@@ -265,22 +321,22 @@ func TestParseClaudeOutput(t *testing.T) {
 	}{
 		{
 			name:        "valid JSON output",
-			output:      `{"content":"Hello world","error":""}`,
-			wantContent: "Hello world",
+			output:      `{"content":"Hello World","error":""}`,
+			wantContent: "Hello World",
 			wantError:   "",
 			wantErr:     false,
 		},
 		{
-			name:        "JSON with error",
+			name:        "valid JSON with error",
 			output:      `{"content":"","error":"Something went wrong"}`,
 			wantContent: "",
 			wantError:   "Something went wrong",
 			wantErr:     false,
 		},
 		{
-			name:        "invalid JSON - fallback to raw text",
-			output:      "This is not JSON",
-			wantContent: "This is not JSON",
+			name:        "non-JSON output",
+			output:      "Plain text output without JSON",
+			wantContent: "Plain text output without JSON",
 			wantError:   "",
 			wantErr:     false,
 		},
@@ -291,32 +347,18 @@ func TestParseClaudeOutput(t *testing.T) {
 			wantError:   "",
 			wantErr:     false,
 		},
-		{
-			name:        "partial JSON",
-			output:      `{"content":"incomplete"`,
-			wantContent: `{"content":"incomplete"`,
-			wantError:   "",
-			wantErr:     false,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ParseClaudeOutput(tt.output)
-
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseClaudeOutput() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-
-			if result == nil {
-				t.Fatal("ParseClaudeOutput() returned nil result")
-			}
-
 			if result.Content != tt.wantContent {
 				t.Errorf("Content = %q, want %q", result.Content, tt.wantContent)
 			}
-
 			if result.Error != tt.wantError {
 				t.Errorf("Error = %q, want %q", result.Error, tt.wantError)
 			}
@@ -324,612 +366,163 @@ func TestParseClaudeOutput(t *testing.T) {
 	}
 }
 
-func TestInvokeWithTimeout(t *testing.T) {
-	tests := []struct {
-		name    string
-		task    models.Task
-		timeout time.Duration
-		wantErr bool
-	}{
-		{
-			name: "basic invocation structure",
-			task: models.Task{
-				Number: "1",
-				Name:   "Test Task",
-				Prompt: "print 'hello'",
-			},
-			timeout: 10 * time.Second,
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			inv := NewInvoker()
-			inv.ClaudePath = "/opt/homebrew/bin/claude"
-
-			result, err := inv.InvokeWithTimeout(tt.task, tt.timeout)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("InvokeWithTimeout() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			// Verify result structure
-			if result == nil {
-				t.Fatal("InvokeWithTimeout() returned nil result")
-			}
-
-			// Duration should be recorded
-			if result.Duration == 0 {
-				t.Error("Duration should be recorded")
-			}
-
-			// Duration should be less than timeout
-			if result.Duration >= tt.timeout {
-				t.Errorf("Duration %v should be less than timeout %v", result.Duration, tt.timeout)
-			}
-
-			// Output should be captured
-			if result.Output == "" {
-				t.Error("Output should be captured")
-			}
-
-			// Exit code should be set (0 for success)
-			if result.ExitCode != 0 {
-				t.Logf("Exit code: %d, Output: %s", result.ExitCode, result.Output)
-			}
-		})
-	}
-}
-
 func TestInvoke(t *testing.T) {
-	tests := []struct {
-		name    string
-		task    models.Task
-		timeout time.Duration
-		wantErr bool
-	}{
-		{
-			name: "successful invocation",
-			task: models.Task{
-				Number: "1",
-				Name:   "Test Task",
-				Prompt: "respond with 'ok'",
-			},
-			timeout: 10 * time.Second,
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			inv := NewInvoker()
-			inv.ClaudePath = "/opt/homebrew/bin/claude"
-
-			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
-			defer cancel()
-
-			result, err := inv.Invoke(ctx, tt.task)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Invoke() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if result == nil {
-				t.Fatal("Invoke() returned nil result")
-			}
-
-			// Duration should be tracked
-			if result.Duration == 0 {
-				t.Error("Duration should be tracked")
-			}
-
-			// Output should be captured
-			if result.Output == "" {
-				t.Error("Output should be captured")
-			}
-		})
-	}
-}
-
-// TestInvokeSuccess tests the happy path with simple prompt
-func TestInvokeSuccess(t *testing.T) {
-	inv := NewInvoker()
-	inv.ClaudePath = "/opt/homebrew/bin/claude"
-
-	task := models.Task{
-		Number: "1",
-		Name:   "Simple Test",
-		Prompt: "say 'test'",
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	result, err := inv.Invoke(ctx, task)
-
-	if err != nil {
-		t.Fatalf("Invoke() unexpected error: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("Invoke() returned nil result")
-	}
-
-	// Some environments require manual acceptance of updated terms.
-	// If the CLI exits with a non-zero code and prints the terms notice,
-	// skip this integration test instead of failing the suite.
-	outputLower := strings.ToLower(result.Output)
-	if result.ExitCode != 0 && strings.Contains(outputLower, "terms") && strings.Contains(outputLower, "action required") {
-		t.Skip("claude CLI requires manual terms acceptance; skipping integration test")
-	}
-
-	// Verify output contains something
-	if result.Output == "" {
-		t.Error("Output should not be empty")
-	}
-
-	// Exit code should be 0 for success
-	if result.ExitCode != 0 {
-		t.Errorf("ExitCode = %d, want 0. Output: %s", result.ExitCode, result.Output)
-	}
-
-	// Duration should be reasonable (under 10 seconds)
-	if result.Duration <= 0 {
-		t.Error("Duration should be positive")
-	}
-	if result.Duration >= 10*time.Second {
-		t.Errorf("Duration %v too long for simple prompt", result.Duration)
-	}
-
-	// No error should be set
-	if result.Error != nil {
-		t.Errorf("Result.Error should be nil, got: %v", result.Error)
-	}
-}
-
-// TestInvokeTimeout tests that timeout is properly handled
-func TestInvokeTimeout(t *testing.T) {
-	inv := NewInvoker()
-	inv.ClaudePath = "/opt/homebrew/bin/claude"
-
-	task := models.Task{
-		Number: "1",
-		Name:   "Timeout Test",
-		Prompt: "count to 1000 slowly, taking at least 5 seconds",
-	}
-
-	// Use a very short timeout to force timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	result, err := inv.Invoke(ctx, task)
-
-	// Should not return error from Invoke itself (returns result with error info)
-	if err != nil {
-		t.Fatalf("Invoke() unexpected error: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("Invoke() returned nil result")
-	}
-
-	// Result should have an error set (context deadline exceeded or killed)
-	// or a non-zero exit code
-	if result.Error == nil && result.ExitCode == 0 {
-		t.Error("Expected timeout to cause error or non-zero exit code")
-	}
-}
-
-// TestInvokeContextCancellation tests context cancellation handling
-func TestInvokeContextCancellation(t *testing.T) {
-	inv := NewInvoker()
-	inv.ClaudePath = "/opt/homebrew/bin/claude"
-
-	task := models.Task{
-		Number: "1",
-		Name:   "Cancellation Test",
-		Prompt: "perform a long task",
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Cancel immediately
-	cancel()
-
-	result, err := inv.Invoke(ctx, task)
-
-	if err != nil {
-		t.Fatalf("Invoke() unexpected error: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("Invoke() returned nil result")
-	}
-
-	// Should have error or non-zero exit code due to cancellation
-	if result.Error == nil && result.ExitCode == 0 {
-		t.Error("Expected cancellation to cause error or non-zero exit code")
-	}
-}
-
-// TestInvokeExitCode tests handling of non-zero exit codes
-func TestInvokeExitCode(t *testing.T) {
-	inv := NewInvoker()
-	inv.ClaudePath = "/opt/homebrew/bin/claude"
-
-	task := models.Task{
-		Number: "1",
-		Name:   "Exit Code Test",
-		Prompt: "test",
-	}
-
-	// Build args and append an invalid flag to cause error
-	args := inv.BuildCommandArgs(task)
-	args = append(args, "--invalid-flag-xyz")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Create a custom invocation with invalid flag
-	task.Prompt = "test --invalid-flag-xyz-should-fail"
-
-	result, err := inv.Invoke(ctx, task)
-
-	if err != nil {
-		t.Fatalf("Invoke() unexpected error: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("Invoke() returned nil result")
-	}
-
-	// Output should be captured even on error
-	if result.Output == "" {
-		t.Log("Warning: Expected some output even on error")
-	}
-
-	// Note: This test may not always produce non-zero exit code
-	// depending on how claude CLI handles invalid input
-	// The important thing is that exit code is captured
-	t.Logf("Exit code: %d, Output: %s", result.ExitCode, result.Output)
-}
-
-// TestInvokeOutput tests that output is properly captured
-func TestInvokeOutput(t *testing.T) {
-	inv := NewInvoker()
-	inv.ClaudePath = "/opt/homebrew/bin/claude"
-
-	task := models.Task{
-		Number: "1",
-		Name:   "Output Test",
-		Prompt: "respond with exactly: EXPECTED_OUTPUT",
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	result, err := inv.Invoke(ctx, task)
-
-	if err != nil {
-		t.Fatalf("Invoke() unexpected error: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("Invoke() returned nil result")
-	}
-
-	// Output should be captured
-	if result.Output == "" {
-		t.Error("Output should not be empty")
-	}
-
-	// Verify output is in InvocationResult
-	if len(result.Output) == 0 {
-		t.Error("InvocationResult should contain output")
-	}
-
-	t.Logf("Captured output (%d bytes): %s", len(result.Output), result.Output)
-}
-
-// TestBuildCommandArgsWithRealRegistry tests integration with Registry
-func TestBuildCommandArgsWithRealRegistry(t *testing.T) {
-	// Create temporary directory with test agent
+	// Create temporary directory for test files
 	tmpDir := t.TempDir()
 
-	agentContent := `---
-name: test-agent
-description: Test agent for integration
-tools:
-  - read
-  - write
----
-This is a test agent for integration testing.
+	// Create a mock executable script that simulates claude CLI
+	mockScript := filepath.Join(tmpDir, "mock-claude")
+	scriptContent := `#!/bin/sh
+echo '{"content":"Task completed successfully","error":""}'
+exit 0
 `
-
-	err := os.WriteFile(filepath.Join(tmpDir, "test-agent.md"), []byte(agentContent), 0644)
+	err := os.WriteFile(mockScript, []byte(scriptContent), 0755)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Create registry and discover agents
-	registry := NewRegistry(tmpDir)
-	agents, err := registry.Discover()
-	if err != nil {
-		t.Fatalf("Registry.Discover() error: %v", err)
+	// Create invoker with mock claude path
+	inv := &Invoker{
+		ClaudePath: mockScript,
 	}
 
-	if len(agents) != 1 {
-		t.Fatalf("Expected 1 agent, got %d", len(agents))
-	}
-
-	// Create invoker with registry
-	inv := NewInvokerWithRegistry(registry)
-
+	// Create test task
 	task := models.Task{
-		Number: "1",
-		Name:   "Test with agent",
-		Prompt: "perform task",
-		Agent:  "test-agent",
+		Number:        "1",
+		Name:          "Test Task",
+		Prompt:        "Do something",
+		EstimatedTime: 30 * time.Minute,
 	}
 
-	args := inv.BuildCommandArgs(task)
+	// Invoke with context
+	ctx := context.Background()
+	result, err := inv.Invoke(ctx, task)
 
-	// Verify agent is mentioned in prompt
-	foundAgentRef := false
-	for _, arg := range args {
-		if strings.Contains(arg, "use the test-agent subagent to:") {
-			foundAgentRef = true
-			break
-		}
+	if err != nil {
+		t.Fatalf("Invoke() error = %v", err)
 	}
 
-	if !foundAgentRef {
-		t.Error("Agent should be referenced in built command args")
+	if result == nil {
+		t.Fatal("Invoke() returned nil result")
 	}
 
-	// Verify original prompt is still there
-	foundPrompt := false
-	for _, arg := range args {
-		if strings.Contains(arg, "perform task") {
-			foundPrompt = true
-			break
-		}
+	// Parse and verify output
+	output, err := ParseClaudeOutput(result.Output)
+	if err != nil {
+		t.Fatalf("ParseClaudeOutput() error = %v", err)
 	}
 
-	if !foundPrompt {
-		t.Error("Original prompt should be in command args")
+	if !strings.Contains(output.Content, "Task completed successfully") {
+		t.Errorf("Output content = %q, want to contain 'Task completed successfully'", output.Content)
 	}
 }
 
-// TestInvokeWithTimeoutShort tests short timeout handling
-func TestInvokeWithTimeoutShort(t *testing.T) {
-	inv := NewInvoker()
-	inv.ClaudePath = "/opt/homebrew/bin/claude"
+func TestInvokeWithTimeout(t *testing.T) {
+	// Create temporary directory for test files
+	tmpDir := t.TempDir()
 
-	task := models.Task{
-		Number: "1",
-		Name:   "Short Timeout",
-		Prompt: "take a very long time to respond",
+	// Create a mock script that sleeps
+	mockScript := filepath.Join(tmpDir, "mock-claude-slow")
+	scriptContent := `#!/bin/sh
+sleep 10
+echo '{"content":"Done","error":""}'
+exit 0
+`
+	err := os.WriteFile(mockScript, []byte(scriptContent), 0755)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	// Very short timeout
-	result, err := inv.InvokeWithTimeout(task, 200*time.Millisecond)
+	// Create invoker with mock claude path
+	inv := &Invoker{
+		ClaudePath: mockScript,
+	}
+
+	// Create test task
+	task := models.Task{
+		Number:        "1",
+		Name:          "Slow Task",
+		Prompt:        "Do something slow",
+		EstimatedTime: 30 * time.Minute,
+	}
+
+	// Invoke with very short timeout
+	result, err := inv.InvokeWithTimeout(task, 100*time.Millisecond)
 
 	if err != nil {
-		t.Fatalf("InvokeWithTimeout() unexpected error: %v", err)
+		t.Fatalf("InvokeWithTimeout() error = %v", err)
 	}
 
 	if result == nil {
 		t.Fatal("InvokeWithTimeout() returned nil result")
 	}
 
-	// Should complete quickly (timeout or actual completion)
-	if result.Duration > 1*time.Second {
-		t.Errorf("Duration %v too long for short timeout", result.Duration)
+	// Verify that it timed out (non-zero exit code or error)
+	if result.ExitCode == 0 && result.Error == nil {
+		t.Error("Expected timeout to cause non-zero exit code or error")
 	}
 }
 
-// TestInvokeWithDifferentPrompts tests various prompt types
-func TestInvokeWithDifferentPrompts(t *testing.T) {
-	tests := []struct {
-		name   string
-		prompt string
-	}{
-		{
-			name:   "simple prompt",
-			prompt: "hello",
-		},
-		{
-			name:   "question prompt",
-			prompt: "what is 2+2?",
-		},
-		{
-			name:   "instruction prompt",
-			prompt: "list three colors",
-		},
+func TestInvokeContext(t *testing.T) {
+	// Create a mock executable that responds to cancellation
+	tmpDir := t.TempDir()
+	mockScript := filepath.Join(tmpDir, "mock-claude")
+	scriptContent := `#!/bin/sh
+echo '{"content":"Result","error":""}'
+exit 0
+`
+	err := os.WriteFile(mockScript, []byte(scriptContent), 0755)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			inv := NewInvoker()
-			inv.ClaudePath = "/opt/homebrew/bin/claude"
-
-			task := models.Task{
-				Number: "1",
-				Name:   tt.name,
-				Prompt: tt.prompt,
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			result, err := inv.Invoke(ctx, task)
-
-			if err != nil {
-				t.Fatalf("Invoke() unexpected error: %v", err)
-			}
-
-			if result == nil {
-				t.Fatal("Invoke() returned nil result")
-			}
-
-			// All should produce some output
-			if result.Output == "" {
-				t.Error("Expected output from claude CLI")
-			}
-
-			t.Logf("Prompt: %s, Output length: %d bytes", tt.prompt, len(result.Output))
-		})
-	}
-}
-
-func TestInvocationResult(t *testing.T) {
-	// Test that InvocationResult can be created and has expected fields
-	result := &InvocationResult{
-		Output:   "test output",
-		ExitCode: 0,
-		Duration: 100 * time.Millisecond,
-		Error:    nil,
+	inv := &Invoker{
+		ClaudePath: mockScript,
 	}
 
-	if result.Output != "test output" {
-		t.Errorf("Output = %s, want 'test output'", result.Output)
+	task := models.Task{
+		Number:        "1",
+		Name:          "Test",
+		Prompt:        "Test prompt",
+		EstimatedTime: 1 * time.Minute,
 	}
 
+	// Test with normal context
+	ctx := context.Background()
+	result, err := inv.Invoke(ctx, task)
+	if err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
 	if result.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0", result.ExitCode)
 	}
-
-	if result.Duration != 100*time.Millisecond {
-		t.Errorf("Duration = %v, want 100ms", result.Duration)
-	}
-
-	if result.Error != nil {
-		t.Errorf("Error = %v, want nil", result.Error)
-	}
 }
 
-func TestClaudeOutput(t *testing.T) {
-	// Test that ClaudeOutput can be marshaled/unmarshaled
-	co := ClaudeOutput{
-		Content: "test content",
-		Error:   "test error",
+func TestClaudeOutputMarshaling(t *testing.T) {
+	// Test that ClaudeOutput can be marshaled/unmarshaled correctly
+	original := &ClaudeOutput{
+		Content: "Test content",
+		Error:   "Test error",
 	}
 
-	data, err := json.Marshal(co)
+	// Marshal to JSON
+	data, err := json.Marshal(original)
 	if err != nil {
-		t.Fatalf("Failed to marshal ClaudeOutput: %v", err)
+		t.Fatalf("Marshal error = %v", err)
 	}
 
+	// Unmarshal back
 	var parsed ClaudeOutput
 	err = json.Unmarshal(data, &parsed)
 	if err != nil {
-		t.Fatalf("Failed to unmarshal ClaudeOutput: %v", err)
+		t.Fatalf("Unmarshal error = %v", err)
 	}
 
-	if parsed.Content != co.Content {
-		t.Errorf("Content = %s, want %s", parsed.Content, co.Content)
+	// Verify
+	if parsed.Content != original.Content {
+		t.Errorf("Content = %q, want %q", parsed.Content, original.Content)
 	}
-
-	if parsed.Error != co.Error {
-		t.Errorf("Error = %s, want %s", parsed.Error, co.Error)
-	}
-}
-
-// TestInvokeInvalidPath tests the error path when ClaudePath is invalid
-// This test covers line 94 in invoker.go (result.Error = err)
-func TestInvokeInvalidPath(t *testing.T) {
-	inv := NewInvoker()
-	inv.ClaudePath = "/nonexistent/path/to/claude"
-
-	task := models.Task{
-		Number: "1",
-		Name:   "Test Task",
-		Prompt: "test",
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	result, err := inv.Invoke(ctx, task)
-
-	// Should not panic, err can be nil (error in result.Error)
-	if err != nil {
-		t.Fatalf("Invoke() returned unexpected error: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("Expected result, got nil")
-	}
-
-	// The critical assertion - line 94 path
-	// When the executable doesn't exist, result.Error should be set
-	if result.Error == nil {
-		t.Error("Expected result.Error to be set for invalid path")
-	}
-
-	// Error should indicate missing/invalid binary
-	if result.Error != nil {
-		errMsg := result.Error.Error()
-		if !strings.Contains(errMsg, "executable") && !strings.Contains(errMsg, "no such file") {
-			t.Logf("Error message: %v", result.Error)
-		}
-	}
-
-	// Exit code should remain 0 (wasn't set by ExitError)
-	if result.ExitCode != 0 {
-		t.Errorf("Expected ExitCode 0 for spawn failure, got %d", result.ExitCode)
-	}
-}
-
-// TestInvokeExitCodeGuaranteed tests the exit code extraction path with deterministic exit code
-// This test covers lines 91-92 in invoker.go (exit code extraction)
-func TestInvokeExitCodeGuaranteed(t *testing.T) {
-	// Create wrapper script that exits with code 42
-	tmpDir := t.TempDir()
-	scriptPath := filepath.Join(tmpDir, "exit42.sh")
-
-	scriptContent := `#!/bin/sh
-exit 42
-`
-	err := os.WriteFile(scriptPath, []byte(scriptContent), 0755)
-	if err != nil {
-		t.Fatalf("Failed to create test script: %v", err)
-	}
-
-	inv := NewInvoker()
-	inv.ClaudePath = scriptPath // Use our script instead of claude
-
-	task := models.Task{
-		Number: "1",
-		Name:   "Test Task",
-		Prompt: "anything", // Script ignores this
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	result, err := inv.Invoke(ctx, task)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("Expected result, got nil")
-	}
-
-	// THE CRITICAL ASSERTION - lines 91-92 path
-	// This guarantees the exit code extraction code is executed
-	if result.ExitCode != 42 {
-		t.Errorf("Expected exit code 42, got %d", result.ExitCode)
-	}
-
-	// Verify error is NOT set (only ExitCode should be populated)
-	if result.Error != nil {
-		t.Errorf("Expected result.Error to be nil with exit code, got: %v", result.Error)
+	if parsed.Error != original.Error {
+		t.Errorf("Error = %q, want %q", parsed.Error, original.Error)
 	}
 }

@@ -8,32 +8,150 @@ package logger
 import (
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/harrison/conductor/internal/models"
 )
 
+// Log level constants for filtering
+const (
+	levelTrace int = 0
+	levelDebug int = 1
+	levelInfo  int = 2
+	levelWarn  int = 3
+	levelError int = 4
+)
+
 // ConsoleLogger logs execution progress to a writer with timestamps and thread safety.
 // All output is prefixed with [HH:MM:SS] timestamps for tracking execution flow.
+// It supports log level filtering to control message verbosity.
 type ConsoleLogger struct {
-	writer io.Writer
-	mutex  sync.Mutex
+	writer   io.Writer
+	logLevel string
+	mutex    sync.Mutex
 }
 
 // NewConsoleLogger creates a ConsoleLogger that writes to the provided io.Writer.
 // If writer is nil, messages are silently discarded.
-func NewConsoleLogger(writer io.Writer) *ConsoleLogger {
+// logLevel determines the minimum log level for messages to be output.
+// Valid levels: trace, debug, info, warn, error (case-insensitive).
+// If logLevel is empty or invalid, defaults to "info".
+func NewConsoleLogger(writer io.Writer, logLevel string) *ConsoleLogger {
+	// Normalize and validate log level
+	normalizedLevel := normalizeLogLevel(logLevel)
+
 	return &ConsoleLogger{
-		writer: writer,
-		mutex:  sync.Mutex{},
+		writer:   writer,
+		logLevel: normalizedLevel,
+		mutex:    sync.Mutex{},
 	}
 }
 
-// LogWaveStart logs the start of a wave execution.
+// normalizeLogLevel converts a log level string to lowercase and validates it.
+// Returns "info" as default for empty or invalid levels.
+func normalizeLogLevel(level string) string {
+	normalized := strings.ToLower(strings.TrimSpace(level))
+
+	validLevels := map[string]bool{
+		"trace": true,
+		"debug": true,
+		"info":  true,
+		"warn":  true,
+		"error": true,
+	}
+
+	if validLevels[normalized] {
+		return normalized
+	}
+
+	return "info" // Default level
+}
+
+// shouldLog checks if a message at the given level should be logged.
+// Returns true if messageLevel >= configured logLevel.
+func (cl *ConsoleLogger) shouldLog(messageLevel string) bool {
+	configuredLevel := logLevelToInt(cl.logLevel)
+	msgLevel := logLevelToInt(messageLevel)
+	return msgLevel >= configuredLevel
+}
+
+// logLevelToInt converts a log level string to its numeric value.
+func logLevelToInt(level string) int {
+	switch level {
+	case "trace":
+		return levelTrace
+	case "debug":
+		return levelDebug
+	case "info":
+		return levelInfo
+	case "warn":
+		return levelWarn
+	case "error":
+		return levelError
+	default:
+		return levelInfo // Default to info if unknown
+	}
+}
+
+// LogTrace logs a trace-level message (most verbose).
+// Format: "[HH:MM:SS] [TRACE] <message>"
+func (cl *ConsoleLogger) LogTrace(message string) {
+	cl.logWithLevel("TRACE", message)
+}
+
+// LogDebug logs a debug-level message.
+// Format: "[HH:MM:SS] [DEBUG] <message>"
+func (cl *ConsoleLogger) LogDebug(message string) {
+	cl.logWithLevel("DEBUG", message)
+}
+
+// LogInfo logs an info-level message.
+// Format: "[HH:MM:SS] [INFO] <message>"
+func (cl *ConsoleLogger) LogInfo(message string) {
+	cl.logWithLevel("INFO", message)
+}
+
+// LogWarn logs a warning-level message.
+// Format: "[HH:MM:SS] [WARN] <message>"
+func (cl *ConsoleLogger) LogWarn(message string) {
+	cl.logWithLevel("WARN", message)
+}
+
+// LogError logs an error-level message.
+// Format: "[HH:MM:SS] [ERROR] <message>"
+func (cl *ConsoleLogger) LogError(message string) {
+	cl.logWithLevel("ERROR", message)
+}
+
+// logWithLevel is a helper that logs a message at the specified level if filtering allows it.
+func (cl *ConsoleLogger) logWithLevel(level string, message string) {
+	if cl.writer == nil {
+		return
+	}
+
+	// Check if this level should be logged
+	if !cl.shouldLog(strings.ToLower(level)) {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	formatted := fmt.Sprintf("[%s] [%s] %s\n", timestamp(), level, message)
+	cl.writer.Write([]byte(formatted))
+}
+
+// LogWaveStart logs the start of a wave execution at INFO level.
 // Format: "[HH:MM:SS] Starting Wave <name>: <count> tasks"
 func (cl *ConsoleLogger) LogWaveStart(wave models.Wave) {
 	if cl.writer == nil {
+		return
+	}
+
+	// Wave logging is at INFO level
+	if !cl.shouldLog("info") {
 		return
 	}
 
@@ -45,10 +163,15 @@ func (cl *ConsoleLogger) LogWaveStart(wave models.Wave) {
 	cl.writer.Write([]byte(message))
 }
 
-// LogWaveComplete logs the completion of a wave execution.
+// LogWaveComplete logs the completion of a wave execution at INFO level.
 // Format: "[HH:MM:SS] Wave <name> complete (<duration>)"
 func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
 	if cl.writer == nil {
+		return
+	}
+
+	// Wave logging is at INFO level
+	if !cl.shouldLog("info") {
 		return
 	}
 
@@ -60,10 +183,15 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 	cl.writer.Write([]byte(message))
 }
 
-// LogSummary logs the execution summary with completion statistics.
+// LogSummary logs the execution summary with completion statistics at INFO level.
 // Format: "[HH:MM:SS] === Execution Summary ===\n[HH:MM:SS] Total tasks: <n>\n[HH:MM:SS] Completed: <n>\n[HH:MM:SS] Failed: <n>\n[HH:MM:SS] Duration: <d>\n"
 func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 	if cl.writer == nil {
+		return
+	}
+
+	// Summary logging is at INFO level
+	if !cl.shouldLog("info") {
 		return
 	}
 
