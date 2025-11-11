@@ -552,7 +552,7 @@ plan:
         - "docs/plans/phase-2a-guide.md"
       depends_on: [32]
       estimated_time: "45m"
-      status: "in-progress"
+      status: "completed"
       description: |
         Document Phase 2A features, add examples of split plans, explain worktree group
         assignments, update architecture diagrams to show multi-file support.
@@ -611,6 +611,7 @@ plan:
           - "CLAUDE.md"
           - "README.md"
           - "docs/plans/phase-2a-guide.md"
+      completed_date: "2025-11-11"
   testing_strategy:
     unit_tests:
       location: "*_test.go files alongside implementation"

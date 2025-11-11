@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -265,7 +266,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create console logger for real-time progress
-	consoleLog := logger.NewConsoleLogger(cmd.OutOrStdout(), logLevel)
+	consoleLog := logger.NewConsoleLogger(os.Stdout, logLevel)
 
 	// Create file logger for detailed logs (unless dry-run)
 	var fileLog *logger.FileLogger
