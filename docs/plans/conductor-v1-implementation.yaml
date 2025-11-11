@@ -3592,9 +3592,18 @@ plan:
       files:
         - "internal/executor/errors.go"
         - "internal/executor/errors_test.go"
+        - "internal/executor/wave.go"
+        - "internal/executor/task.go"
+        - "internal/executor/orchestrator.go"
       depends_on: [15]
       estimated_time: "1h"
-      status: "pending"
+      actual_time: "1.5h"
+      status: "completed"
+      completed_date: "2025-11-11"
+      git_commit: "b901df6"
+      qa_status: "GREEN"
+      test_coverage: "86.4%"
+      notes: "Custom error types (TaskError, TimeoutError, ExecutionError) successfully integrated into wave.go, task.go, and orchestrator.go. 6 new integration tests added. Coverage improved from 76.7% to 86.4%. All error paths now use typed errors with proper wrapping and context."
 
       description: |
         Graceful error handling throughout, continue-on-error strategy, timeout handling,
@@ -4134,10 +4143,16 @@ plan:
         - "internal/cmd/run.go"
         - "internal/executor/orchestrator.go"
         - "internal/cmd/run_test.go"
-        - "Various files"
       depends_on: [16, 17, 18, 19, 22, 23, 24]
       estimated_time: "3h"
-      status: "pending"
+      actual_time: "2h"
+      status: "completed"
+      completed_date: "2025-11-11"
+      git_commit: "HEAD"
+      qa_status: "GREEN"
+      test_coverage: "86.4%"
+      tests_added: 15
+      notes: "Implemented all 15 required E2E test functions: FileLogger integration (3 tests), log file verification (4 tests), plan execution E2E tests (8 tests). Test file grew from 604 to 1,193 lines. All tests use fixtures (simple-plan.md/.yaml, complex-dependencies.md, large-plan.md, with-failure.md). All tests passing. Full pipeline validation complete."
 
       description: |
         Run full end-to-end Conductor workflows with real implementation plans, test various error scenarios,
