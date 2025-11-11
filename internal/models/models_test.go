@@ -251,3 +251,155 @@ func TestExecutionResult(t *testing.T) {
 		}
 	})
 }
+
+func TestTaskWorktreeGroup(t *testing.T) {
+	tests := []struct {
+		name            string
+		task            Task
+		expectedWorktree string
+	}{
+		{
+			name: "task with worktree group",
+			task: Task{
+				Number:        "1",
+				Name:          "Test Task",
+				Prompt:        "Do something",
+				WorktreeGroup: "frontend",
+			},
+			expectedWorktree: "frontend",
+		},
+		{
+			name: "task without worktree group",
+			task: Task{
+				Number:        "2",
+				Name:          "Backend Task",
+				Prompt:        "Backend work",
+				WorktreeGroup: "",
+			},
+			expectedWorktree: "",
+		},
+		{
+			name: "task with complex worktree group name",
+			task: Task{
+				Number:        "3",
+				Name:          "Complex Task",
+				Prompt:        "Do work",
+				WorktreeGroup: "group-v1-2-3",
+			},
+			expectedWorktree: "group-v1-2-3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.task.WorktreeGroup != tt.expectedWorktree {
+				t.Errorf("Task.WorktreeGroup = %v, want %v", tt.task.WorktreeGroup, tt.expectedWorktree)
+			}
+		})
+	}
+}
+
+func TestPlanWorktreeGroups(t *testing.T) {
+	tests := []struct {
+		name             string
+		plan             Plan
+		expectedGroupLen int
+		expectedGroupIDs []string
+	}{
+		{
+			name: "plan with worktree groups",
+			plan: Plan{
+				Name: "Test Plan",
+				WorktreeGroups: []WorktreeGroup{
+					{
+						GroupID:        "frontend",
+						Description:    "Frontend tasks",
+						ExecutionModel: "parallel",
+						Isolation:      "strong",
+						Rationale:      "UI components need isolation",
+					},
+					{
+						GroupID:        "backend",
+						Description:    "Backend tasks",
+						ExecutionModel: "sequential",
+						Isolation:      "weak",
+						Rationale:      "Database consistency",
+					},
+				},
+			},
+			expectedGroupLen: 2,
+			expectedGroupIDs: []string{"frontend", "backend"},
+		},
+		{
+			name: "plan with empty worktree groups",
+			plan: Plan{
+				Name:           "Empty Plan",
+				WorktreeGroups: []WorktreeGroup{},
+			},
+			expectedGroupLen: 0,
+			expectedGroupIDs: []string{},
+		},
+		{
+			name: "plan with single worktree group",
+			plan: Plan{
+				Name: "Single Group Plan",
+				WorktreeGroups: []WorktreeGroup{
+					{
+						GroupID:        "unified",
+						Description:    "All tasks run together",
+						ExecutionModel: "parallel",
+						Isolation:      "none",
+						Rationale:      "Monolithic application",
+					},
+				},
+			},
+			expectedGroupLen: 1,
+			expectedGroupIDs: []string{"unified"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if len(tt.plan.WorktreeGroups) != tt.expectedGroupLen {
+				t.Errorf("len(Plan.WorktreeGroups) = %v, want %v", len(tt.plan.WorktreeGroups), tt.expectedGroupLen)
+			}
+
+			for i, expectedID := range tt.expectedGroupIDs {
+				if i >= len(tt.plan.WorktreeGroups) {
+					t.Fatalf("WorktreeGroups index out of range: %d", i)
+				}
+				if tt.plan.WorktreeGroups[i].GroupID != expectedID {
+					t.Errorf("WorktreeGroups[%d].GroupID = %v, want %v", i, tt.plan.WorktreeGroups[i].GroupID, expectedID)
+				}
+			}
+		})
+	}
+}
+
+func TestWorktreeGroupMetadata(t *testing.T) {
+	t.Run("worktree group is serializable", func(t *testing.T) {
+		group := WorktreeGroup{
+			GroupID:        "test-group",
+			Description:    "A test group",
+			ExecutionModel: "parallel",
+			Isolation:      "strong",
+			Rationale:      "Testing isolation",
+		}
+
+		if group.GroupID != "test-group" {
+			t.Errorf("WorktreeGroup.GroupID = %v, want test-group", group.GroupID)
+		}
+		if group.Description != "A test group" {
+			t.Errorf("WorktreeGroup.Description = %v, want A test group", group.Description)
+		}
+		if group.ExecutionModel != "parallel" {
+			t.Errorf("WorktreeGroup.ExecutionModel = %v, want parallel", group.ExecutionModel)
+		}
+		if group.Isolation != "strong" {
+			t.Errorf("WorktreeGroup.Isolation = %v, want strong", group.Isolation)
+		}
+		if group.Rationale != "Testing isolation" {
+			t.Errorf("WorktreeGroup.Rationale = %v, want Testing isolation", group.Rationale)
+		}
+	})
+}

@@ -14,6 +14,7 @@ type Task struct {
 	EstimatedTime time.Duration // Estimated time to complete
 	Agent         string        // Agent to use (optional)
 	Prompt        string        // Full task description/prompt
+	WorktreeGroup string        // Worktree group this task belongs to (optional)
 }
 
 // Validate checks if the task has all required fields
