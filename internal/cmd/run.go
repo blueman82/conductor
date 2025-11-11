@@ -72,7 +72,9 @@ Examples:
   conductor run --timeout 2h plan.md       # Set 2 hour timeout
   conductor run --verbose plan.md          # Show detailed progress
   conductor run --log-dir ./logs plan.md   # Use custom log directory
-  conductor run --config custom.yaml plan.md  # Use custom config file`,
+  conductor run --config custom.yaml plan.md  # Use custom config file
+  conductor run --skip-completed plan.md   # Skip already completed tasks
+  conductor run --retry-failed plan.md     # Retry failed tasks`,
 		Args: cobra.ExactArgs(1),
 		RunE: runCommand,
 	}
@@ -84,6 +86,10 @@ Examples:
 	cmd.Flags().String("timeout", "", "Maximum execution time (e.g., 30m, 2h, 1h30m)")
 	cmd.Flags().Bool("verbose", false, "Show detailed execution information")
 	cmd.Flags().String("log-dir", "", "Directory for log files")
+	cmd.Flags().Bool("skip-completed", false, "Skip tasks that have already been completed")
+	cmd.Flags().Bool("no-skip-completed", false, "Do not skip completed tasks (overrides config)")
+	cmd.Flags().Bool("retry-failed", false, "Retry tasks that failed")
+	cmd.Flags().Bool("no-retry-failed", false, "Do not retry failed tasks (overrides config)")
 
 	return cmd
 }
@@ -114,6 +120,18 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	maxConcurrencyFlag, _ := cmd.Flags().GetInt("max-concurrency")
 	timeoutStr, _ := cmd.Flags().GetString("timeout")
 	logDirFlag, _ := cmd.Flags().GetString("log-dir")
+	skipCompletedFlag, _ := cmd.Flags().GetBool("skip-completed")
+	noSkipCompletedFlag, _ := cmd.Flags().GetBool("no-skip-completed")
+	retryFailedFlag, _ := cmd.Flags().GetBool("retry-failed")
+	noRetryFailedFlag, _ := cmd.Flags().GetBool("no-retry-failed")
+
+	// Validate conflicting flags
+	if cmd.Flags().Changed("skip-completed") && cmd.Flags().Changed("no-skip-completed") {
+		return fmt.Errorf("cannot use both --skip-completed and --no-skip-completed")
+	}
+	if cmd.Flags().Changed("retry-failed") && cmd.Flags().Changed("no-retry-failed") {
+		return fmt.Errorf("cannot use both --retry-failed and --no-retry-failed")
+	}
 
 	// Build flag pointers for merge (only non-default values)
 	var maxConcurrencyPtr *int
@@ -140,8 +158,22 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		dryRunPtr = &dryRunFlag
 	}
 
+	var skipCompletedPtr *bool
+	if cmd.Flags().Changed("skip-completed") {
+		skipCompletedPtr = &skipCompletedFlag
+	} else if cmd.Flags().Changed("no-skip-completed") {
+		skipCompletedPtr = &noSkipCompletedFlag
+	}
+
+	var retryFailedPtr *bool
+	if cmd.Flags().Changed("retry-failed") {
+		retryFailedPtr = &retryFailedFlag
+	} else if cmd.Flags().Changed("no-retry-failed") {
+		retryFailedPtr = &noRetryFailedFlag
+	}
+
 	// Merge CLI flags with config (flags take precedence)
-	cfg.MergeWithFlags(maxConcurrencyPtr, timeoutPtr, logDirPtr, dryRunPtr)
+	cfg.MergeWithFlags(maxConcurrencyPtr, timeoutPtr, logDirPtr, dryRunPtr, skipCompletedPtr, retryFailedPtr)
 
 	// Validate merged configuration
 	if err := cfg.Validate(); err != nil {
