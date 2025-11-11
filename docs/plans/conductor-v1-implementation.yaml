@@ -199,7 +199,7 @@ plan:
         - "internal/cmd/validate_test.go"
       depends_on: [27]
       estimated_time: "1h 30m"
-      status: "in-progress"
+      status: "completed"
       description: |
         Enhance validate command to handle multi-file plans, validate worktree groups,
         validate cross-file dependencies, and validate split boundaries.
@@ -263,6 +263,7 @@ plan:
         files:
           - "internal/cmd/validate.go"
           - "internal/cmd/validate_test.go"
+      completed_date: "2025-11-11"
     - task_number: 29
       name: "Annotate Dependency Graph with Worktree Groups"
       files:
@@ -336,7 +337,7 @@ plan:
         - "internal/executor/orchestrator_test.go"
       depends_on: [27, 29]
       estimated_time: "1h"
-      status: "in-progress"
+      status: "completed"
       description: |
         Before building dependency graph, merge all loaded plan files, validate merged plan
         consistency, track file-to-task mapping for later updates.
@@ -395,6 +396,7 @@ plan:
         files:
           - "internal/executor/orchestrator.go"
           - "internal/executor/orchestrator_test.go"
+      completed_date: "2025-11-11"
     - task_number: 31
       name: "Add File Tracking to Task Executor"
       files:
@@ -404,7 +406,7 @@ plan:
         - "internal/filelock/filelock_test.go"
       depends_on: [30]
       estimated_time: "1h"
-      status: "pending"
+      status: "in-progress"
       description: |
         Track which file each task belongs to, update correct plan file when task completes,
         implement per-file locking strategy for safe concurrent updates.

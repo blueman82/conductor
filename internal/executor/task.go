@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
@@ -41,6 +42,48 @@ func (f planUpdaterFunc) Update(planPath string, taskNumber string, status strin
 	return f(planPath, taskNumber, status, completedAt)
 }
 
+// FileLockManager manages per-file locking to prevent concurrent modifications.
+// Each file has its own lock, allowing concurrent updates to different files
+// while serializing updates to the same file.
+type FileLockManager interface {
+	// Lock acquires an exclusive lock for the given file path.
+	// Returns a function that should be called to release the lock.
+	Lock(filePath string) func()
+}
+
+// DefaultFileLockManager implements per-file locking using sync.Mutex.
+type DefaultFileLockManager struct {
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+// NewFileLockManager creates a new file lock manager.
+func NewFileLockManager() *DefaultFileLockManager {
+	return &DefaultFileLockManager{
+		locks: make(map[string]*sync.Mutex),
+	}
+}
+
+// Lock acquires an exclusive lock for the given file path.
+func (dm *DefaultFileLockManager) Lock(filePath string) func() {
+	dm.mu.Lock()
+	// Get or create lock for this file
+	fileLock, exists := dm.locks[filePath]
+	if !exists {
+		fileLock = &sync.Mutex{}
+		dm.locks[filePath] = fileLock
+	}
+	dm.mu.Unlock()
+
+	// Acquire the file-specific lock
+	fileLock.Lock()
+
+	// Return unlock function
+	return func() {
+		fileLock.Unlock()
+	}
+}
+
 // TaskExecutorConfig configures TaskExecutor behaviour for a specific plan.
 type TaskExecutorConfig struct {
 	PlanPath       string
@@ -50,13 +93,15 @@ type TaskExecutorConfig struct {
 
 // DefaultTaskExecutor executes individual tasks, applying QC review and plan updates.
 type DefaultTaskExecutor struct {
-	invoker     InvokerInterface
-	reviewer    Reviewer
-	planUpdater PlanUpdater
-	cfg         TaskExecutorConfig
-	clock       func() time.Time
-	qcEnabled   bool
-	retryLimit  int
+	invoker          InvokerInterface
+	reviewer         Reviewer
+	planUpdater      PlanUpdater
+	cfg              TaskExecutorConfig
+	clock            func() time.Time
+	qcEnabled        bool
+	retryLimit       int
+	SourceFile       string              // Track which file this task comes from
+	FileLockManager  FileLockManager     // Per-file locking strategy
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -75,11 +120,12 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 	}
 
 	te := &DefaultTaskExecutor{
-		invoker:     invoker,
-		reviewer:    reviewer,
-		planUpdater: planUpdater,
-		cfg:         cfg,
-		clock:       time.Now,
+		invoker:         invoker,
+		reviewer:        reviewer,
+		planUpdater:     planUpdater,
+		cfg:             cfg,
+		clock:           time.Now,
+		FileLockManager: NewFileLockManager(),
 	}
 
 	if cfg.QualityControl.Enabled {
@@ -110,6 +156,16 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 // Execute runs an individual task, handling agent invocation, quality control, and plan updates.
 func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
 	result := models.TaskResult{Task: task}
+
+	// Determine which file to lock - prefer SourceFile over PlanPath
+	fileToLock := te.cfg.PlanPath
+	if te.SourceFile != "" {
+		fileToLock = te.SourceFile
+	}
+
+	// Acquire per-file lock to ensure only one task updates this file at a time
+	unlock := te.FileLockManager.Lock(fileToLock)
+	defer unlock()
 
 	// Apply default agent if provided.
 	if task.Agent == "" && te.cfg.DefaultAgent != "" {
