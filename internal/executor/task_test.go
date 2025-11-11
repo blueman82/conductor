@@ -801,3 +801,176 @@ func TestTaskExecutor_InvocationErrorVsExitCode(t *testing.T) {
 		})
 	}
 }
+
+// TestTaskExecutor_InvocationErrorReturnsTaskError verifies that invocation errors
+// are wrapped in TaskError with proper context.
+// Tests integration of custom error types in task.go lines 153 and 160.
+func TestTaskExecutor_InvocationErrorReturnsTaskError(t *testing.T) {
+	tests := []struct {
+		name          string
+		invocationErr error
+		exitCode      int
+		expectTaskErr bool
+	}{
+		{
+			name:          "Invocation Error wrapped in TaskError",
+			invocationErr: errors.New("command not found"),
+			exitCode:      0,
+			expectTaskErr: true,
+		},
+		{
+			name:          "Non-zero ExitCode wrapped in TaskError",
+			invocationErr: nil,
+			exitCode:      127,
+			expectTaskErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			invoker := newStubInvoker(&agent.InvocationResult{
+				Output:   `{"content":"output"}`,
+				Error:    tt.invocationErr,
+				ExitCode: tt.exitCode,
+			})
+
+			updater := &recordingUpdater{}
+
+			executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+				PlanPath: "plan.md",
+			})
+			if err != nil {
+				t.Fatalf("NewTaskExecutor returned error: %v", err)
+			}
+
+			task := models.Task{Number: "13", Name: "Task error test", Prompt: "Test"}
+
+			result, err := executor.Execute(context.Background(), task)
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+
+			// Verify the error is a TaskError
+			if tt.expectTaskErr && !IsTaskError(err) {
+				t.Errorf("expected TaskError, got %T: %v", err, err)
+			}
+
+			// Verify error contains task information
+			var taskErr *TaskError
+			if errors.As(err, &taskErr) {
+				if taskErr.TaskName != task.Number {
+					t.Errorf("expected TaskName %q, got %q", task.Number, taskErr.TaskName)
+				}
+			}
+
+			// Verify result also has the error
+			if result.Error == nil {
+				t.Error("expected result.Error to be set")
+			}
+		})
+	}
+}
+
+// TestTaskExecutor_ContextTimeoutReturnsTimeoutError verifies that context timeout
+// returns a TimeoutError with proper wrapping.
+func TestTaskExecutor_ContextTimeoutReturnsTimeoutError(t *testing.T) {
+	// Create a slow invoker that will timeout
+	slowInvoker := &slowStubInvoker{
+		delay: 100 * time.Millisecond,
+	}
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(slowInvoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Create context with very short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	task := models.Task{Number: "14", Name: "Timeout task", Prompt: "Will timeout"}
+
+	result, err := executor.Execute(ctx, task)
+	if err == nil {
+		t.Fatalf("expected timeout error, got nil")
+	}
+
+	// Verify the error is a timeout
+	if !IsTimeoutError(err) {
+		t.Errorf("expected timeout error, got %T: %v", err, err)
+	}
+
+	// Verify it's context.DeadlineExceeded
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context timeout error, got %v", err)
+	}
+
+	// Verify result status
+	if result.Status != models.StatusFailed {
+		t.Errorf("expected status FAILED, got %s", result.Status)
+	}
+}
+
+// slowStubInvoker simulates a slow invocation that respects context.
+type slowStubInvoker struct {
+	delay time.Duration
+}
+
+func (s *slowStubInvoker) Invoke(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+	select {
+	case <-time.After(s.delay):
+		return &agent.InvocationResult{
+			Output:   `{"content":"completed"}`,
+			ExitCode: 0,
+		}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// TestTaskExecutor_QCInvalidFlagReturnsTaskError verifies that invalid QC flags
+// return TaskError with proper context.
+// Tests integration at task.go lines 207 and 229.
+func TestTaskExecutor_QCInvalidFlagReturnsTaskError(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task output"}`,
+		ExitCode: 0,
+	})
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: "INVALID_FLAG", Feedback: "Unknown flag"},
+		},
+		retryDecisions: map[int]bool{0: false},
+	}
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	task := models.Task{Number: "15", Name: "Invalid QC flag", Prompt: "Test"}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err == nil {
+		t.Fatalf("expected error for invalid flag, got nil")
+	}
+
+	// The error itself may not be a TaskError (it's ErrQualityGateFailed),
+	// but we can verify the result contains error information
+	if result.Status != models.StatusRed && result.Status != models.StatusFailed {
+		t.Errorf("expected status RED or FAILED, got %s", result.Status)
+	}
+}

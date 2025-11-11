@@ -302,3 +302,95 @@ func TestWaveExecutor_LoggingOnEmptyWave(t *testing.T) {
 		t.Errorf("expected 0 LogWaveComplete calls for empty wave, got %d", len(mockLog.waveCompleteCalls))
 	}
 }
+
+// TestWaveExecutor_MissingTaskReturnsTaskError verifies that missing tasks return TaskError.
+// This tests the integration of custom error types in wave.go line 110.
+func TestWaveExecutor_MissingTaskReturnsTaskError(t *testing.T) {
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "99"}, MaxConcurrency: 1},
+		},
+	}
+
+	waveExecutor := NewWaveExecutor(&sequentialMockExecutor{wave1Done: make(chan struct{})}, nil)
+
+	_, err := waveExecutor.ExecutePlan(context.Background(), plan)
+	if err == nil {
+		t.Fatalf("expected error for missing task")
+	}
+
+	// Verify that the error is a TaskError
+	if !IsTaskError(err) {
+		t.Errorf("expected TaskError, got %T: %v", err, err)
+	}
+
+	// Verify error contains task information
+	var taskErr *TaskError
+	if errors.As(err, &taskErr) {
+		if taskErr.TaskName != "99" {
+			t.Errorf("expected TaskName '99', got %q", taskErr.TaskName)
+		}
+		if !strings.Contains(taskErr.Message, "not found") {
+			t.Errorf("expected message to contain 'not found', got %q", taskErr.Message)
+		}
+	}
+}
+
+// TestWaveExecutor_TaskExecutionErrorsAggregated verifies that task execution errors
+// are properly wrapped in ExecutionError with phase context.
+func TestWaveExecutor_TaskExecutionErrorsAggregated(t *testing.T) {
+	failingExecutor := &mockFailingExecutor{
+		failOnTask: "2",
+	}
+
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Do task 1"},
+			{Number: "2", Name: "Task 2", Prompt: "Do task 2"},
+			{Number: "3", Name: "Task 3", Prompt: "Do task 3"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1", "2", "3"}, MaxConcurrency: 2},
+		},
+	}
+
+	waveExecutor := NewWaveExecutor(failingExecutor, nil)
+	results, err := waveExecutor.ExecutePlan(context.Background(), plan)
+
+	if err == nil {
+		t.Fatalf("expected error from failing task")
+	}
+
+	// Verify we got results even with error
+	if len(results) == 0 {
+		t.Error("expected some results even with error")
+	}
+
+	// Verify the error is a TaskError
+	if !IsTaskError(err) {
+		t.Errorf("expected TaskError from execution, got %T: %v", err, err)
+	}
+}
+
+// mockFailingExecutor fails on a specific task.
+type mockFailingExecutor struct {
+	failOnTask string
+}
+
+func (m *mockFailingExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
+	if task.Number == m.failOnTask {
+		taskErr := NewTaskError(task.Number, "task execution failed", errors.New("simulated failure"))
+		return models.TaskResult{
+			Task:   task,
+			Status: models.StatusFailed,
+			Error:  taskErr,
+		}, taskErr
+	}
+	return models.TaskResult{
+		Task:   task,
+		Status: models.StatusGreen,
+	}, nil
+}

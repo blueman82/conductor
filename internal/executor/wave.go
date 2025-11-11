@@ -107,7 +107,7 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 
 		task, ok := taskMap[taskNumber]
 		if !ok {
-			launchErr = fmt.Errorf("%s: task %s not found", wave.Name, taskNumber)
+			launchErr = NewTaskError(taskNumber, fmt.Sprintf("task not found in %s", wave.Name), nil)
 			break
 		}
 

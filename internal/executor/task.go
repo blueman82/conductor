@@ -133,6 +133,15 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 	for attempt := 0; attempt <= maxAttempt; attempt++ {
 		if err := ctx.Err(); err != nil {
+			// Wrap context errors with TimeoutError for better error handling
+			if errors.Is(err, context.DeadlineExceeded) {
+				timeoutErr := NewTimeoutError(task.Number, 0)
+				timeoutErr.Context = "task execution timeout"
+				result.Status = models.StatusFailed
+				result.Error = timeoutErr
+				_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+				return result, timeoutErr
+			}
 			result.Status = models.StatusFailed
 			result.Error = err
 			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
@@ -141,6 +150,15 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 		invocation, err := te.invoker.Invoke(ctx, task)
 		if err != nil {
+			// Wrap invocation errors with TimeoutError if it's a timeout
+			if errors.Is(err, context.DeadlineExceeded) {
+				timeoutErr := NewTimeoutError(task.Number, 0)
+				timeoutErr.Context = "invoker timeout"
+				result.Status = models.StatusFailed
+				result.Error = timeoutErr
+				_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+				return result, timeoutErr
+			}
 			result.Status = models.StatusFailed
 			result.Error = err
 			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
@@ -150,18 +168,18 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		totalDuration += invocation.Duration
 
 		if invocation.Error != nil {
-			err = fmt.Errorf("task invocation error: %w", invocation.Error)
+			taskErr := NewTaskError(task.Number, "task invocation failed", invocation.Error)
 			result.Status = models.StatusFailed
-			result.Error = err
+			result.Error = taskErr
 			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
-			return result, err
+			return result, taskErr
 		}
 		if invocation.ExitCode != 0 {
-			err = fmt.Errorf("task exited with code %d", invocation.ExitCode)
+			taskErr := NewTaskError(task.Number, fmt.Sprintf("task exited with code %d", invocation.ExitCode), nil)
 			result.Status = models.StatusFailed
-			result.Error = err
+			result.Error = taskErr
 			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
-			return result, err
+			return result, taskErr
 		}
 
 		parsedOutput, _ := agent.ParseClaudeOutput(invocation.Output)
@@ -204,7 +222,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 		switch {
 		case review == nil || review.Flag == "":
-			lastErr = fmt.Errorf("quality control did not return a valid flag")
+			lastErr = NewTaskError(task.Number, "quality control did not return a valid flag", nil)
 		case review.Flag == models.StatusGreen:
 			result.Status = models.StatusGreen
 			result.RetryCount = attempt
@@ -226,7 +244,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		case review.Flag == models.StatusRed:
 			lastErr = ErrQualityGateFailed
 		default:
-			lastErr = fmt.Errorf("quality control returned unsupported flag %q", review.Flag)
+			lastErr = NewTaskError(task.Number, fmt.Sprintf("quality control returned unsupported flag %q", review.Flag), nil)
 		}
 
 		if lastErr == nil {

@@ -505,3 +505,53 @@ func TestOrchestratorLogging(t *testing.T) {
 		}
 	}
 }
+
+// TestOrchestratorTimeoutErrorHandling verifies that context timeout errors
+// are properly detected and can be wrapped with TimeoutError.
+func TestOrchestratorTimeoutErrorHandling(t *testing.T) {
+	mockWave := &mockWaveExecutor{
+		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+			// Wait for context to timeout
+			<-ctx.Done()
+
+			// Return timeout error wrapped in TimeoutError for better error handling
+			timeoutErr := NewTimeoutError("plan execution", 50*time.Millisecond)
+			return []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusFailed, Error: timeoutErr},
+			}, timeoutErr
+		},
+	}
+	mockLog := &mockLogger{}
+
+	plan := &models.Plan{
+		Name:  "Test Plan",
+		Tasks: []models.Task{{Number: "1"}},
+		Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []string{"1"}}},
+	}
+
+	orch := NewOrchestrator(mockWave, mockLog)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	result, err := orch.ExecutePlan(ctx, plan)
+
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+
+	// Verify error is a timeout error
+	if !IsTimeoutError(err) {
+		t.Errorf("expected TimeoutError, got %T: %v", err, err)
+	}
+
+	// Verify we can unwrap to context.DeadlineExceeded
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Error("expected error to wrap context.DeadlineExceeded")
+	}
+
+	// Verify result still returned
+	if result == nil {
+		t.Error("expected non-nil result even on timeout")
+	}
+}

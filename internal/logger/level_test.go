@@ -13,11 +13,11 @@ import (
 // TestLogLevelFiltering verifies that messages are filtered based on log level
 func TestLogLevelFiltering(t *testing.T) {
 	tests := []struct {
-		name            string
-		logLevel        string
-		messageLevel    string
-		message         string
-		shouldAppear    bool
+		name         string
+		logLevel     string
+		messageLevel string
+		message      string
+		shouldAppear bool
 	}{
 		// trace level - should see everything
 		{name: "trace sees trace", logLevel: "trace", messageLevel: "trace", message: "trace msg", shouldAppear: true},
@@ -126,9 +126,9 @@ func TestConsoleLoggerWithLogLevel(t *testing.T) {
 // TestExistingMethodsRespectLogLevel verifies LogWaveStart/LogWaveComplete/LogSummary respect log level
 func TestExistingMethodsRespectLogLevel(t *testing.T) {
 	tests := []struct {
-		name          string
-		logLevel      string
-		shouldAppear  bool
+		name         string
+		logLevel     string
+		shouldAppear bool
 	}{
 		{name: "info level shows waves", logLevel: "info", shouldAppear: true},
 		{name: "warn level hides waves", logLevel: "warn", shouldAppear: false},
@@ -176,9 +176,9 @@ func TestExistingMethodsRespectLogLevel(t *testing.T) {
 // TestLogLevelEdgeCases verifies handling of invalid/unknown log levels
 func TestLogLevelEdgeCases(t *testing.T) {
 	tests := []struct {
-		name           string
-		logLevel       string
-		expectedLevel  string
+		name          string
+		logLevel      string
+		expectedLevel string
 	}{
 		{name: "empty string defaults to info", logLevel: "", expectedLevel: "info"},
 		{name: "unknown level defaults to info", logLevel: "unknown", expectedLevel: "info"},
