@@ -8,7 +8,7 @@ COVERAGE_FILE=coverage.out
 COVERAGE_HTML=coverage.html
 
 # Build information
-VERSION?=1.0.0
+VERSION?=1.1.0
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS=-ldflags "-X github.com/harrison/conductor/internal/cmd.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
