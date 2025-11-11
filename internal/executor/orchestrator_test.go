@@ -726,3 +726,72 @@ func TestFileToTaskMapping(t *testing.T) {
 		}
 	}
 }
+
+// TestOrchestratorWithConfig verifies that skip/retry config is properly threaded through orchestrator
+func TestOrchestratorWithConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		skipCompleted bool
+		retryFailed   bool
+	}{
+		{
+			name:          "skip completed enabled",
+			skipCompleted: true,
+			retryFailed:   false,
+		},
+		{
+			name:          "retry failed enabled",
+			skipCompleted: false,
+			retryFailed:   true,
+		},
+		{
+			name:          "both enabled",
+			skipCompleted: true,
+			retryFailed:   true,
+		},
+		{
+			name:          "both disabled",
+			skipCompleted: false,
+			retryFailed:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockWave := &mockWaveExecutor{
+				executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+					return []models.TaskResult{
+						{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+					}, nil
+				},
+			}
+			mockLog := &mockLogger{}
+
+			plan := &models.Plan{
+				Name:  "Test Plan",
+				Tasks: []models.Task{{Number: "1", Name: "Task 1"}},
+				Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []string{"1"}}},
+			}
+
+			// Create orchestrator with config
+			orch := NewOrchestratorWithConfig(mockWave, mockLog, tt.skipCompleted, tt.retryFailed)
+
+			// Verify config fields are set
+			if orch.skipCompleted != tt.skipCompleted {
+				t.Errorf("expected skipCompleted=%v, got %v", tt.skipCompleted, orch.skipCompleted)
+			}
+			if orch.retryFailed != tt.retryFailed {
+				t.Errorf("expected retryFailed=%v, got %v", tt.retryFailed, orch.retryFailed)
+			}
+
+			// Execute plan
+			result, err := orch.ExecutePlan(context.Background(), plan)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if result == nil {
+				t.Fatal("expected non-nil result")
+			}
+		})
+	}
+}
