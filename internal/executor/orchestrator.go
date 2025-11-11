@@ -83,12 +83,28 @@ func NewOrchestratorWithConfig(waveExecutor WaveExecutorInterface, logger Logger
 	}
 }
 
-// ExecutePlan orchestrates the execution of a plan with graceful shutdown support.
-// It handles SIGINT/SIGTERM signals, coordinates wave execution, logs progress,
-// and aggregates results into an ExecutionResult.
-func (o *Orchestrator) ExecutePlan(ctx context.Context, plan *models.Plan) (*models.ExecutionResult, error) {
-	if plan == nil {
-		return nil, fmt.Errorf("plan cannot be nil")
+// ExecutePlan orchestrates the execution of one or more plans with graceful shutdown support.
+// It merges multiple plans, handles SIGINT/SIGTERM signals, coordinates wave execution,
+// logs progress, and aggregates results into an ExecutionResult.
+// For file-to-task mapping, it populates the FileToTaskMapping field from the merged plan.
+func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (*models.ExecutionResult, error) {
+	if len(plans) == 0 {
+		return nil, fmt.Errorf("at least one plan is required")
+	}
+
+	// Merge all plans
+	mergedPlan, err := MergePlans(plans...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge plans: %w", err)
+	}
+
+	// Populate FileToTaskMapping from merged plan
+	if mergedPlan.FileToTaskMap != nil {
+		for filePath, taskNumbers := range mergedPlan.FileToTaskMap {
+			for _, taskNum := range taskNumbers {
+				o.FileToTaskMapping[taskNum] = filePath
+			}
+		}
 	}
 
 	// Set up context with cancellation for signal handling
@@ -117,12 +133,12 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plan *models.Plan) (*mod
 	startTime := time.Now()
 
 	// Execute the plan through the wave executor
-	results, err := o.waveExecutor.ExecutePlan(ctx, plan)
+	results, err := o.waveExecutor.ExecutePlan(ctx, mergedPlan)
 
 	duration := time.Since(startTime)
 
 	// Aggregate results
-	executionResult := o.aggregateResults(plan, results, duration)
+	executionResult := o.aggregateResults(mergedPlan, results, duration)
 
 	// Log summary
 	if o.logger != nil {

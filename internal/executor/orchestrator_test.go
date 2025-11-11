@@ -180,6 +180,21 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 	}
 }
 
+// TestOrchestratorExecutePlanEmptyInput verifies error handling for no plans
+func TestOrchestratorExecutePlanEmptyInput(t *testing.T) {
+	mockWave := &mockWaveExecutor{}
+	mockLog := &mockLogger{}
+	orch := NewOrchestrator(mockWave, mockLog)
+
+	result, err := orch.ExecutePlan(context.Background())
+	if err == nil {
+		t.Error("expected error for empty plans, got nil")
+	}
+	if result != nil {
+		t.Error("expected nil result for empty plans")
+	}
+}
+
 // TestOrchestratorGracefulShutdown verifies graceful shutdown via context cancellation.
 // This also covers signal handling, as SIGINT/SIGTERM trigger context cancellation.
 func TestOrchestratorGracefulShutdown(t *testing.T) {
@@ -432,11 +447,18 @@ func TestOrchestratorNilInputs(t *testing.T) {
 			}
 
 			orch := NewOrchestrator(tt.waveExec, tt.logger)
-			_, err := orch.ExecutePlan(context.Background(), tt.plan)
+			var result *models.ExecutionResult
+			var err error
+			if tt.plan != nil {
+				result, err = orch.ExecutePlan(context.Background(), tt.plan)
+			} else {
+				result, err = orch.ExecutePlan(context.Background())
+			}
 
 			if !tt.expectPanic && tt.plan == nil && err == nil {
-				t.Error("expected error for nil plan")
+				t.Error("expected error for no plans")
 			}
+			_ = result // Suppress unused variable warning
 		})
 	}
 }
@@ -694,17 +716,13 @@ func TestFileToTaskMapping(t *testing.T) {
 		},
 	}
 
-	merged, err := MergePlans(plans...)
-	if err != nil {
-		t.Fatalf("merge failed: %v", err)
-	}
-
-	_, err = orch.ExecutePlan(context.Background(), merged)
+	result, err := orch.ExecutePlan(context.Background(), plans...)
 	if err != nil {
 		t.Fatalf("execution failed: %v", err)
 	}
+	_ = result // Suppress unused variable warning
 
-	// Verify file-to-task mapping
+	// Verify file-to-task mapping is populated
 	if orch.FileToTaskMapping == nil {
 		t.Error("FileToTaskMapping not initialized")
 	}
