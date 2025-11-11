@@ -72,7 +72,8 @@ plan:
       commit:
         type: "feat"
         message: "extract task status from markdown plans"
-      status: "in-progress"
+      status: "completed"
+      completed_date: "2025-11-11"
     - task_number: 3
       name: "Update YAML Parser to Extract Status"
       agent: golang-pro
