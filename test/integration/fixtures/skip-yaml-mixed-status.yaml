@@ -1,0 +1,43 @@
+conductor:
+  max_concurrency: 2
+  timeout: "5m"
+
+plan:
+  metadata:
+    name: "Skip Test: Mixed Status Tasks"
+    estimated_tasks: 5
+  tasks:
+    - task_number: 1
+      name: "Completed Task"
+      prompt: "This task is completed"
+      files: ["file1.go"]
+      depends_on: []
+      estimated_time: "10m"
+      status: "completed"
+      completed_at: "2025-11-11T10:00:00Z"
+    - task_number: 2
+      name: "Pending Task A"
+      prompt: "This task is pending"
+      files: ["file2.go"]
+      depends_on: [1]
+      estimated_time: "10m"
+    - task_number: 3
+      name: "Another Completed Task"
+      prompt: "Also completed"
+      files: ["file3.go"]
+      depends_on: [2]
+      estimated_time: "10m"
+      status: "completed"
+      completed_at: "2025-11-11T10:05:00Z"
+    - task_number: 4
+      name: "Pending Task B"
+      prompt: "Also pending"
+      files: ["file4.go"]
+      depends_on: [3]
+      estimated_time: "10m"
+    - task_number: 5
+      name: "Pending Task C"
+      prompt: "Pending as well"
+      files: ["file5.go"]
+      depends_on: [4]
+      estimated_time: "10m"
