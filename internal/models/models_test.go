@@ -403,3 +403,155 @@ func TestWorktreeGroupMetadata(t *testing.T) {
 		}
 	})
 }
+
+func TestTask_StatusFields(t *testing.T) {
+	tests := []struct {
+		name      string
+		task      Task
+		wantError bool
+	}{
+		{
+			name: "task with status field",
+			task: Task{
+				Number: "1",
+				Name:   "Test Task",
+				Prompt: "Do something",
+				Status: "pending",
+			},
+			wantError: false,
+		},
+		{
+			name: "task with completed status and time",
+			task: Task{
+				Number:      "1",
+				Name:        "Test Task",
+				Prompt:      "Do something",
+				Status:      "completed",
+				CompletedAt: timePtr(time.Now()),
+			},
+			wantError: false,
+		},
+		{
+			name: "task with in_progress status",
+			task: Task{
+				Number: "1",
+				Name:   "Test Task",
+				Prompt: "Do something",
+				Status: "in_progress",
+			},
+			wantError: false,
+		},
+		{
+			name: "task with skipped status",
+			task: Task{
+				Number: "1",
+				Name:   "Test Task",
+				Prompt: "Do something",
+				Status: "skipped",
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.task.Status == "" && tt.task.CompletedAt != nil {
+				t.Error("task has CompletedAt but empty Status")
+			}
+			if tt.task.Status == "completed" && tt.task.CompletedAt == nil {
+				t.Error("task has completed status but no CompletedAt time")
+			}
+		})
+	}
+}
+
+func TestTask_IsCompleted(t *testing.T) {
+	tests := []struct {
+		name     string
+		task     Task
+		expected bool
+	}{
+		{
+			name:     "task with completed status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "completed"},
+			expected: true,
+		},
+		{
+			name:     "task with pending status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "pending"},
+			expected: false,
+		},
+		{
+			name:     "task with in_progress status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "in_progress"},
+			expected: false,
+		},
+		{
+			name:     "task with skipped status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "skipped"},
+			expected: false,
+		},
+		{
+			name:     "task with empty status",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: ""},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.IsCompleted()
+			if result != tt.expected {
+				t.Errorf("Task.IsCompleted() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestTask_CanSkip(t *testing.T) {
+	tests := []struct {
+		name     string
+		task     Task
+		expected bool
+	}{
+		{
+			name:     "completed task can be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "completed"},
+			expected: true,
+		},
+		{
+			name:     "skipped task can be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "skipped"},
+			expected: true,
+		},
+		{
+			name:     "pending task cannot be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "pending"},
+			expected: false,
+		},
+		{
+			name:     "in_progress task cannot be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: "in_progress"},
+			expected: false,
+		},
+		{
+			name:     "empty status cannot be skipped",
+			task:     Task{Number: "1", Name: "Test", Prompt: "test", Status: ""},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.CanSkip()
+			if result != tt.expected {
+				t.Errorf("Task.CanSkip() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// Helper function for tests
+func timePtr(t time.Time) *time.Time {
+	return &t
+}

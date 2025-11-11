@@ -4,7 +4,6 @@ plan:
     created: "2025-11-11"
     target: "Enable conductor to read task completion status from plan files, verify actual completion via re-execution, and skip GREEN/YELLOW tasks"
     estimated_tasks: 9
-
   worktree_groups:
     - group_id: "chain-1"
       description: "Complete skip feature implementation"
@@ -13,7 +12,6 @@ plan:
       execution_model: "sequential"
       isolation: "separate-worktree"
       rationale: "All tasks depend on previous model/config changes - sequential execution required"
-
   context:
     framework: "Go 1.25.4"
     architecture: "Interface-based dependency injection with executor pipeline"
@@ -23,7 +21,6 @@ plan:
       - "Commit after each completed task"
       - "Follow existing code patterns"
       - "Maintain 85%+ test coverage"
-
   prerequisites:
     - item: "Go 1.25.4 installed"
       verified: false
@@ -31,7 +28,6 @@ plan:
       verified: false
     - item: "All tests passing locally"
       verified: false
-
   tasks:
     - task_number: 1
       name: "Extend Task Model with Status Fields"
@@ -45,24 +41,21 @@ plan:
       description: |
         Add Status and CompletedAt fields to Task struct for persisting task completion status in memory after parsing.
         Add helper methods IsCompleted() and CanSkip() for executor logic.
-
       test_first:
         test_file: "internal/models/task_test.go"
         structure:
           - "TestTask_StatusFields - verify new fields exist"
           - "TestTask_IsCompleted - verify status checking"
           - "TestTask_CanSkip - verify skip eligibility"
-
       implementation:
         approach: |
           Add two fields to Task struct: Status (string) and CompletedAt (*time.Time).
           Implement IsCompleted() returning Status == "completed".
           Implement CanSkip() checking status values intelligently.
-
       commit:
         type: "feat"
         message: "add status tracking to Task model"
-
+      status: "in-progress"
     - task_number: 2
       name: "Update Markdown Parser to Extract Status"
       agent: golang-pro
@@ -75,11 +68,9 @@ plan:
       description: |
         Enhance Markdown parser to extract task completion status from plan files.
         Parse checkbox state [x] vs [ ] and inline status annotations (status: completed).
-
       commit:
         type: "feat"
         message: "extract task status from markdown plans"
-
     - task_number: 3
       name: "Update YAML Parser to Extract Status"
       agent: golang-pro
@@ -92,11 +83,9 @@ plan:
       description: |
         Enhance YAML parser to extract status field and completed_date/completed_at timestamps.
         Transfer to Task model for status persistence after loading plans.
-
       commit:
         type: "feat"
         message: "extract task status and timestamp from YAML plans"
-
     - task_number: 4
       name: "Add SkipCompleted to Config Model"
       agent: golang-pro
@@ -110,11 +99,9 @@ plan:
       description: |
         Add SkipCompleted bool and RetryFailed bool fields to Config struct.
         Support loading from YAML config file and CLI overrides.
-
       commit:
         type: "feat"
         message: "add skip_completed and retry_failed config options"
-
     - task_number: 5
       name: "Add CLI Flags for Skip and Retry"
       agent: golang-pro
@@ -127,11 +114,9 @@ plan:
       description: |
         Add --skip-completed/--no-skip-completed and --retry-failed CLI flags to conductor run command.
         Flags should override config file values.
-
       commit:
         type: "feat"
         message: "add --skip-completed and --retry-failed CLI flags"
-
     - task_number: 6
       name: "Implement Skip Logic in WaveExecutor"
       agent: golang-pro
@@ -144,11 +129,9 @@ plan:
       description: |
         Add skip logic to WaveExecutor to filter out completed tasks before execution.
         Create synthetic TaskResult with GREEN status for skipped tasks.
-
       commit:
         type: "feat"
         message: "implement task skip logic in wave executor"
-
     - task_number: 7
       name: "Wire Skip Config Through Orchestrator"
       agent: golang-pro
@@ -162,11 +145,9 @@ plan:
       description: |
         Thread skip_completed and retry_failed configuration through orchestrator to wave executor.
         Update run command to pass merged config through execution chain.
-
       commit:
         type: "feat"
         message: "wire skip config through orchestrator to executor"
-
     - task_number: 8
       name: "Integration Tests for Skip Behavior"
       agent: golang-pro
@@ -179,11 +160,9 @@ plan:
       description: |
         Create comprehensive integration tests for skip-completed feature.
         Test with Markdown and YAML plans, various status combinations, and config/CLI interactions.
-
       commit:
         type: "test"
         message: "add comprehensive integration tests for skip feature"
-
     - task_number: 9
       name: "Documentation and Example Plans"
       agent: golang-pro
@@ -198,32 +177,26 @@ plan:
       description: |
         Document skip-completed feature in README, usage guide, and plan format guide.
         Create example plans showing task completion marking and resume functionality.
-
       commit:
         type: "docs"
         message: "document skip-completed feature"
-
   testing_strategy:
     unit_tests:
       location: "internal/**/*_test.go"
       run_command: "go test ./internal/... -v"
       coverage_target: "85%"
-
     integration_tests:
       location: "test/integration/conductor_test.go"
       run_command: "go test ./test/integration -v"
-
   commit_strategy:
     total_commits: 9
     message_format: "type: description in present tense"
-
   resources:
     existing_code:
       - type: "Task execution pipeline"
         path: "internal/executor/task.go:111-273"
       - type: "Stub pattern for tests"
         path: "internal/executor/task_test.go:15-35"
-
   validation_checklist:
     - item: "All tests pass"
       command: "go test ./..."
