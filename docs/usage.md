@@ -151,6 +151,68 @@ conductor validate --help
 conductor run --help
 ```
 
+## Plan Execution Modes
+
+### Skip Completed Tasks
+
+Conductor can resume interrupted plans by skipping already-completed tasks. This is useful when:
+- A long-running plan is interrupted mid-execution
+- You want to re-run a plan but skip previously successful tasks
+- You're iterating on specific failing tasks
+
+**Mark tasks as completed in your plan file:**
+
+```markdown
+## Task 1: Already Completed
+**Status**: completed
+
+This task has already been executed successfully.
+```
+
+```yaml
+tasks:
+  - id: 1
+    name: Already Completed
+    status: completed
+    description: This task has already been executed successfully.
+```
+
+**Skip completed tasks during execution:**
+
+```bash
+# Skip all completed tasks
+conductor run plan.md --skip-completed
+
+# Skip completed tasks and retry failed ones
+conductor run plan.md --skip-completed --retry-failed
+
+# Or set as default in config file
+skip_completed: true
+```
+
+**Behavior:**
+- Tasks marked with `Status: completed` are skipped
+- Skipped tasks create synthetic GREEN results
+- Dependencies from skipped tasks are still satisfied
+- Pending and failed tasks execute normally
+
+### Retry Failed Tasks
+
+Retry previously failed tasks on plan resume:
+
+```bash
+# Retry tasks marked as failed
+conductor run plan.md --retry-failed
+
+# Combined: skip completed and retry failed
+conductor run plan.md --skip-completed --retry-failed
+```
+
+**Behavior:**
+- Without `--retry-failed`: failed tasks are skipped
+- With `--retry-failed`: failed tasks are re-executed
+- Use to fix issues and continue a partially-failed plan
+
 ## Configuration
 
 ### Configuration File
@@ -172,8 +234,12 @@ vim .conductor/config.yaml
 ```yaml
 # Execution settings
 max_concurrency: 3        # Maximum parallel tasks per wave (default: 3)
-task_timeout: 5m          # Individual task timeout (default: 5m)
-execution_timeout: 30m    # Total execution timeout (default: 30m)
+timeout: 30m              # Total execution timeout (default: 30m)
+dry_run: false            # Simulate without executing (default: false)
+
+# Resume & retry settings
+skip_completed: false     # Skip tasks marked as completed (default: false)
+retry_failed: false       # Retry tasks marked as failed (default: false)
 
 # Quality control settings
 qc_enabled: true          # Enable QC reviews (default: true)

@@ -27,6 +27,7 @@ Conductor automates complex multi-step implementations by:
 - **Dependency Management**: Automatic dependency graph calculation with cycle detection
 - **Quality Control**: Automated review of task outputs (GREEN/RED/YELLOW verdicts)
 - **Retry Logic**: Automatic retry on failures (up to 2 attempts per task)
+- **Skip Completed Tasks**: Resume interrupted plans by skipping already-completed tasks
 - **File Locking**: Safe concurrent updates to plan files
 - **Agent Discovery**: Automatic detection of available Claude agents
 - **Dual Format Support**: Both Markdown and YAML plan formats
@@ -125,6 +126,24 @@ conductor run plan.md --verbose
 
 # Custom log directory
 conductor run plan.md --log-dir ./execution-logs
+
+# Skip completed tasks and retry failed ones
+conductor run plan.md --skip-completed --retry-failed
+```
+
+### Resume Interrupted Plans
+
+Conductor supports resumable execution by skipping tasks marked as completed:
+
+```bash
+# Run plan, marking completed tasks in the file
+conductor run plan.md
+
+# Resume the plan later, skipping completed tasks
+conductor run plan.md --skip-completed
+
+# Retry failed tasks on resume
+conductor run plan.md --skip-completed --retry-failed
 ```
 
 ### Command-Line Flags
@@ -138,6 +157,8 @@ conductor run plan.md --log-dir ./execution-logs
 | `--timeout` | duration | 30m | Timeout for entire execution |
 | `--verbose` | bool | false | Enable detailed logging |
 | `--log-dir` | string | .conductor/logs | Directory for execution logs |
+| `--skip-completed` | bool | false | Skip tasks marked as completed in plan |
+| `--retry-failed` | bool | false | Retry tasks marked as failed in plan |
 
 **`conductor validate` flags:**
 
@@ -160,12 +181,12 @@ vim .conductor/config.yaml
 ```yaml
 # Execution settings
 max_concurrency: 3        # Parallel tasks per wave
-task_timeout: 5m          # Individual task timeout
-execution_timeout: 30m    # Total execution timeout
+timeout: 30m              # Total execution timeout
+dry_run: false            # Simulate without executing
 
-# Quality control settings
-qc_enabled: true          # Enable QC reviews
-max_retries: 2            # Retry attempts on RED
+# Resume & retry settings
+skip_completed: false     # Skip tasks marked as completed
+retry_failed: false       # Retry tasks marked as failed
 
 # Logging settings
 log_dir: .conductor/logs  # Log directory

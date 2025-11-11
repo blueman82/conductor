@@ -80,13 +80,13 @@ Plan File (.md/.yaml)
 
 **Parser (`internal/parser/`)**: Auto-detects file format and parses plan files into Task structs. Markdown parser extracts tasks from `## Task N:` headings. YAML parser handles structured format. Both support optional YAML frontmatter for conductor config.
 
-**Models (`internal/models/`)**: Core data structures (Task, Plan, Wave, TaskResult). Task.DependsOn creates dependency graph. Wave groups parallel-executable tasks.
+**Models (`internal/models/`)**: Core data structures (Task, Plan, Wave, TaskResult). Task includes Status and CompletedAt fields for resumable execution. Task.DependsOn creates dependency graph. Wave groups parallel-executable tasks. Helper methods: IsCompleted(), CanSkip().
 
 **Executor (`internal/executor/`)**:
 - `graph.go`: Dependency graph builder using Kahn's algorithm for wave calculation. DFS with color marking for cycle detection. Validates all dependencies exist.
 - `qc.go`: Quality control reviews using dedicated agent. Parses GREEN/RED/YELLOW flags from output. Handles retry logic (max 2 attempts on RED).
 - `task.go`: Task executor implementing invoke → review → retry pipeline. Handles GREEN/RED/YELLOW flags, retries on RED, updates plan file on completion. 84.5% test coverage with comprehensive error path testing.
-- `wave.go`: Wave executor for sequential wave execution with bounded concurrency. Uses semaphore pattern for parallel task execution within waves.
+- `wave.go`: Wave executor for sequential wave execution with bounded concurrency. Filters completed tasks before execution based on SkipCompleted config. Creates synthetic GREEN results for skipped tasks. Respects RetryFailed flag for failed task re-execution.
 
 **Agent (`internal/agent/`)**:
 - `discovery.go`: Scans `~/.claude/agents/` for agent .md files with YAML frontmatter. Uses directory whitelisting (root + numbered dirs 01-10) and file filtering (skips README.md, *-framework.md, examples/, transcripts/, logs/) to eliminate false warnings. Registry provides fast agent lookup with ~94% test coverage.
@@ -94,13 +94,19 @@ Plan File (.md/.yaml)
 
 **CLI (`internal/cmd/`)**:
 - `root.go`: Root command with version display and subcommand registration
-- `run.go`: Implements `conductor run` command for plan execution (267 lines)
-  - CLI flags: --dry-run, --max-concurrency, --timeout, --verbose
+- `run.go`: Implements `conductor run` command for plan execution
+  - CLI flags: --dry-run, --max-concurrency, --timeout, --verbose, --skip-completed, --retry-failed, --log-dir
+  - Config file merging (CLI flags override config.yaml)
   - Plan file loading with auto-format detection
   - Orchestrator integration with progress logging
   - Comprehensive error handling
 - `validate.go`: Implements `conductor validate` command for plan validation
 - Console logger: Real-time progress updates with timestamps
+
+**Config (`internal/config/`)**:
+- Supports .conductor/config.yaml for default settings
+- Configuration priority: defaults → config file → CLI flags (highest priority)
+- Fields: max_concurrency, timeout, dry_run, skip_completed, retry_failed, log_dir, log_level
 
 ### Dependency Graph Algorithm
 

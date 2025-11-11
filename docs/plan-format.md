@@ -126,6 +126,7 @@ plan:
   depends_on: [string]       # Optional: Task dependencies
   estimated_time: string     # Optional: Estimated duration
   agent: string              # Optional: Agent name
+  status: string             # Optional: completed|failed|in-progress
   description: string        # Optional: Task description
 ```
 
@@ -186,6 +187,63 @@ plan:
 - Agent must exist in `~/.claude/agents/`
 - Optional (uses default if not specified)
 - Agent discovery scans numbered directories and root
+
+### Status / status
+
+**Purpose**: Track task completion status for resumable execution
+
+**Format:**
+- Markdown: `**Status**: completed` or `[x]` checkbox
+- YAML: `status: completed`
+
+**Valid Values:**
+- `completed` - Task successfully completed
+- `failed` - Task failed in previous execution
+- `in-progress` - Task is currently running
+- (empty) - Task not yet executed
+
+**Rules:**
+- Optional field (defaults to empty/pending)
+- Set manually or automatically by conductor after execution
+- Used with `--skip-completed` flag to resume plans
+- Skipped tasks create synthetic GREEN results
+
+**Examples:**
+
+Markdown with explicit status:
+```markdown
+## Task 1: Already Done
+**Status**: completed
+
+This task was already completed and will be skipped.
+```
+
+Markdown with checkbox (shorthand):
+```markdown
+## Task 1: Already Done
+- [x] This task is marked as completed
+```
+
+YAML format:
+```yaml
+- id: 1
+  name: Already Done
+  status: completed
+  description: This task was already completed.
+```
+
+**Resume Examples:**
+
+```bash
+# First run: marks completed tasks in plan file
+conductor run plan.md
+
+# Resume later: skip completed tasks
+conductor run plan.md --skip-completed
+
+# Retry failed tasks on resume
+conductor run plan.md --skip-completed --retry-failed
+```
 
 ## Dependencies
 
