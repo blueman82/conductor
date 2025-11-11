@@ -18,16 +18,30 @@ type TaskExecutor interface {
 
 // WaveExecutor coordinates sequential wave execution with bounded parallelism per wave.
 type WaveExecutor struct {
-	taskExecutor TaskExecutor
-	logger       Logger
+	taskExecutor  TaskExecutor
+	logger        Logger
+	skipCompleted bool // Skip tasks that are already completed
+	retryFailed   bool // Retry tasks that have failed status
 }
 
 // NewWaveExecutor constructs a WaveExecutor with the provided task executor implementation.
 // The logger parameter is optional and can be nil to disable logging.
 func NewWaveExecutor(taskExecutor TaskExecutor, logger Logger) *WaveExecutor {
 	return &WaveExecutor{
-		taskExecutor: taskExecutor,
-		logger:       logger,
+		taskExecutor:  taskExecutor,
+		logger:        logger,
+		skipCompleted: false, // Default: don't skip
+		retryFailed:   false, // Default: don't retry
+	}
+}
+
+// NewWaveExecutorWithConfig constructs a WaveExecutor with skip/retry configuration.
+func NewWaveExecutorWithConfig(taskExecutor TaskExecutor, logger Logger, skipCompleted, retryFailed bool) *WaveExecutor {
+	return &WaveExecutor{
+		taskExecutor:  taskExecutor,
+		logger:        logger,
+		skipCompleted: skipCompleted,
+		retryFailed:   retryFailed,
 	}
 }
 
@@ -79,6 +93,42 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		return []models.TaskResult{}, nil
 	}
 
+	// Separate tasks into skipped and to-execute based on CanSkip() logic
+	var tasksToExecute []string
+	var skippedResults []models.TaskResult
+
+	for _, taskNumber := range wave.TaskNumbers {
+		task, ok := taskMap[taskNumber]
+		if !ok {
+			return nil, NewTaskError(taskNumber, fmt.Sprintf("task not found in %s", wave.Name), nil)
+		}
+
+		// Check if we should skip this task
+		if w.skipCompleted && task.CanSkip() {
+			// Create synthetic GREEN result for skipped task
+			skippedResult := models.TaskResult{
+				Task:   task,
+				Status: models.StatusGreen,
+				Output: "Skipped",
+			}
+			skippedResults = append(skippedResults, skippedResult)
+
+			// Log the skipped task result
+			if w.logger != nil {
+				if logErr := w.logger.LogTaskResult(skippedResult); logErr != nil {
+					// Log error but don't fail execution
+				}
+			}
+		} else {
+			tasksToExecute = append(tasksToExecute, taskNumber)
+		}
+	}
+
+	// If all tasks are skipped, return the skipped results
+	if len(tasksToExecute) == 0 {
+		return skippedResults, nil
+	}
+
 	// Track how many task goroutines actually started to prevent logging
 	// wave start/completion for pre-cancelled contexts where no tasks launched.
 	var tasksLaunched int32
@@ -87,30 +137,27 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 	waveStartTime := time.Now()
 
 	maxConcurrency := wave.MaxConcurrency
-	if maxConcurrency <= 0 || maxConcurrency > taskCount {
-		maxConcurrency = taskCount
+	execCount := len(tasksToExecute)
+	if maxConcurrency <= 0 || maxConcurrency > execCount {
+		maxConcurrency = execCount
 	}
 	if maxConcurrency == 0 {
 		maxConcurrency = 1
 	}
 
 	semaphore := make(chan struct{}, maxConcurrency)
-	resultsCh := make(chan taskExecutionResult, taskCount)
+	resultsCh := make(chan taskExecutionResult, execCount)
 
 	var wg sync.WaitGroup
 	var launchErr error
 
-	for _, taskNumber := range wave.TaskNumbers {
+	for _, taskNumber := range tasksToExecute {
 		if err := ctx.Err(); err != nil {
 			launchErr = err
 			break
 		}
 
-		task, ok := taskMap[taskNumber]
-		if !ok {
-			launchErr = NewTaskError(taskNumber, fmt.Sprintf("task not found in %s", wave.Name), nil)
-			break
-		}
+		task := taskMap[taskNumber]
 
 		// Check context again before acquiring semaphore to avoid blocking on a cancelled context
 		select {
@@ -158,7 +205,7 @@ launchComplete:
 		close(resultsCh)
 	}()
 
-	resultMap := make(map[string]models.TaskResult, taskCount)
+	resultMap := make(map[string]models.TaskResult, execCount)
 	var execErr error
 
 	for executionResult := range resultsCh {
@@ -176,9 +223,20 @@ launchComplete:
 		}
 	}
 
-	waveResults := make([]models.TaskResult, 0, len(resultMap))
+	waveResults := make([]models.TaskResult, 0, taskCount)
+
+	// Build results map including skipped tasks for easy lookup
+	allResults := make(map[string]models.TaskResult)
+	for _, result := range skippedResults {
+		allResults[result.Task.Number] = result
+	}
+	for taskNum, result := range resultMap {
+		allResults[taskNum] = result
+	}
+
+	// Add results in original wave order
 	for _, taskNumber := range wave.TaskNumbers {
-		if result, ok := resultMap[taskNumber]; ok {
+		if result, ok := allResults[taskNumber]; ok {
 			waveResults = append(waveResults, result)
 		}
 	}
