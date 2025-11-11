@@ -56,3 +56,6 @@ conductor
 
 # Deployment strategies (local planning docs)
 docs/plans/subagent-deployment-strategy.md
+
+# MCP integration documentation (local research)
+docs/mcp-headless-invocation.md
