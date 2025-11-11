@@ -8,10 +8,12 @@ package logger
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -27,10 +29,12 @@ const (
 // ConsoleLogger logs execution progress to a writer with timestamps and thread safety.
 // All output is prefixed with [HH:MM:SS] timestamps for tracking execution flow.
 // It supports log level filtering to control message verbosity.
+// Color output is automatically enabled for terminal output (os.Stdout/os.Stderr).
 type ConsoleLogger struct {
-	writer   io.Writer
-	logLevel string
-	mutex    sync.Mutex
+	writer      io.Writer
+	logLevel    string
+	mutex       sync.Mutex
+	colorOutput bool
 }
 
 // NewConsoleLogger creates a ConsoleLogger that writes to the provided io.Writer.
@@ -38,15 +42,37 @@ type ConsoleLogger struct {
 // logLevel determines the minimum log level for messages to be output.
 // Valid levels: trace, debug, info, warn, error (case-insensitive).
 // If logLevel is empty or invalid, defaults to "info".
+// Color output is automatically enabled when writing to os.Stdout or os.Stderr with TTY support.
 func NewConsoleLogger(writer io.Writer, logLevel string) *ConsoleLogger {
 	// Normalize and validate log level
 	normalizedLevel := normalizeLogLevel(logLevel)
 
+	// Detect if we should use color output
+	useColor := isTerminal(writer)
+
 	return &ConsoleLogger{
-		writer:   writer,
-		logLevel: normalizedLevel,
-		mutex:    sync.Mutex{},
+		writer:      writer,
+		logLevel:    normalizedLevel,
+		mutex:       sync.Mutex{},
+		colorOutput: useColor,
 	}
+}
+
+// isTerminal checks if the writer is a terminal that supports colors.
+// Returns true for os.Stdout and os.Stderr when they are TTYs.
+func isTerminal(w io.Writer) bool {
+	if w == nil {
+		return false
+	}
+
+	// Check if writer is os.Stdout or os.Stderr
+	if w == os.Stdout || w == os.Stderr {
+		// Use color library's built-in TTY detection
+		// This will return false if NO_COLOR env var is set
+		return !color.NoColor
+	}
+
+	return false
 }
 
 // normalizeLogLevel converts a log level string to lowercase and validates it.
@@ -139,8 +165,40 @@ func (cl *ConsoleLogger) logWithLevel(level string, message string) {
 	cl.mutex.Lock()
 	defer cl.mutex.Unlock()
 
-	formatted := fmt.Sprintf("[%s] [%s] %s\n", timestamp(), level, message)
+	ts := timestamp()
+	var formatted string
+
+	if cl.colorOutput {
+		// Format with colors
+		formatted = cl.formatWithColor(ts, level, message)
+	} else {
+		// Plain text format
+		formatted = fmt.Sprintf("[%s] [%s] %s\n", ts, level, message)
+	}
+
 	cl.writer.Write([]byte(formatted))
+}
+
+// formatWithColor formats a log message with ANSI color codes.
+func (cl *ConsoleLogger) formatWithColor(ts, level, message string) string {
+	var coloredLevel string
+
+	switch strings.ToUpper(level) {
+	case "TRACE":
+		coloredLevel = color.New(color.FgHiBlack).Sprint(level)
+	case "DEBUG":
+		coloredLevel = color.New(color.FgCyan).Sprint(level)
+	case "INFO":
+		coloredLevel = color.New(color.FgBlue).Sprint(level)
+	case "WARN":
+		coloredLevel = color.New(color.FgYellow).Sprint(level)
+	case "ERROR":
+		coloredLevel = color.New(color.FgRed).Sprint(level)
+	default:
+		coloredLevel = level
+	}
+
+	return fmt.Sprintf("[%s] [%s] %s\n", ts, coloredLevel, message)
 }
 
 // LogWaveStart logs the start of a wave execution at INFO level.
@@ -158,8 +216,18 @@ func (cl *ConsoleLogger) LogWaveStart(wave models.Wave) {
 	cl.mutex.Lock()
 	defer cl.mutex.Unlock()
 
+	ts := timestamp()
 	taskCount := len(wave.TaskNumbers)
-	message := fmt.Sprintf("[%s] Starting Wave %s: %d tasks\n", timestamp(), wave.Name, taskCount)
+
+	var message string
+	if cl.colorOutput {
+		// Bold/bright for wave headers
+		waveName := color.New(color.Bold).Sprint(wave.Name)
+		message = fmt.Sprintf("[%s] Starting Wave %s: %d tasks\n", ts, waveName, taskCount)
+	} else {
+		message = fmt.Sprintf("[%s] Starting Wave %s: %d tasks\n", ts, wave.Name, taskCount)
+	}
+
 	cl.writer.Write([]byte(message))
 }
 
@@ -178,8 +246,19 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 	cl.mutex.Lock()
 	defer cl.mutex.Unlock()
 
+	ts := timestamp()
 	durationStr := formatDuration(duration)
-	message := fmt.Sprintf("[%s] Wave %s complete (%s)\n", timestamp(), wave.Name, durationStr)
+
+	var message string
+	if cl.colorOutput {
+		// Green for successful completion
+		waveName := color.New(color.Bold).Sprint(wave.Name)
+		completeText := color.New(color.FgGreen).Sprint("complete")
+		message = fmt.Sprintf("[%s] Wave %s %s (%s)\n", ts, waveName, completeText, durationStr)
+	} else {
+		message = fmt.Sprintf("[%s] Wave %s complete (%s)\n", ts, wave.Name, durationStr)
+	}
+
 	cl.writer.Write([]byte(message))
 }
 
@@ -201,16 +280,49 @@ func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 	ts := timestamp()
 	durationStr := formatDuration(result.Duration)
 
-	output := fmt.Sprintf("[%s] === Execution Summary ===\n", ts)
-	output += fmt.Sprintf("[%s] Total tasks: %d\n", ts, result.TotalTasks)
-	output += fmt.Sprintf("[%s] Completed: %d\n", ts, result.Completed)
-	output += fmt.Sprintf("[%s] Failed: %d\n", ts, result.Failed)
-	output += fmt.Sprintf("[%s] Duration: %s\n", ts, durationStr)
+	var output string
 
-	if result.Failed > 0 && len(result.FailedTasks) > 0 {
-		output += fmt.Sprintf("[%s] Failed tasks:\n", ts)
-		for _, failedTask := range result.FailedTasks {
-			output += fmt.Sprintf("[%s]   - Task %s: %s\n", ts, failedTask.Task.Name, failedTask.Status)
+	if cl.colorOutput {
+		// Colorized summary
+		header := color.New(color.Bold).Sprint("=== Execution Summary ===")
+		output = fmt.Sprintf("[%s] %s\n", ts, header)
+		output += fmt.Sprintf("[%s] Total tasks: %d\n", ts, result.TotalTasks)
+
+		// Green for completed tasks
+		completedText := color.New(color.FgGreen).Sprintf("Completed: %d", result.Completed)
+		output += fmt.Sprintf("[%s] %s\n", ts, completedText)
+
+		// Red for failed tasks if any, otherwise show in default color
+		if result.Failed > 0 {
+			failedText := color.New(color.FgRed).Sprintf("Failed: %d", result.Failed)
+			output += fmt.Sprintf("[%s] %s\n", ts, failedText)
+		} else {
+			output += fmt.Sprintf("[%s] Failed: %d\n", ts, result.Failed)
+		}
+
+		output += fmt.Sprintf("[%s] Duration: %s\n", ts, durationStr)
+
+		if result.Failed > 0 && len(result.FailedTasks) > 0 {
+			failedHeader := color.New(color.FgRed).Sprint("Failed tasks:")
+			output += fmt.Sprintf("[%s] %s\n", ts, failedHeader)
+			for _, failedTask := range result.FailedTasks {
+				taskName := color.New(color.FgRed).Sprint(failedTask.Task.Name)
+				output += fmt.Sprintf("[%s]   - Task %s: %s\n", ts, taskName, failedTask.Status)
+			}
+		}
+	} else {
+		// Plain text summary
+		output = fmt.Sprintf("[%s] === Execution Summary ===\n", ts)
+		output += fmt.Sprintf("[%s] Total tasks: %d\n", ts, result.TotalTasks)
+		output += fmt.Sprintf("[%s] Completed: %d\n", ts, result.Completed)
+		output += fmt.Sprintf("[%s] Failed: %d\n", ts, result.Failed)
+		output += fmt.Sprintf("[%s] Duration: %s\n", ts, durationStr)
+
+		if result.Failed > 0 && len(result.FailedTasks) > 0 {
+			output += fmt.Sprintf("[%s] Failed tasks:\n", ts)
+			for _, failedTask := range result.FailedTasks {
+				output += fmt.Sprintf("[%s]   - Task %s: %s\n", ts, failedTask.Task.Name, failedTask.Status)
+			}
 		}
 	}
 
