@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/executor"
 	"github.com/harrison/conductor/internal/logger"
 	"github.com/harrison/conductor/internal/models"
@@ -61,41 +62,98 @@ The run command parses the specified plan file (Markdown or YAML format),
 calculates task dependencies, and executes tasks in parallel waves while
 maintaining proper dependency ordering.
 
+Configuration is loaded from .conductor/config.yaml if present.
+CLI flags override configuration file settings.
+
 Examples:
   conductor run plan.md                    # Execute plan.md
   conductor run --dry-run plan.yaml        # Validate without executing
   conductor run --max-concurrency 5 plan.md  # Limit to 5 parallel tasks
   conductor run --timeout 2h plan.md       # Set 2 hour timeout
   conductor run --verbose plan.md          # Show detailed progress
-  conductor run --log-dir ./logs plan.md   # Use custom log directory`,
+  conductor run --log-dir ./logs plan.md   # Use custom log directory
+  conductor run --config custom.yaml plan.md  # Use custom config file`,
 		Args: cobra.ExactArgs(1),
 		RunE: runCommand,
 	}
 
 	// Add flags
+	cmd.Flags().String("config", "", "Path to config file (default: .conductor/config.yaml)")
 	cmd.Flags().Bool("dry-run", false, "Validate the plan without executing tasks")
-	cmd.Flags().Int("max-concurrency", 0, "Maximum number of concurrent tasks (0 = unlimited)")
-	cmd.Flags().String("timeout", "10h", "Maximum execution time (e.g., 30m, 2h, 1h30m)")
+	cmd.Flags().Int("max-concurrency", -1, "Maximum number of concurrent tasks (0 = unlimited, -1 = use config)")
+	cmd.Flags().String("timeout", "", "Maximum execution time (e.g., 30m, 2h, 1h30m)")
 	cmd.Flags().Bool("verbose", false, "Show detailed execution information")
-	cmd.Flags().String("log-dir", "", "Directory for log files (default: .conductor/logs)")
+	cmd.Flags().String("log-dir", "", "Directory for log files")
 
 	return cmd
 }
 
 // runCommand implements the run command logic
 func runCommand(cmd *cobra.Command, args []string) error {
-	// Get flags
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	maxConcurrency, _ := cmd.Flags().GetInt("max-concurrency")
-	timeoutStr, _ := cmd.Flags().GetString("timeout")
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	logDir, _ := cmd.Flags().GetString("log-dir")
+	// Load configuration from file
+	configPath, _ := cmd.Flags().GetString("config")
+	var cfg *config.Config
+	var err error
 
-	// Validate timeout format
-	timeout, err := time.ParseDuration(timeoutStr)
-	if err != nil {
-		return fmt.Errorf("invalid timeout format %q: %w", timeoutStr, err)
+	if configPath != "" {
+		// Load from explicit config path
+		cfg, err = config.LoadConfig(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config from %s: %w", configPath, err)
+		}
+	} else {
+		// Load from default .conductor/config.yaml
+		cfg, err = config.LoadConfigFromDir(".")
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
 	}
+
+	// Get flag values
+	dryRunFlag, _ := cmd.Flags().GetBool("dry-run")
+	maxConcurrencyFlag, _ := cmd.Flags().GetInt("max-concurrency")
+	timeoutStr, _ := cmd.Flags().GetString("timeout")
+	logDirFlag, _ := cmd.Flags().GetString("log-dir")
+
+	// Build flag pointers for merge (only non-default values)
+	var maxConcurrencyPtr *int
+	if cmd.Flags().Changed("max-concurrency") {
+		maxConcurrencyPtr = &maxConcurrencyFlag
+	}
+
+	var timeoutPtr *time.Duration
+	if cmd.Flags().Changed("timeout") {
+		timeout, err := time.ParseDuration(timeoutStr)
+		if err != nil {
+			return fmt.Errorf("invalid timeout format %q: %w", timeoutStr, err)
+		}
+		timeoutPtr = &timeout
+	}
+
+	var logDirPtr *string
+	if cmd.Flags().Changed("log-dir") {
+		logDirPtr = &logDirFlag
+	}
+
+	var dryRunPtr *bool
+	if cmd.Flags().Changed("dry-run") {
+		dryRunPtr = &dryRunFlag
+	}
+
+	// Merge CLI flags with config (flags take precedence)
+	cfg.MergeWithFlags(maxConcurrencyPtr, timeoutPtr, logDirPtr, dryRunPtr)
+
+	// Validate merged configuration
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Use merged config values
+	dryRun := cfg.DryRun
+	maxConcurrency := cfg.MaxConcurrency
+	timeout := cfg.Timeout
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	logDir := cfg.LogDir
 
 	// Get plan file path
 	if len(args) == 0 {
@@ -143,6 +201,9 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "  Timeout: %s\n", timeout)
 	if maxConcurrency > 0 {
 		fmt.Fprintf(cmd.OutOrStdout(), "  Max concurrency: %d\n", maxConcurrency)
+	}
+	if configPath != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Config: %s\n", configPath)
 	}
 
 	// Dry-run mode: validate only
