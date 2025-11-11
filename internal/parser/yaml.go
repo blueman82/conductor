@@ -36,6 +36,8 @@ type yamlTask struct {
 	EstimatedTime string        `yaml:"estimated_time"`
 	Agent         string        `yaml:"agent"`
 	Status        string        `yaml:"status"`
+	CompletedDate string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
+	CompletedAt   string        `yaml:"completed_at"`   // Timestamp format: RFC3339
 	Description   string        `yaml:"description"`
 	TestFirst     struct {
 		TestFile        string   `yaml:"test_file"`
@@ -142,12 +144,24 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 			Files:     yt.Files,
 			DependsOn: dependsOn,
 			Agent:     yt.Agent,
+			Status:    yt.Status,
 		}
 
 		// Parse estimated time
 		if yt.EstimatedTime != "" {
 			if dur, err := parseTimeString(yt.EstimatedTime); err == nil {
 				task.EstimatedTime = dur
+			}
+		}
+
+		// Parse completion timestamp from either completed_date or completed_at
+		if yt.CompletedAt != "" {
+			if t, err := parseCompletionTimestamp(yt.CompletedAt); err == nil {
+				task.CompletedAt = &t
+			}
+		} else if yt.CompletedDate != "" {
+			if t, err := parseCompletionDate(yt.CompletedDate); err == nil {
+				task.CompletedAt = &t
 			}
 		}
 
@@ -429,4 +443,14 @@ func buildPromptFromYAML(yt *yamlTask) string {
 func parseTimeString(s string) (time.Duration, error) {
 	// time.ParseDuration already handles formats like "30m", "1h", "2h30m"
 	return time.ParseDuration(s)
+}
+
+// parseCompletionDate parses a date string in format "YYYY-MM-DD" and returns a time.Time
+func parseCompletionDate(dateStr string) (time.Time, error) {
+	return time.Parse("2006-01-02", dateStr)
+}
+
+// parseCompletionTimestamp parses a timestamp string in RFC3339 format and returns a time.Time
+func parseCompletionTimestamp(timestampStr string) (time.Time, error) {
+	return time.Parse(time.RFC3339, timestampStr)
 }

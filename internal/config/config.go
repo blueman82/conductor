@@ -25,6 +25,12 @@ type Config struct {
 
 	// DryRun enables validation-only mode without execution
 	DryRun bool `yaml:"dry_run"`
+
+	// SkipCompleted skips tasks that have already been completed
+	SkipCompleted bool `yaml:"skip_completed"`
+
+	// RetryFailed retries tasks that failed
+	RetryFailed bool `yaml:"retry_failed"`
 }
 
 // DefaultConfig returns a Config with sensible default values
@@ -35,6 +41,8 @@ func DefaultConfig() *Config {
 		LogLevel:       "info",
 		LogDir:         ".conductor/logs",
 		DryRun:         false,
+		SkipCompleted:  false,
+		RetryFailed:    false,
 	}
 }
 
@@ -65,6 +73,8 @@ func LoadConfig(path string) (*Config, error) {
 		LogLevel       string `yaml:"log_level"`
 		LogDir         string `yaml:"log_dir"`
 		DryRun         bool   `yaml:"dry_run"`
+		SkipCompleted  bool   `yaml:"skip_completed"`
+		RetryFailed    bool   `yaml:"retry_failed"`
 	}
 
 	var yamlCfg yamlConfig
@@ -93,6 +103,14 @@ func LoadConfig(path string) (*Config, error) {
 	if yamlCfg.DryRun {
 		cfg.DryRun = yamlCfg.DryRun
 	}
+	// SkipCompleted is explicitly set if present in YAML
+	if yamlCfg.SkipCompleted {
+		cfg.SkipCompleted = yamlCfg.SkipCompleted
+	}
+	// RetryFailed is explicitly set if present in YAML
+	if yamlCfg.RetryFailed {
+		cfg.RetryFailed = yamlCfg.RetryFailed
+	}
 
 	return cfg, nil
 }
@@ -107,7 +125,7 @@ func LoadConfigFromDir(dir string) (*Config, error) {
 // MergeWithFlags merges CLI flags into the configuration
 // Non-nil flag values override configuration values
 // This allows CLI flags to take precedence over config file settings
-func (c *Config) MergeWithFlags(maxConcurrency *int, timeout *time.Duration, logDir *string, dryRun *bool) {
+func (c *Config) MergeWithFlags(maxConcurrency *int, timeout *time.Duration, logDir *string, dryRun *bool, skipCompleted *bool, retryFailed *bool) {
 	if maxConcurrency != nil {
 		c.MaxConcurrency = *maxConcurrency
 	}
@@ -119,6 +137,12 @@ func (c *Config) MergeWithFlags(maxConcurrency *int, timeout *time.Duration, log
 	}
 	if dryRun != nil {
 		c.DryRun = *dryRun
+	}
+	if skipCompleted != nil {
+		c.SkipCompleted = *skipCompleted
+	}
+	if retryFailed != nil {
+		c.RetryFailed = *retryFailed
 	}
 }
 

@@ -26,6 +26,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.DryRun != false {
 		t.Errorf("DryRun = %v, want false", cfg.DryRun)
 	}
+	if cfg.SkipCompleted != false {
+		t.Errorf("SkipCompleted = %v, want false", cfg.SkipCompleted)
+	}
+	if cfg.RetryFailed != false {
+		t.Errorf("RetryFailed = %v, want false", cfg.RetryFailed)
+	}
 }
 
 // TestLoadConfigValidFile tests loading a valid YAML config file
@@ -39,6 +45,8 @@ timeout: 30m
 log_level: debug
 log_dir: /tmp/logs
 dry_run: true
+skip_completed: true
+retry_failed: true
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -65,6 +73,12 @@ dry_run: true
 	}
 	if cfg.DryRun != true {
 		t.Errorf("DryRun = %v, want true", cfg.DryRun)
+	}
+	if cfg.SkipCompleted != true {
+		t.Errorf("SkipCompleted = %v, want true", cfg.SkipCompleted)
+	}
+	if cfg.RetryFailed != true {
+		t.Errorf("RetryFailed = %v, want true", cfg.RetryFailed)
 	}
 }
 
@@ -192,6 +206,8 @@ func TestMergeWithFlags(t *testing.T) {
 		LogLevel:       "info",
 		LogDir:         ".conductor/logs",
 		DryRun:         false,
+		SkipCompleted:  false,
+		RetryFailed:    false,
 	}
 
 	// Override all values with flags
@@ -199,8 +215,10 @@ func TestMergeWithFlags(t *testing.T) {
 	timeout := 2 * time.Hour
 	logDir := "/custom/logs"
 	dryRun := true
+	skipCompleted := true
+	retryFailed := true
 
-	cfg.MergeWithFlags(&maxConcurrency, &timeout, &logDir, &dryRun)
+	cfg.MergeWithFlags(&maxConcurrency, &timeout, &logDir, &dryRun, &skipCompleted, &retryFailed)
 
 	// Verify flags take precedence
 	if cfg.MaxConcurrency != 10 {
@@ -215,6 +233,12 @@ func TestMergeWithFlags(t *testing.T) {
 	if cfg.DryRun != true {
 		t.Errorf("DryRun = %v, want true", cfg.DryRun)
 	}
+	if cfg.SkipCompleted != true {
+		t.Errorf("SkipCompleted = %v, want true", cfg.SkipCompleted)
+	}
+	if cfg.RetryFailed != true {
+		t.Errorf("RetryFailed = %v, want true", cfg.RetryFailed)
+	}
 }
 
 // TestMergeWithFlagsPartial tests that only non-nil flags override config
@@ -225,13 +249,15 @@ func TestMergeWithFlagsPartial(t *testing.T) {
 		LogLevel:       "info",
 		LogDir:         ".conductor/logs",
 		DryRun:         false,
+		SkipCompleted:  false,
+		RetryFailed:    false,
 	}
 
 	// Only override some values (others are nil)
 	maxConcurrency := 5
 	timeout := 1 * time.Hour
 
-	cfg.MergeWithFlags(&maxConcurrency, &timeout, nil, nil)
+	cfg.MergeWithFlags(&maxConcurrency, &timeout, nil, nil, nil, nil)
 
 	// Verify partial override
 	if cfg.MaxConcurrency != 5 {
@@ -248,6 +274,12 @@ func TestMergeWithFlagsPartial(t *testing.T) {
 	if cfg.DryRun != false {
 		t.Errorf("DryRun = %v, want false (original)", cfg.DryRun)
 	}
+	if cfg.SkipCompleted != false {
+		t.Errorf("SkipCompleted = %v, want false (original)", cfg.SkipCompleted)
+	}
+	if cfg.RetryFailed != false {
+		t.Errorf("RetryFailed = %v, want false (original)", cfg.RetryFailed)
+	}
 }
 
 // TestMergeWithFlagsNil tests that nil flags don't override config
@@ -258,10 +290,12 @@ func TestMergeWithFlagsNil(t *testing.T) {
 		LogLevel:       "info",
 		LogDir:         ".conductor/logs",
 		DryRun:         false,
+		SkipCompleted:  false,
+		RetryFailed:    false,
 	}
 
 	// Pass all nil flags
-	cfg.MergeWithFlags(nil, nil, nil, nil)
+	cfg.MergeWithFlags(nil, nil, nil, nil, nil, nil)
 
 	// Verify all original values preserved
 	if cfg.MaxConcurrency != 3 {
@@ -275,6 +309,12 @@ func TestMergeWithFlagsNil(t *testing.T) {
 	}
 	if cfg.DryRun != false {
 		t.Errorf("DryRun = %v, want false (original)", cfg.DryRun)
+	}
+	if cfg.SkipCompleted != false {
+		t.Errorf("SkipCompleted = %v, want false (original)", cfg.SkipCompleted)
+	}
+	if cfg.RetryFailed != false {
+		t.Errorf("RetryFailed = %v, want false (original)", cfg.RetryFailed)
 	}
 }
 
@@ -484,6 +524,8 @@ func TestMergeWithFlagsZeroValues(t *testing.T) {
 		LogLevel:       "debug",
 		LogDir:         "/tmp/logs",
 		DryRun:         true,
+		SkipCompleted:  true,
+		RetryFailed:    true,
 	}
 
 	// Set flags to zero values
@@ -491,8 +533,10 @@ func TestMergeWithFlagsZeroValues(t *testing.T) {
 	timeout := 0 * time.Second
 	logDir := ""
 	dryRun := false
+	skipCompleted := false
+	retryFailed := false
 
-	cfg.MergeWithFlags(&maxConcurrency, &timeout, &logDir, &dryRun)
+	cfg.MergeWithFlags(&maxConcurrency, &timeout, &logDir, &dryRun, &skipCompleted, &retryFailed)
 
 	// Zero values should override config
 	if cfg.MaxConcurrency != 0 {
@@ -506,6 +550,12 @@ func TestMergeWithFlagsZeroValues(t *testing.T) {
 	}
 	if cfg.DryRun != false {
 		t.Errorf("DryRun = %v, want false", cfg.DryRun)
+	}
+	if cfg.SkipCompleted != false {
+		t.Errorf("SkipCompleted = %v, want false", cfg.SkipCompleted)
+	}
+	if cfg.RetryFailed != false {
+		t.Errorf("RetryFailed = %v, want false", cfg.RetryFailed)
 	}
 }
 
@@ -548,5 +598,128 @@ func TestInvalidLogLevels(t *testing.T) {
 				t.Errorf("Validate() expected error for invalid level %q", level)
 			}
 		})
+	}
+}
+
+// TestSkipCompletedFlag tests loading skip_completed config option
+func TestSkipCompletedFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `skip_completed: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.SkipCompleted != true {
+		t.Errorf("SkipCompleted = %v, want true", cfg.SkipCompleted)
+	}
+}
+
+// TestRetryFailedFlag tests loading retry_failed config option
+func TestRetryFailedFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `retry_failed: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.RetryFailed != true {
+		t.Errorf("RetryFailed = %v, want true", cfg.RetryFailed)
+	}
+}
+
+// TestSkipCompletedAndRetryFailedTogether tests both flags together
+func TestSkipCompletedAndRetryFailedTogether(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `skip_completed: true
+retry_failed: true
+max_concurrency: 4
+timeout: 2h
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.SkipCompleted != true {
+		t.Errorf("SkipCompleted = %v, want true", cfg.SkipCompleted)
+	}
+	if cfg.RetryFailed != true {
+		t.Errorf("RetryFailed = %v, want true", cfg.RetryFailed)
+	}
+	if cfg.MaxConcurrency != 4 {
+		t.Errorf("MaxConcurrency = %d, want 4", cfg.MaxConcurrency)
+	}
+	if cfg.Timeout != 2*time.Hour {
+		t.Errorf("Timeout = %v, want 2h", cfg.Timeout)
+	}
+}
+
+// TestSkipCompletedFlagOverride tests CLI flag override for skip_completed
+func TestSkipCompletedFlagOverride(t *testing.T) {
+	cfg := &Config{
+		MaxConcurrency: 3,
+		Timeout:        30 * time.Minute,
+		LogLevel:       "info",
+		LogDir:         ".conductor/logs",
+		DryRun:         false,
+		SkipCompleted:  false,
+		RetryFailed:    false,
+	}
+
+	skipCompleted := true
+	cfg.MergeWithFlags(nil, nil, nil, nil, &skipCompleted, nil)
+
+	if cfg.SkipCompleted != true {
+		t.Errorf("SkipCompleted = %v, want true", cfg.SkipCompleted)
+	}
+	// Verify other values unchanged
+	if cfg.MaxConcurrency != 3 {
+		t.Errorf("MaxConcurrency = %d, want 3 (original)", cfg.MaxConcurrency)
+	}
+}
+
+// TestRetryFailedFlagOverride tests CLI flag override for retry_failed
+func TestRetryFailedFlagOverride(t *testing.T) {
+	cfg := &Config{
+		MaxConcurrency: 3,
+		Timeout:        30 * time.Minute,
+		LogLevel:       "info",
+		LogDir:         ".conductor/logs",
+		DryRun:         false,
+		SkipCompleted:  false,
+		RetryFailed:    false,
+	}
+
+	retryFailed := true
+	cfg.MergeWithFlags(nil, nil, nil, nil, nil, &retryFailed)
+
+	if cfg.RetryFailed != true {
+		t.Errorf("RetryFailed = %v, want true", cfg.RetryFailed)
+	}
+	// Verify other values unchanged
+	if cfg.SkipCompleted != false {
+		t.Errorf("SkipCompleted = %v, want false (original)", cfg.SkipCompleted)
 	}
 }
