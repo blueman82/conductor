@@ -397,3 +397,91 @@ plan:
 		t.Errorf("Expected CompletedAt to be nil for pending task, but got %v", task.CompletedAt)
 	}
 }
+
+func TestParseYAMLWorktreeGroup(t *testing.T) {
+	tests := []struct {
+		name              string
+		yamlContent       string
+		expectedGroup     string
+		expectSecondGroup string
+	}{
+		{
+			name: "task with worktree_group",
+			yamlContent: `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Backend Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Backend implementation"
+      worktree_group: "backend-core"
+`,
+			expectedGroup: "backend-core",
+		},
+		{
+			name: "task without worktree_group",
+			yamlContent: `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Generic Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Generic task"
+`,
+			expectedGroup: "",
+		},
+		{
+			name: "multiple tasks with different groups",
+			yamlContent: `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Backend Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Backend"
+      worktree_group: "backend-api"
+    - task_number: 2
+      name: "Frontend Task"
+      depends_on: []
+      estimated_time: "45m"
+      description: "Frontend"
+      worktree_group: "frontend-ui"
+`,
+			expectedGroup:     "backend-api",
+			expectSecondGroup: "frontend-ui",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewYAMLParser()
+			plan, err := parser.Parse(strings.NewReader(tt.yamlContent))
+			if err != nil {
+				t.Fatalf("Failed to parse YAML: %v", err)
+			}
+
+			if len(plan.Tasks) < 1 {
+				t.Fatal("Expected at least 1 task")
+			}
+
+			task := plan.Tasks[0]
+			if task.WorktreeGroup != tt.expectedGroup {
+				t.Errorf("Expected worktree group '%s', got '%s'", tt.expectedGroup, task.WorktreeGroup)
+			}
+
+			// For multi-task test, check second task
+			if tt.expectSecondGroup != "" {
+				if len(plan.Tasks) < 2 {
+					t.Fatal("Expected at least 2 tasks")
+				}
+				task2 := plan.Tasks[1]
+				if task2.WorktreeGroup != tt.expectSecondGroup {
+					t.Errorf("Expected second task worktree group '%s', got '%s'", tt.expectSecondGroup, task2.WorktreeGroup)
+				}
+			}
+		})
+	}
+}

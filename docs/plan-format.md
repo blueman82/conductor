@@ -87,6 +87,7 @@ Metadata uses bold keys followed by colons:
 **Depends on**: value
 **Estimated time**: value
 **Agent**: value
+**WorktreeGroup**: value
 **Status**: value
 ```
 
@@ -126,6 +127,7 @@ plan:
   depends_on: [string]       # Optional: Task dependencies
   estimated_time: string     # Optional: Estimated duration
   agent: string              # Optional: Agent name
+  worktree_group: string     # Optional: Worktree group name (Phase 2A)
   status: string             # Optional: completed|failed|in-progress
   description: string        # Optional: Task description
 ```
@@ -244,6 +246,48 @@ conductor run plan.md --skip-completed
 # Retry failed tasks on resume
 conductor run plan.md --skip-completed --retry-failed
 ```
+
+### WorktreeGroup / worktree_group
+
+**Purpose**: Assign task to worktree group for organizational purposes
+
+**Format:**
+- Markdown: `**WorktreeGroup**: backend-core`
+- YAML: `worktree_group: backend-core`
+
+**Rules:**
+- Optional field (defaults to empty if not specified)
+- Parsed by conductor (Phase 2A feature)
+- Used for task organization and grouping in multi-file plans
+- Group names should use hyphens for multi-word names (no spaces)
+- Informational metadata - not enforced by conductor execution engine
+- Groups can be defined in plan configuration for validation
+
+**Examples:**
+
+Markdown:
+```markdown
+## Task 2: API Implementation
+**File(s)**: api/routes.go
+**Depends on**: Task 1
+**WorktreeGroup**: backend-core
+
+Implement REST API endpoints.
+```
+
+YAML:
+```yaml
+- id: 2
+  name: API Implementation
+  files: [api/routes.go]
+  depends_on: [1]
+  worktree_group: backend-core
+  description: Implement REST API endpoints.
+```
+
+**See Also:**
+- [Phase 2A Guide](phase-2a-guide.md) - Multi-file plans and worktree groups
+- [Worktree Best Practices](worktree-best-practices.md) - Using worktree groups effectively
 
 ## Dependencies
 
@@ -445,6 +489,7 @@ Document the feature.
 ## Task 1: Foundation
 **File(s)**: base.go
 **Estimated time**: 10 minutes
+**WorktreeGroup**: foundation
 
 Create foundation.
 
@@ -452,6 +497,7 @@ Create foundation.
 **File(s)**: component_a.go
 **Depends on**: Task 1
 **Estimated time**: 15 minutes
+**WorktreeGroup**: components
 
 Implement component A.
 
@@ -459,6 +505,7 @@ Implement component A.
 **File(s)**: component_b.go
 **Depends on**: Task 1
 **Estimated time**: 15 minutes
+**WorktreeGroup**: components
 
 Implement component B.
 
@@ -466,14 +513,15 @@ Implement component B.
 **File(s)**: integration.go
 **Depends on**: Task 2, Task 3
 **Estimated time**: 10 minutes
+**WorktreeGroup**: integration
 
 Integrate components.
 ```
 
 Wave execution:
-- Wave 1: Task 1
-- Wave 2: Task 2, Task 3 (parallel)
-- Wave 3: Task 4
+- Wave 1: Task 1 (foundation group)
+- Wave 2: Task 2, Task 3 (components group, parallel)
+- Wave 3: Task 4 (integration group)
 
 ### Example 3: Full-Stack
 
@@ -484,6 +532,7 @@ Wave execution:
 ## Task 1: Database Schema
 **File(s)**: migrations/001_schema.sql
 **Estimated time**: 10 minutes
+**WorktreeGroup**: backend
 
 Create database schema.
 
@@ -491,6 +540,7 @@ Create database schema.
 **File(s)**: models/entity.go
 **Depends on**: Task 1
 **Estimated time**: 15 minutes
+**WorktreeGroup**: backend
 
 Implement backend model.
 
@@ -498,12 +548,14 @@ Implement backend model.
 **File(s)**: handlers/api.go
 **Depends on**: Task 2
 **Estimated time**: 20 minutes
+**WorktreeGroup**: backend
 
 Implement REST API.
 
 ## Task 4: Frontend Component
 **File(s)**: components/Feature.tsx
 **Estimated time**: 20 minutes
+**WorktreeGroup**: frontend
 
 Create frontend component.
 
@@ -511,6 +563,7 @@ Create frontend component.
 **File(s)**: pages/feature.tsx
 **Depends on**: Task 3, Task 4
 **Estimated time**: 15 minutes
+**WorktreeGroup**: frontend
 
 Integrate frontend with API.
 
@@ -518,6 +571,7 @@ Integrate frontend with API.
 **File(s)**: tests/e2e_test.go
 **Depends on**: Task 5
 **Estimated time**: 20 minutes
+**WorktreeGroup**: testing
 
 Write end-to-end tests.
 
@@ -525,6 +579,7 @@ Write end-to-end tests.
 **File(s)**: docs/feature.md
 **Depends on**: Task 6
 **Estimated time**: 15 minutes
+**WorktreeGroup**: docs
 
 Document feature.
 ```

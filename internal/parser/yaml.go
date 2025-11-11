@@ -35,6 +35,7 @@ type yamlTask struct {
 	DependsOn     []interface{} `yaml:"depends_on"` // Accepts int, float, or string
 	EstimatedTime string        `yaml:"estimated_time"`
 	Agent         string        `yaml:"agent"`
+	WorktreeGroup string        `yaml:"worktree_group"` // Worktree group for task organization
 	Status        string        `yaml:"status"`
 	CompletedDate string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
 	CompletedAt   string        `yaml:"completed_at"`   // Timestamp format: RFC3339
@@ -96,6 +97,13 @@ type yamlConductorConfig struct {
 		ReviewAgent string `yaml:"review_agent"`
 		RetryOnRed  int    `yaml:"retry_on_red"`
 	} `yaml:"quality_control"`
+	WorktreeGroups []struct {
+		GroupID        string `yaml:"group_id"`
+		Description    string `yaml:"description"`
+		ExecutionModel string `yaml:"execution_model"`
+		Isolation      string `yaml:"isolation"`
+		Rationale      string `yaml:"rationale"`
+	} `yaml:"worktree_groups"`
 }
 
 // NewYAMLParser creates a new YAML parser instance
@@ -139,12 +147,13 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 		}
 
 		task := models.Task{
-			Number:    taskNum,
-			Name:      yt.Name,
-			Files:     yt.Files,
-			DependsOn: dependsOn,
-			Agent:     yt.Agent,
-			Status:    yt.Status,
+			Number:        taskNum,
+			Name:          yt.Name,
+			Files:         yt.Files,
+			DependsOn:     dependsOn,
+			Agent:         yt.Agent,
+			WorktreeGroup: yt.WorktreeGroup,
+			Status:        yt.Status,
 		}
 
 		// Parse estimated time
@@ -212,6 +221,18 @@ func parseConductorConfigYAML(cfg *yamlConductorConfig, plan *models.Plan) error
 		Enabled:     cfg.QualityControl.Enabled,
 		ReviewAgent: cfg.QualityControl.ReviewAgent,
 		RetryOnRed:  cfg.QualityControl.RetryOnRed,
+	}
+
+	// Parse worktree groups
+	for _, yg := range cfg.WorktreeGroups {
+		group := models.WorktreeGroup{
+			GroupID:        yg.GroupID,
+			Description:    yg.Description,
+			ExecutionModel: yg.ExecutionModel,
+			Isolation:      yg.Isolation,
+			Rationale:      yg.Rationale,
+		}
+		plan.WorktreeGroups = append(plan.WorktreeGroups, group)
 	}
 
 	return nil
