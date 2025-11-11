@@ -4,7 +4,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const Version = "1.0.0"
+// Version is injected at build time via -ldflags
+var Version = "dev"
 
 // NewRootCommand creates and returns the root cobra command for conductor
 func NewRootCommand() *cobra.Command {
