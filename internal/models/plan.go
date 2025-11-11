@@ -13,9 +13,10 @@ type Plan struct {
 
 // Wave represents a group of tasks that can be executed in parallel
 type Wave struct {
-	Name           string   // Wave name (e.g., "Wave 1")
-	TaskNumbers    []string // Task numbers in this wave
-	MaxConcurrency int      // Maximum concurrent tasks in this wave
+	Name           string              // Wave name (e.g., "Wave 1")
+	TaskNumbers    []string            // Task numbers in this wave
+	MaxConcurrency int                 // Maximum concurrent tasks in this wave
+	GroupInfo      map[string][]string // group ID -> list of task numbers in this wave
 }
 
 // QualityControlConfig holds configuration for the QA review process
