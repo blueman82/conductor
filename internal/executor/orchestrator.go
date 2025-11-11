@@ -47,6 +47,8 @@ type Orchestrator struct {
 	waveExecutor      WaveExecutorInterface
 	logger            Logger
 	FileToTaskMapping map[string]string // task number -> file path mapping
+	skipCompleted     bool               // Skip tasks that are already completed
+	retryFailed       bool               // Retry tasks that have failed status
 }
 
 // NewOrchestrator creates a new Orchestrator instance.
@@ -58,8 +60,26 @@ func NewOrchestrator(waveExecutor WaveExecutorInterface, logger Logger) *Orchest
 	}
 
 	return &Orchestrator{
-		waveExecutor: waveExecutor,
-		logger:       logger,
+		waveExecutor:      waveExecutor,
+		logger:            logger,
+		FileToTaskMapping: make(map[string]string),
+	}
+}
+
+// NewOrchestratorWithConfig creates a new Orchestrator instance with skip/retry configuration.
+// The logger parameter is optional and can be nil to disable logging.
+// The waveExecutor is required and must not be nil.
+func NewOrchestratorWithConfig(waveExecutor WaveExecutorInterface, logger Logger, skipCompleted, retryFailed bool) *Orchestrator {
+	if waveExecutor == nil {
+		panic("wave executor cannot be nil")
+	}
+
+	return &Orchestrator{
+		waveExecutor:      waveExecutor,
+		logger:            logger,
+		skipCompleted:     skipCompleted,
+		retryFailed:       retryFailed,
+		FileToTaskMapping: make(map[string]string),
 	}
 }
 

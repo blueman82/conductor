@@ -308,11 +308,11 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create task executor: %w", err)
 	}
 
-	// Create wave executor with task executor
-	waveExec := executor.NewWaveExecutor(taskExec, multiLog)
+	// Create wave executor with task executor and config
+	waveExec := executor.NewWaveExecutorWithConfig(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
 
 	// Create orchestrator with wave executor and logger
-	orch := executor.NewOrchestrator(waveExec, multiLog)
+	orch := executor.NewOrchestratorWithConfig(waveExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

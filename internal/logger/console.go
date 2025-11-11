@@ -202,7 +202,7 @@ func (cl *ConsoleLogger) formatWithColor(ts, level, message string) string {
 }
 
 // LogWaveStart logs the start of a wave execution at INFO level.
-// Format: "[HH:MM:SS] Starting Wave <name>: <count> tasks"
+// Format: "[HH:MM:SS] Starting <name>: <count> tasks"
 func (cl *ConsoleLogger) LogWaveStart(wave models.Wave) {
 	if cl.writer == nil {
 		return
@@ -223,16 +223,16 @@ func (cl *ConsoleLogger) LogWaveStart(wave models.Wave) {
 	if cl.colorOutput {
 		// Bold/bright for wave headers
 		waveName := color.New(color.Bold).Sprint(wave.Name)
-		message = fmt.Sprintf("[%s] Starting Wave %s: %d tasks\n", ts, waveName, taskCount)
+		message = fmt.Sprintf("[%s] Starting %s: %d tasks\n", ts, waveName, taskCount)
 	} else {
-		message = fmt.Sprintf("[%s] Starting Wave %s: %d tasks\n", ts, wave.Name, taskCount)
+		message = fmt.Sprintf("[%s] Starting %s: %d tasks\n", ts, wave.Name, taskCount)
 	}
 
 	cl.writer.Write([]byte(message))
 }
 
 // LogWaveComplete logs the completion of a wave execution at INFO level.
-// Format: "[HH:MM:SS] Wave <name> complete (<duration>)"
+// Format: "[HH:MM:SS] <name> complete (<duration>)"
 func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
 	if cl.writer == nil {
 		return
@@ -254,9 +254,9 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 		// Green for successful completion
 		waveName := color.New(color.Bold).Sprint(wave.Name)
 		completeText := color.New(color.FgGreen).Sprint("complete")
-		message = fmt.Sprintf("[%s] Wave %s %s (%s)\n", ts, waveName, completeText, durationStr)
+		message = fmt.Sprintf("[%s] %s %s (%s)\n", ts, waveName, completeText, durationStr)
 	} else {
-		message = fmt.Sprintf("[%s] Wave %s complete (%s)\n", ts, wave.Name, durationStr)
+		message = fmt.Sprintf("[%s] %s complete (%s)\n", ts, wave.Name, durationStr)
 	}
 
 	cl.writer.Write([]byte(message))
