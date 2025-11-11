@@ -89,7 +89,8 @@ plan:
       commit:
         type: "feat"
         message: "extract task status and timestamp from YAML plans"
-      status: "in-progress"
+      status: "completed"
+      completed_date: "2025-11-11"
     - task_number: 4
       name: "Add SkipCompleted to Config Model"
       agent: golang-pro
@@ -106,7 +107,8 @@ plan:
       commit:
         type: "feat"
         message: "add skip_completed and retry_failed config options"
-      status: "in-progress"
+      status: "completed"
+      completed_date: "2025-11-11"
     - task_number: 5
       name: "Add CLI Flags for Skip and Retry"
       agent: golang-pro
