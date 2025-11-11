@@ -406,7 +406,7 @@ plan:
         - "internal/filelock/filelock_test.go"
       depends_on: [30]
       estimated_time: "1h"
-      status: "in-progress"
+      status: "completed"
       description: |
         Track which file each task belongs to, update correct plan file when task completes,
         implement per-file locking strategy for safe concurrent updates.
@@ -467,6 +467,7 @@ plan:
           - "internal/executor/task.go"
           - "internal/executor/task_test.go"
           - "internal/filelock/filelock.go"
+      completed_date: "2025-11-11"
     - task_number: 32
       name: "Comprehensive Testing for Phase 2A"
       files:
@@ -475,7 +476,7 @@ plan:
         - "Various test files"
       depends_on: [26, 27, 28, 29, 30, 31]
       estimated_time: "1h 30m"
-      status: "pending"
+      status: "in-progress"
       description: |
         Create test fixtures for split plans, write comprehensive tests for multi-file
         merging, cross-file dependencies, worktree group validation, and integration scenarios.

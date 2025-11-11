@@ -1,0 +1,49 @@
+conductor:
+  worktree_groups:
+    - group_id: "build-chain-b"
+      description: "Second development chain"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Can run tasks in parallel within chain"
+    - group_id: "testing"
+      description: "Quality assurance phase"
+      execution_model: "sequential"
+      isolation: "strong"
+      rationale: "Tests must run in order to validate all features"
+
+plan:
+  name: "Multi-Chain Build (Part 2)"
+  default_agent: "golang-pro"
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+    retry_on_red: 2
+  tasks:
+    - task_number: 5
+      name: "Product Service Implementation"
+      files: ["internal/service/product.go", "internal/repository/product.go"]
+      depends_on: [2]
+      agent: "golang-pro"
+      description: "Implement product CRUD operations independently from user service"
+      worktree_group: "build-chain-b"
+    - task_number: 6
+      name: "Order Service Implementation"
+      files: ["internal/service/order.go", "internal/repository/order.go"]
+      depends_on: [2, 5]
+      agent: "golang-pro"
+      description: "Implement order management that combines user and product services"
+      worktree_group: "build-chain-b"
+    - task_number: 7
+      name: "Integration Tests"
+      files: ["tests/integration_test.go"]
+      depends_on: [4, 6]
+      agent: "testdev"
+      description: "Write comprehensive integration tests for all services"
+      worktree_group: "testing"
+    - task_number: 8
+      name: "Performance Testing"
+      files: ["tests/performance_test.go", "tests/load_test.go"]
+      depends_on: [7]
+      agent: "testdev"
+      description: "Run load tests and performance validation"
+      worktree_group: "testing"
