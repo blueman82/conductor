@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"os"
