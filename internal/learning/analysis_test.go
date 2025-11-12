@@ -11,11 +11,13 @@ import (
 // setupTestStoreWithHistory creates a test store and populates it with execution history
 func setupTestStoreWithHistory(t *testing.T, failureCount int, agent string) *Store {
 	t.Helper()
+	ctx := context.Background()
 	store := setupTestStore(t)
 
 	// Create execution history with specified number of failures
 	for i := 0; i < failureCount; i++ {
 		exec := &TaskExecution{
+			PlanFile:     "plan.md",
 			TaskNumber:   "Task 1",
 			TaskName:     "Test Task",
 			Agent:        agent,
@@ -25,7 +27,7 @@ func setupTestStoreWithHistory(t *testing.T, failureCount int, agent string) *St
 			ErrorMessage: "Build failed",
 			DurationSecs: 30,
 		}
-		require.NoError(t, store.RecordExecution(exec))
+		require.NoError(t, store.RecordExecution(ctx, exec))
 	}
 
 	return store
@@ -86,20 +88,20 @@ func TestAnalyzeFailures_TwoFailures(t *testing.T) {
 
 func TestAnalyzeFailures_MixedResults(t *testing.T) {
 	t.Run("handles mixed success and failure results", func(t *testing.T) {
+		ctx := context.Background()
 		store := setupTestStore(t)
 		defer store.Close()
 
 		// Add 2 failures and 1 success
 		executions := []*TaskExecution{
-			{TaskNumber: "Task 1", TaskName: "Test", Agent: "golang-pro", Prompt: "test", Success: false, Output: "test_failure", DurationSecs: 30},
-			{TaskNumber: "Task 1", TaskName: "Test", Agent: "golang-pro", Prompt: "test", Success: false, Output: "compilation_error", DurationSecs: 30},
-			{TaskNumber: "Task 1", TaskName: "Test", Agent: "golang-pro", Prompt: "test", Success: true, Output: "success", DurationSecs: 30},
+			{PlanFile: "plan.md", TaskNumber: "Task 1", TaskName: "Test", Agent: "golang-pro", Prompt: "test", Success: false, Output: "test_failure", DurationSecs: 30},
+			{PlanFile: "plan.md", TaskNumber: "Task 1", TaskName: "Test", Agent: "golang-pro", Prompt: "test", Success: false, Output: "compilation_error", DurationSecs: 30},
+			{PlanFile: "plan.md", TaskNumber: "Task 1", TaskName: "Test", Agent: "golang-pro", Prompt: "test", Success: true, Output: "success", DurationSecs: 30},
 		}
 		for _, exec := range executions {
-			require.NoError(t, store.RecordExecution(exec))
+			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
-		ctx := context.Background()
 		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
 		require.NoError(t, err)
 
@@ -150,12 +152,14 @@ func TestAnalyzeFailures_CommonPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 			store := setupTestStore(t)
 			defer store.Close()
 
 			// Add executions with specified outputs
 			for _, output := range tt.outputs {
 				exec := &TaskExecution{
+					PlanFile:   "plan.md",
 					TaskNumber: "Task 1",
 					TaskName:   "Test",
 					Agent:      "golang-pro",
@@ -163,10 +167,9 @@ func TestAnalyzeFailures_CommonPatterns(t *testing.T) {
 					Success:    false,
 					Output:     output,
 				}
-				require.NoError(t, store.RecordExecution(exec))
+				require.NoError(t, store.RecordExecution(ctx, exec))
 			}
 
-			ctx := context.Background()
 			analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
 			require.NoError(t, err)
 
@@ -186,16 +189,18 @@ func TestFindBestAlternativeAgent(t *testing.T) {
 		{
 			name: "suggests agent with high success rate",
 			setup: func(s *Store) {
+				ctx := context.Background()
 				// Record successful executions with test-automator
 				for i := 0; i < 10; i++ {
 					exec := &TaskExecution{
+						PlanFile:   "plan.md",
 						TaskNumber: "Task 2",
 						TaskName:   "Other task",
 						Agent:      "test-automator",
 						Prompt:     "test",
 						Success:    true,
 					}
-					require.NoError(t, s.RecordExecution(exec))
+					require.NoError(t, s.RecordExecution(ctx, exec))
 				}
 			},
 			triedAgents: []string{"golang-pro"},
@@ -205,18 +210,20 @@ func TestFindBestAlternativeAgent(t *testing.T) {
 		{
 			name: "excludes already tried agents",
 			setup: func(s *Store) {
+				ctx := context.Background()
 				// Record successes with both agents
 				agents := []string{"golang-pro", "test-automator"}
 				for _, agent := range agents {
 					for i := 0; i < 5; i++ {
 						exec := &TaskExecution{
+							PlanFile:   "plan.md",
 							TaskNumber: "Task 2",
 							TaskName:   "Other task",
 							Agent:      agent,
 							Prompt:     "test",
 							Success:    true,
 						}
-						require.NoError(t, s.RecordExecution(exec))
+						require.NoError(t, s.RecordExecution(ctx, exec))
 					}
 				}
 			},
@@ -310,10 +317,10 @@ func TestExtractFailurePatterns(t *testing.T) {
 
 func TestGenerateApproachSuggestion(t *testing.T) {
 	tests := []struct {
-		name              string
-		patterns          []string
-		alternativeAgent  string
-		expectedContains  []string
+		name             string
+		patterns         []string
+		alternativeAgent string
+		expectedContains []string
 	}{
 		{
 			name:             "suggests approach for compilation errors",
@@ -361,6 +368,7 @@ func TestGenerateApproachSuggestion(t *testing.T) {
 
 func TestAnalyzeFailures_AllAgentsTried(t *testing.T) {
 	t.Run("handles case where all agents have been tried", func(t *testing.T) {
+		ctx := context.Background()
 		store := setupTestStore(t)
 		defer store.Close()
 
@@ -368,6 +376,7 @@ func TestAnalyzeFailures_AllAgentsTried(t *testing.T) {
 		agents := []string{"golang-pro", "test-automator", "backend-developer", "general-purpose"}
 		for _, agent := range agents {
 			exec := &TaskExecution{
+				PlanFile:   "plan.md",
 				TaskNumber: "Task 1",
 				TaskName:   "Test",
 				Agent:      agent,
@@ -375,10 +384,9 @@ func TestAnalyzeFailures_AllAgentsTried(t *testing.T) {
 				Success:    false,
 				Output:     "error",
 			}
-			require.NoError(t, store.RecordExecution(exec))
+			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
-		ctx := context.Background()
 		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
 		require.NoError(t, err)
 
@@ -391,31 +399,32 @@ func TestAnalyzeFailures_AllAgentsTried(t *testing.T) {
 
 func TestAnalyzeFailures_InsufficientData(t *testing.T) {
 	t.Run("handles insufficient data gracefully", func(t *testing.T) {
+		ctx := context.Background()
 		store := setupTestStore(t)
 		defer store.Close()
 
 		// Add only 2 executions from different agents (not enough for statistical significance)
 		executions := []*TaskExecution{
-			{TaskNumber: "Other", TaskName: "Test", Agent: "agent-a", Prompt: "test", Success: true},
-			{TaskNumber: "Other", TaskName: "Test", Agent: "agent-b", Prompt: "test", Success: true},
+			{PlanFile: "plan.md", TaskNumber: "Other", TaskName: "Test", Agent: "agent-a", Prompt: "test", Success: true},
+			{PlanFile: "plan.md", TaskNumber: "Other", TaskName: "Test", Agent: "agent-b", Prompt: "test", Success: true},
 		}
 		for _, exec := range executions {
-			require.NoError(t, store.RecordExecution(exec))
+			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
 		// Now analyze a task with 2 failures
 		for i := 0; i < 2; i++ {
 			exec := &TaskExecution{
+				PlanFile:   "plan.md",
 				TaskNumber: "Task 1",
 				TaskName:   "Test",
 				Agent:      "golang-pro",
 				Prompt:     "test",
 				Success:    false,
 			}
-			require.NoError(t, store.RecordExecution(exec))
+			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
-		ctx := context.Background()
 		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
 		require.NoError(t, err)
 
@@ -427,6 +436,7 @@ func TestAnalyzeFailures_InsufficientData(t *testing.T) {
 
 func TestAnalyzeFailures_ConflictingPatterns(t *testing.T) {
 	t.Run("handles conflicting patterns in execution history", func(t *testing.T) {
+		ctx := context.Background()
 		store := setupTestStore(t)
 		defer store.Close()
 
@@ -439,6 +449,7 @@ func TestAnalyzeFailures_ConflictingPatterns(t *testing.T) {
 		}
 		for _, output := range outputs {
 			exec := &TaskExecution{
+				PlanFile:   "plan.md",
 				TaskNumber: "Task 1",
 				TaskName:   "Test",
 				Agent:      "golang-pro",
@@ -446,10 +457,9 @@ func TestAnalyzeFailures_ConflictingPatterns(t *testing.T) {
 				Success:    false,
 				Output:     output,
 			}
-			require.NoError(t, store.RecordExecution(exec))
+			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
-		ctx := context.Background()
 		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
 		require.NoError(t, err)
 

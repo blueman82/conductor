@@ -7,17 +7,18 @@ import (
 
 // Task represents a single task in an implementation plan
 type Task struct {
-	Number        string        // Task number/identifier (supports int, float, alphanumeric)
-	Name          string        // Task name/title
-	Files         []string      // Files to be modified/created
-	DependsOn     []string      // Task numbers this task depends on
-	EstimatedTime time.Duration // Estimated time to complete
-	Agent         string        // Agent to use (optional)
-	Prompt        string        // Full task description/prompt
-	WorktreeGroup string        // Worktree group this task belongs to (optional)
-	Status        string        // Task status: pending, in_progress, completed, skipped
-	CompletedAt   *time.Time    // Timestamp when task was completed (nil if not completed)
-	SourceFile    string        // Source plan file this task originates from (for multi-file plans)
+	Number        string                 // Task number/identifier (supports int, float, alphanumeric)
+	Name          string                 // Task name/title
+	Files         []string               // Files to be modified/created
+	DependsOn     []string               // Task numbers this task depends on
+	EstimatedTime time.Duration          // Estimated time to complete
+	Agent         string                 // Agent to use (optional)
+	Prompt        string                 // Full task description/prompt
+	WorktreeGroup string                 // Worktree group this task belongs to (optional)
+	Status        string                 // Task status: pending, in_progress, completed, skipped
+	CompletedAt   *time.Time             // Timestamp when task was completed (nil if not completed)
+	SourceFile    string                 // Source plan file this task originates from (for multi-file plans)
+	Metadata      map[string]interface{} // Additional metadata for hooks and extensions
 }
 
 // Validate checks if the task has all required fields

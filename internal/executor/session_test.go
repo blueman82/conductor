@@ -7,10 +7,10 @@ import (
 func TestGenerateSessionID_Format(t *testing.T) {
 	sessionID := generateSessionID()
 
-	// Session ID should match format: session-YYYYMMDD-HHMM
-	// Example: session-20251112-1430
-	if len(sessionID) != 21 {
-		t.Errorf("Expected session ID length 21, got %d", len(sessionID))
+	// Session ID should match format: session-YYYYMMDD-HHMMSS
+	// Example: session-20251112-143045
+	if len(sessionID) != 23 {
+		t.Errorf("Expected session ID length 23, got %d", len(sessionID))
 	}
 
 	// Check prefix
@@ -19,10 +19,10 @@ func TestGenerateSessionID_Format(t *testing.T) {
 	}
 
 	// Check format with regex-like validation
-	// Format: session-YYYYMMDD-HHMM
+	// Format: session-YYYYMMDD-HHMMSS
 	dateTimePart := sessionID[8:]
-	if len(dateTimePart) != 13 {
-		t.Errorf("Expected date-time part length 13, got %d", len(dateTimePart))
+	if len(dateTimePart) != 15 {
+		t.Errorf("Expected date-time part length 15, got %d", len(dateTimePart))
 	}
 
 	// Check hyphen position
@@ -36,15 +36,15 @@ func TestGenerateSessionID_Unique(t *testing.T) {
 	sessionID1 := generateSessionID()
 	sessionID2 := generateSessionID()
 
-	// They should be identical if generated in the same minute
+	// They should be identical if generated in the same second
 	// This test verifies the function works consistently
 	if sessionID1 != sessionID2 {
-		// This is expected if we cross a minute boundary
-		t.Logf("Session IDs differ (likely crossed minute boundary): %s vs %s", sessionID1, sessionID2)
+		// This is expected if we cross a second boundary
+		t.Logf("Session IDs differ (likely crossed second boundary): %s vs %s", sessionID1, sessionID2)
 	}
 
 	// Both should still have valid format
-	if len(sessionID1) != 21 || len(sessionID2) != 21 {
-		t.Errorf("Both session IDs should have length 21")
+	if len(sessionID1) != 23 || len(sessionID2) != 23 {
+		t.Errorf("Both session IDs should have length 23")
 	}
 }

@@ -30,7 +30,7 @@ func (s *Store) AnalyzeFailures(ctx context.Context, planFile, taskNumber string
 	}
 
 	// Query execution history for this task
-	history, err := s.GetExecutionHistory(taskNumber)
+	history, err := s.GetExecutionHistory(ctx, planFile, taskNumber)
 	if err != nil {
 		return nil, fmt.Errorf("get execution history: %w", err)
 	}
@@ -178,16 +178,16 @@ func generateApproachSuggestion(patterns []string, alternativeAgent string) stri
 
 	// Generate specific suggestions based on patterns
 	patternSuggestions := map[string]string{
-		"compilation_error":   "Focus on fixing compilation errors. Review syntax, type definitions, and imports carefully.",
-		"test_failure":        "Investigate test failures. Check assertions, test data, and expected vs actual behavior.",
-		"dependency_missing":  "Resolve missing dependencies. Verify all required packages are installed and versions are compatible.",
-		"timeout":             "Address timeout issues. Consider breaking down the task, optimizing performance, or increasing timeout limits.",
-		"syntax_error":        "Fix syntax errors. Review language syntax rules and code structure.",
-		"type_error":          "Resolve type mismatches. Check type definitions and ensure proper type conversions.",
-		"import_error":        "Fix import/module errors. Verify import paths and package availability.",
-		"runtime_error":       "Debug runtime errors. Add error handling and validate input data.",
-		"permission_denied":   "Resolve permission issues. Check file/directory permissions and access rights.",
-		"file_not_found":      "Fix file path issues. Verify file paths are correct and files exist.",
+		"compilation_error":  "Focus on fixing compilation errors. Review syntax, type definitions, and imports carefully.",
+		"test_failure":       "Investigate test failures. Check assertions, test data, and expected vs actual behavior.",
+		"dependency_missing": "Resolve missing dependencies. Verify all required packages are installed and versions are compatible.",
+		"timeout":            "Address timeout issues. Consider breaking down the task, optimizing performance, or increasing timeout limits.",
+		"syntax_error":       "Fix syntax errors. Review language syntax rules and code structure.",
+		"type_error":         "Resolve type mismatches. Check type definitions and ensure proper type conversions.",
+		"import_error":       "Fix import/module errors. Verify import paths and package availability.",
+		"runtime_error":      "Debug runtime errors. Add error handling and validate input data.",
+		"permission_denied":  "Resolve permission issues. Check file/directory permissions and access rights.",
+		"file_not_found":     "Fix file path issues. Verify file paths are correct and files exist.",
 	}
 
 	for _, pattern := range patterns {

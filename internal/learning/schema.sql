@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS task_executions (
     output TEXT,
     error_message TEXT,
     duration_seconds INTEGER,
+    qc_verdict TEXT, -- Quality control verdict: GREEN, RED, YELLOW
+    qc_feedback TEXT, -- Detailed feedback from QC review
+    failure_patterns TEXT, -- JSON array of identified failure patterns
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     context TEXT -- JSON blob for additional context
 );

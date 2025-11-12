@@ -88,7 +88,7 @@ func TestLearningPipeline_SingleTask(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify execution was recorded
-	history, err := store.GetExecutionHistory(context.Background(), planFile, "1")
+	history, err := store.GetExecutionHistory(context.Background(), "plan.md", "1")
 	require.NoError(t, err)
 	require.Len(t, history, 1)
 	assert.Equal(t, "Test Task", history[0].TaskName)
@@ -398,7 +398,7 @@ func TestLearningPipeline_MultipleTasksWithLearning(t *testing.T) {
 
 	// Verify all executions recorded
 	for _, task := range plan.Tasks {
-		history, err := store.GetExecutionHistory(context.Background(), planFile, task.Number)
+		history, err := store.GetExecutionHistory(context.Background(), "plan.md", task.Number)
 		require.NoError(t, err)
 		require.Len(t, history, 1)
 		assert.Equal(t, task.Name, history[0].TaskName)
@@ -750,7 +750,7 @@ func TestCrossRun_RunNumberIncrement(t *testing.T) {
 		Output:       "B1 completed",
 		DurationSecs: 20,
 	}
-	err = db3.RecordExecution(context.Background(), exec3)
+	err = db3.RecordExecution(exec3)
 	require.NoError(t, err)
 
 	// Verify run counts are correct per plan file
@@ -761,12 +761,12 @@ func TestCrossRun_RunNumberIncrement(t *testing.T) {
 	assert.Equal(t, 1, runCountB, "plan-b.yaml should have 1 run")
 
 	// Verify each plan's executions are separate
-	historyA1, err := db3.GetExecutionHistory(context.Background(), "plan-a.yaml", "task-1")
+	historyA1, err := db3.GetExecutionHistory("task-1")
 	require.NoError(t, err)
 	require.Len(t, historyA1, 1)
 	assert.Equal(t, "plan-a.yaml", historyA1[0].PlanFile)
 
-	historyB1, err := db3.GetExecutionHistory(context.Background(), "plan-b.yaml", "task-3")
+	historyB1, err := db3.GetExecutionHistory("task-3")
 	require.NoError(t, err)
 	require.Len(t, historyB1, 1)
 	assert.Equal(t, "plan-b.yaml", historyB1[0].PlanFile)
@@ -904,7 +904,7 @@ func TestCrossRun_SessionIsolation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify all sessions recorded
-	history, err := db.GetExecutionHistory(context.Background(), "plan.yaml", taskNumber)
+	history, err := db.GetExecutionHistory(taskNumber)
 	require.NoError(t, err)
 	require.Len(t, history, 3, "Should have 3 session executions")
 
@@ -977,7 +977,7 @@ func TestCrossRun_MultipleFailuresAndRecovery(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	history, err := db.GetExecutionHistory(context.Background(), "plan.yaml", taskNumber)
+	history, err := db.GetExecutionHistory(taskNumber)
 	require.NoError(t, err)
 	require.Len(t, history, 4)
 

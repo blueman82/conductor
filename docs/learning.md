@@ -98,8 +98,8 @@ if failures >= config.MinFailuresBeforeAdapt (default: 2) {
 ### Session Management
 
 Each conductor run gets a unique session ID:
-- Format: `session-YYYYMMDD-HHMM`
-- Example: `session-20250112-1430`
+- Format: `session-YYYYMMDD-HHMMSS`
+- Example: `session-20250112-143045`
 - Used for grouping executions and tracking run numbers
 
 Run numbers increment per plan file:
@@ -354,7 +354,7 @@ Execution History: Task 3
 ==========================
 
 Execution #1 - 2025-01-12 14:30:45
-  Session: session-20250112-1430
+  Session: session-20250112-143045
   Run: 2
   Agent: golang-pro
   Verdict: GREEN
@@ -362,7 +362,7 @@ Execution #1 - 2025-01-12 14:30:45
   Patterns: none
 
 Execution #2 - 2025-01-12 13:15:22
-  Session: session-20250112-1315
+  Session: session-20250112-131522
   Run: 1
   Agent: backend-developer
   Verdict: RED

@@ -539,6 +539,7 @@ func TestClaudeOutputMarshaling(t *testing.T) {
 		t.Errorf("Error = %q, want %q", parsed.Error, original.Error)
 	}
 }
+
 // TestBuildCommandArgsWithAgentsFlag tests Method 1 agent invocation using --agents JSON flag
 func TestBuildCommandArgsWithAgentsFlag(t *testing.T) {
 	tests := []struct {

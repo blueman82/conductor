@@ -1,7 +1,9 @@
 package learning
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	_ "embed"
 	"fmt"
 	"os"
@@ -16,19 +18,22 @@ var schemaSQL string
 
 // TaskExecution represents a single task execution record
 type TaskExecution struct {
-	ID           int64
-	PlanFile     string
-	RunNumber    int
-	TaskNumber   string
-	TaskName     string
-	Agent        string
-	Prompt       string
-	Success      bool
-	Output       string
-	ErrorMessage string
-	DurationSecs int64
-	Timestamp    time.Time
-	Context      string // JSON blob for additional context
+	ID              int64
+	PlanFile        string
+	RunNumber       int
+	TaskNumber      string
+	TaskName        string
+	Agent           string
+	Prompt          string
+	Success         bool
+	Output          string
+	ErrorMessage    string
+	DurationSecs    int64
+	QCVerdict       string   // Quality control verdict: GREEN, RED, YELLOW
+	QCFeedback      string   // Detailed feedback from QC review
+	FailurePatterns []string // Identified failure patterns
+	Timestamp       time.Time
+	Context         string // JSON blob for additional context
 }
 
 // ApproachHistory tracks different approaches tried for recurring task patterns
@@ -135,18 +140,28 @@ func (s *Store) indexExists(indexName string) (bool, error) {
 }
 
 // RecordExecution records a task execution in the database
-func (s *Store) RecordExecution(exec *TaskExecution) error {
+func (s *Store) RecordExecution(ctx context.Context, exec *TaskExecution) error {
 	// Marshal context if needed (currently unused, but available for future use)
 	contextJSON := exec.Context
 	if contextJSON == "" {
 		contextJSON = "{}"
 	}
 
-	query := `INSERT INTO task_executions
-		(plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, context)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	// Marshal failure patterns to JSON
+	failurePatternsJSON := "[]"
+	if len(exec.FailurePatterns) > 0 {
+		data, err := json.Marshal(exec.FailurePatterns)
+		if err != nil {
+			return fmt.Errorf("marshal failure patterns: %w", err)
+		}
+		failurePatternsJSON = string(data)
+	}
 
-	result, err := s.db.Exec(query,
+	query := `INSERT INTO task_executions
+		(plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, qc_verdict, qc_feedback, failure_patterns, context)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	result, err := s.db.ExecContext(ctx, query,
 		exec.PlanFile,
 		exec.RunNumber,
 		exec.TaskNumber,
@@ -157,6 +172,9 @@ func (s *Store) RecordExecution(exec *TaskExecution) error {
 		exec.Output,
 		exec.ErrorMessage,
 		exec.DurationSecs,
+		exec.QCVerdict,
+		exec.QCFeedback,
+		failurePatternsJSON,
 		contextJSON,
 	)
 	if err != nil {
@@ -175,7 +193,7 @@ func (s *Store) RecordExecution(exec *TaskExecution) error {
 
 // GetExecutions retrieves all executions for a specific plan file, ordered by most recent first
 func (s *Store) GetExecutions(planFile string) ([]*TaskExecution, error) {
-	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, timestamp, context
+	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, qc_verdict, qc_feedback, failure_patterns, timestamp, context
 		FROM task_executions
 		WHERE plan_file = ?
 		ORDER BY id DESC`
@@ -189,11 +207,11 @@ func (s *Store) GetExecutions(planFile string) ([]*TaskExecution, error) {
 	var executions []*TaskExecution
 	for rows.Next() {
 		exec := &TaskExecution{}
-		var planFile, agent, output, errorMessage, context sql.NullString
+		var planFileVal, agent, output, errorMessage, qcVerdict, qcFeedback, failurePatterns, contextVal sql.NullString
 		var runNumber sql.NullInt64
 		err := rows.Scan(
 			&exec.ID,
-			&planFile,
+			&planFileVal,
 			&runNumber,
 			&exec.TaskNumber,
 			&exec.TaskName,
@@ -203,16 +221,19 @@ func (s *Store) GetExecutions(planFile string) ([]*TaskExecution, error) {
 			&output,
 			&errorMessage,
 			&exec.DurationSecs,
+			&qcVerdict,
+			&qcFeedback,
+			&failurePatterns,
 			&exec.Timestamp,
-			&context,
+			&contextVal,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan execution row: %w", err)
 		}
 
 		// Handle nullable fields
-		if planFile.Valid {
-			exec.PlanFile = planFile.String
+		if planFileVal.Valid {
+			exec.PlanFile = planFileVal.String
 		}
 		if runNumber.Valid {
 			exec.RunNumber = int(runNumber.Int64)
@@ -226,8 +247,19 @@ func (s *Store) GetExecutions(planFile string) ([]*TaskExecution, error) {
 		if errorMessage.Valid {
 			exec.ErrorMessage = errorMessage.String
 		}
-		if context.Valid {
-			exec.Context = context.String
+		if qcVerdict.Valid {
+			exec.QCVerdict = qcVerdict.String
+		}
+		if qcFeedback.Valid {
+			exec.QCFeedback = qcFeedback.String
+		}
+		if failurePatterns.Valid && failurePatterns.String != "" {
+			if err := json.Unmarshal([]byte(failurePatterns.String), &exec.FailurePatterns); err != nil {
+				return nil, fmt.Errorf("unmarshal failure patterns: %w", err)
+			}
+		}
+		if contextVal.Valid {
+			exec.Context = contextVal.String
 		}
 
 		executions = append(executions, exec)
@@ -241,13 +273,13 @@ func (s *Store) GetExecutions(planFile string) ([]*TaskExecution, error) {
 }
 
 // GetExecutionHistory retrieves all executions for a specific task, ordered by most recent first
-func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error) {
-	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, timestamp, context
+func (s *Store) GetExecutionHistory(ctx context.Context, planFile, taskNumber string) ([]*TaskExecution, error) {
+	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, qc_verdict, qc_feedback, failure_patterns, timestamp, context
 		FROM task_executions
-		WHERE task_number = ?
+		WHERE plan_file = ? AND task_number = ?
 		ORDER BY id DESC`
 
-	rows, err := s.db.Query(query, taskNumber)
+	rows, err := s.db.QueryContext(ctx, query, planFile, taskNumber)
 	if err != nil {
 		return nil, fmt.Errorf("query execution history: %w", err)
 	}
@@ -256,11 +288,11 @@ func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error)
 	var executions []*TaskExecution
 	for rows.Next() {
 		exec := &TaskExecution{}
-		var planFile, agent, output, errorMessage, context sql.NullString
+		var planFileVal, agent, output, errorMessage, qcVerdict, qcFeedback, failurePatterns, contextVal sql.NullString
 		var runNumber sql.NullInt64
 		err := rows.Scan(
 			&exec.ID,
-			&planFile,
+			&planFileVal,
 			&runNumber,
 			&exec.TaskNumber,
 			&exec.TaskName,
@@ -270,16 +302,19 @@ func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error)
 			&output,
 			&errorMessage,
 			&exec.DurationSecs,
+			&qcVerdict,
+			&qcFeedback,
+			&failurePatterns,
 			&exec.Timestamp,
-			&context,
+			&contextVal,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan execution row: %w", err)
 		}
 
 		// Handle nullable fields
-		if planFile.Valid {
-			exec.PlanFile = planFile.String
+		if planFileVal.Valid {
+			exec.PlanFile = planFileVal.String
 		}
 		if runNumber.Valid {
 			exec.RunNumber = int(runNumber.Int64)
@@ -293,8 +328,19 @@ func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error)
 		if errorMessage.Valid {
 			exec.ErrorMessage = errorMessage.String
 		}
-		if context.Valid {
-			exec.Context = context.String
+		if qcVerdict.Valid {
+			exec.QCVerdict = qcVerdict.String
+		}
+		if qcFeedback.Valid {
+			exec.QCFeedback = qcFeedback.String
+		}
+		if failurePatterns.Valid && failurePatterns.String != "" {
+			if err := json.Unmarshal([]byte(failurePatterns.String), &exec.FailurePatterns); err != nil {
+				return nil, fmt.Errorf("unmarshal failure patterns: %w", err)
+			}
+		}
+		if contextVal.Valid {
+			exec.Context = contextVal.String
 		}
 
 		executions = append(executions, exec)
@@ -308,7 +354,7 @@ func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error)
 }
 
 // RecordApproach records or updates an approach in the approach history
-func (s *Store) RecordApproach(approach *ApproachHistory) error {
+func (s *Store) RecordApproach(ctx context.Context, approach *ApproachHistory) error {
 	// Marshal metadata if needed
 	metadataJSON := approach.Metadata
 	if metadataJSON == "" {
@@ -319,7 +365,7 @@ func (s *Store) RecordApproach(approach *ApproachHistory) error {
 		(task_pattern, approach_description, success_count, failure_count, metadata)
 		VALUES (?, ?, ?, ?, ?)`
 
-	result, err := s.db.Exec(query,
+	result, err := s.db.ExecContext(ctx, query,
 		approach.TaskPattern,
 		approach.ApproachDescription,
 		approach.SuccessCount,
@@ -342,15 +388,14 @@ func (s *Store) RecordApproach(approach *ApproachHistory) error {
 
 // GetRunCount returns the maximum run number for a given plan file.
 // Returns 0 if the plan has never been executed.
-func (s *Store) GetRunCount(planFile string) int {
+func (s *Store) GetRunCount(ctx context.Context, planFile string) (int, error) {
 	var maxRun int
 	query := `SELECT COALESCE(MAX(run_number), 0) FROM task_executions WHERE plan_file = ?`
-	err := s.db.QueryRow(query, planFile).Scan(&maxRun)
+	err := s.db.QueryRowContext(ctx, query, planFile).Scan(&maxRun)
 	if err != nil {
-		// Return 0 on error (graceful degradation)
-		return 0
+		return 0, fmt.Errorf("query run count: %w", err)
 	}
-	return maxRun
+	return maxRun, nil
 }
 
 // QueryRows executes a query that returns multiple rows

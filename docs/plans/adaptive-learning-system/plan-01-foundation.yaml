@@ -878,6 +878,8 @@ plan:
         files:
           - "internal/executor/task.go"
           - "internal/executor/task_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 5
       name: "Add QC-review hook for pattern extraction"
       agent: "golang-pro"
@@ -949,6 +951,8 @@ plan:
         files:
           - "internal/executor/task.go"
           - "internal/executor/task_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 6
       name: "Add post-task hook for execution recording"
       agent: "golang-pro"
@@ -1022,6 +1026,8 @@ plan:
         files:
           - "internal/executor/task.go"
           - "internal/executor/task_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 7
       name: "Integrate learning system into orchestrator with session management"
       agent: "golang-pro"
@@ -1093,6 +1099,8 @@ plan:
         files:
           - "internal/executor/orchestrator.go"
           - "internal/executor/orchestrator_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 8
       name: "Implement 'conductor learning stats' command"
       agent: "golang-pro"
@@ -1439,7 +1447,8 @@ plan:
         files:
           - "internal/cmd/learning_export.go"
           - "internal/cmd/learning_export_test.go"
-      status: "in-progress"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 12
       name: "Wire up learning subcommands to root command"
       agent: "golang-pro"
@@ -1509,3 +1518,5 @@ plan:
           - "internal/cmd/root.go"
           - "internal/cmd/learning.go"
           - "internal/cmd/root_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"

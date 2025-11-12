@@ -143,7 +143,9 @@ func confirmAction(output interface{}) bool {
 	// Create scanner for stdin
 	scanner := bufio.NewScanner(os.Stdin)
 
-	fmt.Fprintf(output.(interface{ Write(p []byte) (n int, err error) }), "Continue? [y/N]: ")
+	fmt.Fprintf(output.(interface {
+		Write(p []byte) (n int, err error)
+	}), "Continue? [y/N]: ")
 
 	if !scanner.Scan() {
 		return false

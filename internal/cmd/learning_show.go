@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -65,7 +66,8 @@ func runShow(cmd *cobra.Command, args []string) error {
 	defer store.Close()
 
 	// Get execution history for the task
-	executions, err := store.GetExecutionHistory(taskNumber)
+	ctx := context.Background()
+	executions, err := store.GetExecutionHistory(ctx, filepath.Base(absPath), taskNumber)
 	if err != nil {
 		return fmt.Errorf("get execution history: %w", err)
 	}

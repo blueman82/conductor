@@ -88,7 +88,7 @@ func TestLearningPipeline_SingleTask(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify execution was recorded
-	history, err := store.GetExecutionHistory(context.Background(), planFile, "1")
+	history, err := store.GetExecutionHistory(context.Background(), "plan.md", "1")
 	require.NoError(t, err)
 	require.Len(t, history, 1)
 	assert.Equal(t, "Test Task", history[0].TaskName)
@@ -272,18 +272,18 @@ func TestLearningPipeline_RunNumberTracking(t *testing.T) {
 		}
 
 		// Verify run count increments correctly
-		currentRunCount, _ := store.GetRunCount(context.Background(), planFile)
+		currentRunCount := store.GetRunCount(planFile)
 		assert.Equal(t, runNum, currentRunCount,
 			"Run count should be %d after run %d", runNum, runNum)
 	}
 
 	// Verify final run count
-	finalRunCount, _ := store.GetRunCount(context.Background(), planFile)
+	finalRunCount := store.GetRunCount(planFile)
 	assert.Equal(t, 5, finalRunCount)
 
 	// Test different plan file has independent run count
 	otherPlanFile := "other-plan.md"
-	otherRunCount, _ := store.GetRunCount(context.Background(), otherPlanFile)
+	otherRunCount := store.GetRunCount(otherPlanFile)
 	assert.Equal(t, 0, otherRunCount, "Different plan file should have independent run count")
 }
 
@@ -398,7 +398,7 @@ func TestLearningPipeline_MultipleTasksWithLearning(t *testing.T) {
 
 	// Verify all executions recorded
 	for _, task := range plan.Tasks {
-		history, err := store.GetExecutionHistory(context.Background(), planFile, task.Number)
+		history, err := store.GetExecutionHistory(context.Background(), "plan.md", task.Number)
 		require.NoError(t, err)
 		require.Len(t, history, 1)
 		assert.Equal(t, task.Name, history[0].TaskName)
@@ -492,7 +492,7 @@ func TestLearningPipeline_FirstRunVsSubsequentRuns(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify first run recorded
-	runCount, _ = store.GetRunCount(context.Background(), planFile)
+	runCount = store.GetRunCount(planFile)
 	assert.Equal(t, 1, runCount, "After first run, count should be 1")
 
 	history, err := store.GetExecutionHistory(context.Background(), "plan.md", taskNumber)
@@ -516,7 +516,7 @@ func TestLearningPipeline_FirstRunVsSubsequentRuns(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify subsequent run recorded
-	runCount, _ = store.GetRunCount(context.Background(), planFile)
+	runCount = store.GetRunCount(planFile)
 	assert.Equal(t, 2, runCount, "After second run, count should be 2")
 
 	history, err = store.GetExecutionHistory(context.Background(), "plan.md", taskNumber)
@@ -551,7 +551,7 @@ func TestCrossRun_LearningPersists(t *testing.T) {
 		Output:       "First run completed",
 		DurationSecs: 50,
 	}
-	err = db1.RecordExecution(context.Background(), exec1)
+	err = db1.RecordExecution(exec1)
 	require.NoError(t, err)
 
 	// Close first database connection
@@ -563,7 +563,7 @@ func TestCrossRun_LearningPersists(t *testing.T) {
 	defer db2.Close()
 
 	// Verify data from Run 1 is available
-	history, err := db2.GetExecutionHistory(context.Background(), "plan.yaml", taskNumber)
+	history, err := db2.GetExecutionHistory(taskNumber)
 	require.NoError(t, err)
 	require.Len(t, history, 1, "Should find execution from Run 1")
 
@@ -572,7 +572,7 @@ func TestCrossRun_LearningPersists(t *testing.T) {
 	assert.True(t, history[0].Success)
 
 	// Verify run count persisted
-	runCount, _ := db2.GetRunCount(context.Background(), planFile)
+	runCount := db2.GetRunCount(planFile)
 	assert.Equal(t, 1, runCount, "Run count should persist across runs")
 
 	// Record second run
@@ -587,11 +587,11 @@ func TestCrossRun_LearningPersists(t *testing.T) {
 		Output:       "Second run completed",
 		DurationSecs: 45,
 	}
-	err = db2.RecordExecution(context.Background(), exec2)
+	err = db2.RecordExecution(exec2)
 	require.NoError(t, err)
 
 	// Verify both runs are in history
-	history, err = db2.GetExecutionHistory(context.Background(), "plan.yaml", taskNumber)
+	history, err = db2.GetExecutionHistory(taskNumber)
 	require.NoError(t, err)
 	require.Len(t, history, 2, "Should find executions from both runs")
 }
@@ -620,7 +620,7 @@ func TestCrossRun_AgentAdaptation(t *testing.T) {
 		ErrorMessage: "Task failed",
 		DurationSecs: 30,
 	}
-	err = db1.RecordExecution(context.Background(), exec1)
+	err = db1.RecordExecution(exec1)
 	require.NoError(t, err)
 
 	// Attempt 2: Fail again with agent-a
@@ -636,7 +636,7 @@ func TestCrossRun_AgentAdaptation(t *testing.T) {
 		ErrorMessage: "Task failed again",
 		DurationSecs: 35,
 	}
-	err = db1.RecordExecution(context.Background(), exec2)
+	err = db1.RecordExecution(exec2)
 	require.NoError(t, err)
 
 	db1.Close()
@@ -677,11 +677,11 @@ func TestCrossRun_AgentAdaptation(t *testing.T) {
 		Output:       "Task completed successfully",
 		DurationSecs: 40,
 	}
-	err = db2.RecordExecution(context.Background(), exec3)
+	err = db2.RecordExecution(exec3)
 	require.NoError(t, err)
 
 	// Verify new history shows agent-b success
-	history, err := db2.GetExecutionHistory(context.Background(), "plan.yaml", taskNumber)
+	history, err := db2.GetExecutionHistory(taskNumber)
 	require.NoError(t, err)
 	require.Len(t, history, 3)
 
@@ -709,7 +709,7 @@ func TestCrossRun_RunNumberIncrement(t *testing.T) {
 		Output:       "A1 completed",
 		DurationSecs: 10,
 	}
-	err = db1.RecordExecution(context.Background(), exec1)
+	err = db1.RecordExecution(exec1)
 	require.NoError(t, err)
 
 	db1.Close()
@@ -729,7 +729,7 @@ func TestCrossRun_RunNumberIncrement(t *testing.T) {
 		Output:       "A2 completed",
 		DurationSecs: 15,
 	}
-	err = db2.RecordExecution(context.Background(), exec2)
+	err = db2.RecordExecution(exec2)
 	require.NoError(t, err)
 
 	db2.Close()
@@ -750,23 +750,23 @@ func TestCrossRun_RunNumberIncrement(t *testing.T) {
 		Output:       "B1 completed",
 		DurationSecs: 20,
 	}
-	err = db3.RecordExecution(context.Background(), exec3)
+	err = db3.RecordExecution(exec3)
 	require.NoError(t, err)
 
 	// Verify run counts are correct per plan file
-	runCountA, _ := db3.GetRunCount(context.Background(), "plan-a.yaml")
+	runCountA := db3.GetRunCount("plan-a.yaml")
 	assert.Equal(t, 2, runCountA, "plan-a.yaml should have 2 runs")
 
-	runCountB, _ := db3.GetRunCount(context.Background(), "plan-b.yaml")
+	runCountB := db3.GetRunCount("plan-b.yaml")
 	assert.Equal(t, 1, runCountB, "plan-b.yaml should have 1 run")
 
 	// Verify each plan's executions are separate
-	historyA1, err := db3.GetExecutionHistory(context.Background(), "plan-a.yaml", "task-1")
+	historyA1, err := db3.GetExecutionHistory("task-1")
 	require.NoError(t, err)
 	require.Len(t, historyA1, 1)
 	assert.Equal(t, "plan-a.yaml", historyA1[0].PlanFile)
 
-	historyB1, err := db3.GetExecutionHistory(context.Background(), "plan-b.yaml", "task-3")
+	historyB1, err := db3.GetExecutionHistory("task-3")
 	require.NoError(t, err)
 	require.Len(t, historyB1, 1)
 	assert.Equal(t, "plan-b.yaml", historyB1[0].PlanFile)
@@ -791,7 +791,7 @@ func TestCrossRun_DatabaseDeleted(t *testing.T) {
 		Output:       "Completed",
 		DurationSecs: 10,
 	}
-	err = db1.RecordExecution(context.Background(), exec1)
+	err = db1.RecordExecution(exec1)
 	require.NoError(t, err)
 
 	db1.Close()
@@ -818,11 +818,11 @@ func TestCrossRun_DatabaseDeleted(t *testing.T) {
 	require.NoError(t, err, "Database file should be recreated")
 
 	// Stats should be empty (no historical data)
-	history, err := db2.GetExecutionHistory(context.Background(), "plan.yaml", "task-1")
+	history, err := db2.GetExecutionHistory("task-1")
 	require.NoError(t, err)
 	assert.Empty(t, history, "Should have no history after database deletion")
 
-	runCount, _ := db2.GetRunCount(context.Background(), "plan.yaml")
+	runCount := db2.GetRunCount("plan.yaml")
 	assert.Equal(t, 0, runCount, "Run count should be 0 after database deletion")
 
 	// Should be able to record new data
@@ -837,11 +837,11 @@ func TestCrossRun_DatabaseDeleted(t *testing.T) {
 		Output:       "Completed after recreation",
 		DurationSecs: 12,
 	}
-	err = db2.RecordExecution(context.Background(), exec2)
+	err = db2.RecordExecution(exec2)
 	require.NoError(t, err, "Should be able to record in recreated database")
 
 	// Verify new data was recorded
-	history, err = db2.GetExecutionHistory(context.Background(), "plan.yaml", "task-1")
+	history, err = db2.GetExecutionHistory("task-1")
 	require.NoError(t, err)
 	require.Len(t, history, 1)
 }
@@ -904,12 +904,12 @@ func TestCrossRun_SessionIsolation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify all sessions recorded
-	history, err := db.GetExecutionHistory(context.Background(), "plan.yaml", taskNumber)
+	history, err := db.GetExecutionHistory(taskNumber)
 	require.NoError(t, err)
 	require.Len(t, history, 3, "Should have 3 session executions")
 
 	// Verify cross-session learning
-	runCount, _ := db.GetRunCount(context.Background(), planFile)
+	runCount := db.GetRunCount(planFile)
 	assert.Equal(t, 3, runCount, "Should track all 3 runs")
 
 	// Verify each execution maintained its data
@@ -977,7 +977,7 @@ func TestCrossRun_MultipleFailuresAndRecovery(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	history, err := db.GetExecutionHistory(context.Background(), "plan.yaml", taskNumber)
+	history, err := db.GetExecutionHistory(taskNumber)
 	require.NoError(t, err)
 	require.Len(t, history, 4)
 

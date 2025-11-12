@@ -266,12 +266,12 @@ func extractFailurePatterns(verdict, feedback, output string) []string {
 
 	patterns := []string{}
 	patternKeywords := map[string][]string{
-		"compilation_error":   {"compilation", "compile", "syntax error"},
-		"test_failure":        {"test fail", "tests fail", "test failure"},
-		"dependency_missing":  {"dependency", "package not found", "module not found"},
-		"permission_error":    {"permission", "access denied", "forbidden"},
-		"timeout":             {"timeout", "deadline", "timed out"},
-		"runtime_error":       {"runtime error", "panic", "segfault", "nil pointer"},
+		"compilation_error":  {"compilation", "compile", "syntax error"},
+		"test_failure":       {"test fail", "tests fail", "test failure"},
+		"dependency_missing": {"dependency", "package not found", "module not found"},
+		"permission_error":   {"permission", "access denied", "forbidden"},
+		"timeout":            {"timeout", "deadline", "timed out"},
+		"runtime_error":      {"runtime error", "panic", "segfault", "nil pointer"},
 	}
 
 	// Combine all text sources for pattern matching (case insensitive)
