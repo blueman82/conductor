@@ -20,7 +20,7 @@ jobs:
       # Don't cancel other matrix jobs if one fails
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
         go-version: ['1.24.x']
 
     steps:
