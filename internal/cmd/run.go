@@ -340,9 +340,24 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "\nDry-run mode: Plan is valid and ready for execution.\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "\nExecution waves:\n")
 		for i, wave := range waves {
-			fmt.Fprintf(cmd.OutOrStdout(), "  Wave %d: %d task(s)\n", i+1, len(wave.TaskNumbers))
+			// Filter tasks based on SkipCompleted config (same logic as wave executor)
+			var tasksToDisplay []string
+			for _, taskNum := range wave.TaskNumbers {
+				task, ok := getTask(plan.Tasks, taskNum)
+				if !ok {
+					continue
+				}
+				// Apply skip-completed filter in dry-run mode
+				if cfg.SkipCompleted && task.CanSkip() {
+					continue // Skip completed/skipped tasks
+				}
+				tasksToDisplay = append(tasksToDisplay, taskNum)
+			}
+
+			// Display wave with filtered task count
+			fmt.Fprintf(cmd.OutOrStdout(), "  Wave %d: %d task(s)\n", i+1, len(tasksToDisplay))
 			if verbose {
-				for _, taskNum := range wave.TaskNumbers {
+				for _, taskNum := range tasksToDisplay {
 					if task, ok := getTask(plan.Tasks, taskNum); ok {
 						fmt.Fprintf(cmd.OutOrStdout(), "    - Task %s: %s\n", task.Number, task.Name)
 					}
