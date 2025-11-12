@@ -1,9 +1,6 @@
 # Conductor
 
-[![CI](https://github.com/blueman82/conductor/actions/workflows/ci.yml/badge.svg)](https://github.com/blueman82/conductor/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/blueman82/conductor/branch/main/graph/badge.svg)](https://codecov.io/gh/blueman82/conductor)
-[![Go Report Card](https://goreportcard.com/badge/github.com/blueman82/conductor)](https://goreportcard.com/report/github.com/blueman82/conductor)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/blueman82/conductor)](https://github.com/blueman82/conductor)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/blueman82/conductor)
 
 **Autonomous Multi-Agent Orchestration for Claude Code**
 
@@ -48,7 +45,21 @@ Conductor automates complex multi-step implementations by:
 # Clone the repository
 git clone https://github.com/blueman82/conductor.git
 cd conductor
+```
 
+#### Using Make (Recommended)
+
+```bash
+# Install to $GOPATH/bin
+make install
+
+# Verify installation
+conductor --version
+```
+
+#### Manual Build
+
+```bash
 # Build the binary
 go build ./cmd/conductor
 
@@ -272,7 +283,9 @@ See [plugin/docs](plugin/docs) for complete plugin documentation.
 
 ## Architecture Overview
 
-### Phase 1 (v1.0) - Single-File Plans
+### Execution Pipeline
+
+**Single-File Plans:**
 ```
 Plan File (.md/.yaml)
   → Parser (auto-detects format)
@@ -285,7 +298,7 @@ Plan File (.md/.yaml)
   → Plan Updater (marks tasks complete)
 ```
 
-### Phase 2A - Multi-File Plans (Extended)
+**Multi-File Plans:**
 ```
 Multiple Plan Files (.md/.yaml)
   → Multi-File Loader (auto-detects format per file)
@@ -298,14 +311,14 @@ Multiple Plan Files (.md/.yaml)
 
 **Key Components:**
 
-- **Parser**: Auto-detects and parses Markdown/YAML plan files (per file in Phase 2A)
-- **Multi-File Loader**: Loads and merges multiple plans with validation (Phase 2A)
-- **Graph Builder**: Calculates dependencies using Kahn's algorithm (cross-file in Phase 2A)
+- **Parser**: Auto-detects and parses Markdown/YAML plan files
+- **Multi-File Loader**: Loads and merges multiple plans with cross-file dependency validation
+- **Graph Builder**: Calculates dependencies using Kahn's algorithm
 - **Orchestrator**: Coordinates wave-based execution with bounded concurrency
 - **Task Executor**: Spawns Claude CLI agents with timeout and retry logic
 - **Quality Control**: Reviews task outputs using dedicated QC agent
-- **Plan Updater**: Thread-safe updates to plan files with file locking (file-aware in Phase 2A)
-- **Worktree Groups**: Organize tasks into execution groups with isolation levels (Phase 2A)
+- **Plan Updater**: Thread-safe updates to plan files with file locking
+- **Worktree Groups**: Organize tasks into execution groups with isolation levels
 
 ## Development
 
@@ -344,7 +357,30 @@ golangci-lint run
 go vet ./...
 ```
 
-## Multi-File Plans (Phase 2A)
+### Version Management
+
+Conductor uses semantic versioning with automatic version bumping:
+
+```bash
+# View current version
+cat VERSION
+
+# Build with current version
+make build
+
+# Bump patch version (1.1.0 → 1.1.1) and build
+make build-patch
+
+# Bump minor version (1.1.0 → 1.2.0) and build
+make build-minor
+
+# Bump major version (1.1.0 → 2.0.0) and build
+make build-major
+```
+
+The VERSION file serves as the single source of truth and is automatically injected into the binary at build time.
+
+## Multi-File Plans
 
 Conductor supports splitting large implementation plans across multiple files with automatic merging and dependency management:
 
@@ -362,30 +398,25 @@ conductor validate *.md
 - ✅ Cross-file dependency management
 - ✅ Worktree groups for execution control
 - ✅ File-to-task mapping for resume operations
-- ✅ 100% backward compatible with v1.0 single-file plans
+- ✅ 100% backward compatible with single-file plans
 
 See [Phase 2A Guide](docs/phase-2a-guide.md) for detailed documentation and examples.
 
 ## Project Status
 
-**Current Status**: Production-ready v1.0 + Phase 2A (Multi-File Plans)
+**Current Status**: Production-ready v1.1.0
 
-### Conductor Core (Phase 1)
-- ✅ Complete implementation with full test coverage
+Conductor is feature-complete with:
+- ✅ Complete implementation with 86.4% test coverage (465+ tests)
 - ✅ `conductor validate` and `conductor run` commands
-- ✅ Wave-based parallel execution
-- ✅ Quality control reviews
+- ✅ Wave-based parallel execution with dependency management
+- ✅ Quality control reviews with automated retries
+- ✅ Multi-file plan loading and merging
+- ✅ Worktree group organization with isolation levels
+- ✅ Auto-incrementing version management (VERSION file)
 - ✅ File locking for concurrent updates
 - ✅ Agent discovery system
 - ✅ Comprehensive documentation
-
-### Phase 2A Extensions
-- ✅ Multi-file plan loading and merging
-- ✅ Objective plan splitting with logical grouping
-- ✅ Worktree group organization (parallel/sequential, isolation levels)
-- ✅ FileToTaskMap tracking for resume operations
-- ✅ 37 integration tests for Phase 2A features
-- ✅ 100% backward compatible with v1.0
 
 ### Conductor Plugin
 - ✅ 4 slash commands (`/doc`, `/doc-yaml`, `/cook-auto`, `/cook-man`)
