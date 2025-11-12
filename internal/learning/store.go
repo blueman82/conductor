@@ -173,6 +173,73 @@ func (s *Store) RecordExecution(exec *TaskExecution) error {
 	return nil
 }
 
+// GetExecutions retrieves all executions for a specific plan file, ordered by most recent first
+func (s *Store) GetExecutions(planFile string) ([]*TaskExecution, error) {
+	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, timestamp, context
+		FROM task_executions
+		WHERE plan_file = ?
+		ORDER BY id DESC`
+
+	rows, err := s.db.Query(query, planFile)
+	if err != nil {
+		return nil, fmt.Errorf("query executions: %w", err)
+	}
+	defer rows.Close()
+
+	var executions []*TaskExecution
+	for rows.Next() {
+		exec := &TaskExecution{}
+		var planFile, agent, output, errorMessage, context sql.NullString
+		var runNumber sql.NullInt64
+		err := rows.Scan(
+			&exec.ID,
+			&planFile,
+			&runNumber,
+			&exec.TaskNumber,
+			&exec.TaskName,
+			&agent,
+			&exec.Prompt,
+			&exec.Success,
+			&output,
+			&errorMessage,
+			&exec.DurationSecs,
+			&exec.Timestamp,
+			&context,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan execution row: %w", err)
+		}
+
+		// Handle nullable fields
+		if planFile.Valid {
+			exec.PlanFile = planFile.String
+		}
+		if runNumber.Valid {
+			exec.RunNumber = int(runNumber.Int64)
+		}
+		if agent.Valid {
+			exec.Agent = agent.String
+		}
+		if output.Valid {
+			exec.Output = output.String
+		}
+		if errorMessage.Valid {
+			exec.ErrorMessage = errorMessage.String
+		}
+		if context.Valid {
+			exec.Context = context.String
+		}
+
+		executions = append(executions, exec)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate execution rows: %w", err)
+	}
+
+	return executions, nil
+}
+
 // GetExecutionHistory retrieves all executions for a specific task, ordered by most recent first
 func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error) {
 	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, timestamp, context
@@ -284,4 +351,14 @@ func (s *Store) GetRunCount(planFile string) int {
 		return 0
 	}
 	return maxRun
+}
+
+// QueryRows executes a query that returns multiple rows
+func (s *Store) QueryRows(query string, args ...interface{}) (*sql.Rows, error) {
+	return s.db.Query(query, args...)
+}
+
+// Exec executes a query that doesn't return rows (INSERT, UPDATE, DELETE)
+func (s *Store) Exec(query string, args ...interface{}) (sql.Result, error) {
+	return s.db.Exec(query, args...)
 }

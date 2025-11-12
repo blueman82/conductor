@@ -263,7 +263,8 @@ plan:
         files:
           - "internal/learning/store.go"
           - "internal/learning/store_test.go"
-      status: "in-progress"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 16
       name: "Update .gitignore to exclude learning database"
       agent: "fullstack-developer"
@@ -492,6 +493,8 @@ plan:
           - Cross-run learning tests
         files:
           - "internal/executor/learning_integration_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 19
       name: "Create cross-run learning integration tests"
       agent: "test-automator"

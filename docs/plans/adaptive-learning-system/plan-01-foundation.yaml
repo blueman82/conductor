@@ -790,7 +790,8 @@ plan:
         files:
           - "internal/learning/analysis.go"
           - "internal/learning/analysis_test.go"
-      status: "in-progress"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 4
       name: "Add pre-task hook for failure analysis and agent adaptation"
       agent: "golang-pro"
@@ -1186,6 +1187,8 @@ plan:
         files:
           - "internal/cmd/learning_stats.go"
           - "internal/cmd/learning_stats_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 9
       name: "Implement 'conductor learning show' command"
       agent: "golang-pro"
@@ -1264,6 +1267,8 @@ plan:
         files:
           - "internal/cmd/learning_show.go"
           - "internal/cmd/learning_show_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 10
       name: "Implement 'conductor learning clear' command"
       agent: "golang-pro"
@@ -1348,6 +1353,8 @@ plan:
         files:
           - "internal/cmd/learning_clear.go"
           - "internal/cmd/learning_clear_test.go"
+      status: "completed"
+      completed_date: "2025-11-12"
     - task_number: 11
       name: "Implement 'conductor learning export' command"
       agent: "golang-pro"
@@ -1432,6 +1439,7 @@ plan:
         files:
           - "internal/cmd/learning_export.go"
           - "internal/cmd/learning_export_test.go"
+      status: "in-progress"
     - task_number: 12
       name: "Wire up learning subcommands to root command"
       agent: "golang-pro"
