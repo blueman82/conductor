@@ -41,6 +41,9 @@ logs/
 # Conductor learning database (project-local)
 .conductor/learning/
 
+# Local configuration (use config.yaml.example as template)
+.conductor/config.yaml
+
 # Temporary files
 tmp/
 temp/
