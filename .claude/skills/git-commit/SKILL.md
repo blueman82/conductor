@@ -40,6 +40,7 @@ Follow conventional commits specification:
 - ❌ "Co-Authored-By: Claude"
 - ❌ Any AI attribution
 - ❌ Bot indicators
+- ❌ Badges in documentation (shields.io, img.shields.io, etc.)
 
 **MUST include:**
 - ✓ Clear, concise subject line (50 chars or less)
