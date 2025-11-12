@@ -5,3 +5,13 @@ log_level: info
 verbose: false
 log_dir: .conductor/logs
 dry_run: false
+
+# Learning system configuration
+learning:
+  enabled: true
+  db_path: .conductor/learning
+  auto_adapt_agent: false
+  enhance_prompts: true
+  min_failures_before_adapt: 2
+  keep_executions_days: 90
+  max_executions_per_task: 100
