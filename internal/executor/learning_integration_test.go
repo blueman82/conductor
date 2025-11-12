@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -525,4 +526,476 @@ func TestLearningPipeline_FirstRunVsSubsequentRuns(t *testing.T) {
 	// History should be ordered by most recent first
 	assert.Equal(t, 2, history[0].RunNumber)
 	assert.Equal(t, 1, history[1].RunNumber)
+}
+
+// TestCrossRun_LearningPersists verifies that learning data persists between conductor runs
+func TestCrossRun_LearningPersists(t *testing.T) {
+	// Create persistent temp database (not :memory:)
+	dbPath := filepath.Join(t.TempDir(), "cross_run_test.db")
+
+	// Run 1: Execute a task and record outcome
+	db1, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+
+	planFile := "plan.yaml"
+	taskNumber := "task-1"
+
+	exec1 := &learning.TaskExecution{
+		PlanFile:     planFile,
+		RunNumber:    1,
+		TaskNumber:   taskNumber,
+		TaskName:     "Test Task",
+		Agent:        "backend-developer",
+		Prompt:       "Do something",
+		Success:      true,
+		Output:       "First run completed",
+		DurationSecs: 50,
+	}
+	err = db1.RecordExecution(exec1)
+	require.NoError(t, err)
+
+	// Close first database connection
+	db1.Close()
+
+	// Run 2: New orchestrator instance, same database file
+	db2, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+	defer db2.Close()
+
+	// Verify data from Run 1 is available
+	history, err := db2.GetExecutionHistory(taskNumber)
+	require.NoError(t, err)
+	require.Len(t, history, 1, "Should find execution from Run 1")
+
+	assert.Equal(t, 1, history[0].RunNumber)
+	assert.Equal(t, "backend-developer", history[0].Agent)
+	assert.True(t, history[0].Success)
+
+	// Verify run count persisted
+	runCount := db2.GetRunCount(planFile)
+	assert.Equal(t, 1, runCount, "Run count should persist across runs")
+
+	// Record second run
+	exec2 := &learning.TaskExecution{
+		PlanFile:     planFile,
+		RunNumber:    2,
+		TaskNumber:   taskNumber,
+		TaskName:     "Test Task",
+		Agent:        "backend-developer",
+		Prompt:       "Do something",
+		Success:      true,
+		Output:       "Second run completed",
+		DurationSecs: 45,
+	}
+	err = db2.RecordExecution(exec2)
+	require.NoError(t, err)
+
+	// Verify both runs are in history
+	history, err = db2.GetExecutionHistory(taskNumber)
+	require.NoError(t, err)
+	require.Len(t, history, 2, "Should find executions from both runs")
+}
+
+// TestCrossRun_AgentAdaptation verifies that the system adapts agent selection based on historical data
+func TestCrossRun_AgentAdaptation(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "adaptation_test.db")
+
+	planFile := "plan.yaml"
+	taskNumber := "task-1"
+
+	// Run 1: Record failures with agent-a
+	db1, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+
+	// Attempt 1: Fail with agent-a
+	exec1 := &learning.TaskExecution{
+		PlanFile:     planFile,
+		RunNumber:    1,
+		TaskNumber:   taskNumber,
+		TaskName:     "Problematic Task",
+		Agent:        "agent-a",
+		Prompt:       "Fix the bug",
+		Success:      false,
+		Output:       "compilation_error: undefined variable",
+		ErrorMessage: "Task failed",
+		DurationSecs: 30,
+	}
+	err = db1.RecordExecution(exec1)
+	require.NoError(t, err)
+
+	// Attempt 2: Fail again with agent-a
+	exec2 := &learning.TaskExecution{
+		PlanFile:     planFile,
+		RunNumber:    2,
+		TaskNumber:   taskNumber,
+		TaskName:     "Problematic Task",
+		Agent:        "agent-a",
+		Prompt:       "Fix the bug",
+		Success:      false,
+		Output:       "compilation_error: type mismatch",
+		ErrorMessage: "Task failed again",
+		DurationSecs: 35,
+	}
+	err = db1.RecordExecution(exec2)
+	require.NoError(t, err)
+
+	db1.Close()
+
+	// Run 2: New orchestrator instance, should adapt based on failures
+	db2, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+	defer db2.Close()
+
+	// Analyze failures
+	analysis, err := db2.AnalyzeFailures(context.Background(), planFile, taskNumber)
+	require.NoError(t, err)
+	require.NotNil(t, analysis)
+
+	// Verify agent-a has poor performance
+	assert.Equal(t, 2, analysis.TotalAttempts)
+	assert.Equal(t, 2, analysis.FailedAttempts)
+	assert.Contains(t, analysis.TriedAgents, "agent-a")
+	assert.True(t, analysis.ShouldTryDifferentAgent)
+
+	// Suggested agent should NOT be agent-a
+	assert.NotEmpty(t, analysis.SuggestedAgent)
+	assert.NotEqual(t, "agent-a", analysis.SuggestedAgent,
+		"System should suggest different agent after multiple failures")
+
+	// Verify failure patterns detected
+	assert.Contains(t, analysis.CommonPatterns, "compilation_error")
+
+	// Now record success with different agent
+	exec3 := &learning.TaskExecution{
+		PlanFile:     planFile,
+		RunNumber:    3,
+		TaskNumber:   taskNumber,
+		TaskName:     "Problematic Task",
+		Agent:        "agent-b",
+		Prompt:       "Fix the bug",
+		Success:      true,
+		Output:       "Task completed successfully",
+		DurationSecs: 40,
+	}
+	err = db2.RecordExecution(exec3)
+	require.NoError(t, err)
+
+	// Verify new history shows agent-b success
+	history, err := db2.GetExecutionHistory(taskNumber)
+	require.NoError(t, err)
+	require.Len(t, history, 3)
+
+	// Most recent should be successful with agent-b
+	assert.True(t, history[0].Success)
+	assert.Equal(t, "agent-b", history[0].Agent)
+}
+
+// TestCrossRun_RunNumberIncrement verifies that run numbers increment correctly per plan file
+func TestCrossRun_RunNumberIncrement(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "run_number_test.db")
+
+	// Run 1 for plan-a.yaml
+	db1, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+
+	exec1 := &learning.TaskExecution{
+		PlanFile:     "plan-a.yaml",
+		RunNumber:    1,
+		TaskNumber:   "task-1",
+		TaskName:     "Task A1",
+		Agent:        "agent-a",
+		Prompt:       "Do A1",
+		Success:      true,
+		Output:       "A1 completed",
+		DurationSecs: 10,
+	}
+	err = db1.RecordExecution(exec1)
+	require.NoError(t, err)
+
+	db1.Close()
+
+	// Run 2 for plan-a.yaml (should be run number 2)
+	db2, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+
+	exec2 := &learning.TaskExecution{
+		PlanFile:     "plan-a.yaml",
+		RunNumber:    2,
+		TaskNumber:   "task-2",
+		TaskName:     "Task A2",
+		Agent:        "agent-b",
+		Prompt:       "Do A2",
+		Success:      true,
+		Output:       "A2 completed",
+		DurationSecs: 15,
+	}
+	err = db2.RecordExecution(exec2)
+	require.NoError(t, err)
+
+	db2.Close()
+
+	// Run 1 for plan-b.yaml (different plan, run number 1)
+	db3, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+	defer db3.Close()
+
+	exec3 := &learning.TaskExecution{
+		PlanFile:     "plan-b.yaml",
+		RunNumber:    1,
+		TaskNumber:   "task-3",
+		TaskName:     "Task B1",
+		Agent:        "agent-c",
+		Prompt:       "Do B1",
+		Success:      true,
+		Output:       "B1 completed",
+		DurationSecs: 20,
+	}
+	err = db3.RecordExecution(exec3)
+	require.NoError(t, err)
+
+	// Verify run counts are correct per plan file
+	runCountA := db3.GetRunCount("plan-a.yaml")
+	assert.Equal(t, 2, runCountA, "plan-a.yaml should have 2 runs")
+
+	runCountB := db3.GetRunCount("plan-b.yaml")
+	assert.Equal(t, 1, runCountB, "plan-b.yaml should have 1 run")
+
+	// Verify each plan's executions are separate
+	historyA1, err := db3.GetExecutionHistory("task-1")
+	require.NoError(t, err)
+	require.Len(t, historyA1, 1)
+	assert.Equal(t, "plan-a.yaml", historyA1[0].PlanFile)
+
+	historyB1, err := db3.GetExecutionHistory("task-3")
+	require.NoError(t, err)
+	require.Len(t, historyB1, 1)
+	assert.Equal(t, "plan-b.yaml", historyB1[0].PlanFile)
+}
+
+// TestCrossRun_DatabaseDeleted verifies graceful handling when database is deleted between runs
+func TestCrossRun_DatabaseDeleted(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "deleted_test.db")
+
+	// Run 1: Create database and record data
+	db1, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+
+	exec1 := &learning.TaskExecution{
+		PlanFile:     "plan.yaml",
+		RunNumber:    1,
+		TaskNumber:   "task-1",
+		TaskName:     "Test Task",
+		Agent:        "agent-a",
+		Prompt:       "Do something",
+		Success:      true,
+		Output:       "Completed",
+		DurationSecs: 10,
+	}
+	err = db1.RecordExecution(exec1)
+	require.NoError(t, err)
+
+	db1.Close()
+
+	// Verify database exists
+	_, err = os.Stat(dbPath)
+	require.NoError(t, err, "Database file should exist")
+
+	// Delete the database file
+	err = os.Remove(dbPath)
+	require.NoError(t, err)
+
+	// Verify database is gone
+	_, err = os.Stat(dbPath)
+	require.True(t, os.IsNotExist(err), "Database file should be deleted")
+
+	// Run 2: Should handle missing database gracefully by recreating it
+	db2, err := learning.NewStore(dbPath)
+	require.NoError(t, err, "Should recreate database gracefully")
+	defer db2.Close()
+
+	// Database should be recreated
+	_, err = os.Stat(dbPath)
+	require.NoError(t, err, "Database file should be recreated")
+
+	// Stats should be empty (no historical data)
+	history, err := db2.GetExecutionHistory("task-1")
+	require.NoError(t, err)
+	assert.Empty(t, history, "Should have no history after database deletion")
+
+	runCount := db2.GetRunCount("plan.yaml")
+	assert.Equal(t, 0, runCount, "Run count should be 0 after database deletion")
+
+	// Should be able to record new data
+	exec2 := &learning.TaskExecution{
+		PlanFile:     "plan.yaml",
+		RunNumber:    1,
+		TaskNumber:   "task-1",
+		TaskName:     "Test Task",
+		Agent:        "agent-a",
+		Prompt:       "Do something",
+		Success:      true,
+		Output:       "Completed after recreation",
+		DurationSecs: 12,
+	}
+	err = db2.RecordExecution(exec2)
+	require.NoError(t, err, "Should be able to record in recreated database")
+
+	// Verify new data was recorded
+	history, err = db2.GetExecutionHistory("task-1")
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+}
+
+// TestCrossRun_SessionIsolation verifies that different sessions maintain proper data separation
+func TestCrossRun_SessionIsolation(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "session_test.db")
+
+	db, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	planFile := "plan.yaml"
+	taskNumber := "task-1"
+
+	// Session 1: Run with agent-a (success)
+	exec1 := &learning.TaskExecution{
+		PlanFile:     planFile,
+		RunNumber:    1,
+		TaskNumber:   taskNumber,
+		TaskName:     "Task 1",
+		Agent:        "agent-a",
+		Prompt:       "Do something",
+		Success:      true,
+		Output:       "Session 1 completed",
+		DurationSecs: 20,
+	}
+	err = db.RecordExecution(exec1)
+	require.NoError(t, err)
+
+	// Session 2: Run with agent-b (failure)
+	exec2 := &learning.TaskExecution{
+		PlanFile:     planFile,
+		RunNumber:    2,
+		TaskNumber:   taskNumber,
+		TaskName:     "Task 1",
+		Agent:        "agent-b",
+		Prompt:       "Do something",
+		Success:      false,
+		Output:       "Session 2 failed",
+		ErrorMessage: "Error occurred",
+		DurationSecs: 25,
+	}
+	err = db.RecordExecution(exec2)
+	require.NoError(t, err)
+
+	// Session 3: Run with agent-a again (success)
+	exec3 := &learning.TaskExecution{
+		PlanFile:     planFile,
+		RunNumber:    3,
+		TaskNumber:   taskNumber,
+		TaskName:     "Task 1",
+		Agent:        "agent-a",
+		Prompt:       "Do something",
+		Success:      true,
+		Output:       "Session 3 completed",
+		DurationSecs: 18,
+	}
+	err = db.RecordExecution(exec3)
+	require.NoError(t, err)
+
+	// Verify all sessions recorded
+	history, err := db.GetExecutionHistory(taskNumber)
+	require.NoError(t, err)
+	require.Len(t, history, 3, "Should have 3 session executions")
+
+	// Verify cross-session learning
+	runCount := db.GetRunCount(planFile)
+	assert.Equal(t, 3, runCount, "Should track all 3 runs")
+
+	// Verify each execution maintained its data
+	assert.Equal(t, 3, history[0].RunNumber) // Most recent
+	assert.True(t, history[0].Success)
+	assert.Equal(t, "agent-a", history[0].Agent)
+
+	assert.Equal(t, 2, history[1].RunNumber) // Middle
+	assert.False(t, history[1].Success)
+	assert.Equal(t, "agent-b", history[1].Agent)
+
+	assert.Equal(t, 1, history[2].RunNumber) // Oldest
+	assert.True(t, history[2].Success)
+	assert.Equal(t, "agent-a", history[2].Agent)
+}
+
+// TestCrossRun_MultipleFailuresAndRecovery verifies learning across multiple failed attempts
+func TestCrossRun_MultipleFailuresAndRecovery(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "recovery_test.db")
+
+	planFile := "plan.yaml"
+	taskNumber := "task-1"
+
+	// Simulate 4 separate runs with different outcomes
+	scenarios := []struct {
+		runNumber int
+		agent     string
+		success   bool
+		output    string
+	}{
+		{1, "agent-a", false, "compilation_error: undefined variable"},
+		{2, "agent-a", false, "compilation_error: type mismatch"},
+		{3, "agent-b", false, "test_failure: TestFoo failed"},
+		{4, "agent-c", true, "All tests passed"},
+	}
+
+	for _, scenario := range scenarios {
+		db, err := learning.NewStore(dbPath)
+		require.NoError(t, err)
+
+		exec := &learning.TaskExecution{
+			PlanFile:     planFile,
+			RunNumber:    scenario.runNumber,
+			TaskNumber:   taskNumber,
+			TaskName:     "Problematic Task",
+			Agent:        scenario.agent,
+			Prompt:       "Fix the bug",
+			Success:      scenario.success,
+			Output:       scenario.output,
+			DurationSecs: 30,
+		}
+
+		if !scenario.success {
+			exec.ErrorMessage = fmt.Sprintf("Run %d failed", scenario.runNumber)
+		}
+
+		err = db.RecordExecution(exec)
+		require.NoError(t, err)
+
+		db.Close()
+	}
+
+	// Final verification: Check learning data
+	db, err := learning.NewStore(dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	history, err := db.GetExecutionHistory(taskNumber)
+	require.NoError(t, err)
+	require.Len(t, history, 4)
+
+	// Verify final run succeeded
+	assert.True(t, history[0].Success)
+	assert.Equal(t, "agent-c", history[0].Agent)
+	assert.Equal(t, 4, history[0].RunNumber)
+
+	// Verify failure analysis
+	analysis, err := db.AnalyzeFailures(context.Background(), planFile, taskNumber)
+	require.NoError(t, err)
+
+	assert.Equal(t, 4, analysis.TotalAttempts)
+	assert.Equal(t, 3, analysis.FailedAttempts)
+	assert.Contains(t, analysis.TriedAgents, "agent-a")
+	assert.Contains(t, analysis.TriedAgents, "agent-b")
+	assert.Contains(t, analysis.TriedAgents, "agent-c")
+
+	// Should detect compilation_error pattern
+	assert.Contains(t, analysis.CommonPatterns, "compilation_error")
 }
