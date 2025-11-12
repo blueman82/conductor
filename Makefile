@@ -8,7 +8,7 @@ COVERAGE_FILE=coverage.out
 COVERAGE_HTML=coverage.html
 
 # Build information
-VERSION?=1.1.0
+VERSION=$(shell cat VERSION 2>/dev/null || echo "0.0.0")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS=-ldflags "-X github.com/harrison/conductor/internal/cmd.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
@@ -35,7 +35,7 @@ else
 endif
 
 # Phony targets (not actual files)
-.PHONY: all build test test-verbose coverage clean install help fmt vet lint tidy check deps
+.PHONY: all build build-patch build-minor build-major test test-verbose coverage clean install help fmt vet lint tidy check deps
 
 # Default target
 all: clean fmt vet build test
@@ -45,6 +45,9 @@ help:
 	@echo "Conductor - Makefile targets:"
 	@echo ""
 	@echo "  make build          - Build the conductor binary to ./$(BINARY_NAME)"
+	@echo "  make build-patch    - Bump patch version and build (1.1.0 → 1.1.1)"
+	@echo "  make build-minor    - Bump minor version and build (1.1.0 → 1.2.0)"
+	@echo "  make build-major    - Bump major version and build (1.1.0 → 2.0.0)"
 	@echo "  make test           - Run all tests with coverage"
 	@echo "  make test-verbose   - Run tests with verbose output"
 	@echo "  make coverage       - Generate coverage report and open HTML"
@@ -65,6 +68,39 @@ build:
 	@echo "Building $(BINARY_NAME)..."
 	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME)$(BINARY_EXT) $(CMD_PATH)
 	@echo "Build complete: ./$(BINARY_NAME)$(BINARY_EXT)"
+
+## build-patch: Bump patch version (x.y.Z) and build
+build-patch:
+	@echo "Bumping patch version..."
+	@current=$$(cat VERSION); \
+	major=$$(echo $$current | cut -d. -f1); \
+	minor=$$(echo $$current | cut -d. -f2); \
+	patch=$$(echo $$current | cut -d. -f3); \
+	patch=$$(($$patch + 1)); \
+	echo "$$major.$$minor.$$patch" > VERSION; \
+	echo "Version bumped: $$current → $$major.$$minor.$$patch"
+	@$(MAKE) build
+
+## build-minor: Bump minor version (x.Y.0) and build
+build-minor:
+	@echo "Bumping minor version..."
+	@current=$$(cat VERSION); \
+	major=$$(echo $$current | cut -d. -f1); \
+	minor=$$(echo $$current | cut -d. -f2); \
+	minor=$$(($$minor + 1)); \
+	echo "$$major.$$minor.0" > VERSION; \
+	echo "Version bumped: $$current → $$major.$$minor.0"
+	@$(MAKE) build
+
+## build-major: Bump major version (X.0.0) and build
+build-major:
+	@echo "Bumping major version..."
+	@current=$$(cat VERSION); \
+	major=$$(echo $$current | cut -d. -f1); \
+	major=$$(($$major + 1)); \
+	echo "$$major.0.0" > VERSION; \
+	echo "Version bumped: $$current → $$major.0.0"
+	@$(MAKE) build
 
 ## test: Run all tests with coverage
 test:
