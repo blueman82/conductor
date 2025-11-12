@@ -1,6 +1,7 @@
 package learning
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -263,4 +264,280 @@ func TestConcurrentInitialization(t *testing.T) {
 			assert.Equal(t, 1, version)
 		}
 	})
+}
+
+// setupTestStore creates a test store with in-memory database
+func setupTestStore(t *testing.T) *Store {
+	t.Helper()
+	store, err := NewStore(":memory:")
+	require.NoError(t, err)
+	return store
+}
+
+func TestRecordExecution(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    *TaskExecution
+		wantErr bool
+	}{
+		{
+			name: "records execution successfully",
+			exec: &TaskExecution{
+				TaskNumber:   "Task 1",
+				TaskName:     "Setup database",
+				Agent:        "golang-pro",
+				Prompt:       "Initialize PostgreSQL database",
+				Success:      true,
+				Output:       "Database initialized successfully",
+				DurationSecs: 30,
+			},
+			wantErr: false,
+		},
+		{
+			name: "records failed execution",
+			exec: &TaskExecution{
+				TaskNumber:   "Task 2",
+				TaskName:     "Run tests",
+				Agent:        "test-automator",
+				Prompt:       "Run all unit tests",
+				Success:      false,
+				ErrorMessage: "3 tests failed",
+				Output:       "FAIL: TestFoo",
+				DurationSecs: 45,
+			},
+			wantErr: false,
+		},
+		{
+			name: "handles empty optional fields",
+			exec: &TaskExecution{
+				TaskNumber: "Task 3",
+				TaskName:   "Build project",
+				Prompt:     "Build the project",
+				Success:    true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "handles very long output",
+			exec: &TaskExecution{
+				TaskNumber:   "Task 4",
+				TaskName:     "Generate report",
+				Prompt:       "Generate large report",
+				Success:      true,
+				Output:       string(make([]byte, 10000)), // 10KB output
+				DurationSecs: 60,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := setupTestStore(t)
+			defer store.Close()
+
+			err := store.RecordExecution(tt.exec)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify record exists by querying
+			var count int
+			err = store.db.QueryRow("SELECT COUNT(*) FROM task_executions WHERE task_number = ?", tt.exec.TaskNumber).Scan(&count)
+			require.NoError(t, err)
+			assert.Equal(t, 1, count)
+		})
+	}
+}
+
+func TestRecordExecution_Concurrent(t *testing.T) {
+	t.Run("handles concurrent writes without corruption", func(t *testing.T) {
+		// Use file-based DB for better concurrent access support
+		dbPath := filepath.Join(t.TempDir(), "concurrent.db")
+		store, err := NewStore(dbPath)
+		require.NoError(t, err)
+		defer store.Close()
+
+		// Verify table exists before starting concurrent operations
+		var count int
+		err = store.db.QueryRow("SELECT COUNT(*) FROM task_executions").Scan(&count)
+		require.NoError(t, err)
+
+		// Record 10 executions concurrently
+		done := make(chan error, 10)
+		for i := 0; i < 10; i++ {
+			go func(idx int) {
+				exec := &TaskExecution{
+					TaskNumber:   fmt.Sprintf("Task %d", idx),
+					TaskName:     fmt.Sprintf("Concurrent task %d", idx),
+					Prompt:       fmt.Sprintf("Test prompt %d", idx),
+					Success:      idx%2 == 0,
+					DurationSecs: int64(idx * 10),
+				}
+				done <- store.RecordExecution(exec)
+			}(i)
+		}
+
+		// Wait for all goroutines
+		for i := 0; i < 10; i++ {
+			err := <-done
+			require.NoError(t, err)
+		}
+
+		// Verify all records exist
+		err = store.db.QueryRow("SELECT COUNT(*) FROM task_executions").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 10, count)
+	})
+}
+
+func TestGetExecutionHistory(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func(*Store)
+		taskNumber string
+		wantCount  int
+		wantErr    bool
+	}{
+		{
+			name: "returns history for task",
+			setup: func(s *Store) {
+				executions := []*TaskExecution{
+					{TaskNumber: "Task 1", TaskName: "Test A", Prompt: "prompt", Success: true},
+					{TaskNumber: "Task 1", TaskName: "Test A", Prompt: "prompt", Success: false},
+					{TaskNumber: "Task 2", TaskName: "Test B", Prompt: "prompt", Success: true},
+				}
+				for _, exec := range executions {
+					require.NoError(t, s.RecordExecution(exec))
+				}
+			},
+			taskNumber: "Task 1",
+			wantCount:  2,
+			wantErr:    false,
+		},
+		{
+			name: "returns empty for nonexistent task",
+			setup: func(s *Store) {
+				exec := &TaskExecution{TaskNumber: "Task 1", TaskName: "Test", Prompt: "prompt", Success: true}
+				require.NoError(t, s.RecordExecution(exec))
+			},
+			taskNumber: "Task 99",
+			wantCount:  0,
+			wantErr:    false,
+		},
+		{
+			name:       "handles empty database",
+			setup:      func(s *Store) {},
+			taskNumber: "Task 1",
+			wantCount:  0,
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := setupTestStore(t)
+			defer store.Close()
+
+			if tt.setup != nil {
+				tt.setup(store)
+			}
+
+			history, err := store.GetExecutionHistory(tt.taskNumber)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, history, tt.wantCount)
+		})
+	}
+}
+
+func TestGetExecutionHistory_Ordering(t *testing.T) {
+	t.Run("returns history in chronological order", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Insert 3 executions with slight delays
+		for i := 1; i <= 3; i++ {
+			exec := &TaskExecution{
+				TaskNumber:   "Task 1",
+				TaskName:     fmt.Sprintf("Attempt %d", i),
+				Prompt:       "test",
+				Success:      i == 3,
+				DurationSecs: int64(i),
+			}
+			require.NoError(t, store.RecordExecution(exec))
+		}
+
+		history, err := store.GetExecutionHistory("Task 1")
+		require.NoError(t, err)
+		require.Len(t, history, 3)
+
+		// Verify chronological order (newest first)
+		assert.Equal(t, int64(3), history[0].DurationSecs)
+		assert.Equal(t, int64(2), history[1].DurationSecs)
+		assert.Equal(t, int64(1), history[2].DurationSecs)
+	})
+}
+
+func TestRecordApproach(t *testing.T) {
+	tests := []struct {
+		name     string
+		approach *ApproachHistory
+		wantErr  bool
+	}{
+		{
+			name: "records new approach",
+			approach: &ApproachHistory{
+				TaskPattern:         "test-fix",
+				ApproachDescription: "Use table-driven tests",
+				SuccessCount:        1,
+				FailureCount:        0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "records failed approach",
+			approach: &ApproachHistory{
+				TaskPattern:         "build-error",
+				ApproachDescription: "Update dependencies",
+				SuccessCount:        0,
+				FailureCount:        1,
+			},
+			wantErr: false,
+		},
+		{
+			name: "handles empty metadata",
+			approach: &ApproachHistory{
+				TaskPattern:         "refactor",
+				ApproachDescription: "Extract function",
+				SuccessCount:        1,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := setupTestStore(t)
+			defer store.Close()
+
+			err := store.RecordApproach(tt.approach)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify record exists
+			var count int
+			err = store.db.QueryRow("SELECT COUNT(*) FROM approach_history WHERE task_pattern = ?", tt.approach.TaskPattern).Scan(&count)
+			require.NoError(t, err)
+			assert.Equal(t, 1, count)
+		})
+	}
 }

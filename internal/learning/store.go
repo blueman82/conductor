@@ -6,12 +6,40 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 //go:embed schema.sql
 var schemaSQL string
+
+// TaskExecution represents a single task execution record
+type TaskExecution struct {
+	ID           int64
+	TaskNumber   string
+	TaskName     string
+	Agent        string
+	Prompt       string
+	Success      bool
+	Output       string
+	ErrorMessage string
+	DurationSecs int64
+	Timestamp    time.Time
+	Context      string // JSON blob for additional context
+}
+
+// ApproachHistory tracks different approaches tried for recurring task patterns
+type ApproachHistory struct {
+	ID                  int64
+	TaskPattern         string
+	ApproachDescription string
+	SuccessCount        int
+	FailureCount        int
+	LastUsed            time.Time
+	CreatedAt           time.Time
+	Metadata            string // JSON blob for additional data
+}
 
 // Store manages the SQLite database for adaptive learning
 type Store struct {
@@ -102,4 +130,132 @@ func (s *Store) indexExists(indexName string) (bool, error) {
 		return false, fmt.Errorf("check index existence: %w", err)
 	}
 	return count > 0, nil
+}
+
+// RecordExecution records a task execution in the database
+func (s *Store) RecordExecution(exec *TaskExecution) error {
+	// Marshal context if needed (currently unused, but available for future use)
+	contextJSON := exec.Context
+	if contextJSON == "" {
+		contextJSON = "{}"
+	}
+
+	query := `INSERT INTO task_executions
+		(task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, context)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	result, err := s.db.Exec(query,
+		exec.TaskNumber,
+		exec.TaskName,
+		exec.Agent,
+		exec.Prompt,
+		exec.Success,
+		exec.Output,
+		exec.ErrorMessage,
+		exec.DurationSecs,
+		contextJSON,
+	)
+	if err != nil {
+		return fmt.Errorf("insert task execution: %w", err)
+	}
+
+	// Get the inserted ID
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("get last insert id: %w", err)
+	}
+	exec.ID = id
+
+	return nil
+}
+
+// GetExecutionHistory retrieves all executions for a specific task, ordered by most recent first
+func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error) {
+	query := `SELECT id, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, timestamp, context
+		FROM task_executions
+		WHERE task_number = ?
+		ORDER BY id DESC`
+
+	rows, err := s.db.Query(query, taskNumber)
+	if err != nil {
+		return nil, fmt.Errorf("query execution history: %w", err)
+	}
+	defer rows.Close()
+
+	var executions []*TaskExecution
+	for rows.Next() {
+		exec := &TaskExecution{}
+		var agent, output, errorMessage, context sql.NullString
+		err := rows.Scan(
+			&exec.ID,
+			&exec.TaskNumber,
+			&exec.TaskName,
+			&agent,
+			&exec.Prompt,
+			&exec.Success,
+			&output,
+			&errorMessage,
+			&exec.DurationSecs,
+			&exec.Timestamp,
+			&context,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan execution row: %w", err)
+		}
+
+		// Handle nullable fields
+		if agent.Valid {
+			exec.Agent = agent.String
+		}
+		if output.Valid {
+			exec.Output = output.String
+		}
+		if errorMessage.Valid {
+			exec.ErrorMessage = errorMessage.String
+		}
+		if context.Valid {
+			exec.Context = context.String
+		}
+
+		executions = append(executions, exec)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate execution rows: %w", err)
+	}
+
+	return executions, nil
+}
+
+// RecordApproach records or updates an approach in the approach history
+func (s *Store) RecordApproach(approach *ApproachHistory) error {
+	// Marshal metadata if needed
+	metadataJSON := approach.Metadata
+	if metadataJSON == "" {
+		metadataJSON = "{}"
+	}
+
+	query := `INSERT INTO approach_history
+		(task_pattern, approach_description, success_count, failure_count, metadata)
+		VALUES (?, ?, ?, ?, ?)`
+
+	result, err := s.db.Exec(query,
+		approach.TaskPattern,
+		approach.ApproachDescription,
+		approach.SuccessCount,
+		approach.FailureCount,
+		metadataJSON,
+	)
+	if err != nil {
+		return fmt.Errorf("insert approach history: %w", err)
+	}
+
+	// Get the inserted ID
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("get last insert id: %w", err)
+	}
+	approach.ID = id
+
+	return nil
 }
