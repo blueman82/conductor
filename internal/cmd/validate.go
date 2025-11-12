@@ -364,7 +364,19 @@ func validatePlan(filePath string, registry *agent.Registry, output io.Writer) e
 		errors = append(errors, agentErrors...)
 	}
 
-	// 7. Final validation check
+	// 7. Validate worktree groups
+	groupsMap := make(map[string]*models.WorktreeGroup)
+	for _, group := range plan.WorktreeGroups {
+		groupsMap[group.GroupID] = &group
+	}
+	groupErrors := validateWorktreeGroups(&plan.Tasks, groupsMap)
+	if len(groupErrors) > 0 {
+		errors = append(errors, groupErrors...)
+	} else if len(plan.WorktreeGroups) > 0 || hasWorktreeGroupAssignments(plan.Tasks) {
+		fmt.Fprintf(output, "✓ All worktree groups are valid\n")
+	}
+
+	// 8. Final validation check
 	if len(errors) == 0 {
 		fmt.Fprintf(output, "✓ All task dependencies valid\n")
 		fmt.Fprintf(output, "\n✓ Plan is valid!\n")
@@ -587,4 +599,14 @@ func validateCrossFileDependencies(tasks *[]models.Task) []string {
 	}
 
 	return errors
+}
+
+// hasWorktreeGroupAssignments checks if any task has a worktree group assigned
+func hasWorktreeGroupAssignments(tasks []models.Task) bool {
+	for _, task := range tasks {
+		if task.WorktreeGroup != "" {
+			return true
+		}
+	}
+	return false
 }
