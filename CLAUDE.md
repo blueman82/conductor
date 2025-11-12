@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews.
 
-**Current Status**: ✅ **PHASE 1 (25 TASKS) COMPLETE** + **PHASE 2A (Multi-File Plans) IMPLEMENTED**. Conductor v1 fully implemented, tested, and production-ready. All core functionality, logging, configuration, error handling, integration tests, build tooling, and documentation complete. Phase 2A adds multi-file plan support with objective plan splitting and worktree group organization.
+**Current Status**: Production-ready v1.1.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, and auto-incrementing version management.
 
 ## Development Commands
 
@@ -61,26 +61,66 @@ golangci-lint run
 go vet ./...
 ```
 
+### Version Management
+```bash
+# Current version (stored in VERSION file)
+cat VERSION
+
+# Build with current version
+make build
+
+# Auto-increment patch version (1.1.0 → 1.1.1) and build
+make build-patch
+
+# Auto-increment minor version (1.1.0 → 1.2.0) and build
+make build-minor
+
+# Auto-increment major version (1.1.0 → 2.0.0) and build
+make build-major
+```
+
+**Versioning**: Conductor uses semantic versioning with auto-increment targets. The VERSION file is the single source of truth, automatically injected into the binary at build time via LDFLAGS.
+
 ## Architecture Overview
 
 ### High-Level Flow
+
+**Single-File Plans:**
 ```
 Plan File (.md/.yaml)
   → Parser (auto-detects format)
   → Dependency Graph Builder (validates, detects cycles)
   → Wave Calculator (Kahn's algorithm for topological sort)
-  → Orchestrator (NOT YET IMPLEMENTED)
+  → Orchestrator (coordinates execution)
   → Wave Executor (spawns parallel tasks)
   → Task Executor (invokes claude CLI, handles retries)
   → Quality Control (reviews output, decides GREEN/RED/YELLOW)
   → Plan Updater (marks tasks complete)
 ```
 
+**Multi-File Plans:**
+```
+Multiple Plan Files (.md/.yaml)
+  → Parser (auto-detects format per file)
+  → Plan Merger (validates, deduplicates, merges)
+  → Dependency Graph Builder (cross-file dependencies)
+  → Wave Calculator (respects worktree groups)
+  → Orchestrator (maintains file origins)
+  → Execution & Logging (file-aware tracking)
+```
+
 ### Key Components
 
 **Parser (`internal/parser/`)**: Auto-detects file format and parses plan files into Task structs. Markdown parser extracts tasks from `## Task N:` headings. YAML parser handles structured format. Both support optional YAML frontmatter for conductor config.
 
-**Models (`internal/models/`)**: Core data structures (Task, Plan, Wave, TaskResult). Task includes Status and CompletedAt fields for resumable execution. Task.DependsOn creates dependency graph. Wave groups parallel-executable tasks. Helper methods: IsCompleted(), CanSkip().
+**Plan Merger** (multi-file support):
+- Loads and merges multiple plan files (.md or .yaml)
+- Auto-detects format per file
+- Validates cross-file dependencies
+- Tracks file-to-task mapping for resume operations
+- Maintains worktree group organization
+
+**Models (`internal/models/`)**: Core data structures (Task, Plan, Wave, TaskResult). Task includes Status and CompletedAt fields for resumable execution. Task.DependsOn creates dependency graph. Wave groups parallel-executable tasks. Plan includes WorktreeGroups and FileToTaskMap for multi-file coordination. Helper methods: IsCompleted(), CanSkip().
 
 **Executor (`internal/executor/`)**:
 - `graph.go`: Dependency graph builder using Kahn's algorithm for wave calculation. DFS with color marking for cycle detection. Validates all dependencies exist.
@@ -202,7 +242,7 @@ Conductor's parsers (Markdown and YAML) extract these fields from plan files:
 - `Status` - Task completion status (completed, failed, in-progress, pending)
 - `CompletedAt` - Timestamp when task was completed
 
-**Phase 2A fields** (parsed as of Phase 2A implementation):
+**Multi-file plan fields**:
 - `WorktreeGroup` - Group assignment for task organization
   - Parsed by both Markdown parser (`**WorktreeGroup**: value`) and YAML parser (`worktree_group: value`)
   - Stored in Task.WorktreeGroup field
@@ -234,141 +274,13 @@ defer cancel()
 result, err := invoker.Invoke(ctx, task)
 ```
 
-### ✅ ALL CORE FUNCTIONALITY COMPLETE
-All critical components now implemented and production-ready:
+## Production Status
 
-✅ **Task 16 - Completed 2025-11-09**: `conductor run` command
-- Full plan execution with parallel orchestration
-- CLI flags: --dry-run, --max-concurrency, --timeout, --verbose
-- 92.5% code coverage, 17 tests all passing
-- QA GREEN verdict - production ready
+Conductor v1.1.0 is production-ready with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → logging. All core features, multi-file plan support, and auto-incrementing version management implemented and tested.
 
-✅ **Task 17 - Completed 2025-11-09**: `conductor validate` command
-- Plan validation with 100% test coverage
-- Validates dependencies, detects cycles
-- Shows detailed validation report
+## Multi-File Plan Examples
 
-✅ **Core Pipeline Complete**:
-- ✅ File locking for concurrent plan updates (Task 11)
-- ✅ Plan updater to mark tasks complete (Task 12)
-- ✅ Wave executor for parallel task execution (Task 13)
-- ✅ Task executor with retry logic (Task 14)
-- ✅ Orchestration engine (Task 15)
-
-✅ **Task 19 - Completed 2025-11-11**: File Logger
-- Timestamped log files in .conductor/logs/
-- Per-task detailed logs with execution results
-- Latest.log symlink for quick access
-- 93.2% test coverage, 17 tests passing
-
-✅ **Task 20 - Completed 2025-11-10**: Configuration File Support
-- YAML config file support (.conductor/config.yaml)
-- CLI flag merging with proper precedence
-- Sensible defaults, comprehensive validation
-- 95.3% test coverage, 22 tests passing
-
-✅ **Task 21 - Completed 2025-11-11**: Error Handling & Recovery (FIXED)
-- Custom error types integrated throughout executor pipeline
-- TaskError, TimeoutError, ExecutionError in use
-- Wave, task, and orchestrator proper error wrapping
-- 86.4% executor coverage (improved from 76.7%)
-- 6 integration tests added for error handling
-
-✅ **Task 22 - Completed 2025-11-10**: Integration Tests
-- 12 comprehensive E2E test functions
-- 9 test fixtures covering simple to complex scenarios
-- Cycle detection, wave calculation, format validation
-- 100% test pass rate
-
-✅ **Task 23 - Completed 2025-11-10**: Makefile & Build Script
-- 14 Makefile targets (exceeds 13 required)
-- Cross-compilation for 5 platforms (Linux/macOS/Windows × x86/ARM)
-- Version injection via LDFLAGS, colored output
-- All targets tested and working
-
-✅ **Task 24 - Completed 2025-11-10**: README & Documentation
-- 361-line comprehensive README
-- 4 documentation files (usage, plan-format, troubleshooting)
-- 215+ code examples, 5 complete implementation examples
-- 100% CLI command and flag coverage
-
-✅ **Task 25 - Completed 2025-11-11**: Final Integration & Testing (FIXED)
-- 15 E2E test functions implemented (was 0/15)
-- Logger integration tests (FileLogger, ConsoleLogger, MultiLogger)
-- Plan execution E2E tests (Markdown, YAML, complex dependencies, failures)
-- Log file creation and symlink verification tests
-- Test file grew from 604 to 1,193 lines
-
-**Current Status**: **✅ PRODUCTION READY** - All 25 tasks complete. The conductor binary is fully functional with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → execution → logging → completion. All documentation, tooling, and error handling in place. Ready for production deployment.
-
-## Phase 2A: Multi-File Plans & Objective Plan Splitting
-
-**Status**: ✅ Fully implemented with 37 new integration tests and 100% backward compatibility.
-
-Phase 2A extends Conductor to support splitting large implementation plans across multiple files with objective grouping of related tasks.
-
-### Key Phase 2A Features
-
-**1. Multi-File Plan Loading**
-- Load and automatically merge multiple plan files (.md or .yaml)
-- Auto-detect format per file (each file can be Markdown or YAML)
-- Maintain cross-file task dependencies
-- Track which file each task originated from
-
-**2. Objective Plan Splitting**
-- Split complex plans into logical phases or components
-- Each file represents a cohesive unit (e.g., frontend, backend, deployment)
-- Related tasks stay together with clear file organization
-- Smaller files = easier to review and understand
-
-**3. Worktree Group Organization**
-- Group related tasks into logical units (worktree groups)
-- Define execution model: `parallel` or `sequential`
-- Set isolation levels: `none`, `weak`, or `strong`
-- Capture rationale for each group's organization
-
-**4. FileToTaskMap Tracking**
-- Every task knows which file it came from
-- Maps file paths to task numbers for quick lookup
-- Enables resume operations on split plans
-- Supports partial plan re-execution
-
-### Phase 2A Use Cases
-
-1. **Large Projects**: Split a 20+ task plan into 2-3 focused files
-2. **Team Collaboration**: Different teams own different plan files
-3. **Phased Delivery**: Setup → Core Implementation → Testing → Deployment
-4. **Microservices**: Separate plans per service, merged for orchestration
-5. **Feature Flags**: Optional features in separate plan files
-
-### Phase 2A Architecture
-
-**Multi-File Merging Pipeline**:
-```
-Multiple Plan Files (.md/.yaml)
-  → Parser (auto-detects format per file)
-  → MergePlans (validate, deduplicate, merge)
-  → Dependency Graph Builder (cross-file dependencies)
-  → Wave Calculator (respects worktree groups)
-  → Orchestrator (maintains file origins)
-  → Execution & Logging (file-aware tracking)
-```
-
-**Models Integration**:
-- `Plan.WorktreeGroups` - Define task groups and execution rules
-- `Plan.FileToTaskMap` - Track task origins
-- `Task.WorktreeGroup` - Assign task to group
-- `Wave.GroupInfo` - Group-aware wave execution
-
-**Backward Compatibility**:
-- Single-file plans work unchanged
-- No breaking changes to existing API
-- All Phase 1 (v1.0) features fully preserved
-- 100% test coverage for compatibility
-
-### Phase 2A Examples
-
-**Example 1: Split Backend Plan**
+### Example 1: Split Backend Plan
 
 Part 1 (setup.md):
 ```markdown
@@ -413,7 +325,7 @@ Or validate first:
 conductor validate setup.md features.md
 ```
 
-**Example 2: Microservices Plan**
+### Example 2: Microservices Plan
 
 Three separate plans:
 - `auth-service-plan.md` - Authentication service (6 tasks)
@@ -424,34 +336,6 @@ With worktree groups:
 - `auth-service` group → sequential execution (isolation: strong)
 - `api-service` group → parallel where possible (isolation: weak)
 - `deployment` group → sequential (isolation: strong)
-
-**Best Practices**
-
-1. **File Organization**
-   - 1 file per feature/module/service
-   - Aim for 5-20 tasks per file
-   - Clear, descriptive filenames
-
-2. **Cross-File Dependencies**
-   - Keep intra-file dependencies tight
-   - Minimize cross-file dependencies where possible
-   - Document file execution order if strict
-
-3. **Worktree Groups**
-   - Use groups for execution control
-   - `sequential` for state-dependent tasks
-   - `parallel` for independent tasks
-   - `strong` isolation for infrastructure tasks
-
-4. **Task Naming**
-   - Prefix with module name: "Backend: Setup DB"
-   - Clear task boundaries
-   - File mappings should be obvious
-
-5. **Testing Split Plans**
-   - Validate all files together: `conductor validate *.md`
-   - Dry-run before actual execution
-   - Check dependency graph for cross-file links
 
 ## Module Path
 
@@ -475,3 +359,39 @@ Minimal external dependencies:
 - `gopkg.in/yaml.v3` - YAML parsing
 
 No networking, no ML frameworks, no web frameworks. Just local CLI orchestration.
+
+## Best Practices
+
+### Single-File Plans
+- Keep tasks focused and well-scoped
+- Use clear dependency declarations
+- Test with --dry-run first
+- Leverage --skip-completed for resume
+
+### Multi-File Plans
+
+**File Organization**
+- 1 file per feature/module/service
+- Aim for 5-20 tasks per file
+- Clear, descriptive filenames
+
+**Cross-File Dependencies**
+- Keep intra-file dependencies tight
+- Minimize cross-file dependencies where possible
+- Document file execution order if strict
+
+**Worktree Groups**
+- Use groups for execution control
+- `sequential` for state-dependent tasks
+- `parallel` for independent tasks
+- `strong` isolation for infrastructure tasks
+
+**Task Naming**
+- Prefix with module name: "Backend: Setup DB"
+- Clear task boundaries
+- File mappings should be obvious
+
+**Testing Split Plans**
+- Validate all files together: `conductor validate *.md`
+- Dry-run before actual execution
+- Check dependency graph for cross-file links
