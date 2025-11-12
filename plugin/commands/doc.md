@@ -382,7 +382,7 @@ For EACH task, provide:
   - Multiple dependencies: `Task 1, Task 2, Task 3` (comma-separated, list each individually)
   - **IMPORTANT**: Range notation (e.g., `Tasks 1-3`) is NOT supported - always list task numbers individually
   - Omit this field entirely if no dependencies
-**Worktree Group**: [group-id] (e.g., "chain-1", "independent-3")
+**WorktreeGroup**: [group-id] (e.g., "chain-1", "independent-3")
 **Estimated time**: [5m/15m/30m/1h]
 
 **Agent Assignment Guidelines:**
