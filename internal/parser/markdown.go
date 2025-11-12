@@ -339,6 +339,12 @@ func parseTaskMetadata(task *models.Task, content string) {
 	if matches := agentRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
 		task.Agent = strings.TrimSpace(matches[1])
 	}
+
+	// Parse **WorktreeGroup**:
+	worktreeGroupRegex := regexp.MustCompile(`\*\*WorktreeGroup\*\*:\s*(\S+)`)
+	if matches := worktreeGroupRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
+		task.WorktreeGroup = strings.TrimSpace(matches[1])
+	}
 }
 
 // parseDuration parses time strings like "30m", "1h", "2h30m"

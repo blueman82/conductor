@@ -176,16 +176,16 @@ When the trigger condition is met, create numbered YAML plan files organized by 
 
 ```
 docs/plans/feature-name/
-├── 1-chain-1.yaml        (2000 lines, tasks in chain-1 worktree group)
-├── 2-chain-2.yaml        (1800 lines, tasks in chain-2 worktree group)
-├── 3-independent.yaml    (1200 lines, independent tasks)
-└── index.yaml            (metadata and cross-references to all plan files)
+├── plan-01-chain-1.yaml        (2000 lines, tasks in chain-1 worktree group)
+├── plan-02-chain-2.yaml        (1800 lines, tasks in chain-2 worktree group)
+├── plan-03-independent.yaml    (1200 lines, independent tasks)
+└── index.yaml                  (metadata and cross-references to all plan files)
 ```
 
 **File naming convention:**
-- `N-[worktree-group-id].yaml` where N is the sequence number (1, 2, 3, etc.)
+- `plan-NN-[worktree-group-id].yaml` where NN is the zero-padded sequence number (01, 02, 03, etc.)
 - The worktree group ID identifies which tasks are in which file
-- Example: `1-chain-1.yaml`, `2-independent-tasks.yaml`, `3-chain-2.yaml`
+- Example: `plan-01-chain-1.yaml`, `plan-02-independent-tasks.yaml`, `plan-03-chain-2.yaml`
 
 ### YAML-Specific Considerations
 
@@ -200,7 +200,7 @@ When splitting YAML plans, ensure each file:
 **Example valid split file structure:**
 
 ```yaml
-# docs/plans/feature-name/1-chain-1.yaml
+# docs/plans/feature-name/plan-01-chain-1.yaml
 plan:
   metadata:
     feature_name: "User Authentication"
@@ -208,7 +208,7 @@ plan:
     total_files: 3
     worktree_group: "chain-1"
     tasks_in_file: [1, 2, 3, 4, 5]
-    next_file: "2-chain-2.yaml"
+    next_file: "plan-02-chain-2.yaml"
 
   tasks:
     - task_number: 1
@@ -275,31 +275,31 @@ plan_index:
 
   files:
     - sequence: 1
-      filename: "1-chain-1.yaml"
+      filename: "plan-01-chain-1.yaml"
       worktree_group: "chain-1"
       tasks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       line_count: 2023
       description: "Core authentication flow implementation"
 
     - sequence: 2
-      filename: "2-chain-2.yaml"
+      filename: "plan-02-chain-2.yaml"
       worktree_group: "chain-2"
       tasks: [11, 12, 13, 14, 15, 16, 17, 18]
       line_count: 1987
       description: "API integration layer and middleware"
 
     - sequence: 3
-      filename: "3-independent.yaml"
+      filename: "plan-03-independent.yaml"
       worktree_group: "independent"
       tasks: [19, 20, 21, 22, 23, 24, 25]
       line_count: 1156
       description: "Documentation, tests, and independent cleanup tasks"
 
   getting_started:
-    first_file: "1-chain-1.yaml"
+    first_file: "plan-01-chain-1.yaml"
     first_task: 1
     instructions: |
-      1. Start with 1-chain-1.yaml - Task 1
+      1. Start with plan-01-chain-1.yaml - Task 1
       2. Follow task dependencies as documented in each file
       3. Refer to worktree_group field for parallel execution guidance
       4. Tasks may reference tasks in other files - check depends_on field
@@ -328,14 +328,14 @@ YAML plan created: docs/plans/<feature-slug>.yaml
 YAML plan created in: docs/plans/<feature-name>/
 - Total tasks: 25
 - Plan files created: 3
-  - 1-chain-1.yaml (2,023 lines, tasks 1-10)
-  - 2-chain-2.yaml (1,987 lines, tasks 11-18)
-  - 3-independent.yaml (1,156 lines, tasks 19-25)
+  - plan-01-chain-1.yaml (2,023 lines, tasks 1-10)
+  - plan-02-chain-2.yaml (1,987 lines, tasks 11-18)
+  - plan-03-independent.yaml (1,156 lines, tasks 19-25)
 - Index: docs/plans/<feature-name>/index.yaml
 - Worktree groups: 5 (chain-1, chain-2, independent-1, independent-2, independent-3)
 - YAML validation: ALL FILES PASSED
 
-Start with: docs/plans/<feature-name>/1-chain-1.yaml - Task 1
+Start with: docs/plans/<feature-name>/plan-01-chain-1.yaml - Task 1
 ```
 
 ### YAML Validation Requirements

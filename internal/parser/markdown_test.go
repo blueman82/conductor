@@ -735,3 +735,134 @@ func TestParseCompleteTaskMetadata(t *testing.T) {
 		t.Errorf("Expected agent 'godev', got '%s'", task.Agent)
 	}
 }
+
+func TestParseWorktreeGroup(t *testing.T) {
+	tests := []struct {
+		name                  string
+		content               string
+		expectedWorktreeGroup string
+	}{
+		{
+			name: "worktree group chain-1",
+			content: `**File(s)**: ` + "`file1.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+**Agent**: godev
+**WorktreeGroup**: chain-1`,
+			expectedWorktreeGroup: "chain-1",
+		},
+		{
+			name: "worktree group independent-3",
+			content: `**File(s)**: ` + "`file2.go`" + `
+**Depends on**: Task 1
+**Estimated time**: 1h
+**Agent**: godev
+**WorktreeGroup**: independent-3`,
+			expectedWorktreeGroup: "independent-3",
+		},
+		{
+			name: "no worktree group field",
+			content: `**File(s)**: ` + "`file3.go`" + `
+**Depends on**: None
+**Estimated time**: 45m
+**Agent**: godev`,
+			expectedWorktreeGroup: "",
+		},
+		{
+			name: "worktree group with extra whitespace",
+			content: `**File(s)**: ` + "`file4.go`" + `
+**WorktreeGroup**:   backend-service  `,
+			expectedWorktreeGroup: "backend-service",
+		},
+		{
+			name: "worktree group at beginning",
+			content: `**WorktreeGroup**: auth-service
+**File(s)**: ` + "`auth.go`" + `
+**Depends on**: None`,
+			expectedWorktreeGroup: "auth-service",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := &models.Task{}
+			parseTaskMetadata(task, tt.content)
+
+			if task.WorktreeGroup != tt.expectedWorktreeGroup {
+				t.Errorf("Expected WorktreeGroup '%s', got '%s'", tt.expectedWorktreeGroup, task.WorktreeGroup)
+			}
+		})
+	}
+}
+
+func TestParseWorktreeGroupIgnoresCodeBlocks(t *testing.T) {
+	// Test that WorktreeGroup extraction ignores patterns in code blocks
+	content := `**WorktreeGroup**: real-group
+**File(s)**: ` + "`real-file.go`" + `
+**Agent**: godev
+
+### Implementation
+
+Here's a code example:
+
+` + "```go" + `
+// Example code that should not affect metadata extraction:
+// **WorktreeGroup**: fake-group
+worktreeGroupRegex := regexp.MustCompile(` + "`" + `\*\*WorktreeGroup\*\*:\s*(\S+)` + "`" + `)
+` + "```" + `
+
+More content after code block.
+`
+
+	task := &models.Task{}
+	parseTaskMetadata(task, content)
+
+	// Verify only real metadata extracted, not fake metadata from code block
+	if task.WorktreeGroup != "real-group" {
+		t.Errorf("Expected WorktreeGroup 'real-group', got '%s' (should not extract from code block)", task.WorktreeGroup)
+	}
+}
+
+func TestParseFullTaskWithWorktreeGroup(t *testing.T) {
+	// Test full task parsing including WorktreeGroup
+	markdown := `# Test Plan
+
+## Task 1: Backend API Task
+
+**File(s)**: ` + "`internal/api/handler.go`" + `
+**Depends on**: None
+**Estimated time**: 2h
+**Agent**: godev
+**WorktreeGroup**: backend-api
+
+### Implementation
+Create API handler for user endpoints.
+`
+
+	parser := NewMarkdownParser()
+	plan, err := parser.Parse(strings.NewReader(markdown))
+	if err != nil {
+		t.Fatalf("Failed to parse markdown: %v", err)
+	}
+
+	if len(plan.Tasks) != 1 {
+		t.Fatalf("Expected 1 task, got %d", len(plan.Tasks))
+	}
+
+	task := plan.Tasks[0]
+	if task.Number != "1" {
+		t.Errorf("Expected task number '1', got '%s'", task.Number)
+	}
+	if task.Name != "Backend API Task" {
+		t.Errorf("Expected task name 'Backend API Task', got '%s'", task.Name)
+	}
+	if task.Agent != "godev" {
+		t.Errorf("Expected agent 'godev', got '%s'", task.Agent)
+	}
+	if task.WorktreeGroup != "backend-api" {
+		t.Errorf("Expected WorktreeGroup 'backend-api', got '%s'", task.WorktreeGroup)
+	}
+	if task.EstimatedTime != 2*time.Hour {
+		t.Errorf("Expected time 2h, got %v", task.EstimatedTime)
+	}
+}
