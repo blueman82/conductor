@@ -1424,3 +1424,158 @@ First task.
 		t.Error("Expected second filename in progress")
 	}
 }
+
+// ============================================================================
+// NUMBERED FILES WARNING TESTS (TDD RED Phase)
+// ============================================================================
+
+// TestValidateCommand_WarnsMixedPatterns tests warning when numbered files are present
+func TestValidateCommand_WarnsMixedPatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create numbered files (old pattern)
+	numberedFile1 := `# Setup
+## Task 1: Setup
+**Agent**: golang-pro
+**Files**: setup.go
+Setup task.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "1-setup.md"), []byte(numberedFile1), 0644); err != nil {
+		t.Fatalf("Failed to create 1-setup.md: %v", err)
+	}
+
+	numberedFile2 := `plan:
+  tasks:
+    - task_number: 2
+      name: "API"
+      agent: "golang-pro"
+      files: ["api.go"]
+      description: "API task"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "2-api.yaml"), []byte(numberedFile2), 0644); err != nil {
+		t.Fatalf("Failed to create 2-api.yaml: %v", err)
+	}
+
+	// Create plan file (new pattern)
+	planFile := `# Testing
+## Task 3: Testing
+**Agent**: golang-pro
+**Files**: test.go
+Testing task.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-03-testing.md"), []byte(planFile), 0644); err != nil {
+		t.Fatalf("Failed to create plan-03-testing.md: %v", err)
+	}
+
+	// Setup agents
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	// Run validate with directory - should warn about numbered files
+	cmd := NewValidateCommand()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+
+	// Should succeed (only validates plan-* files)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\nOutput: %s", err, output.String())
+	}
+
+	outputStr := output.String()
+
+	// Verify warning is present
+	if !strings.Contains(outputStr, "Warning") && !strings.Contains(outputStr, "⚠") {
+		t.Error("Expected warning symbol in output")
+	}
+
+	// Should mention "numbered files" or similar
+	hasWarning := strings.Contains(outputStr, "numbered files") ||
+		strings.Contains(outputStr, "1-") ||
+		strings.Contains(outputStr, "2-")
+	if !hasWarning {
+		t.Error("Expected warning to mention numbered files")
+	}
+
+	// Should suggest plan-* pattern
+	if !strings.Contains(outputStr, "plan-") {
+		t.Error("Expected warning to suggest plan-* pattern")
+	}
+
+	// Should mention specific files found
+	if !strings.Contains(outputStr, "1-setup.md") || !strings.Contains(outputStr, "2-api.yaml") {
+		t.Error("Expected warning to list numbered files found")
+	}
+
+	// Verify yellow ANSI color is used for warning
+	if !strings.Contains(outputStr, "\x1b[33m") && !strings.Contains(outputStr, "\033[33m") {
+		t.Error("Expected yellow ANSI color code in warning")
+	}
+}
+
+// TestValidateCommand_NoWarningForPlanFilesOnly tests no warning when only plan-* files exist
+func TestValidateCommand_NoWarningForPlanFilesOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create only plan-* files (no numbered files)
+	plan1 := `# Plan 1
+## Task 1: First
+**Agent**: golang-pro
+**Files**: first.go
+First task.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-01.md"), []byte(plan1), 0644); err != nil {
+		t.Fatalf("Failed to create plan-01.md: %v", err)
+	}
+
+	plan2 := `plan:
+  tasks:
+    - task_number: 2
+      name: "Second"
+      agent: "golang-pro"
+      files: ["second.go"]
+      description: "Second task"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-02.yaml"), []byte(plan2), 0644); err != nil {
+		t.Fatalf("Failed to create plan-02.yaml: %v", err)
+	}
+
+	// Setup agents
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	// Run validate with directory
+	cmd := NewValidateCommand()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\nOutput: %s", err, output.String())
+	}
+
+	outputStr := output.String()
+
+	// Verify NO warning is shown
+	if strings.Contains(outputStr, "Warning") || strings.Contains(outputStr, "⚠") {
+		t.Error("Should NOT show warning when only plan-* files exist")
+	}
+
+	if strings.Contains(outputStr, "numbered files") {
+		t.Error("Should NOT mention numbered files when none exist")
+	}
+}

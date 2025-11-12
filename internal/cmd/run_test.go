@@ -2387,3 +2387,127 @@ First task.
 		t.Error("Expected second filename in progress")
 	}
 }
+
+// ============================================================================
+// NUMBERED FILES WARNING TESTS (TDD RED Phase)
+// ============================================================================
+
+// TestRunCommand_WarnsMixedPatterns tests warning when numbered files are present
+func TestRunCommand_WarnsMixedPatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create numbered files (old pattern)
+	numberedFile1 := `# Setup
+## Task 1: Setup
+**Status**: pending
+**Files**: setup.go
+Setup task.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "1-setup.md"), []byte(numberedFile1), 0644); err != nil {
+		t.Fatalf("Failed to create 1-setup.md: %v", err)
+	}
+
+	numberedFile2 := `plan:
+  tasks:
+    - task_number: 2
+      name: "API"
+      files: ["api.go"]
+      status: "pending"
+      description: "API task"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "2-api.yaml"), []byte(numberedFile2), 0644); err != nil {
+		t.Fatalf("Failed to create 2-api.yaml: %v", err)
+	}
+
+	// Create plan file (new pattern)
+	planFile := `# Testing
+## Task 3: Testing
+**Status**: pending
+**Files**: test.go
+Testing task.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-03-testing.md"), []byte(planFile), 0644); err != nil {
+		t.Fatalf("Failed to create plan-03-testing.md: %v", err)
+	}
+
+	// Run with directory - should warn about numbered files
+	args := []string{"run", "--dry-run", tmpDir}
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\nOutput: %s", err, output)
+	}
+
+	// Verify warning is present
+	if !strings.Contains(output, "Warning") && !strings.Contains(output, "⚠") {
+		t.Error("Expected warning symbol in output")
+	}
+
+	// Should mention "numbered files" or similar
+	hasWarning := strings.Contains(output, "numbered files") ||
+		strings.Contains(output, "1-") ||
+		strings.Contains(output, "2-")
+	if !hasWarning {
+		t.Error("Expected warning to mention numbered files")
+	}
+
+	// Should suggest plan-* pattern
+	if !strings.Contains(output, "plan-") {
+		t.Error("Expected warning to suggest plan-* pattern")
+	}
+
+	// Should mention specific files found
+	if !strings.Contains(output, "1-setup.md") || !strings.Contains(output, "2-api.yaml") {
+		t.Error("Expected warning to list numbered files found")
+	}
+
+	// Verify yellow ANSI color is used for warning
+	if !strings.Contains(output, "\x1b[33m") && !strings.Contains(output, "\033[33m") {
+		t.Error("Expected yellow ANSI color code in warning")
+	}
+}
+
+// TestRunCommand_NoWarningForPlanFilesOnly tests no warning when only plan-* files exist
+func TestRunCommand_NoWarningForPlanFilesOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create only plan-* files (no numbered files)
+	plan1 := `# Plan 1
+## Task 1: First
+**Status**: pending
+**Files**: first.go
+First task.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-01.md"), []byte(plan1), 0644); err != nil {
+		t.Fatalf("Failed to create plan-01.md: %v", err)
+	}
+
+	plan2 := `plan:
+  tasks:
+    - task_number: 2
+      name: "Second"
+      files: ["second.go"]
+      status: "pending"
+      description: "Second task"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-02.yaml"), []byte(plan2), 0644); err != nil {
+		t.Fatalf("Failed to create plan-02.yaml: %v", err)
+	}
+
+	// Run with directory
+	args := []string{"run", "--dry-run", tmpDir}
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\nOutput: %s", err, output)
+	}
+
+	// Verify NO warning is shown
+	if strings.Contains(output, "Warning") || strings.Contains(output, "⚠") {
+		t.Error("Should NOT show warning when only plan-* files exist")
+	}
+
+	if strings.Contains(output, "numbered files") {
+		t.Error("Should NOT mention numbered files when none exist")
+	}
+}

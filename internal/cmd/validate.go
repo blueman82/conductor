@@ -35,7 +35,7 @@ Supports multiple input modes:
 Exit code: 0 if valid, 1 if errors found`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return validatePlanFile(args)
+			return validatePlanFileWithOutput(args, cmd.OutOrStdout())
 		},
 		SilenceUsage: true,
 	}
@@ -46,6 +46,11 @@ Exit code: 0 if valid, 1 if errors found`,
 // validatePlanFile is the main entry point that uses default registry and stdout
 // Supports single file, single directory, or multiple files
 func validatePlanFile(paths []string) error {
+	return validatePlanFileWithOutput(paths, os.Stdout)
+}
+
+// validatePlanFileWithOutput validates plan files with custom output writer (for testing)
+func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 	registry := agent.NewRegistry("")
 	registry.Discover()
 
@@ -67,11 +72,13 @@ func validatePlanFile(paths []string) error {
 			if err != nil {
 				return err
 			}
-			return validateMultipleFiles(planFiles, registry, os.Stdout)
+			// Detect and warn about numbered files
+			detectAndWarnNumberedFilesValidate(output, []string{path})
+			return validateMultipleFiles(planFiles, registry, output)
 		}
 
 		// Single file - use existing validatePlan
-		return validatePlan(path, registry, os.Stdout)
+		return validatePlan(path, registry, output)
 	}
 
 	// Multiple paths provided - filter and validate together
@@ -80,7 +87,10 @@ func validatePlanFile(paths []string) error {
 		return err
 	}
 
-	return validateMultipleFiles(planFiles, registry, os.Stdout)
+	// Detect and warn about numbered files in directories
+	detectAndWarnNumberedFilesValidate(output, paths)
+
+	return validateMultipleFiles(planFiles, registry, output)
 }
 
 // filterPlanFiles filters paths to only include plan-*.md and plan-*.yaml files
@@ -551,4 +561,84 @@ func validateCrossFileDependencies(tasks *[]models.Task) []string {
 	}
 
 	return errors
+}
+
+// detectAndWarnNumberedFilesValidate scans paths for numbered files (e.g., 1-*.md, 2-*.yaml)
+// and displays a helpful warning if any are found
+func detectAndWarnNumberedFilesValidate(output io.Writer, paths []string) {
+	numberedFiles := findNumberedFilesValidate(paths)
+
+	// If numbered files found, display warning
+	if len(numberedFiles) > 0 {
+		// Yellow color for warning
+		fmt.Fprintf(output, "\n\x1b[33m⚠️  Warning:\x1b[0m Found numbered files (%s) in directory\n", strings.Join(numberedFiles, ", "))
+		fmt.Fprintf(output, "    Conductor only processes plan-*.{md,yaml} files\n")
+		fmt.Fprintf(output, "    To use these files, rename them to: plan-01-setup.md, plan-02-api.yaml, etc.\n\n")
+	}
+}
+
+// findNumberedFilesValidate scans paths for numbered files and returns their basenames
+func findNumberedFilesValidate(paths []string) []string {
+	var numberedFiles []string
+
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+
+		if info.IsDir() {
+			// Scan directory for numbered files
+			err := filepath.Walk(path, func(filePath string, fileInfo os.FileInfo, walkErr error) error {
+				if walkErr != nil || fileInfo.IsDir() {
+					return walkErr
+				}
+
+				fileName := filepath.Base(filePath)
+				if isNumberedFileValidate(fileName) {
+					numberedFiles = append(numberedFiles, fileName)
+				}
+				return nil
+			})
+			if err != nil {
+				continue
+			}
+		}
+	}
+
+	return numberedFiles
+}
+
+// isNumberedFileValidate checks if a filename matches the numbered file pattern (e.g., 1-*.md, 2-*.yaml)
+func isNumberedFileValidate(filename string) bool {
+	// Pattern: starts with digit(s), followed by dash
+	if len(filename) < 3 {
+		return false
+	}
+
+	// Check if first character is a digit
+	if filename[0] < '0' || filename[0] > '9' {
+		return false
+	}
+
+	// Find the first dash
+	dashIdx := -1
+	for i := 1; i < len(filename); i++ {
+		if filename[i] == '-' {
+			dashIdx = i
+			break
+		}
+		// If not a digit before dash, not a numbered file
+		if filename[i] < '0' || filename[i] > '9' {
+			return false
+		}
+	}
+
+	if dashIdx == -1 {
+		return false
+	}
+
+	// Check if extension is valid
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".md" || ext == ".markdown" || ext == ".yaml" || ext == ".yml"
 }
