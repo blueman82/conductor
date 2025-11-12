@@ -38,6 +38,9 @@ Thumbs.db
 logs/
 .conductor/logs/
 
+# Conductor learning database (project-local)
+.conductor/learning/
+
 # Temporary files
 tmp/
 temp/

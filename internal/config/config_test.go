@@ -723,3 +723,214 @@ func TestRetryFailedFlagOverride(t *testing.T) {
 		t.Errorf("SkipCompleted = %v, want false (original)", cfg.SkipCompleted)
 	}
 }
+
+// TestConfig_LearningDefaults tests that learning config has correct defaults
+func TestConfig_LearningDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if !cfg.Learning.Enabled {
+		t.Errorf("Learning.Enabled = %v, want true", cfg.Learning.Enabled)
+	}
+	if cfg.Learning.DBPath != ".conductor/learning" {
+		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, ".conductor/learning")
+	}
+	if cfg.Learning.AutoAdaptAgent {
+		t.Errorf("Learning.AutoAdaptAgent = %v, want false", cfg.Learning.AutoAdaptAgent)
+	}
+	if !cfg.Learning.EnhancePrompts {
+		t.Errorf("Learning.EnhancePrompts = %v, want true", cfg.Learning.EnhancePrompts)
+	}
+	if cfg.Learning.MinFailuresBeforeAdapt != 2 {
+		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 2", cfg.Learning.MinFailuresBeforeAdapt)
+	}
+	if cfg.Learning.KeepExecutionsDays != 90 {
+		t.Errorf("Learning.KeepExecutionsDays = %d, want 90", cfg.Learning.KeepExecutionsDays)
+	}
+	if cfg.Learning.MaxExecutionsPerTask != 100 {
+		t.Errorf("Learning.MaxExecutionsPerTask = %d, want 100", cfg.Learning.MaxExecutionsPerTask)
+	}
+}
+
+// TestConfig_LearningDisabled tests loading config with learning disabled
+func TestConfig_LearningDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `learning:
+  enabled: false
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.Learning.Enabled {
+		t.Errorf("Learning.Enabled = %v, want false", cfg.Learning.Enabled)
+	}
+	// Other fields should have defaults
+	if cfg.Learning.DBPath != ".conductor/learning" {
+		t.Errorf("Learning.DBPath = %q, want %q (default)", cfg.Learning.DBPath, ".conductor/learning")
+	}
+}
+
+// TestConfig_LearningCustomPath tests loading config with custom learning settings
+func TestConfig_LearningCustomPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `learning:
+  enabled: true
+  db_path: /custom/path/learning.db
+  auto_adapt_agent: true
+  enhance_prompts: false
+  min_failures_before_adapt: 5
+  keep_executions_days: 30
+  max_executions_per_task: 50
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if !cfg.Learning.Enabled {
+		t.Errorf("Learning.Enabled = %v, want true", cfg.Learning.Enabled)
+	}
+	if cfg.Learning.DBPath != "/custom/path/learning.db" {
+		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, "/custom/path/learning.db")
+	}
+	if !cfg.Learning.AutoAdaptAgent {
+		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
+	}
+	if cfg.Learning.EnhancePrompts {
+		t.Errorf("Learning.EnhancePrompts = %v, want false", cfg.Learning.EnhancePrompts)
+	}
+	if cfg.Learning.MinFailuresBeforeAdapt != 5 {
+		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 5", cfg.Learning.MinFailuresBeforeAdapt)
+	}
+	if cfg.Learning.KeepExecutionsDays != 30 {
+		t.Errorf("Learning.KeepExecutionsDays = %d, want 30", cfg.Learning.KeepExecutionsDays)
+	}
+	if cfg.Learning.MaxExecutionsPerTask != 50 {
+		t.Errorf("Learning.MaxExecutionsPerTask = %d, want 50", cfg.Learning.MaxExecutionsPerTask)
+	}
+}
+
+// TestConfig_LearningMissingSection tests that missing learning section uses defaults
+func TestConfig_LearningMissingSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `max_concurrency: 5
+timeout: 30m
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Learning should have default values
+	if !cfg.Learning.Enabled {
+		t.Errorf("Learning.Enabled = %v, want true (default)", cfg.Learning.Enabled)
+	}
+	if cfg.Learning.DBPath != ".conductor/learning" {
+		t.Errorf("Learning.DBPath = %q, want %q (default)", cfg.Learning.DBPath, ".conductor/learning")
+	}
+}
+
+// TestConfig_LearningValidation tests validation of learning config values
+func TestConfig_LearningValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		config    string
+		wantError bool
+	}{
+		{
+			name: "valid learning config",
+			config: `learning:
+  enabled: true
+  db_path: .conductor/learning
+  min_failures_before_adapt: 2
+  keep_executions_days: 90
+  max_executions_per_task: 100
+`,
+			wantError: false,
+		},
+		{
+			name: "empty db_path",
+			config: `learning:
+  enabled: true
+  db_path: ""
+`,
+			wantError: true,
+		},
+		{
+			name: "negative min_failures_before_adapt",
+			config: `learning:
+  enabled: true
+  min_failures_before_adapt: -1
+`,
+			wantError: true,
+		},
+		{
+			name: "zero min_failures_before_adapt",
+			config: `learning:
+  enabled: true
+  min_failures_before_adapt: 0
+`,
+			wantError: true,
+		},
+		{
+			name: "negative keep_executions_days",
+			config: `learning:
+  enabled: true
+  keep_executions_days: -1
+`,
+			wantError: true,
+		},
+		{
+			name: "negative max_executions_per_task",
+			config: `learning:
+  enabled: true
+  max_executions_per_task: -1
+`,
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			if err := os.WriteFile(configPath, []byte(tt.config), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				if !tt.wantError {
+					t.Fatalf("LoadConfig() unexpected error = %v", err)
+				}
+				return
+			}
+
+			// Validate the loaded config
+			err = cfg.Validate()
+			if (err != nil) != tt.wantError {
+				t.Errorf("Validate() error = %v, wantError %v", err, tt.wantError)
+			}
+		})
+	}
+}
