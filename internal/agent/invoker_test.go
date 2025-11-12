@@ -76,6 +76,19 @@ func TestBuildCommandArgs(t *testing.T) {
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
+					// Check for -p (print mode) flag - REQUIRED for non-interactive automation
+					hasPrintFlag := false
+					for _, arg := range args {
+						if arg == "-p" {
+							hasPrintFlag = true
+							break
+						}
+					}
+					if !hasPrintFlag {
+						t.Error("Command must have -p flag for non-interactive print mode (essential for automation)")
+					}
+				},
+				func(t *testing.T, args []string) {
 					// Check for --dangerously-skip-permissions flag
 					hasSkipPerms := false
 					for _, arg := range args {

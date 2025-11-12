@@ -56,7 +56,8 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 		prompt = fmt.Sprintf("use the %s subagent to: %s", task.Agent, task.Prompt)
 	}
 
-	args = append(args, prompt)
+	// Add -p flag for non-interactive print mode (essential for automation)
+	args = append(args, "-p", prompt)
 
 	// Skip permissions for automation (allow file creation)
 	args = append(args, "--dangerously-skip-permissions")
