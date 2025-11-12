@@ -1,7 +1,5 @@
 # Conductor
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/blueman82/conductor)
-
 **Autonomous Multi-Agent Orchestration for Claude Code**
 
 Conductor is a production-ready Go CLI tool that executes implementation plans by orchestrating multiple Claude Code agents in coordinated parallel waves. It parses plan files, calculates task dependencies using graph algorithms, and manages parallel execution with quality control reviews.
