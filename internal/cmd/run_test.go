@@ -1922,3 +1922,307 @@ First task.
 		t.Error("Expected Wave 2 details in verbose output")
 	}
 }
+
+// ============================================================================
+// BUG-R003: NO MATCHING PLAN FILES ERROR TESTS
+// ============================================================================
+
+// TestRunCommand_NoMatchingPlanFiles_SpecificError tests error message when directory has files but no plan-* files
+func TestRunCommand_NoMatchingPlanFiles_SpecificError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create files that don't match plan-* pattern
+	if err := os.WriteFile(filepath.Join(tmpDir, "setup.md"), []byte("# Setup"), 0644); err != nil {
+		t.Fatalf("Failed to create setup.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "deploy.yaml"), []byte("key: value"), 0644); err != nil {
+		t.Fatalf("Failed to create deploy.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("readme"), 0644); err != nil {
+		t.Fatalf("Failed to create readme.txt: %v", err)
+	}
+
+	// Run conductor run with directory path
+	args := []string{"run", "--dry-run", tmpDir}
+	_, err := executeRunCommand(t, args)
+
+	// Should fail with specific error
+	if err == nil {
+		t.Fatal("Expected error when no plan-* files found, got nil")
+	}
+
+	// Verify error message is specific and helpful
+	errMsg := err.Error()
+
+	// Should mention "no plan files found" or similar
+	if !strings.Contains(errMsg, "no plan files") && !strings.Contains(errMsg, "no matching") {
+		t.Errorf("Expected error to mention 'no plan files' or 'no matching', got: %v", errMsg)
+	}
+
+	// Should mention the pattern plan-*.{md,yaml}
+	hasPattern := strings.Contains(errMsg, "plan-") &&
+		(strings.Contains(errMsg, ".md") || strings.Contains(errMsg, ".yaml") || strings.Contains(errMsg, "pattern"))
+
+	if !hasPattern {
+		t.Errorf("Expected error to mention 'plan-*.md' or 'plan-*.yaml' pattern, got: %v", errMsg)
+	}
+
+	// Should NOT just say "no files found" or generic error
+	if strings.Contains(errMsg, "failed to access path") || strings.Contains(errMsg, "file not found") {
+		t.Errorf("Error is too generic (mentions file access instead of pattern matching), got: %v", errMsg)
+	}
+}
+
+// TestRunCommand_EmptyDirectory_SpecificError tests error message when directory is empty
+func TestRunCommand_EmptyDirectory_SpecificError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Directory is empty (no files at all)
+
+	// Run conductor run with empty directory path
+	args := []string{"run", "--dry-run", tmpDir}
+	_, err := executeRunCommand(t, args)
+
+	// Should fail with specific error
+	if err == nil {
+		t.Fatal("Expected error when directory is empty, got nil")
+	}
+
+	// Verify error message is helpful
+	errMsg := err.Error()
+
+	// Should mention no plan files or directory is empty
+	hasHelpfulMessage := strings.Contains(errMsg, "no plan files") ||
+		strings.Contains(errMsg, "empty") ||
+		strings.Contains(errMsg, "no matching")
+
+	if !hasHelpfulMessage {
+		t.Errorf("Expected error to mention 'no plan files' or 'empty directory', got: %v", errMsg)
+	}
+
+	// Should suggest creating plan-*.md files or mention the pattern
+	hasSuggestion := strings.Contains(errMsg, "plan-") &&
+		(strings.Contains(errMsg, ".md") || strings.Contains(errMsg, ".yaml") || strings.Contains(errMsg, "pattern"))
+
+	if !hasSuggestion {
+		t.Errorf("Expected error to suggest plan-* file naming convention, got: %v", errMsg)
+	}
+}
+
+// ============================================================================
+// REFACTORING TESTS - FilterPlanFiles() Usage (TDD RED Phase)
+// ============================================================================
+// These tests verify that run.go uses parser.FilterPlanFiles() for filtering
+// instead of loadAndMergePlanFiles(). They are written to FAIL initially
+// (TDD RED phase) and will pass after refactoring is complete.
+
+// TestRunCommand_UsesFilterPlanFiles verifies that directory arguments filter plan-* files correctly
+func TestRunCommand_UsesFilterPlanFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create plan-01.md (should be included)
+	plan1 := `# Plan 1
+
+## Task 1: First
+**Status**: pending
+**Files**: first.go
+
+First task.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-01.md"), []byte(plan1), 0644); err != nil {
+		t.Fatalf("Failed to create plan-01.md: %v", err)
+	}
+
+	// Create other.md (should be filtered OUT)
+	other := `# Other
+
+## Task 2: Other
+**Status**: pending
+**Files**: other.go
+
+Other task (not a plan-* file).
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "other.md"), []byte(other), 0644); err != nil {
+		t.Fatalf("Failed to create other.md: %v", err)
+	}
+
+	// Create plan-02.yaml (should be included)
+	plan2 := `plan:
+  tasks:
+    - task_number: 3
+      name: "Second"
+      files: ["second.go"]
+      depends_on: [1]
+      status: "pending"
+      description: "Second task"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-02.yaml"), []byte(plan2), 0644); err != nil {
+		t.Fatalf("Failed to create plan-02.yaml: %v", err)
+	}
+
+	// Execute with directory argument - should filter to only plan-* files
+	args := []string{"run", "--dry-run", tmpDir}
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Errorf("Unexpected error: %v\nOutput: %s", err, output)
+	}
+
+	// CRITICAL: After refactoring, should load ONLY 2 files (plan-01.md and plan-02.yaml)
+	// The other.md file should be filtered out by FilterPlanFiles()
+	if !strings.Contains(output, "Loading and merging plans from 2 files") {
+		t.Errorf("Expected message about loading 2 files (after FilterPlanFiles filtering), got: %s", output)
+	}
+
+	// Should have 2 tasks total (Task 1 from plan-01.md, Task 3 from plan-02.yaml)
+	// Task 2 from other.md should NOT be included
+	if !strings.Contains(output, "Total tasks: 2") {
+		t.Errorf("Expected 2 tasks from plan-* files only, got: %s", output)
+	}
+
+	// Verify dry-run succeeds
+	if !strings.Contains(output, "Dry-run mode") {
+		t.Error("Expected dry-run mode message")
+	}
+}
+
+// TestRunCommand_MultipleFilesWithFiltering verifies explicit file arguments are filtered correctly
+func TestRunCommand_MultipleFilesWithFiltering(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create 5 files: 3 plan-* files and 2 non-plan files
+	plan1 := `# Plan 1
+
+## Task 1: First
+**Status**: pending
+**Files**: first.go
+
+First task.
+`
+	plan1Path := filepath.Join(tmpDir, "plan-01.md")
+	if err := os.WriteFile(plan1Path, []byte(plan1), 0644); err != nil {
+		t.Fatalf("Failed to create plan-01.md: %v", err)
+	}
+
+	setup := `# Setup
+
+## Task 2: Setup
+**Status**: pending
+**Files**: setup.go
+
+Setup task (not a plan-* file).
+`
+	setupPath := filepath.Join(tmpDir, "setup.md")
+	if err := os.WriteFile(setupPath, []byte(setup), 0644); err != nil {
+		t.Fatalf("Failed to create setup.md: %v", err)
+	}
+
+	plan2 := `plan:
+  tasks:
+    - task_number: 3
+      name: "Second"
+      files: ["second.go"]
+      depends_on: [1]
+      status: "pending"
+      description: "Second task"
+`
+	plan2Path := filepath.Join(tmpDir, "plan-02.yaml")
+	if err := os.WriteFile(plan2Path, []byte(plan2), 0644); err != nil {
+		t.Fatalf("Failed to create plan-02.yaml: %v", err)
+	}
+
+	readme := `# README
+
+Documentation file.
+`
+	readmePath := filepath.Join(tmpDir, "readme.md")
+	if err := os.WriteFile(readmePath, []byte(readme), 0644); err != nil {
+		t.Fatalf("Failed to create readme.md: %v", err)
+	}
+
+	plan3 := `plan:
+  tasks:
+    - task_number: 4
+      name: "Third"
+      files: ["third.go"]
+      depends_on: [3]
+      status: "pending"
+      description: "Third task"
+`
+	plan3Path := filepath.Join(tmpDir, "plan-03.yml")
+	if err := os.WriteFile(plan3Path, []byte(plan3), 0644); err != nil {
+		t.Fatalf("Failed to create plan-03.yml: %v", err)
+	}
+
+	// Execute with explicit file arguments (mix of plan-* and non-plan files)
+	// After refactoring with FilterPlanFiles(), only plan-* files should be loaded
+	args := []string{"run", "--dry-run", plan1Path, setupPath, plan2Path, readmePath, plan3Path}
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Errorf("Unexpected error: %v\nOutput: %s", err, output)
+	}
+
+	// CRITICAL: After refactoring, FilterPlanFiles() should accept all 5 paths
+	// but filter down to ONLY the 3 plan-* files
+	if !strings.Contains(output, "Loading and merging plans from 3 files") {
+		t.Errorf("Expected message about loading 3 plan-* files (filtered), got: %s", output)
+	}
+
+	// Should have 3 tasks from plan-* files only (Task 1, 3, 4)
+	// Tasks 2 from setup.md should NOT be included
+	if !strings.Contains(output, "Total tasks: 3") {
+		t.Errorf("Expected 3 tasks from plan-* files only, got: %s", output)
+	}
+}
+
+// TestRunCommand_FilteringErrorMessage verifies clear error when no plan-* files found
+func TestRunCommand_FilteringErrorMessage(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create directory with NO plan-* files (only non-plan files)
+	other := `# Other
+
+## Task 1: Other
+**Status**: pending
+**Files**: other.go
+
+Other task.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "other.md"), []byte(other), 0644); err != nil {
+		t.Fatalf("Failed to create other.md: %v", err)
+	}
+
+	setup := `plan:
+  tasks:
+    - task_number: 2
+      name: "Setup"
+      files: ["setup.go"]
+      status: "pending"
+      description: "Setup task"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "setup.yaml"), []byte(setup), 0644); err != nil {
+		t.Fatalf("Failed to create setup.yaml: %v", err)
+	}
+
+	// Execute with directory that has NO plan-* files
+	args := []string{"run", "--dry-run", tmpDir}
+	_, err := executeRunCommand(t, args)
+
+	// CRITICAL: After refactoring, FilterPlanFiles() should return a clear error
+	if err == nil {
+		t.Error("Expected error when no plan-* files found")
+		return
+	}
+
+	// Error message should mention the filtering pattern
+	expectedErrMsg := "no plan files found matching pattern"
+	if !strings.Contains(err.Error(), expectedErrMsg) {
+		t.Errorf("Expected error containing %q, got: %v", expectedErrMsg, err)
+	}
+
+	// Error should also mention the pattern format
+	if !strings.Contains(err.Error(), "plan-*.") {
+		t.Errorf("Expected error to mention 'plan-*.' pattern, got: %v", err)
+	}
+}

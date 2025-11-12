@@ -843,3 +843,333 @@ func TestFilterPlanFiles_RecursiveDirectory(t *testing.T) {
 		}
 	}
 }
+
+// TestParseFile_AlwaysSetsFilePath tests that ParseFile() ALWAYS sets plan.FilePath
+// for all input types (single markdown, single yaml, directory, relative path).
+// This test verifies the fix for BUG-R002: FileToTaskMap fallback logic should not be needed.
+func TestParseFile_AlwaysSetsFilePath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Helper to create markdown file
+	createMarkdownFile := func(path string) string {
+		fullPath := filepath.Join(tmpDir, path)
+		dir := filepath.Dir(fullPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create dir %s: %v", dir, err)
+		}
+		content := `# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: test.go
+**Depends on**: None
+**Estimated time**: 30m
+
+Test task description.`
+		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create file %s: %v", path, err)
+		}
+		return fullPath
+	}
+
+	// Helper to create YAML file
+	createYAMLFile := func(path string) string {
+		fullPath := filepath.Join(tmpDir, path)
+		dir := filepath.Dir(fullPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create dir %s: %v", dir, err)
+		}
+		content := `plan:
+  metadata:
+    feature_name: "Test Plan"
+  tasks:
+    - task_number: 1
+      name: "Test Task"
+      estimated_time: "30m"
+      description: "Test content"`
+		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create file %s: %v", path, err)
+		}
+		return fullPath
+	}
+
+	tests := []struct {
+		name     string
+		setup    func() string // returns path to parse
+		wantErr  bool
+	}{
+		{
+			name: "single markdown file",
+			setup: func() string {
+				return createMarkdownFile("test-plan.md")
+			},
+			wantErr: false,
+		},
+		{
+			name: "single yaml file",
+			setup: func() string {
+				return createYAMLFile("test-plan.yaml")
+			},
+			wantErr: false,
+		},
+		{
+			name: "directory with numbered plans",
+			setup: func() string {
+				subDir := filepath.Join(tmpDir, "split-plan")
+				if err := os.MkdirAll(subDir, 0755); err != nil {
+					t.Fatalf("Failed to create subdir: %v", err)
+				}
+				// Create first part with Task 1
+				file1 := filepath.Join(subDir, "1-part1.md")
+				content1 := `# Test Plan Part 1
+
+## Task 1: First Task
+
+**File(s)**: test.go
+**Depends on**: None
+**Estimated time**: 30m
+
+First task description.`
+				if err := os.WriteFile(file1, []byte(content1), 0644); err != nil {
+					t.Fatalf("Failed to create file: %v", err)
+				}
+
+				// Create second part with Task 2
+				file2 := filepath.Join(subDir, "2-part2.md")
+				content2 := `# Test Plan Part 2
+
+## Task 2: Second Task
+
+**File(s)**: test.go
+**Depends on**: Task 1
+**Estimated time**: 30m
+
+Second task description.`
+				if err := os.WriteFile(file2, []byte(content2), 0644); err != nil {
+					t.Fatalf("Failed to create file: %v", err)
+				}
+				return subDir
+			},
+			wantErr: false,
+		},
+		{
+			name: "relative path converted to absolute",
+			setup: func() string {
+				// Create file and return relative path
+				absPath := createMarkdownFile("relative-plan.md")
+				// Get current working directory
+				cwd, err := os.Getwd()
+				if err != nil {
+					t.Fatalf("Failed to get cwd: %v", err)
+				}
+				// Calculate relative path from cwd to our temp file
+				relPath, err := filepath.Rel(cwd, absPath)
+				if err != nil {
+					// If we can't make it relative, skip this subtest
+					t.Skip("Cannot create relative path for test")
+				}
+				return relPath
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inputPath := tt.setup()
+
+			plan, err := ParseFile(inputPath)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("ParseFile() expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("ParseFile() unexpected error: %v", err)
+			}
+
+			if plan == nil {
+				t.Fatal("ParseFile() returned nil plan")
+			}
+
+			// CRITICAL ASSERTION: FilePath must ALWAYS be set
+			if plan.FilePath == "" {
+				t.Error("ParseFile() plan.FilePath is empty - BUG-R002 exists!")
+			}
+
+			// CRITICAL ASSERTION: FilePath must be absolute
+			if !filepath.IsAbs(plan.FilePath) {
+				t.Errorf("ParseFile() plan.FilePath should be absolute, got: %q", plan.FilePath)
+			}
+		})
+	}
+}
+
+// TestParsedPlan_FilePathIsAbsolute tests that plan.FilePath is always an absolute path.
+// This verifies that relative paths are properly converted to absolute paths.
+// Part of BUG-R002 fix verification.
+func TestParsedPlan_FilePathIsAbsolute(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a test markdown file
+	testFile := filepath.Join(tmpDir, "test-plan.md")
+	content := `# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: test.go
+**Depends on**: None
+**Estimated time**: 30m
+
+Test task description.`
+
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Save current working directory
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(oldWd)
+
+	// Change to temp directory
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		path     string
+		wantErr  bool
+	}{
+		{
+			name:    "relative path - current directory",
+			path:    "test-plan.md",
+			wantErr: false,
+		},
+		{
+			name:    "relative path - parent directory",
+			path:    "./test-plan.md",
+			wantErr: false,
+		},
+		{
+			name:    "absolute path",
+			path:    testFile,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan, err := ParseFile(tt.path)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("ParseFile() expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("ParseFile() unexpected error: %v", err)
+			}
+
+			if plan == nil {
+				t.Fatal("ParseFile() returned nil plan")
+			}
+
+			// CRITICAL: FilePath must be set
+			if plan.FilePath == "" {
+				t.Fatal("ParseFile() plan.FilePath is empty")
+			}
+
+			// CRITICAL: FilePath must be absolute (using filepath.IsAbs)
+			if !filepath.IsAbs(plan.FilePath) {
+				t.Errorf("ParseFile() plan.FilePath should be absolute, got: %q", plan.FilePath)
+			}
+
+			// On Windows, absolute paths start with drive letter (e.g., C:\)
+			// On Unix, absolute paths start with /
+			firstChar := plan.FilePath[0:1]
+			if filepath.Separator == '/' {
+				// Unix-like systems
+				if firstChar != "/" {
+					t.Errorf("ParseFile() plan.FilePath should start with '/', got: %q", plan.FilePath)
+				}
+			} else {
+				// Windows systems - check for drive letter or UNC path
+				if len(plan.FilePath) < 3 {
+					t.Errorf("ParseFile() plan.FilePath too short for absolute path: %q", plan.FilePath)
+				}
+			}
+		})
+	}
+}
+
+// TestParsedPlan_FilePathMatchesInput tests that plan.FilePath exactly matches
+// the absolute path of the input file. This ensures consistency between input
+// and stored path. Part of BUG-R002 fix verification.
+func TestParsedPlan_FilePathMatchesInput(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a test file at a known path
+	knownPath := filepath.Join(tmpDir, "test", "plan-01.md")
+	if err := os.MkdirAll(filepath.Dir(knownPath), 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+
+	content := `# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: test.go
+**Depends on**: None
+**Estimated time**: 30m
+
+Test task description.`
+
+	if err := os.WriteFile(knownPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Parse the file
+	plan, err := ParseFile(knownPath)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v", err)
+	}
+
+	if plan == nil {
+		t.Fatal("ParseFile() returned nil plan")
+	}
+
+	// Get absolute path of the input (should already be absolute, but verify)
+	expectedPath, err := filepath.Abs(knownPath)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path: %v", err)
+	}
+
+	// CRITICAL: plan.FilePath must match the absolute path to the input file
+	if plan.FilePath != expectedPath {
+		t.Errorf("ParseFile() plan.FilePath = %q, want %q", plan.FilePath, expectedPath)
+	}
+
+	// Additional verification: ensure the path exists and points to our file
+	if _, err := os.Stat(plan.FilePath); err != nil {
+		t.Errorf("ParseFile() plan.FilePath points to non-existent file: %v", err)
+	}
+
+	// Verify consistency: re-parsing should give same FilePath
+	plan2, err := ParseFile(knownPath)
+	if err != nil {
+		t.Fatalf("Second ParseFile() error = %v", err)
+	}
+
+	if plan2.FilePath != plan.FilePath {
+		t.Errorf("ParseFile() inconsistent FilePath: first=%q, second=%q", plan.FilePath, plan2.FilePath)
+	}
+}

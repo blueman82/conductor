@@ -1130,3 +1130,111 @@ Test task.
 		t.Errorf("validateMultipleFiles() failed: %v", err)
 	}
 }
+
+// ============================================================================
+// BUG-R003: NO MATCHING PLAN FILES ERROR TESTS
+// ============================================================================
+
+// TestValidateCommand_NoMatchingPlanFiles_SpecificError tests error message when directory has non-plan files
+func TestValidateCommand_NoMatchingPlanFiles_SpecificError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create non-plan files
+	if err := os.WriteFile(filepath.Join(tmpDir, "setup.md"), []byte("# Setup"), 0644); err != nil {
+		t.Fatalf("Failed to create setup.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "config.yaml"), []byte("key: value"), 0644); err != nil {
+		t.Fatalf("Failed to create config.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("readme"), 0644); err != nil {
+		t.Fatalf("Failed to create readme.txt: %v", err)
+	}
+
+	// Run validate with directory
+	cmd := NewValidateCommand()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+
+	// Should fail with specific error
+	if err == nil {
+		t.Fatal("Expected error when no plan-* files found, got nil")
+	}
+
+	// Verify error message is specific and helpful
+	errMsg := err.Error()
+
+	// Should mention "no plan files" or "no matching"
+	if !strings.Contains(errMsg, "no plan files") && !strings.Contains(errMsg, "no matching") {
+		t.Errorf("Expected error to mention 'no plan files' or 'no matching', got: %v", errMsg)
+	}
+
+	// Should mention the plan-* pattern
+	hasPattern := strings.Contains(errMsg, "plan-") &&
+		(strings.Contains(errMsg, ".md") || strings.Contains(errMsg, ".yaml") || strings.Contains(errMsg, "pattern"))
+
+	if !hasPattern {
+		t.Errorf("Expected error to mention 'plan-*.md' or 'plan-*.yaml' pattern, got: %v", errMsg)
+	}
+
+	// Should NOT just say generic file access error
+	if strings.Contains(errMsg, "failed to access path") {
+		t.Errorf("Error is too generic (file access error instead of pattern mismatch), got: %v", errMsg)
+	}
+}
+
+// TestValidateCommand_MultipleNonPlanFiles_SpecificError tests error when multiple files don't match plan-* pattern
+func TestValidateCommand_MultipleNonPlanFiles_SpecificError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create files that don't match plan-* pattern
+	otherMd := filepath.Join(tmpDir, "other.md")
+	if err := os.WriteFile(otherMd, []byte("# Other\n## Task 1: Test\n**Files**: test.go\nTest."), 0644); err != nil {
+		t.Fatalf("Failed to create other.md: %v", err)
+	}
+
+	setupYaml := filepath.Join(tmpDir, "setup.yaml")
+	if err := os.WriteFile(setupYaml, []byte("plan:\n  tasks: []"), 0644); err != nil {
+		t.Fatalf("Failed to create setup.yaml: %v", err)
+	}
+
+	// Run validate with multiple non-plan files
+	cmd := NewValidateCommand()
+	cmd.SetArgs([]string{otherMd, setupYaml})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+
+	// Should fail with specific error
+	if err == nil {
+		t.Fatal("Expected error when files don't match plan-* pattern, got nil")
+	}
+
+	// Verify error message is helpful
+	errMsg := err.Error()
+
+	// Should explain files don't match plan-* pattern
+	if !strings.Contains(errMsg, "no plan files") && !strings.Contains(errMsg, "no matching") {
+		t.Errorf("Expected error to mention pattern mismatch, got: %v", errMsg)
+	}
+
+	// Should mention the plan-* pattern or suggest renaming
+	hasGuidance := strings.Contains(errMsg, "plan-") &&
+		(strings.Contains(errMsg, "pattern") || strings.Contains(errMsg, ".md") || strings.Contains(errMsg, ".yaml"))
+
+	if !hasGuidance {
+		t.Errorf("Expected error to explain plan-* naming requirement, got: %v", errMsg)
+	}
+
+	// Should suggest file naming or pattern
+	if !strings.Contains(errMsg, "plan-") {
+		t.Errorf("Expected error to suggest plan-* prefix, got: %v", errMsg)
+	}
+}
