@@ -206,7 +206,7 @@ plan:
       files:
         - "internal/learning/store.go"
         - "internal/learning/store_test.go"
-      depends_on: [14]
+      depends_on: [2, 14]
       estimated_time: "30m"
 
       description: |
