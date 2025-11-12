@@ -61,3 +61,45 @@ retry_failed: false
 
 # Example: Retry tasks that failed in previous runs
 # retry_failed: true
+
+# Learning system configuration
+# The learning system tracks task execution history and adapts future executions
+learning:
+  # Enable or disable the learning system (default: true)
+  enabled: true
+
+  # Database path for learning data (default: .conductor/learning)
+  db_path: .conductor/learning
+
+  # Auto-adapt agent selection based on learned patterns (default: false)
+  # When enabled, conductor will automatically suggest or switch agents based on past successes
+  auto_adapt_agent: false
+
+  # Enhance prompts with learned context (default: true)
+  # When enabled, conductor enriches task prompts with relevant execution history
+  enhance_prompts: true
+
+  # Minimum failures before adapting strategy (default: 2)
+  # Conductor will consider adapting after this many consecutive failures
+  min_failures_before_adapt: 2
+
+  # Days to keep execution history (default: 90)
+  # Older execution records are cleaned up automatically
+  keep_executions_days: 90
+
+  # Maximum execution records per task (default: 100)
+  # Limits the number of execution records kept for each unique task
+  max_executions_per_task: 100
+
+# Example: Disable learning system
+# learning:
+#   enabled: false
+
+# Example: Custom learning database path
+# learning:
+#   db_path: /var/lib/conductor/learning.db
+
+# Example: Enable automatic agent adaptation
+# learning:
+#   auto_adapt_agent: true
+#   min_failures_before_adapt: 3

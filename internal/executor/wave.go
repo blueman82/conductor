@@ -181,6 +181,13 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
+			// Set SourceFile on executor before execution (for multi-file plans)
+			if taskExec, ok := w.taskExecutor.(*DefaultTaskExecutor); ok {
+				if task.SourceFile != "" {
+					taskExec.SourceFile = task.SourceFile
+				}
+			}
+
 			result, err := w.taskExecutor.Execute(ctx, task)
 			if result.Task.Number == "" {
 				result.Task = task

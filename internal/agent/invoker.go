@@ -45,18 +45,71 @@ func NewInvokerWithRegistry(registry *Registry) *Invoker {
 	}
 }
 
+// serializeAgentToJSON serializes an agent to JSON format for --agents flag (Method 1)
+// Returns JSON string in the format: {"agent-name": {"name": "...", "description": "...", "tools": [...]}}
+//
+// Example output:
+//
+//	{"golang-pro": {"name": "golang-pro", "description": "Go expert", "tools": ["Read", "Write", "Edit"]}}
+//
+// This allows claude CLI to use the agent definition without requiring discovery.
+func serializeAgentToJSON(agent *Agent) (string, error) {
+	// Create a map with the agent name as key and agent struct as value
+	agentMap := map[string]*Agent{
+		agent.Name: agent,
+	}
+
+	// Marshal to JSON
+	jsonBytes, err := json.Marshal(agentMap)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize agent to JSON: %w", err)
+	}
+
+	return string(jsonBytes), nil
+}
+
 // BuildCommandArgs constructs the command-line arguments for invoking claude CLI
+// Uses Method 1: --agents JSON flag to pass agent definition explicitly for better automation reliability
+//
+// Method 1 (current): Pass agent via --agents JSON flag
+//   - More reliable for automation (explicit definition)
+//   - Example: claude --agents '{"golang-pro":{...}}' -p "use the golang-pro subagent to: ..."
+//
+// Behavior:
+//   - If task.Agent is specified AND exists in registry: adds --agents flag with JSON definition
+//   - If task.Agent is specified but not found: falls back to plain prompt (no agent)
+//   - If task.Agent is empty: plain prompt (no agent flags)
+//
+// Arguments order:
+//  1. --agents (if agent specified and found)
+//  2. -p (prompt with "use the X subagent to:" prefix if agent present)
+//  3. --dangerously-skip-permissions
+//  4. --settings (disableAllHooks)
+//  5. --output-format json
 func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	args := []string{}
+
+	// If agent is specified and exists in registry, add --agents flag with JSON definition
+	if task.Agent != "" && inv.Registry != nil {
+		if agent, exists := inv.Registry.Get(task.Agent); exists {
+			// Serialize agent to JSON
+			agentJSON, err := serializeAgentToJSON(agent)
+			if err == nil {
+				// Add --agents flag BEFORE -p flag (must come first)
+				args = append(args, "--agents", agentJSON)
+			}
+		}
+	}
 
 	// Build prompt with agent reference if specified
 	prompt := task.Prompt
 	if task.Agent != "" && inv.Registry != nil && inv.Registry.Exists(task.Agent) {
-		// Reference agent in prompt
+		// Reference agent in prompt (still needed with Method 1)
 		prompt = fmt.Sprintf("use the %s subagent to: %s", task.Agent, task.Prompt)
 	}
 
-	args = append(args, prompt)
+	// Add -p flag for non-interactive print mode (essential for automation)
+	args = append(args, "-p", prompt)
 
 	// Skip permissions for automation (allow file creation)
 	args = append(args, "--dangerously-skip-permissions")

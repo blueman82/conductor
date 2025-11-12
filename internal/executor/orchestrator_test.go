@@ -813,3 +813,220 @@ func TestOrchestratorWithConfig(t *testing.T) {
 		})
 	}
 }
+
+// mockLearningStore is a test double for learning store
+type mockLearningStore struct {
+	getRunCountFunc func(ctx context.Context, planFile string) (int, error)
+}
+
+func (m *mockLearningStore) GetRunCount(ctx context.Context, planFile string) (int, error) {
+	if m == nil || m.getRunCountFunc == nil {
+		return 0, nil
+	}
+	return m.getRunCountFunc(ctx, planFile)
+}
+
+// TestOrchestrator_WithLearning verifies orchestrator initializes with learning store
+func TestOrchestrator_WithLearning(t *testing.T) {
+	mockWave := &mockWaveExecutor{
+		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+			return []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+			}, nil
+		},
+	}
+	mockLog := &mockLogger{}
+	mockStore := &mockLearningStore{
+		getRunCountFunc: func(ctx context.Context, planFile string) (int, error) {
+			return 0, nil
+		},
+	}
+
+	config := OrchestratorConfig{
+		WaveExecutor:  mockWave,
+		Logger:        mockLog,
+		LearningStore: mockStore,
+		PlanFile:      "test-plan.yaml",
+		SessionID:     "test-session",
+	}
+
+	orch := NewOrchestratorFromConfig(config)
+
+	if orch.learningStore != mockStore {
+		t.Error("expected learning store to be set")
+	}
+	if orch.sessionID != "test-session" {
+		t.Errorf("expected sessionID='test-session', got %q", orch.sessionID)
+	}
+	if orch.planFile != "test-plan.yaml" {
+		t.Errorf("expected planFile='test-plan.yaml', got %q", orch.planFile)
+	}
+}
+
+// TestOrchestrator_WithoutLearning verifies orchestrator works with nil learning store
+func TestOrchestrator_WithoutLearning(t *testing.T) {
+	mockWave := &mockWaveExecutor{
+		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+			return []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+			}, nil
+		},
+	}
+	mockLog := &mockLogger{}
+
+	config := OrchestratorConfig{
+		WaveExecutor:  mockWave,
+		Logger:        mockLog,
+		LearningStore: nil, // No learning
+		PlanFile:      "test-plan.yaml",
+	}
+
+	orch := NewOrchestratorFromConfig(config)
+
+	if orch.learningStore != nil {
+		t.Error("expected learning store to be nil")
+	}
+
+	// Should still execute successfully without learning
+	plan := &models.Plan{
+		Name:  "Test Plan",
+		Tasks: []models.Task{{Number: "1", Name: "Task 1"}},
+		Waves: []models.Wave{{Name: "Wave 1", TaskNumbers: []string{"1"}}},
+	}
+
+	result, err := orch.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+// TestOrchestrator_SessionIDGeneration verifies session ID is generated if not provided
+func TestOrchestrator_SessionIDGeneration(t *testing.T) {
+	mockWave := &mockWaveExecutor{}
+	mockLog := &mockLogger{}
+
+	tests := []struct {
+		name              string
+		providedSessionID string
+		expectGenerated   bool
+	}{
+		{
+			name:              "session ID provided",
+			providedSessionID: "custom-session-123",
+			expectGenerated:   false,
+		},
+		{
+			name:              "session ID not provided",
+			providedSessionID: "",
+			expectGenerated:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := OrchestratorConfig{
+				WaveExecutor: mockWave,
+				Logger:       mockLog,
+				SessionID:    tt.providedSessionID,
+			}
+
+			orch := NewOrchestratorFromConfig(config)
+
+			if tt.expectGenerated {
+				// Should have generated a session ID
+				if orch.sessionID == "" {
+					t.Error("expected session ID to be generated, got empty string")
+				}
+				// Verify format: session-YYYYMMDD-HHMM
+				if len(orch.sessionID) < 17 || orch.sessionID[:8] != "session-" {
+					t.Errorf("generated session ID has unexpected format: %q", orch.sessionID)
+				}
+			} else {
+				// Should use provided session ID
+				if orch.sessionID != tt.providedSessionID {
+					t.Errorf("expected sessionID=%q, got %q", tt.providedSessionID, orch.sessionID)
+				}
+			}
+		})
+	}
+}
+
+// TestOrchestrator_RunNumberTracking verifies run number is calculated from learning store
+func TestOrchestrator_RunNumberTracking(t *testing.T) {
+	mockWave := &mockWaveExecutor{}
+	mockLog := &mockLogger{}
+
+	tests := []struct {
+		name              string
+		planFile          string
+		storedRunCount    int
+		providedRunNumber int
+		expectedRunNumber int
+		learningEnabled   bool
+	}{
+		{
+			name:              "first run",
+			planFile:          "plan.yaml",
+			storedRunCount:    0,
+			providedRunNumber: 0,
+			expectedRunNumber: 1,
+			learningEnabled:   true,
+		},
+		{
+			name:              "subsequent run",
+			planFile:          "plan.yaml",
+			storedRunCount:    3,
+			providedRunNumber: 0,
+			expectedRunNumber: 4,
+			learningEnabled:   true,
+		},
+		{
+			name:              "manual run number",
+			planFile:          "plan.yaml",
+			storedRunCount:    5,
+			providedRunNumber: 10,
+			expectedRunNumber: 10,
+			learningEnabled:   true,
+		},
+		{
+			name:              "learning disabled",
+			planFile:          "plan.yaml",
+			storedRunCount:    0,
+			providedRunNumber: 0,
+			expectedRunNumber: 0,
+			learningEnabled:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := OrchestratorConfig{
+				WaveExecutor: mockWave,
+				Logger:       mockLog,
+				PlanFile:     tt.planFile,
+				RunNumber:    tt.providedRunNumber,
+			}
+
+			// Only set learning store if learning is enabled
+			if tt.learningEnabled {
+				config.LearningStore = &mockLearningStore{
+					getRunCountFunc: func(ctx context.Context, planFile string) (int, error) {
+						if planFile != tt.planFile {
+							t.Errorf("expected planFile=%q, got %q", tt.planFile, planFile)
+						}
+						return tt.storedRunCount, nil
+					},
+				}
+			}
+
+			orch := NewOrchestratorFromConfig(config)
+
+			if orch.runNumber != tt.expectedRunNumber {
+				t.Errorf("expected runNumber=%d, got %d", tt.expectedRunNumber, orch.runNumber)
+			}
+		})
+	}
+}

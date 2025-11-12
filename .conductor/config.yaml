@@ -1,7 +1,0 @@
-# Test configuration for conductor
-max_concurrency: 10
-timeout: 1h
-log_level: info
-verbose: false
-log_dir: .conductor/logs
-dry_run: false

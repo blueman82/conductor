@@ -2511,3 +2511,195 @@ First task.
 		t.Error("Should NOT mention numbered files when none exist")
 	}
 }
+
+// ============================================================================
+// DRY-RUN SKIP-COMPLETED TESTS (TDD RED Phase)
+// ============================================================================
+
+// TestRunCommand_DryRunSkipsCompletedTasks tests --skip-completed in --dry-run mode
+func TestRunCommand_DryRunSkipsCompletedTasks(t *testing.T) {
+	// Create plan with some completed tasks
+	planContent := `# Test Plan
+
+## Task 1: Completed Task
+**Status**: completed
+**Files**: task1.go
+
+This task is already completed.
+
+## Task 2: Pending Task A
+**Status**: pending
+**Files**: task2.go
+
+This task is pending.
+
+## Task 3: Pending Task B
+**Status**: pending
+**Files**: task3.go
+
+This task is also pending.
+
+## Task 4: Another Completed Task
+**Status**: completed
+**Files**: task4.go
+**Depends on**: 1
+
+This task is also completed.
+`
+
+	planFile := createTestPlanFile(t, planContent)
+
+	// Test case 1: Without --skip-completed, should show all tasks
+	t.Run("without skip-completed", func(t *testing.T) {
+		args := []string{"run", "--dry-run", "--verbose", planFile}
+		output, err := executeRunCommand(t, args)
+
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Should show all 4 tasks
+		if !strings.Contains(output, "Total tasks: 4") {
+			t.Errorf("Expected 4 total tasks, got: %s", output)
+		}
+
+		// In verbose mode, should show all task names
+		if !strings.Contains(output, "Task 1") {
+			t.Error("Expected Task 1 in verbose output")
+		}
+		if !strings.Contains(output, "Task 2") {
+			t.Error("Expected Task 2 in verbose output")
+		}
+		if !strings.Contains(output, "Task 3") {
+			t.Error("Expected Task 3 in verbose output")
+		}
+		if !strings.Contains(output, "Task 4") {
+			t.Error("Expected Task 4 in verbose output")
+		}
+	})
+
+	// Test case 2: With --skip-completed, should filter out completed tasks in dry-run display
+	t.Run("with skip-completed", func(t *testing.T) {
+		args := []string{"run", "--dry-run", "--skip-completed", "--verbose", planFile}
+		output, err := executeRunCommand(t, args)
+
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Total tasks should still be 4 (all tasks in plan)
+		if !strings.Contains(output, "Total tasks: 4") {
+			t.Errorf("Expected 4 total tasks in plan, got: %s", output)
+		}
+
+		// But wave output should NOT show completed tasks (Task 1 and Task 4)
+		// Extract wave section
+		if strings.Contains(output, "Execution waves:") {
+			// Should show pending tasks in verbose mode
+			if !strings.Contains(output, "Task 2") {
+				t.Error("Expected Task 2 (pending) in wave output")
+			}
+			if !strings.Contains(output, "Task 3") {
+				t.Error("Expected Task 3 (pending) in wave output")
+			}
+
+			// Should NOT show completed tasks
+			if strings.Contains(output, "Completed Task") {
+				t.Error("Should NOT show completed Task 1 in wave output with --skip-completed")
+			}
+			if strings.Contains(output, "Another Completed Task") {
+				t.Error("Should NOT show completed Task 4 in wave output with --skip-completed")
+			}
+		}
+	})
+}
+
+// TestRunCommand_DryRunSkipCompletedWaveCount tests wave task counts with --skip-completed
+func TestRunCommand_DryRunSkipCompletedWaveCount(t *testing.T) {
+	// Create plan where completed tasks are in first wave
+	planContent := `# Test Plan
+
+## Task 1: Completed Foundation
+**Status**: completed
+**Files**: foundation.go
+
+Already completed foundation.
+
+## Task 13: Another Completed Task
+**Status**: completed
+**Files**: setup.go
+
+Another completed task.
+
+## Task 14: Pending Task A
+**Status**: pending
+**Files**: taskA.go
+**Depends on**: 1
+
+Pending task A.
+
+## Task 16: Pending Task B
+**Status**: pending
+**Files**: taskB.go
+**Depends on**: 1
+
+Pending task B.
+
+## Task 17: Pending Task C
+**Status**: pending
+**Files**: taskC.go
+**Depends on**: 1, 13
+
+Pending task C.
+
+## Task 21: Pending Task D
+**Status**: pending
+**Files**: taskD.go
+**Depends on**: 1, 13
+
+Pending task D.
+`
+
+	planFile := createTestPlanFile(t, planContent)
+
+	// Without --skip-completed
+	t.Run("without skip-completed", func(t *testing.T) {
+		args := []string{"run", "--dry-run", planFile}
+		output, err := executeRunCommand(t, args)
+
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Wave 1 should show 2 tasks (Task 1 and Task 13)
+		if !strings.Contains(output, "Wave 1: 2 task(s)") {
+			t.Errorf("Expected Wave 1 to show 2 tasks, got: %s", output)
+		}
+
+		// Wave 2 should show 4 tasks (Task 14, 16, 17, 21)
+		if !strings.Contains(output, "Wave 2: 4 task(s)") {
+			t.Errorf("Expected Wave 2 to show 4 tasks, got: %s", output)
+		}
+	})
+
+	// With --skip-completed
+	t.Run("with skip-completed", func(t *testing.T) {
+		args := []string{"run", "--dry-run", "--skip-completed", planFile}
+		output, err := executeRunCommand(t, args)
+
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Wave 1 should show 0 tasks (both completed)
+		// Note: Wave with 0 tasks should either be hidden or show "0 task(s)"
+		if strings.Contains(output, "Wave 1: 2 task(s)") {
+			t.Error("Wave 1 should NOT show 2 tasks when both are completed and --skip-completed is set")
+		}
+
+		// Wave 2 should show 4 tasks (all pending)
+		if !strings.Contains(output, "4 task(s)") {
+			t.Errorf("Expected wave to show 4 pending tasks, got: %s", output)
+		}
+	})
+}

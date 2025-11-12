@@ -38,6 +38,12 @@ Thumbs.db
 logs/
 .conductor/logs/
 
+# Conductor learning database (project-local)
+.conductor/learning/
+
+# Local configuration (use config.yaml.example as template)
+.conductor/config.yaml
+
 # Temporary files
 tmp/
 temp/
@@ -59,3 +65,6 @@ docs/plans/subagent-deployment-strategy.md
 
 # MCP integration documentation (local research)
 docs/mcp-headless-invocation.md
+
+# Plan READMEs (local planning documentation)
+docs/plans/**/README.md

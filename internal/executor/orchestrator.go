@@ -42,10 +42,32 @@ type WaveExecutorInterface interface {
 	ExecutePlan(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error)
 }
 
+// LearningStoreInterface defines the behavior required for adaptive learning storage.
+type LearningStoreInterface interface {
+	GetRunCount(ctx context.Context, planFile string) (int, error)
+}
+
+// OrchestratorConfig holds configuration for creating a new Orchestrator.
+type OrchestratorConfig struct {
+	WaveExecutor      WaveExecutorInterface
+	Logger            Logger
+	LearningStore     LearningStoreInterface
+	SessionID         string
+	RunNumber         int
+	PlanFile          string
+	SkipCompleted     bool
+	RetryFailed       bool
+	FileToTaskMapping map[string]string
+}
+
 // Orchestrator coordinates plan execution, handles graceful shutdown, and aggregates results.
 type Orchestrator struct {
 	waveExecutor      WaveExecutorInterface
 	logger            Logger
+	learningStore     LearningStoreInterface
+	sessionID         string
+	runNumber         int
+	planFile          string
 	FileToTaskMapping map[string]string // task number -> file path mapping
 	skipCompleted     bool              // Skip tasks that are already completed
 	retryFailed       bool              // Retry tasks that have failed status
@@ -80,6 +102,53 @@ func NewOrchestratorWithConfig(waveExecutor WaveExecutorInterface, logger Logger
 		skipCompleted:     skipCompleted,
 		retryFailed:       retryFailed,
 		FileToTaskMapping: make(map[string]string),
+	}
+}
+
+// NewOrchestratorFromConfig creates a new Orchestrator instance from a configuration object.
+// This constructor supports the full set of orchestrator features including learning integration.
+// The waveExecutor is required and must not be nil.
+func NewOrchestratorFromConfig(config OrchestratorConfig) *Orchestrator {
+	if config.WaveExecutor == nil {
+		panic("wave executor cannot be nil")
+	}
+
+	// Initialize FileToTaskMapping if nil
+	if config.FileToTaskMapping == nil {
+		config.FileToTaskMapping = make(map[string]string)
+	}
+
+	// Generate session ID if not provided
+	sessionID := config.SessionID
+	if sessionID == "" {
+		sessionID = generateSessionID()
+	}
+
+	// Calculate run number from learning store if learning is enabled
+	// Only calculate run number if:
+	// 1. Learning store is provided (not nil)
+	// 2. Run number is not manually specified (is 0)
+	// 3. Plan file is specified (not empty)
+	runNumber := config.RunNumber
+	if config.LearningStore != nil && runNumber == 0 && config.PlanFile != "" {
+		count, err := config.LearningStore.GetRunCount(context.Background(), config.PlanFile)
+		if err != nil {
+			// Graceful degradation - log but don't fail
+			count = 0
+		}
+		runNumber = count + 1
+	}
+
+	return &Orchestrator{
+		waveExecutor:      config.WaveExecutor,
+		logger:            config.Logger,
+		learningStore:     config.LearningStore,
+		sessionID:         sessionID,
+		runNumber:         runNumber,
+		planFile:          config.PlanFile,
+		skipCompleted:     config.SkipCompleted,
+		retryFailed:       config.RetryFailed,
+		FileToTaskMapping: config.FileToTaskMapping,
 	}
 }
 
@@ -222,8 +291,12 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 			seenTasks[task.Number] = true
 		}
 
-		// Add tasks
-		merged.Tasks = append(merged.Tasks, plan.Tasks...)
+		// Add tasks with SourceFile populated for multi-file tracking
+		for _, task := range plan.Tasks {
+			// Set SourceFile to track which plan file this task comes from
+			task.SourceFile = plan.FilePath
+			merged.Tasks = append(merged.Tasks, task)
+		}
 
 		// Track file-to-task mapping
 		if plan.FilePath != "" {

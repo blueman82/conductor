@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews.
+Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v1.1.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, and auto-incrementing version management.
+**Current Status**: Production-ready v2.0.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, and auto-incrementing version management.
 
 ## Development Commands
 
@@ -23,6 +23,11 @@ go run ./cmd/conductor
 
 # Show help
 ./conductor --help
+
+# Learning commands
+./conductor learning stats        # View learning statistics
+./conductor learning export       # Export learning data
+./conductor learning clear        # Clear learning history
 ```
 
 ### Testing
@@ -37,6 +42,7 @@ go test ./... -cover
 go test ./internal/parser/ -v
 go test ./internal/executor/ -v
 go test ./internal/agent/ -v
+go test ./internal/learning/ -v
 
 # Run specific test
 go test ./internal/parser/ -run TestMarkdownParser -v
@@ -93,9 +99,12 @@ Plan File (.md/.yaml)
   → Wave Calculator (Kahn's algorithm for topological sort)
   → Orchestrator (coordinates execution)
   → Wave Executor (spawns parallel tasks)
+  → Pre-Task Hook (loads failure history, injects context)
   → Task Executor (invokes claude CLI, handles retries)
   → Quality Control (reviews output, decides GREEN/RED/YELLOW)
+  → Post-Task Hook (stores success/failure patterns)
   → Plan Updater (marks tasks complete)
+  → Learning System (analyzes patterns, generates insights)
 ```
 
 **Multi-File Plans:**
@@ -106,7 +115,10 @@ Multiple Plan Files (.md/.yaml)
   → Dependency Graph Builder (cross-file dependencies)
   → Wave Calculator (respects worktree groups)
   → Orchestrator (maintains file origins)
+  → Pre-Task Hook (loads failure history, injects context)
   → Execution & Logging (file-aware tracking)
+  → Post-Task Hook (stores success/failure patterns)
+  → Learning System (cross-run pattern analysis)
 ```
 
 ### Key Components
@@ -132,6 +144,12 @@ Multiple Plan Files (.md/.yaml)
 - `discovery.go`: Scans `~/.claude/agents/` for agent .md files with YAML frontmatter. Uses directory whitelisting (root + numbered dirs 01-10) and file filtering (skips README.md, *-framework.md, examples/, transcripts/, logs/) to eliminate false warnings. Registry provides fast agent lookup with ~94% test coverage.
 - `invoker.go`: Executes `claude -p` commands with proper flags. Always disables hooks, uses JSON output format. Prefixes prompts with "use the {agent} subagent to:" when agent specified.
 
+**Learning (`internal/learning/`)**:
+- `store.go`: Persistent storage for task execution history. Stores success/failure outcomes, error messages, file changes, and timestamps. JSON-based storage with file-per-task organization in `.conductor/learning/` directory.
+- `analyzer.go`: Pattern recognition engine that analyzes historical task executions. Identifies common failure patterns, success strategies, and file-based correlations. Generates actionable insights for future task execution.
+- `hooks.go`: Pre-task and post-task hooks that integrate learning into the execution pipeline. Pre-task hook loads relevant failure history and injects context into task prompts. Post-task hook stores execution outcomes for future analysis.
+- Architecture: Learning data stored in `.conductor/learning/{task-name}-{timestamp}.json`. Each entry contains task metadata, execution outcome, duration, files modified, and detailed error information for failures.
+
 **CLI (`internal/cmd/`)**:
 - `root.go`: Root command with version display and subcommand registration
 - `run.go`: Implements `conductor run` command for plan execution
@@ -141,12 +159,17 @@ Multiple Plan Files (.md/.yaml)
   - Orchestrator integration with progress logging
   - Comprehensive error handling
 - `validate.go`: Implements `conductor validate` command for plan validation
+- `learning.go`: Implements `conductor learning` command group
+  - `learning export`: Export learning data to JSON for analysis
+  - `learning stats`: Display learning statistics and insights
+  - `learning clear`: Clear learning history (with confirmation)
 - Console logger: Real-time progress updates with timestamps
 
 **Config (`internal/config/`)**:
 - Supports .conductor/config.yaml for default settings
 - Configuration priority: defaults → config file → CLI flags (highest priority)
 - Fields: max_concurrency, timeout, dry_run, skip_completed, retry_failed, log_dir, log_level
+- Learning configuration: learning_enabled (default: true), learning_dir (default: .conductor/learning), max_history_entries (default: 100)
 
 ### Dependency Graph Algorithm
 
@@ -201,6 +224,63 @@ Feedback: [your detailed feedback]
 Parser extracts flag via regex: `Quality Control:\s*(GREEN|RED|YELLOW)`
 
 Retry logic: Only retry on RED, up to MaxRetries (default: 2)
+
+### Adaptive Learning System
+
+Conductor learns from task execution history to improve future runs:
+
+**Learning Flow:**
+1. **Pre-Task Hook**: Before executing a task, load historical failures for similar tasks
+2. **Context Injection**: Augment task prompt with relevant failure patterns and solutions
+3. **Task Execution**: Execute task with enhanced context
+4. **Post-Task Hook**: Store execution outcome (success/failure, duration, files, errors)
+5. **Pattern Analysis**: Analyze stored history to identify trends and insights
+
+**Learning Data Structure:**
+```json
+{
+  "task_name": "Task 5: Implement error handling",
+  "task_number": "5",
+  "timestamp": "2025-01-12T10:30:00Z",
+  "outcome": "failed",
+  "duration_seconds": 45.2,
+  "files_modified": ["internal/executor/task.go"],
+  "error_message": "compilation error: undefined variable",
+  "retry_count": 1
+}
+```
+
+**Pattern Recognition:**
+- Failure clustering: Group similar failures by error message, files, task type
+- Success strategies: Identify patterns in successful task executions
+- File correlations: Track which files commonly fail together
+- Time analysis: Detect tasks that consistently take longer than estimated
+
+**Learning Commands:**
+```bash
+# Export all learning data for external analysis
+conductor learning export > analysis.json
+
+# View statistics and insights
+conductor learning stats
+
+# Clear learning history (with confirmation)
+conductor learning clear
+```
+
+**Configuration:**
+Learning can be configured in `.conductor/config.yaml`:
+```yaml
+learning:
+  enabled: true  # Enable/disable learning system
+  dir: .conductor/learning  # Storage directory
+  max_history: 100  # Max entries per task
+```
+
+**Hook Integration:**
+Hooks are automatically invoked during task execution:
+- Pre-task: `PreTaskHook(task, store)` - injects failure context
+- Post-task: `PostTaskHook(task, result, store)` - stores outcome
 
 ## Test-Driven Development
 
@@ -276,7 +356,15 @@ result, err := invoker.Invoke(ctx, task)
 
 ## Production Status
 
-Conductor v1.1.0 is production-ready with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → logging. All core features, multi-file plan support, and auto-incrementing version management implemented and tested.
+Conductor v2.0.0 is production-ready with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support, adaptive learning system, and auto-incrementing version management implemented and tested.
+
+**Major Features:**
+- Multi-agent orchestration with dependency resolution
+- Quality control reviews with retry logic
+- Adaptive learning from execution history
+- Multi-file plan support with cross-file dependencies
+- Resumable execution with state tracking
+- Comprehensive logging and error handling
 
 ## Multi-File Plan Examples
 
@@ -348,6 +436,7 @@ import (
     "github.com/harrison/conductor/internal/executor"
     "github.com/harrison/conductor/internal/agent"
     "github.com/harrison/conductor/internal/models"
+    "github.com/harrison/conductor/internal/learning"
 )
 ```
 

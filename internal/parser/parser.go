@@ -257,6 +257,8 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 				return nil, fmt.Errorf("duplicate task number: %s", task.Number)
 			}
 			seen[task.Number] = true
+			// Set SourceFile to track which plan file this task comes from
+			task.SourceFile = plan.FilePath
 			mergedTasks = append(mergedTasks, task)
 		}
 	}

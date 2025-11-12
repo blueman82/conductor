@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,10 +12,10 @@ import (
 
 // Agent represents a Claude Code agent with metadata
 type Agent struct {
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description"`
-	Tools       ToolList `yaml:"tools"`
-	FilePath    string   `yaml:"-"` // Not parsed from YAML
+	Name        string   `yaml:"name" json:"name"`
+	Description string   `yaml:"description" json:"description"`
+	Tools       ToolList `yaml:"tools" json:"tools"`
+	FilePath    string   `yaml:"-" json:"-"` // Not parsed from YAML, not included in JSON
 }
 
 // ToolList is a custom type that handles both comma-separated strings
@@ -49,6 +50,14 @@ func (t *ToolList) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	return fmt.Errorf("tools must be either a comma-separated string or an array")
+}
+
+// MarshalJSON implements custom marshaling for ToolList
+// Always serializes as a JSON array for consistency with claude CLI --agents flag
+// Example: ["Read", "Write", "Edit"]
+func (t ToolList) MarshalJSON() ([]byte, error) {
+	// Convert ToolList to []string and marshal as array
+	return json.Marshal([]string(t))
 }
 
 // Registry manages discovered agents

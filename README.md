@@ -28,6 +28,11 @@ Conductor automates complex multi-step implementations by:
 - **Dual Format Support**: Both Markdown and YAML plan formats
 - **Dry Run Mode**: Test execution without actually running tasks
 - **Progress Logging**: Real-time console output and file-based logs
+- **Adaptive Learning** (v2.0+): AI-powered learning system that improves over time
+  - Tracks execution history and failure patterns
+  - Automatically adapts agent selection after failures
+  - Learns from past successes to optimize future runs
+  - CLI commands for statistics and insights
 
 ## Quick Start
 
@@ -204,6 +209,74 @@ log_level: info           # Log level (debug/info/warn/error)
 
 For detailed configuration options, see [Usage Guide](docs/usage.md).
 
+## Adaptive Learning System (v2.0+)
+
+Conductor v2.0 introduces an intelligent learning system that automatically improves task execution over time by learning from past successes and failures.
+
+### What It Does
+
+- **Records Execution History**: Tracks every task execution with agent, verdict, patterns, and timing
+- **Detects Failure Patterns**: Identifies common issues (compilation errors, test failures, missing dependencies)
+- **Adapts Agent Selection**: Automatically switches to better-performing agents after repeated failures
+- **Enhances Prompts**: Enriches task prompts with learned context from execution history
+- **Provides Insights**: CLI commands for viewing statistics, history, and trends
+
+### Quick Example
+
+```bash
+# First run - task fails with backend-developer agent
+$ conductor run plan.md
+# [ERROR] Task 3 failed: compilation error
+
+# Second run - task fails again
+$ conductor run plan.md --retry-failed
+# [ERROR] Task 3 failed: compilation error
+
+# Third run - learning system adapts
+$ conductor run plan.md --retry-failed
+# [INFO] Adapting agent: backend-developer → golang-pro
+# [SUCCESS] Task 3 completed successfully
+```
+
+### CLI Commands
+
+```bash
+# View learning statistics for a plan
+$ conductor learning stats plan.md
+
+# Show execution history for a specific task
+$ conductor learning show plan.md "Task 3"
+
+# Export learning data for analysis
+$ conductor learning export plan.md --format json
+
+# Clear learning data
+$ conductor learning clear plan.md
+```
+
+### Configuration
+
+Enable learning in `.conductor/config.yaml`:
+
+```yaml
+learning:
+  enabled: true                    # Master switch (default: true)
+  auto_adapt_agent: true          # Auto-switch agents on failures (default: false)
+  enhance_prompts: true           # Add learned context to prompts (default: true)
+  min_failures_before_adapt: 2    # Failure threshold (default: 2)
+  keep_executions_days: 90        # Data retention (default: 90)
+```
+
+### How It Works
+
+1. **Pre-Task Hook**: Analyzes execution history and adapts strategy before task runs
+2. **QC-Review Hook**: Extracts failure patterns from quality control output
+3. **Post-Task Hook**: Records execution results to SQLite database
+
+Learning data is stored locally in `.conductor/learning/` (excluded from git).
+
+**See [Learning System Guide](docs/learning.md) for complete documentation.**
+
 ## Plan Format
 
 Conductor supports two plan formats:
@@ -272,6 +345,7 @@ See [plugin/docs](plugin/docs) for complete plugin documentation.
 
 ## Documentation
 
+- **[Learning System Guide](docs/learning.md)** - Adaptive learning documentation (v2.0+)
 - **[Usage Guide](docs/usage.md)** - Detailed CLI reference and examples
 - **[Plan Format Guide](docs/plan-format.md)** - Plan format specifications
 - **[Phase 2A Guide](docs/phase-2a-guide.md)** - Multi-file plans and plan splitting
@@ -402,10 +476,10 @@ See [Phase 2A Guide](docs/phase-2a-guide.md) for detailed documentation and exam
 
 ## Project Status
 
-**Current Status**: Production-ready v1.1.0
+**Current Status**: Production-ready v2.0.0
 
 Conductor is feature-complete with:
-- ✅ Complete implementation with 86.4% test coverage (465+ tests)
+- ✅ Complete implementation with 86%+ test coverage
 - ✅ `conductor validate` and `conductor run` commands
 - ✅ Wave-based parallel execution with dependency management
 - ✅ Quality control reviews with automated retries
@@ -414,6 +488,11 @@ Conductor is feature-complete with:
 - ✅ Auto-incrementing version management (VERSION file)
 - ✅ File locking for concurrent updates
 - ✅ Agent discovery system
+- ✅ **Adaptive learning system** (v2.0)
+  - SQLite-based execution history
+  - Automatic agent adaptation
+  - Pattern detection and analysis
+  - Four CLI learning commands
 - ✅ Comprehensive documentation
 
 ### Conductor Plugin

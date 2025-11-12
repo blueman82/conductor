@@ -9,6 +9,30 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// LearningConfig represents learning system configuration
+type LearningConfig struct {
+	// Enabled enables the learning system
+	Enabled bool `yaml:"enabled"`
+
+	// DBPath is the path to the learning database
+	DBPath string `yaml:"db_path"`
+
+	// AutoAdaptAgent enables automatic agent adaptation based on learned patterns
+	AutoAdaptAgent bool `yaml:"auto_adapt_agent"`
+
+	// EnhancePrompts enables prompt enhancement based on learned patterns
+	EnhancePrompts bool `yaml:"enhance_prompts"`
+
+	// MinFailuresBeforeAdapt is the minimum number of failures before adapting
+	MinFailuresBeforeAdapt int `yaml:"min_failures_before_adapt"`
+
+	// KeepExecutionsDays is the number of days to keep execution history
+	KeepExecutionsDays int `yaml:"keep_executions_days"`
+
+	// MaxExecutionsPerTask is the maximum number of executions to keep per task
+	MaxExecutionsPerTask int `yaml:"max_executions_per_task"`
+}
+
 // Config represents conductor configuration options
 type Config struct {
 	// MaxConcurrency is the maximum number of concurrent tasks (0 = unlimited)
@@ -31,6 +55,9 @@ type Config struct {
 
 	// RetryFailed retries tasks that failed
 	RetryFailed bool `yaml:"retry_failed"`
+
+	// Learning contains learning system configuration
+	Learning LearningConfig `yaml:"learning"`
 }
 
 // DefaultConfig returns a Config with sensible default values
@@ -43,6 +70,15 @@ func DefaultConfig() *Config {
 		DryRun:         false,
 		SkipCompleted:  false,
 		RetryFailed:    false,
+		Learning: LearningConfig{
+			Enabled:                true,
+			DBPath:                 ".conductor/learning",
+			AutoAdaptAgent:         false,
+			EnhancePrompts:         true,
+			MinFailuresBeforeAdapt: 2,
+			KeepExecutionsDays:     90,
+			MaxExecutionsPerTask:   100,
+		},
 	}
 }
 
@@ -68,13 +104,14 @@ func LoadConfig(path string) (*Config, error) {
 	// Parse YAML
 	// Use a temporary struct to handle duration parsing
 	type yamlConfig struct {
-		MaxConcurrency int    `yaml:"max_concurrency"`
-		Timeout        string `yaml:"timeout"`
-		LogLevel       string `yaml:"log_level"`
-		LogDir         string `yaml:"log_dir"`
-		DryRun         bool   `yaml:"dry_run"`
-		SkipCompleted  bool   `yaml:"skip_completed"`
-		RetryFailed    bool   `yaml:"retry_failed"`
+		MaxConcurrency int            `yaml:"max_concurrency"`
+		Timeout        string         `yaml:"timeout"`
+		LogLevel       string         `yaml:"log_level"`
+		LogDir         string         `yaml:"log_dir"`
+		DryRun         bool           `yaml:"dry_run"`
+		SkipCompleted  bool           `yaml:"skip_completed"`
+		RetryFailed    bool           `yaml:"retry_failed"`
+		Learning       LearningConfig `yaml:"learning"`
 	}
 
 	var yamlCfg yamlConfig
@@ -110,6 +147,43 @@ func LoadConfig(path string) (*Config, error) {
 	// RetryFailed is explicitly set if present in YAML
 	if yamlCfg.RetryFailed {
 		cfg.RetryFailed = yamlCfg.RetryFailed
+	}
+
+	// Merge Learning config - need to check if the section was provided at all
+	// We create a temporary unmarshal to detect if learning section exists
+	var rawMap map[string]interface{}
+	if err := yaml.Unmarshal(data, &rawMap); err == nil {
+		if learningSection, exists := rawMap["learning"]; exists && learningSection != nil {
+			// Learning section exists in YAML, merge it
+			learning := yamlCfg.Learning
+
+			// For nested struct, we need to check which fields were actually set
+			// If any field is non-zero, we assume it was explicitly set
+			learningMap, _ := learningSection.(map[string]interface{})
+
+			if _, exists := learningMap["enabled"]; exists {
+				cfg.Learning.Enabled = learning.Enabled
+			}
+			if _, exists := learningMap["db_path"]; exists {
+				// Explicitly set db_path, even if empty string
+				cfg.Learning.DBPath = learning.DBPath
+			}
+			if _, exists := learningMap["auto_adapt_agent"]; exists {
+				cfg.Learning.AutoAdaptAgent = learning.AutoAdaptAgent
+			}
+			if _, exists := learningMap["enhance_prompts"]; exists {
+				cfg.Learning.EnhancePrompts = learning.EnhancePrompts
+			}
+			if _, exists := learningMap["min_failures_before_adapt"]; exists {
+				cfg.Learning.MinFailuresBeforeAdapt = learning.MinFailuresBeforeAdapt
+			}
+			if _, exists := learningMap["keep_executions_days"]; exists {
+				cfg.Learning.KeepExecutionsDays = learning.KeepExecutionsDays
+			}
+			if _, exists := learningMap["max_executions_per_task"]; exists {
+				cfg.Learning.MaxExecutionsPerTask = learning.MaxExecutionsPerTask
+			}
+		}
 	}
 
 	return cfg, nil
@@ -169,6 +243,22 @@ func (c *Config) Validate() error {
 	// Timeout can be 0 (no timeout) or positive, negative is invalid
 	if c.Timeout < 0 {
 		return fmt.Errorf("timeout must be >= 0, got %v", c.Timeout)
+	}
+
+	// Validate learning configuration
+	if c.Learning.Enabled {
+		if c.Learning.DBPath == "" {
+			return fmt.Errorf("learning.db_path cannot be empty when learning is enabled")
+		}
+		if c.Learning.MinFailuresBeforeAdapt <= 0 {
+			return fmt.Errorf("learning.min_failures_before_adapt must be > 0, got %d", c.Learning.MinFailuresBeforeAdapt)
+		}
+		if c.Learning.KeepExecutionsDays < 0 {
+			return fmt.Errorf("learning.keep_executions_days must be >= 0, got %d", c.Learning.KeepExecutionsDays)
+		}
+		if c.Learning.MaxExecutionsPerTask < 0 {
+			return fmt.Errorf("learning.max_executions_per_task must be >= 0, got %d", c.Learning.MaxExecutionsPerTask)
+		}
 	}
 
 	return nil
