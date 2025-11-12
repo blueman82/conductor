@@ -539,3 +539,222 @@ func TestClaudeOutputMarshaling(t *testing.T) {
 		t.Errorf("Error = %q, want %q", parsed.Error, original.Error)
 	}
 }
+// TestBuildCommandArgsWithAgentsFlag tests Method 1 agent invocation using --agents JSON flag
+func TestBuildCommandArgsWithAgentsFlag(t *testing.T) {
+	tests := []struct {
+		name          string
+		task          models.Task
+		setupRegistry func(*testing.T) *Registry
+		wantChecks    []func(*testing.T, []string)
+	}{
+		{
+			name: "task with agent - includes --agents flag with JSON definition",
+			task: models.Task{
+				Number:        "1",
+				Name:          "Go Development Task",
+				Prompt:        "Write Go code",
+				Agent:         "golang-pro",
+				EstimatedTime: 30 * time.Minute,
+			},
+			setupRegistry: func(t *testing.T) *Registry {
+				tmpDir := t.TempDir()
+				agentContent := `---
+name: golang-pro
+description: Go development expert
+tools:
+  - Read
+  - Write
+  - Edit
+---
+Go development content
+`
+				err := os.WriteFile(filepath.Join(tmpDir, "golang-pro.md"), []byte(agentContent), 0644)
+				if err != nil {
+					t.Fatal(err)
+				}
+				registry := NewRegistry(tmpDir)
+				_, err = registry.Discover()
+				if err != nil {
+					t.Fatal(err)
+				}
+				return registry
+			},
+			wantChecks: []func(*testing.T, []string){
+				// Check 1: --agents flag must be present
+				func(t *testing.T, args []string) {
+					hasAgentsFlag := false
+					for _, arg := range args {
+						if arg == "--agents" {
+							hasAgentsFlag = true
+							break
+						}
+					}
+					if !hasAgentsFlag {
+						t.Error("Command must have --agents flag when agent is specified")
+					}
+				},
+				// Check 2: --agents must come before -p flag
+				func(t *testing.T, args []string) {
+					agentsFlagIdx := -1
+					pFlagIdx := -1
+					for i, arg := range args {
+						if arg == "--agents" {
+							agentsFlagIdx = i
+						}
+						if arg == "-p" {
+							pFlagIdx = i
+						}
+					}
+					if agentsFlagIdx >= 0 && pFlagIdx >= 0 && agentsFlagIdx >= pFlagIdx {
+						t.Error("--agents flag must come before -p flag")
+					}
+				},
+				// Check 3: --agents value must be valid JSON
+				func(t *testing.T, args []string) {
+					for i, arg := range args {
+						if arg == "--agents" && i+1 < len(args) {
+							var agentMap map[string]interface{}
+							err := json.Unmarshal([]byte(args[i+1]), &agentMap)
+							if err != nil {
+								t.Errorf("--agents value must be valid JSON: %v", err)
+							}
+							return
+						}
+					}
+					t.Error("--agents flag present but no value found")
+				},
+				// Check 4: JSON must contain agent name as key
+				func(t *testing.T, args []string) {
+					for i, arg := range args {
+						if arg == "--agents" && i+1 < len(args) {
+							var agentMap map[string]interface{}
+							json.Unmarshal([]byte(args[i+1]), &agentMap)
+							if _, exists := agentMap["golang-pro"]; !exists {
+								t.Error("--agents JSON must contain 'golang-pro' as key")
+							}
+							return
+						}
+					}
+				},
+				// Check 5: Agent definition must include description field
+				func(t *testing.T, args []string) {
+					for i, arg := range args {
+						if arg == "--agents" && i+1 < len(args) {
+							var agentMap map[string]map[string]interface{}
+							json.Unmarshal([]byte(args[i+1]), &agentMap)
+							if agent, exists := agentMap["golang-pro"]; exists {
+								if _, hasDesc := agent["description"]; !hasDesc {
+									t.Error("Agent definition must include 'description' field")
+								}
+							}
+							return
+						}
+					}
+				},
+				// Check 6: Agent definition must include tools field
+				func(t *testing.T, args []string) {
+					for i, arg := range args {
+						if arg == "--agents" && i+1 < len(args) {
+							var agentMap map[string]map[string]interface{}
+							json.Unmarshal([]byte(args[i+1]), &agentMap)
+							if agent, exists := agentMap["golang-pro"]; exists {
+								if _, hasTools := agent["tools"]; !hasTools {
+									t.Error("Agent definition must include 'tools' field")
+								}
+							}
+							return
+						}
+					}
+				},
+				// Check 7: Prompt should still include "use the X subagent to:" prefix
+				func(t *testing.T, args []string) {
+					hasAgentRef := false
+					for _, arg := range args {
+						if strings.Contains(arg, "use the golang-pro subagent to:") {
+							hasAgentRef = true
+							break
+						}
+					}
+					if !hasAgentRef {
+						t.Error("Prompt should still include 'use the golang-pro subagent to:' prefix")
+					}
+				},
+			},
+		},
+		{
+			name: "task without agent - no --agents flag",
+			task: models.Task{
+				Number:        "2",
+				Name:          "Simple Task",
+				Prompt:        "Do something",
+				Agent:         "",
+				EstimatedTime: 30 * time.Minute,
+			},
+			setupRegistry: nil,
+			wantChecks: []func(*testing.T, []string){
+				func(t *testing.T, args []string) {
+					hasAgentsFlag := false
+					for _, arg := range args {
+						if arg == "--agents" {
+							hasAgentsFlag = true
+							break
+						}
+					}
+					if hasAgentsFlag {
+						t.Error("Command should not have --agents flag when no agent specified")
+					}
+				},
+			},
+		},
+		{
+			name: "task with agent that doesn't exist - no --agents flag",
+			task: models.Task{
+				Number:        "3",
+				Name:          "Task with missing agent",
+				Prompt:        "Do work",
+				Agent:         "nonexistent",
+				EstimatedTime: 30 * time.Minute,
+			},
+			setupRegistry: func(t *testing.T) *Registry {
+				tmpDir := t.TempDir()
+				registry := NewRegistry(tmpDir)
+				return registry
+			},
+			wantChecks: []func(*testing.T, []string){
+				func(t *testing.T, args []string) {
+					hasAgentsFlag := false
+					for _, arg := range args {
+						if arg == "--agents" {
+							hasAgentsFlag = true
+							break
+						}
+					}
+					if hasAgentsFlag {
+						t.Error("Command should not have --agents flag when agent doesn't exist in registry")
+					}
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up invoker with or without registry
+			var inv *Invoker
+			if tt.setupRegistry != nil {
+				registry := tt.setupRegistry(t)
+				inv = NewInvokerWithRegistry(registry)
+			} else {
+				inv = NewInvoker()
+			}
+
+			// Build command args
+			args := inv.BuildCommandArgs(tt.task)
+
+			// Run all validation checks
+			for _, check := range tt.wantChecks {
+				check(t, args)
+			}
+		})
+	}
+}
