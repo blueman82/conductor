@@ -205,9 +205,9 @@ func TestMergePlansEmptyPlans(t *testing.T) {
 // TestMergePlansNilPlans verifies handling of nil plans in list
 func TestMergePlansNilPlans(t *testing.T) {
 	plan1 := &models.Plan{
-		Name:    "Plan 1",
-		Tasks:   []models.Task{{Number: "1", Name: "Task 1"}},
-		Waves:   []models.Wave{},
+		Name:  "Plan 1",
+		Tasks: []models.Task{{Number: "1", Name: "Task 1"}},
+		Waves: []models.Wave{},
 	}
 
 	merged, err := MergePlans(plan1, nil)
@@ -258,16 +258,16 @@ func TestOrchestratorFileToTaskMapping(t *testing.T) {
 	}
 
 	plan1 := &models.Plan{
-		Name:         "Part 1",
-		FilePath:     "part1.yaml",
-		Tasks:        []models.Task{{Number: "1", Name: "Task 1"}},
+		Name:          "Part 1",
+		FilePath:      "part1.yaml",
+		Tasks:         []models.Task{{Number: "1", Name: "Task 1"}},
 		FileToTaskMap: map[string][]string{"part1.yaml": {"1"}},
 	}
 
 	plan2 := &models.Plan{
-		Name:         "Part 2",
-		FilePath:     "part2.yaml",
-		Tasks:        []models.Task{{Number: "2", Name: "Task 2"}},
+		Name:          "Part 2",
+		FilePath:      "part2.yaml",
+		Tasks:         []models.Task{{Number: "2", Name: "Task 2"}},
 		FileToTaskMap: map[string][]string{"part2.yaml": {"2"}},
 	}
 
@@ -778,10 +778,10 @@ func TestOrchestratorBackwardCompatibility(t *testing.T) {
 // TestMergePlansWithNilFileToTaskMap tests handling of nil FileToTaskMap
 func TestMergePlansWithNilFileToTaskMap(t *testing.T) {
 	plan1 := &models.Plan{
-		Name:           "Plan 1",
-		FilePath:       "plan1.yaml",
-		Tasks:          []models.Task{{Number: "1", Name: "Task 1"}},
-		FileToTaskMap:  nil,
+		Name:          "Plan 1",
+		FilePath:      "plan1.yaml",
+		Tasks:         []models.Task{{Number: "1", Name: "Task 1"}},
+		FileToTaskMap: nil,
 	}
 
 	plan2 := &models.Plan{

@@ -47,8 +47,8 @@ type Orchestrator struct {
 	waveExecutor      WaveExecutorInterface
 	logger            Logger
 	FileToTaskMapping map[string]string // task number -> file path mapping
-	skipCompleted     bool               // Skip tasks that are already completed
-	retryFailed       bool               // Retry tasks that have failed status
+	skipCompleted     bool              // Skip tasks that are already completed
+	retryFailed       bool              // Retry tasks that have failed status
 }
 
 // NewOrchestrator creates a new Orchestrator instance.

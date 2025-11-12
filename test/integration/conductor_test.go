@@ -279,9 +279,9 @@ func TestSkipYAMLMixedStatus(t *testing.T) {
 		t.Errorf("Expected 5 tasks, got %d", len(plan.Tasks))
 	}
 
-	completedIndices := []int{0, 2}        // Tasks 1 and 3 are completed
-	skippableIndices := []int{0, 2}        // Completed tasks are skippable
-	executableIndices := []int{1, 3, 4}    // Pending tasks are executable
+	completedIndices := []int{0, 2}     // Tasks 1 and 3 are completed
+	skippableIndices := []int{0, 2}     // Completed tasks are skippable
+	executableIndices := []int{1, 3, 4} // Pending tasks are executable
 
 	for i, task := range plan.Tasks {
 		isCompleted := contains(completedIndices, i)
@@ -624,7 +624,7 @@ func contains(slice []int, item int) bool {
 func stringToIndex(s string) int {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= '0' && s[i] <= '9' {
-			return int(s[0] - '0') - 1
+			return int(s[0]-'0') - 1
 		}
 	}
 	return -1

@@ -91,7 +91,7 @@ func TestIsNumberedFile_EdgeCases(t *testing.T) {
 		{"very long number", "12345678901234567890-test.md", true},
 		{"special chars after dash", "1-test@file.md", true},
 		{"unicode in filename", "1-tëst.md", true},
-		{"path separator in name", "1-test/file.md", true}, // basename would be "file.md"
+		{"path separator in name", "1-test/file.md", true},  // basename would be "file.md"
 		{"windows path separator", "1-test\\file.md", true}, // basename would handle this
 		{"newline in name", "1-test\n.md", false},
 		{"null byte", "1-test\x00.md", false},

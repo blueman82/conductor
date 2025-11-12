@@ -521,11 +521,11 @@ func validatePlanDirectory(dirPath string, registry *agent.Registry, output io.W
 
 	// 8. Validate agents
 	tempPlan := &models.Plan{
-		Tasks:           allTasks,
-		DefaultAgent:    "",
-		QualityControl:  models.QualityControlConfig{},
-		WorktreeGroups:  []models.WorktreeGroup{},
-		FileToTaskMap:   map[string][]string{},
+		Tasks:          allTasks,
+		DefaultAgent:   "",
+		QualityControl: models.QualityControlConfig{},
+		WorktreeGroups: []models.WorktreeGroup{},
+		FileToTaskMap:  map[string][]string{},
 	}
 	agentErrors := validateAgents(tempPlan, registry)
 	if len(agentErrors) == 0 {

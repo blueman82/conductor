@@ -495,4 +495,3 @@ func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	}
 	return nil, false
 }
-

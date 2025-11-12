@@ -655,7 +655,7 @@ func TestFilterPlanFiles(t *testing.T) {
 			name: "filtering - excludes non-plan files",
 			paths: []string{
 				filepath.Join(tmpDir, "plan-01-setup.md"),
-				filepath.Join(tmpDir, "setup.md"), // should be filtered
+				filepath.Join(tmpDir, "setup.md"),  // should be filtered
 				filepath.Join(tmpDir, "README.md"), // should be filtered
 			},
 			wantCount: 1, // only plan-01-setup.md
@@ -894,9 +894,9 @@ Test task description.`
 	}
 
 	tests := []struct {
-		name     string
-		setup    func() string // returns path to parse
-		wantErr  bool
+		name    string
+		setup   func() string // returns path to parse
+		wantErr bool
 	}{
 		{
 			name: "single markdown file",
@@ -1043,9 +1043,9 @@ Test task description.`
 	}
 
 	tests := []struct {
-		name     string
-		path     string
-		wantErr  bool
+		name    string
+		path    string
+		wantErr bool
 	}{
 		{
 			name:    "relative path - current directory",

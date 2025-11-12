@@ -2,14 +2,14 @@ package models
 
 // Plan represents an implementation plan with tasks and configuration
 type Plan struct {
-	Name            string                      // Plan name
-	Tasks           []Task                      // List of tasks to execute
-	Waves           []Wave                      // Execution waves (grouped tasks)
-	DefaultAgent    string                      // Default agent to use if not specified in task
-	QualityControl  QualityControlConfig        // QC configuration
-	FilePath        string                      // Original file path (for updates)
-	WorktreeGroups  []WorktreeGroup             // Worktree groups for task organization
-	FileToTaskMap   map[string][]string         // File path -> list of task numbers mapping
+	Name           string               // Plan name
+	Tasks          []Task               // List of tasks to execute
+	Waves          []Wave               // Execution waves (grouped tasks)
+	DefaultAgent   string               // Default agent to use if not specified in task
+	QualityControl QualityControlConfig // QC configuration
+	FilePath       string               // Original file path (for updates)
+	WorktreeGroups []WorktreeGroup      // Worktree groups for task organization
+	FileToTaskMap  map[string][]string  // File path -> list of task numbers mapping
 }
 
 // Wave represents a group of tasks that can be executed in parallel

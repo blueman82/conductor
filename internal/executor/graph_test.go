@@ -500,10 +500,10 @@ func captureStderr(t *testing.T, fn func()) string {
 
 func TestGraphNodeGroups(t *testing.T) {
 	tests := []struct {
-		name          string
-		tasks         []models.Task
-		wantGroups    map[int]string // task number (as string) -> group ID
-		wantErr       bool
+		name       string
+		tasks      []models.Task
+		wantGroups map[int]string // task number (as string) -> group ID
+		wantErr    bool
 	}{
 		{
 			name: "single group",

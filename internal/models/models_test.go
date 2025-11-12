@@ -254,8 +254,8 @@ func TestExecutionResult(t *testing.T) {
 
 func TestTaskWorktreeGroup(t *testing.T) {
 	tests := []struct {
-		name            string
-		task            Task
+		name             string
+		task             Task
 		expectedWorktree string
 	}{
 		{
@@ -628,12 +628,12 @@ func TestWorktreeGroupValidation(t *testing.T) {
 // TestFileToTaskMapping tests file-to-task mapping structure
 func TestFileToTaskMapping(t *testing.T) {
 	tests := []struct {
-		name      string
-		mapping   map[string][]string
-		validate  func(map[string][]string) bool
+		name     string
+		mapping  map[string][]string
+		validate func(map[string][]string) bool
 	}{
 		{
-			name: "empty mapping",
+			name:    "empty mapping",
 			mapping: map[string][]string{},
 			validate: func(m map[string][]string) bool {
 				return len(m) == 0
@@ -677,8 +677,8 @@ func TestCrossFileDependencies(t *testing.T) {
 		{Number: "1", Name: "Task 1", DependsOn: []string{}},
 		{Number: "2", Name: "Task 2", DependsOn: []string{"1"}},
 		// Part 2 tasks
-		{Number: "3", Name: "Task 3", DependsOn: []string{"2"}},       // Cross-file dep
-		{Number: "4", Name: "Task 4", DependsOn: []string{"1", "3"}},  // Multiple cross-file deps
+		{Number: "3", Name: "Task 3", DependsOn: []string{"2"}},      // Cross-file dep
+		{Number: "4", Name: "Task 4", DependsOn: []string{"1", "3"}}, // Multiple cross-file deps
 		// Part 3 tasks
 		{Number: "5", Name: "Task 5", DependsOn: []string{"3", "4"}}, // Multiple cross-file deps
 	}

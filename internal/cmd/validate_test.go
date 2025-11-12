@@ -1015,16 +1015,16 @@ func TestValidateCommand_PlanFileFiltering(t *testing.T) {
 
 	// Create various files with different naming patterns
 	testFiles := map[string]bool{
-		"plan-01-setup.md":       true,  // Should be included
-		"plan-02-features.yaml":  true,  // Should be included
-		"plan-test.yml":          true,  // Should be included
-		"plan-final.markdown":    true,  // Should be included
-		"setup.md":               false, // Should be filtered out
-		"readme.md":              false, // Should be filtered out
-		"config.yaml":            false, // Should be filtered out
-		"notes.txt":              false, // Should be filtered out
-		"plan.txt":               false, // Wrong extension
-		"myplan-01.md":           false, // Doesn't start with "plan-"
+		"plan-01-setup.md":      true,  // Should be included
+		"plan-02-features.yaml": true,  // Should be included
+		"plan-test.yml":         true,  // Should be included
+		"plan-final.markdown":   true,  // Should be included
+		"setup.md":              false, // Should be filtered out
+		"readme.md":             false, // Should be filtered out
+		"config.yaml":           false, // Should be filtered out
+		"notes.txt":             false, // Should be filtered out
+		"plan.txt":              false, // Wrong extension
+		"myplan-01.md":          false, // Doesn't start with "plan-"
 	}
 
 	for filename := range testFiles {

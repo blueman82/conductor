@@ -38,7 +38,7 @@
 //   - Files: Absolute paths of all matched files (sorted alphabetically)
 //   - Errors: Non-fatal errors encountered during scan
 //
-// ScanDirectory() - Main scanning function that walks directories with the provided options
+// # ScanDirectory() - Main scanning function that walks directories with the provided options
 //
 // # Usage Examples
 //

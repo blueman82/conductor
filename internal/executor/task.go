@@ -93,15 +93,15 @@ type TaskExecutorConfig struct {
 
 // DefaultTaskExecutor executes individual tasks, applying QC review and plan updates.
 type DefaultTaskExecutor struct {
-	invoker          InvokerInterface
-	reviewer         Reviewer
-	planUpdater      PlanUpdater
-	cfg              TaskExecutorConfig
-	clock            func() time.Time
-	qcEnabled        bool
-	retryLimit       int
-	SourceFile       string              // Track which file this task comes from
-	FileLockManager  FileLockManager     // Per-file locking strategy
+	invoker         InvokerInterface
+	reviewer        Reviewer
+	planUpdater     PlanUpdater
+	cfg             TaskExecutorConfig
+	clock           func() time.Time
+	qcEnabled       bool
+	retryLimit      int
+	SourceFile      string          // Track which file this task comes from
+	FileLockManager FileLockManager // Per-file locking strategy
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.

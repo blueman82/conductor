@@ -101,7 +101,7 @@ func TestDisplayWarning_WithFiles(t *testing.T) {
 
 			// Should list each file with indentation and numbering
 			for i, file := range tt.files {
-				expected := strings.Repeat(" ", 6) + (string(rune('1'+i))) + ". " + file
+				expected := strings.Repeat(" ", 6) + (string(rune('1' + i))) + ". " + file
 				if !strings.Contains(output, expected) {
 					t.Errorf("Expected file entry %q in output, got: %s", expected, output)
 				}

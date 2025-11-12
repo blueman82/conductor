@@ -77,9 +77,9 @@ func IsNumberedFile(filename string) bool {
 func FindNumberedFiles(dirPath string) ([]string, error) {
 	// Use fileutil.ScanDirectory to find files matching numbered pattern
 	opts := fileutil.ScanOptions{
-		Pattern:    `^\d+-.*`,                                        // Match files starting with digits followed by dash
-		Extensions: []string{".md", ".markdown", ".yaml", ".yml"},    // Valid plan file extensions
-		Recursive:  false,                                            // Only scan top level
+		Pattern:    `^\d+-.*`,                                     // Match files starting with digits followed by dash
+		Extensions: []string{".md", ".markdown", ".yaml", ".yml"}, // Valid plan file extensions
+		Recursive:  false,                                         // Only scan top level
 	}
 
 	result, err := fileutil.ScanDirectory(dirPath, opts)
