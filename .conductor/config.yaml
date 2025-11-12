@@ -7,11 +7,32 @@ log_dir: .conductor/logs
 dry_run: false
 
 # Learning system configuration
+# Tracks task execution history and adapts future executions based on patterns
 learning:
+  # Enable/disable the learning system (default: true)
+  # When false, no execution history is recorded
   enabled: true
+
+  # Database file path for storing execution history (default: .conductor/learning)
+  # SQLite database will be created at this location
   db_path: .conductor/learning
+
+  # Automatically switch agents after repeated failures (default: false)
+  # When true, conductor will change agents based on success patterns
   auto_adapt_agent: false
+
+  # Add context from past executions to task prompts (default: true)
+  # Enriches prompts with relevant failure patterns and tried approaches
   enhance_prompts: true
+
+  # Number of failures before suggesting alternative agent (default: 2)
+  # Threshold for triggering agent adaptation recommendations
   min_failures_before_adapt: 2
+
+  # Days to retain execution history before cleanup (default: 90)
+  # Set to 0 to keep history forever
   keep_executions_days: 90
+
+  # Maximum execution records to keep per task (default: 100)
+  # Prevents database from growing unbounded for frequently-run tasks
   max_executions_per_task: 100
