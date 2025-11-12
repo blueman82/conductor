@@ -13,6 +13,8 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (1);
 -- Stores every task execution attempt with success/failure data
 CREATE TABLE IF NOT EXISTS task_executions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_file TEXT,
+    run_number INTEGER DEFAULT 1,
     task_number TEXT NOT NULL,
     task_name TEXT NOT NULL,
     agent TEXT,
@@ -29,6 +31,8 @@ CREATE TABLE IF NOT EXISTS task_executions (
 CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_number);
 CREATE INDEX IF NOT EXISTS idx_task_executions_timestamp ON task_executions(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_task_executions_success ON task_executions(success);
+CREATE INDEX IF NOT EXISTS idx_task_executions_plan_file ON task_executions(plan_file);
+CREATE INDEX IF NOT EXISTS idx_task_executions_run_number ON task_executions(run_number);
 
 -- Approach history table
 -- Tracks different approaches tried for recurring task patterns

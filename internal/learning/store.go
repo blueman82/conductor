@@ -17,6 +17,8 @@ var schemaSQL string
 // TaskExecution represents a single task execution record
 type TaskExecution struct {
 	ID           int64
+	PlanFile     string
+	RunNumber    int
 	TaskNumber   string
 	TaskName     string
 	Agent        string
@@ -141,10 +143,12 @@ func (s *Store) RecordExecution(exec *TaskExecution) error {
 	}
 
 	query := `INSERT INTO task_executions
-		(task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, context)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		(plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, context)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := s.db.Exec(query,
+		exec.PlanFile,
+		exec.RunNumber,
 		exec.TaskNumber,
 		exec.TaskName,
 		exec.Agent,
@@ -171,7 +175,7 @@ func (s *Store) RecordExecution(exec *TaskExecution) error {
 
 // GetExecutionHistory retrieves all executions for a specific task, ordered by most recent first
 func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error) {
-	query := `SELECT id, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, timestamp, context
+	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, timestamp, context
 		FROM task_executions
 		WHERE task_number = ?
 		ORDER BY id DESC`
@@ -185,9 +189,12 @@ func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error)
 	var executions []*TaskExecution
 	for rows.Next() {
 		exec := &TaskExecution{}
-		var agent, output, errorMessage, context sql.NullString
+		var planFile, agent, output, errorMessage, context sql.NullString
+		var runNumber sql.NullInt64
 		err := rows.Scan(
 			&exec.ID,
+			&planFile,
+			&runNumber,
 			&exec.TaskNumber,
 			&exec.TaskName,
 			&agent,
@@ -204,6 +211,12 @@ func (s *Store) GetExecutionHistory(taskNumber string) ([]*TaskExecution, error)
 		}
 
 		// Handle nullable fields
+		if planFile.Valid {
+			exec.PlanFile = planFile.String
+		}
+		if runNumber.Valid {
+			exec.RunNumber = int(runNumber.Int64)
+		}
 		if agent.Valid {
 			exec.Agent = agent.String
 		}
@@ -258,4 +271,17 @@ func (s *Store) RecordApproach(approach *ApproachHistory) error {
 	approach.ID = id
 
 	return nil
+}
+
+// GetRunCount returns the maximum run number for a given plan file.
+// Returns 0 if the plan has never been executed.
+func (s *Store) GetRunCount(planFile string) int {
+	var maxRun int
+	query := `SELECT COALESCE(MAX(run_number), 0) FROM task_executions WHERE plan_file = ?`
+	err := s.db.QueryRow(query, planFile).Scan(&maxRun)
+	if err != nil {
+		// Return 0 on error (graceful degradation)
+		return 0
+	}
+	return maxRun
 }

@@ -541,3 +541,124 @@ func TestRecordApproach(t *testing.T) {
 		})
 	}
 }
+
+func TestGetRunCount_NoExecutions(t *testing.T) {
+	t.Run("returns 0 for plan never executed", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		count := store.GetRunCount("never-executed.md")
+		assert.Equal(t, 0, count)
+	})
+}
+
+func TestGetRunCount_MultipleRuns(t *testing.T) {
+	tests := []struct {
+		name     string
+		planFile string
+		setup    func(*Store, string)
+		expected int
+	}{
+		{
+			name:     "single run with one task",
+			planFile: "plan.md",
+			setup: func(s *Store, pf string) {
+				exec := &TaskExecution{
+					PlanFile:   pf,
+					RunNumber:  1,
+					TaskNumber: "Task 1",
+					TaskName:   "Test task",
+					Prompt:     "test",
+					Success:    true,
+				}
+				require.NoError(t, s.RecordExecution(exec))
+			},
+			expected: 1,
+		},
+		{
+			name:     "multiple runs with multiple tasks",
+			planFile: "plan2.md",
+			setup: func(s *Store, pf string) {
+				// Run 1
+				for i := 1; i <= 3; i++ {
+					exec := &TaskExecution{
+						PlanFile:   pf,
+						RunNumber:  1,
+						TaskNumber: fmt.Sprintf("Task %d", i),
+						TaskName:   fmt.Sprintf("Test task %d", i),
+						Prompt:     "test",
+						Success:    true,
+					}
+					require.NoError(t, s.RecordExecution(exec))
+				}
+				// Run 2
+				for i := 1; i <= 3; i++ {
+					exec := &TaskExecution{
+						PlanFile:   pf,
+						RunNumber:  2,
+						TaskNumber: fmt.Sprintf("Task %d", i),
+						TaskName:   fmt.Sprintf("Test task %d", i),
+						Prompt:     "test",
+						Success:    true,
+					}
+					require.NoError(t, s.RecordExecution(exec))
+				}
+				// Run 3
+				for i := 1; i <= 3; i++ {
+					exec := &TaskExecution{
+						PlanFile:   pf,
+						RunNumber:  3,
+						TaskNumber: fmt.Sprintf("Task %d", i),
+						TaskName:   fmt.Sprintf("Test task %d", i),
+						Prompt:     "test",
+						Success:    true,
+					}
+					require.NoError(t, s.RecordExecution(exec))
+				}
+			},
+			expected: 3,
+		},
+		{
+			name:     "different plan files don't interfere",
+			planFile: "plan3.md",
+			setup: func(s *Store, pf string) {
+				// Create executions for different plan file
+				other := &TaskExecution{
+					PlanFile:   "other.md",
+					RunNumber:  5,
+					TaskNumber: "Task 1",
+					TaskName:   "Test",
+					Prompt:     "test",
+					Success:    true,
+				}
+				require.NoError(t, s.RecordExecution(other))
+
+				// Create executions for target plan file
+				exec := &TaskExecution{
+					PlanFile:   pf,
+					RunNumber:  2,
+					TaskNumber: "Task 1",
+					TaskName:   "Test",
+					Prompt:     "test",
+					Success:    true,
+				}
+				require.NoError(t, s.RecordExecution(exec))
+			},
+			expected: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := setupTestStore(t)
+			defer store.Close()
+
+			if tt.setup != nil {
+				tt.setup(store, tt.planFile)
+			}
+
+			count := store.GetRunCount(tt.planFile)
+			assert.Equal(t, tt.expected, count)
+		})
+	}
+}
