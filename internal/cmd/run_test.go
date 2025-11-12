@@ -1462,10 +1462,8 @@ Build foundation.
 
 // TestRunCommand_DirectoryWithPlanFiles tests running with directory argument
 func TestRunCommand_DirectoryWithPlanFiles(t *testing.T) {
-	t.Skip("Skipping: current implementation requires explicit multi-file args, not directory scanning")
-	// NOTE: The current run.go implementation uses parser.ParseFile() for single arguments,
-	// which doesn't handle directory filtering. This test would require updating run.go
-	// to detect directory args and use loadAndMergePlanFiles() for single directories too.
+	// NOTE: After refactoring, run.go now detects directory args and uses FilterPlanFiles
+	// to load plan-* files automatically. This test verifies that functionality works.
 
 	tmpDir := t.TempDir()
 
@@ -1504,8 +1502,8 @@ Do task one.
 		t.Fatalf("Failed to create notes.txt: %v", err)
 	}
 
-	// Execute with directory argument
-	args := []string{"run", "--dry-run", tmpDir}
+	// Execute with directory argument (use --verbose to see task names)
+	args := []string{"run", "--dry-run", "--verbose", tmpDir}
 	output, err := executeRunCommand(t, args)
 
 	if err != nil {
@@ -1517,9 +1515,29 @@ Do task one.
 		t.Errorf("Expected 2 tasks from plan files, got: %s", output)
 	}
 
+	// Verify both tasks are present (one from each plan file)
+	if !strings.Contains(output, "First Task") || !strings.Contains(output, "Second Task") {
+		t.Error("Expected both 'First Task' and 'Second Task' in output")
+	}
+
+	// Verify the multi-file merge message is shown
+	if !strings.Contains(output, "Loading and merging plans from 2 files") {
+		t.Error("Expected multi-file merge message for 2 plan files")
+	}
+
+	// Verify non-plan files were filtered out (readme.md and notes.txt should not appear)
+	if strings.Contains(output, "readme.md") || strings.Contains(output, "notes.txt") {
+		t.Error("Non-plan files should be filtered out")
+	}
+
 	// Verify success
 	if !strings.Contains(output, "Dry-run mode") {
 		t.Error("Expected dry-run mode message")
+	}
+
+	// Verify waves were calculated correctly
+	if !strings.Contains(output, "Execution waves: 2") {
+		t.Error("Expected 2 execution waves (Task 1 in Wave 1, Task 2 in Wave 2 due to dependency)")
 	}
 }
 
