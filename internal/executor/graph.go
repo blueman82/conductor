@@ -14,6 +14,10 @@ import (
 const (
 	// DefaultMaxConcurrency is the default maximum number of concurrent tasks per wave
 	DefaultMaxConcurrency = 10
+
+	// UnparseableTaskSortKey is returned by parseTaskNumber for strings that cannot
+	// be parsed as numbers, ensuring they sort after all numeric task IDs
+	UnparseableTaskSortKey = 999999
 )
 
 // parseTaskNumber extracts the numeric portion from task number strings.
@@ -34,7 +38,7 @@ func parseTaskNumber(taskNum string) int {
 	}
 
 	// Return large number for unparseable strings (they sort last)
-	return 999999
+	return UnparseableTaskSortKey
 }
 
 // DependencyGraph represents a directed graph of task dependencies
