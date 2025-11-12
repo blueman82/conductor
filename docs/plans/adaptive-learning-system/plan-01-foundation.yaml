@@ -1,0 +1,1841 @@
+plan:
+  # Metadata about the implementation plan
+  metadata:
+    feature_name: "Adaptive Learning System for Conductor v2.0.0"
+    created: "2025-01-12"
+    target: "Implement SQLite-based learning system that records task execution history, analyzes failure patterns, automatically adapts agent selection after repeated failures, and provides CLI observability commands"
+    estimated_tasks: 25
+
+  # Worktree groups for parallel execution while respecting dependencies
+  worktree_groups:
+    - group_id: "chain-1-database-foundation"
+      description: "Tasks 1→2→3 (Database schema, learning store implementation, pattern analysis)"
+      tasks: [1, 2, 3]
+      branch: "feature/adaptive-learning-v2/chain-1-database"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Core database and learning store functionality must be built sequentially as each task depends on the previous"
+      setup_commands: |
+        # Create worktree for database foundation chain
+        git worktree add ../wt-learning-db -b feature/adaptive-learning-v2/chain-1-database
+        cd ../wt-learning-db
+
+        # Task 1: Database schema and initialization
+        # [Implement schema.sql, migrations, initialization logic]
+        git add .
+        git commit -m "feat: add learning database schema with SQLite"
+
+        # Task 2: Learning store implementation (depends on Task 1)
+        # [Implement store.go with CRUD operations]
+        git add .
+        git commit -m "feat: implement learning store with execution recording"
+
+        # Task 3: Failure analysis engine (depends on Task 2)
+        # [Implement analysis.go with pattern detection]
+        git add .
+        git commit -m "feat: add failure analysis and agent suggestion logic"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/chain-1-database
+        git push origin main
+
+    - group_id: "chain-2-executor-integration"
+      description: "Tasks 4→5→6→7 (Hook integration in task executor, orchestrator updates)"
+      tasks: [4, 5, 6, 7]
+      branch: "feature/adaptive-learning-v2/chain-2-executor"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Executor integration tasks form a dependency chain - hooks must be implemented before orchestrator integration"
+      setup_commands: |
+        # Wait for chain-1 to merge to main first
+        git checkout main
+        git pull origin main
+
+        # Create worktree for executor integration chain
+        git worktree add ../wt-learning-executor -b feature/adaptive-learning-v2/chain-2-executor
+        cd ../wt-learning-executor
+
+        # Task 4: Pre-task hook implementation
+        # [Add pre-task hook logic to task.go]
+        git add .
+        git commit -m "feat: add pre-task hook with failure analysis"
+
+        # Task 5: QC-review hook (depends on Task 4)
+        # [Add QC-review hook for pattern capture]
+        git add .
+        git commit -m "feat: add QC-review hook for pattern extraction"
+
+        # Task 6: Post-task hook (depends on Task 5)
+        # [Add post-task hook for execution recording]
+        git add .
+        git commit -m "feat: add post-task hook with learning storage"
+
+        # Task 7: Orchestrator integration (depends on Task 6)
+        # [Update orchestrator with learning store, session management]
+        git add .
+        git commit -m "feat: integrate learning system into orchestrator"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/chain-2-executor
+        git push origin main
+
+    - group_id: "chain-3-cli-commands"
+      description: "Tasks 8→9→10→11→12 (CLI command implementation for learning observability)"
+      tasks: [8, 9, 10, 11, 12]
+      branch: "feature/adaptive-learning-v2/chain-3-cli"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "CLI commands build on each other - stats command provides foundation for show, clear, and export"
+      setup_commands: |
+        # Wait for chain-1 to merge (need learning store interface)
+        git checkout main
+        git pull origin main
+
+        # Create worktree for CLI commands chain
+        git worktree add ../wt-learning-cli -b feature/adaptive-learning-v2/chain-3-cli
+        cd ../wt-learning-cli
+
+        # Task 8: Learning stats command
+        # [Implement stats.go in internal/cmd]
+        git add .
+        git commit -m "feat: add learning stats command"
+
+        # Task 9: Learning show command (depends on Task 8)
+        # [Implement show command for task history]
+        git add .
+        git commit -m "feat: add learning show command for task details"
+
+        # Task 10: Learning clear command (depends on Task 8)
+        # [Implement clear command]
+        git add .
+        git commit -m "feat: add learning clear command"
+
+        # Task 11: Learning export command (depends on Task 8)
+        # [Implement export to JSON/CSV]
+        git add .
+        git commit -m "feat: add learning export command"
+
+        # Task 12: Root command integration (depends on all above)
+        # [Wire up all learning subcommands]
+        git add .
+        git commit -m "feat: integrate learning commands into CLI"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/chain-3-cli
+        git push origin main
+
+    - group_id: "independent-13-config"
+      description: "Task 13 (Configuration schema updates - no dependencies)"
+      tasks: [13]
+      branch: "feature/adaptive-learning-v2/independent-13-config"
+      execution_model: "parallel"
+      isolation: "separate-worktree"
+      rationale: "Config changes are independent and can be developed in parallel with other chains"
+      setup_commands: |
+        # Can start immediately, no dependencies
+        git worktree add ../wt-learning-config -b feature/adaptive-learning-v2/independent-13-config
+        cd ../wt-learning-config
+
+        # Task 13: Config schema updates
+        # [Update config.go with learning fields]
+        git add .
+        git commit -m "feat: add learning configuration schema"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/independent-13-config
+        git push origin main
+
+    - group_id: "chain-4-session-management"
+      description: "Tasks 14→15 (Session ID generation and tracking)"
+      tasks: [14, 15]
+      branch: "feature/adaptive-learning-v2/chain-4-session"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Session tracking depends on session ID generation logic"
+      setup_commands: |
+        # Can start after chain-1 completes
+        git checkout main
+        git pull origin main
+
+        # Create worktree for session management
+        git worktree add ../wt-learning-session -b feature/adaptive-learning-v2/chain-4-session
+        cd ../wt-learning-session
+
+        # Task 14: Session ID generation
+        # [Implement session ID logic]
+        git add .
+        git commit -m "feat: add session ID generation and management"
+
+        # Task 15: Run number tracking (depends on Task 14)
+        # [Implement run number calculation]
+        git add .
+        git commit -m "feat: add run number tracking per plan file"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/chain-4-session
+        git push origin main
+
+    - group_id: "independent-16-gitignore"
+      description: "Task 16 (Gitignore updates - no dependencies)"
+      tasks: [16]
+      branch: "feature/adaptive-learning-v2/independent-16-gitignore"
+      execution_model: "parallel"
+      isolation: "separate-worktree"
+      rationale: "Gitignore changes are independent documentation updates"
+      setup_commands: |
+        # Can start immediately
+        git worktree add ../wt-learning-gitignore -b feature/adaptive-learning-v2/independent-16-gitignore
+        cd ../wt-learning-gitignore
+
+        # Task 16: Update .gitignore
+        # [Add .conductor/learning/ to gitignore]
+        git add .
+        git commit -m "chore: add learning directory to gitignore"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/independent-16-gitignore
+        git push origin main
+
+    - group_id: "independent-17-dependencies"
+      description: "Task 17 (Add go-sqlite3 dependency - no dependencies)"
+      tasks: [17]
+      branch: "feature/adaptive-learning-v2/independent-17-deps"
+      execution_model: "parallel"
+      isolation: "separate-worktree"
+      rationale: "Dependency addition is independent and should be done early"
+      setup_commands: |
+        # Can start immediately
+        git worktree add ../wt-learning-deps -b feature/adaptive-learning-v2/independent-17-deps
+        cd ../wt-learning-deps
+
+        # Task 17: Add SQLite dependency
+        # [Run go get for mattn/go-sqlite3]
+        git add .
+        git commit -m "chore: add mattn/go-sqlite3 dependency"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/independent-17-deps
+        git push origin main
+
+    - group_id: "chain-5-integration-tests"
+      description: "Tasks 18→19→20 (Integration testing for complete learning pipeline)"
+      tasks: [18, 19, 20]
+      branch: "feature/adaptive-learning-v2/chain-5-integration"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Integration tests must be built sequentially and require all prior chains to be merged"
+      setup_commands: |
+        # Wait for chains 1, 2, and 4 to merge to main
+        git checkout main
+        git pull origin main
+
+        # Create worktree for integration tests
+        git worktree add ../wt-learning-integration -b feature/adaptive-learning-v2/chain-5-integration
+        cd ../wt-learning-integration
+
+        # Task 18: Full pipeline integration test
+        # [Test complete flow from execution to learning]
+        git add .
+        git commit -m "test: add integration tests for learning pipeline"
+
+        # Task 19: Cross-run learning test (depends on Task 18)
+        # [Test learning across multiple conductor runs]
+        git add .
+        git commit -m "test: add cross-run learning integration tests"
+
+        # Task 20: CLI command integration tests (depends on Task 19)
+        # [Test all CLI commands end-to-end]
+        git add .
+        git commit -m "test: add CLI command integration tests"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/chain-5-integration
+        git push origin main
+
+    - group_id: "independent-21-docs"
+      description: "Task 21 (Documentation updates - can start anytime)"
+      tasks: [21]
+      branch: "feature/adaptive-learning-v2/independent-21-docs"
+      execution_model: "parallel"
+      isolation: "separate-worktree"
+      rationale: "Documentation can be written independently as feature is being developed"
+      setup_commands: |
+        # Can start anytime, ideally near completion
+        git worktree add ../wt-learning-docs -b feature/adaptive-learning-v2/independent-21-docs
+        cd ../wt-learning-docs
+
+        # Task 21: Documentation
+        # [Create docs/learning.md and update README]
+        git add .
+        git commit -m "docs: add comprehensive learning system documentation"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/independent-21-docs
+        git push origin main
+
+    - group_id: "chain-6-final-integration"
+      description: "Tasks 22→23→24→25 (Final integration, validation, version bump, release prep)"
+      tasks: [22, 23, 24, 25]
+      branch: "feature/adaptive-learning-v2/chain-6-final"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Final tasks must execute sequentially - end-to-end testing, validation, version updates, and release preparation"
+      setup_commands: |
+        # Wait for ALL other chains to merge to main
+        git checkout main
+        git pull origin main
+
+        # Create worktree for final integration
+        git worktree add ../wt-learning-final -b feature/adaptive-learning-v2/chain-6-final
+        cd ../wt-learning-final
+
+        # Task 22: End-to-end validation
+        # [Run complete test suite, validate all features]
+        git add .
+        git commit -m "test: add end-to-end validation suite"
+
+        # Task 23: Example config updates (depends on Task 22)
+        # [Update config.yaml.example]
+        git add .
+        git commit -m "docs: update example config with learning settings"
+
+        # Task 24: Version bump to 2.0.0 (depends on Task 23)
+        # [Update VERSION file, update CLAUDE.md]
+        git add .
+        git commit -m "chore: bump version to 2.0.0"
+
+        # Task 25: Release preparation (depends on Task 24)
+        # [Update CHANGELOG, final validation]
+        git add .
+        git commit -m "chore: prepare 2.0.0 release with learning system"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/adaptive-learning-v2/chain-6-final
+        git push origin main
+        git tag v2.0.0
+        git push origin v2.0.0
+
+  # Context for the engineer implementing this
+  context:
+    framework: "Go 1.25.4"
+    architecture: "Clean Architecture with internal packages (agent, cmd, config, executor, logger, models, parser, updater)"
+    test_framework: "Go testing package (testing, testify/assert, testify/require)"
+    database: "SQLite via github.com/mattn/go-sqlite3 (CGO-based)"
+
+    other_context:
+      - "Project follows strict TDD with 86.4% test coverage target"
+      - "Conductor is a CLI orchestration tool that executes implementation plans by spawning Claude Code agents"
+      - "Current version is 1.1.0, this feature will be 2.0.0 (major version bump)"
+      - "Learning system must be enabled by default but gracefully degrade on failures"
+      - "Database location: .conductor/learning/conductor-learning.db (project-local)"
+      - "Agent adaptation triggers after 2 failures with same agent (configurable)"
+      - "Pattern detection uses keyword matching (compilation_error, test_failure, dependency_missing, etc.)"
+      - "Three hook points: pre-task (adapt), qc-review (capture patterns), post-task (record)"
+      - "Session IDs auto-generated as session-YYYYMMDD-HHMM format"
+      - "Learning database must handle concurrent writes safely"
+      - "All failures in learning system must be logged as warnings, never break execution"
+
+    expectations:
+      - "Write tests BEFORE implementation (strict TDD red-green-refactor)"
+      - "Commit after each completed task with conventional commit format"
+      - "Follow existing code patterns in internal/ packages"
+      - "Keep changes minimal and focused (YAGNI)"
+      - "Avoid code duplication (DRY - reference existing utilities)"
+      - "Use worktrees for parallel development when tasks are independent"
+      - "Validate YAML/SQL syntax before committing"
+      - "Add comprehensive error handling with graceful degradation"
+      - "Document all public APIs and complex logic"
+      - "Maintain 86%+ test coverage for all new code"
+
+  # Prerequisites checklist
+  prerequisites:
+    - item: "Required tools installed"
+      details: "Go 1.25.4+, git, CGO compiler (for mattn/go-sqlite3), sqlite3 CLI (optional, for manual DB inspection)"
+      verified: false
+
+    - item: "Development environment setup"
+      details: "GOPATH configured, conductor builds successfully with 'go build ./cmd/conductor'"
+      verified: false
+
+    - item: "Understanding of existing codebase"
+      details: "Reviewed internal/ package structure, read CLAUDE.md, understand current execution flow"
+      verified: false
+
+    - item: "Familiarity with SQLite and CGO"
+      details: "Understand SQLite schema design, CGO build requirements, database/sql package in Go"
+      verified: false
+
+    - item: "Git worktrees understood"
+      details: "Comfortable with 'git worktree add/list/remove' commands for parallel development"
+      verified: false
+
+    - item: "Test environment ready"
+      details: "Can run 'go test ./...' successfully, understand table-driven test patterns"
+      verified: false
+
+    - item: "Branch created from main"
+      details: "Working from main branch with latest changes pulled"
+      verified: false
+
+  # Detailed task breakdown
+  tasks:
+    - task_number: 1
+      name: "Create learning package with database schema and initialization"
+      agent: "golang-pro"
+      worktree_group: "chain-1-database-foundation"
+      files:
+        - "internal/learning/schema.sql"
+        - "internal/learning/store.go"
+        - "internal/learning/store_test.go"
+      depends_on: []
+      estimated_time: "2h"
+
+      description: |
+        Create the foundational learning package with SQLite database schema embedded using go:embed.
+        This task establishes the database structure for storing task executions, failure patterns,
+        and approach history. The schema includes proper indexes for fast lookups and supports
+        concurrent access patterns needed by the orchestrator.
+
+      test_first:
+        test_file: "internal/learning/store_test.go"
+
+        structure:
+          - "TestNewStore - database initialization"
+          - "TestInitSchema - schema creation and versioning"
+          - "TestStoreConnection - connection management"
+          - "TestSchemaVersion - version tracking"
+          - "TestDatabasePath - path resolution (relative, absolute)"
+
+        mocks:
+          - "No mocks needed - use in-memory SQLite (:memory:)"
+
+        fixtures:
+          - "Test database path helpers"
+          - "Temporary directory creation"
+
+        assertions:
+          - "Database file created at correct path"
+          - "Schema tables exist (task_executions, approach_history, schema_version)"
+          - "Indexes created successfully"
+          - "Schema version set to 1"
+          - "Connection can be opened and closed"
+
+        edge_cases:
+          - "Database already exists (should not recreate)"
+          - "Invalid path (should return error)"
+          - "Permission denied (should return error)"
+          - "Concurrent initialization attempts"
+
+        example_skeleton: |
+          package learning
+
+          import (
+              "context"
+              "os"
+              "path/filepath"
+              "testing"
+
+              "github.com/stretchr/testify/assert"
+              "github.com/stretchr/testify/require"
+          )
+
+          func TestNewStore(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  dbPath  string
+                  wantErr bool
+              }{
+                  {
+                      name:    "creates database successfully",
+                      dbPath:  filepath.Join(t.TempDir(), "test.db"),
+                      wantErr: false,
+                  },
+                  {
+                      name:    "handles in-memory database",
+                      dbPath:  ":memory:",
+                      wantErr: false,
+                  },
+                  {
+                      name:    "returns error for invalid path",
+                      dbPath:  "/invalid/path/db.db",
+                      wantErr: true,
+                  },
+              }
+
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      store, err := NewStore(tt.dbPath)
+                      if tt.wantErr {
+                          require.Error(t, err)
+                          return
+                      }
+                      require.NoError(t, err)
+                      require.NotNil(t, store)
+                      defer store.Close()
+
+                      // Verify schema initialized
+                      version, err := store.getSchemaVersion()
+                      require.NoError(t, err)
+                      assert.Equal(t, 1, version)
+                  })
+              }
+          }
+
+      implementation:
+        approach: |
+          1. Create internal/learning/ package directory
+          2. Design SQL schema with two main tables: task_executions and approach_history
+          3. Embed schema.sql using //go:embed directive
+          4. Implement Store struct with *sql.DB connection
+          5. Add NewStore() constructor that initializes database and runs schema
+          6. Include schema versioning for future migrations
+          7. Add proper error handling with wrapped errors
+          8. Implement Close() method for cleanup
+
+        code_structure: |
+          // internal/learning/store.go
+          package learning
+
+          import (
+              "database/sql"
+              "embed"
+              "fmt"
+              _ "github.com/mattn/go-sqlite3"
+          )
+
+          //go:embed schema.sql
+          var schemaSQL string
+
+          type Store struct {
+              db *sql.DB
+              dbPath string
+          }
+
+          func NewStore(dbPath string) (*Store, error) {
+              // Ensure directory exists
+              // Open SQLite connection
+              // Initialize schema
+              // Return store
+          }
+
+          func (s *Store) Close() error {
+              if s.db != nil {
+                  return s.db.Close()
+              }
+              return nil
+          }
+
+          func (s *Store) initSchema() error {
+              _, err := s.db.Exec(schemaSQL)
+              return err
+          }
+
+        key_points:
+          - point: "Use mattn/go-sqlite3 driver"
+            details: "Import with underscore: _ \"github.com/mattn/go-sqlite3\""
+          - point: "Embed SQL schema"
+            details: "Use //go:embed schema.sql directive to embed file in binary"
+          - point: "Schema versioning"
+            details: "Include schema_version table with INSERT OR IGNORE for idempotency"
+          - point: "Error wrapping"
+            details: "Use fmt.Errorf with %w to wrap errors for better stack traces"
+          - point: "Directory creation"
+            details: "Use os.MkdirAll to create parent directories if needed"
+          - point: "Connection pooling"
+            details: "database/sql handles pooling automatically, single *sql.DB instance is safe"
+
+        integration:
+          imports:
+            - "import \"database/sql\""
+            - "import \"embed\""
+            - "import \"os\""
+            - "import \"path/filepath\""
+            - "import _ \"github.com/mattn/go-sqlite3\""
+
+          services_to_inject: []
+
+          config_values: []
+
+          error_handling:
+            - "Wrap all errors with context: fmt.Errorf(\"init schema: %w\", err)"
+            - "Log warnings for non-critical failures"
+            - "Return errors for critical failures (db open, schema init)"
+
+      verification:
+        manual_testing:
+          - step: "Create test directory and database"
+            command: "mkdir -p /tmp/conductor-test && touch /tmp/conductor-test/test.db"
+          - step: "Run package tests"
+            command: "go test ./internal/learning/ -v"
+            expected: "All tests pass, database created with correct schema"
+          - step: "Inspect database schema"
+            command: "sqlite3 /tmp/conductor-test/test.db \".schema\""
+            expected: "Shows task_executions, approach_history, schema_version tables with indexes"
+
+        automated_tests:
+          command: "go test ./internal/learning/store_test.go -v -run TestNewStore"
+          expected_output: |
+            PASS: TestNewStore/creates_database_successfully
+            PASS: TestNewStore/handles_in-memory_database
+            PASS: TestNewStore/returns_error_for_invalid_path
+
+        success_criteria:
+          - "All store initialization tests pass"
+          - "Schema creates all required tables and indexes"
+          - "Schema version table tracks version 1"
+          - "No compiler errors"
+          - "go vet passes"
+
+      commit:
+        type: "feat"
+        message: "add learning database schema with SQLite"
+        body: |
+          Create foundational learning package with:
+          - SQLite schema embedded via go:embed
+          - task_executions table for execution history
+          - approach_history table for tracking tried approaches
+          - schema_version table for migration support
+          - Store struct with initialization and cleanup
+          - Comprehensive tests for database creation
+
+          Part of adaptive learning system v2.0.0
+
+        files:
+          - "internal/learning/schema.sql"
+          - "internal/learning/store.go"
+          - "internal/learning/store_test.go"
+
+    - task_number: 2
+      name: "Implement learning store CRUD operations for execution recording"
+      agent: "golang-pro"
+      worktree_group: "chain-1-database-foundation"
+      files:
+        - "internal/learning/store.go"
+        - "internal/learning/store_test.go"
+      depends_on: [1]
+      estimated_time: "2h"
+
+      description: |
+        Implement core CRUD operations in the learning store for recording task executions,
+        querying execution history, and managing approach history. This provides the data layer
+        for all learning functionality with proper error handling and concurrent access support.
+
+      test_first:
+        test_file: "internal/learning/store_test.go"
+        structure:
+          - "TestRecordExecution - basic execution recording"
+          - "TestRecordExecution_Concurrent - parallel writes"
+          - "TestGetExecutionHistory - query by plan/task"
+          - "TestGetRunCount - count runs per plan"
+          - "TestRecordApproach - track tried approaches"
+        mocks: []
+        fixtures:
+          - "Sample TaskExecution structs"
+          - "Test database with seed data"
+        assertions:
+          - "Execution recorded with all fields"
+          - "Timestamps set automatically"
+          - "Concurrent writes don't corrupt data"
+          - "Queries return correct filtered results"
+        edge_cases:
+          - "Duplicate execution IDs"
+          - "Null/empty fields"
+          - "Very long output strings"
+          - "Special characters in fields"
+        example_skeleton: |
+          func TestRecordExecution(t *testing.T) {
+              store := setupTestStore(t)
+              defer store.Close()
+              
+              exec := &TaskExecution{
+                  PlanFile: "test.md",
+                  TaskNumber: "Task 1",
+                  AgentUsed: "golang-pro",
+                  QCVerdict: "GREEN",
+              }
+              
+              err := store.RecordExecution(context.Background(), exec)
+              require.NoError(t, err)
+              
+              // Verify record exists
+              history, err := store.GetExecutionHistory(context.Background(), "test.md", "Task 1")
+              require.NoError(t, err)
+              assert.Len(t, history, 1)
+          }
+
+      implementation:
+        approach: |
+          1. Define TaskExecution and ApproachHistory structs
+          2. Implement RecordExecution with prepared statements
+          3. Implement GetExecutionHistory with filtering
+          4. Add GetRunCount for session tracking
+          5. Implement RecordApproach for approach history
+          6. Use context for all operations (timeout support)
+          7. Add proper error wrapping and logging
+
+        code_structure: |
+          type TaskExecution struct {
+              ID              int64
+              PlanFile        string
+              TaskNumber      string
+              SessionID       string
+              RunNumber       int
+              AgentUsed       string
+              QCVerdict       string
+              ExecutionTimeMs int64
+              FailurePatterns []string
+              ExecutedAt      time.Time
+          }
+          
+          func (s *Store) RecordExecution(ctx context.Context, exec *TaskExecution) error {
+              // Marshal JSON fields
+              // Execute INSERT with context
+              // Return wrapped error
+          }
+
+        key_points:
+          - point: "Use prepared statements"
+            details: "Prevent SQL injection and improve performance"
+          - point: "Context timeout support"
+            details: "All DB operations accept context.Context"
+          - point: "JSON marshaling for arrays"
+            details: "Store FailurePatterns as JSON TEXT field"
+          - point: "Transaction support"
+            details: "Future-proof for multi-record operations"
+
+        integration:
+          imports:
+            - "import \"context\""
+            - "import \"encoding/json\""
+            - "import \"time\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Wrap all DB errors with context"
+            - "Log at debug level for successful operations"
+            - "Return errors for all failures"
+
+      verification:
+        manual_testing:
+          - step: "Run store tests"
+            command: "go test ./internal/learning/ -v -run TestRecordExecution"
+            expected: "All CRUD operations pass"
+        automated_tests:
+          command: "go test ./internal/learning/ -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "All CRUD tests pass"
+          - "Concurrent write tests pass"
+          - "No data races detected"
+
+      commit:
+        type: "feat"
+        message: "implement learning store with execution recording"
+        body: |
+          Add CRUD operations for learning database:
+          - RecordExecution for storing task execution history
+          - GetExecutionHistory for querying past executions
+          - GetRunCount for session tracking
+          - RecordApproach for tracking tried approaches
+          - Full test coverage with concurrent access tests
+        files:
+          - "internal/learning/store.go"
+          - "internal/learning/store_test.go"
+
+    - task_number: 3
+      name: "Implement failure analysis engine with agent suggestion"
+      agent: "golang-pro"
+      worktree_group: "chain-1-database-foundation"
+      files:
+        - "internal/learning/analysis.go"
+        - "internal/learning/analysis_test.go"
+      depends_on: [2]
+      estimated_time: "2h"
+
+      description: |
+        Build the failure analysis engine that examines execution history to identify
+        patterns, suggest alternative agents, and provide actionable recommendations.
+        This is the "intelligence" layer that makes learning decisions.
+
+      test_first:
+        test_file: "internal/learning/analysis_test.go"
+        structure:
+          - "TestAnalyzeFailures_NoHistory"
+          - "TestAnalyzeFailures_TwoFailures"
+          - "TestAnalyzeFailures_CommonPatterns"
+          - "TestFindBestAlternativeAgent"
+          - "TestExtractFailurePatterns"
+          - "TestGenerateApproachSuggestion"
+        mocks: []
+        fixtures:
+          - "Mock execution history with various patterns"
+        assertions:
+          - "Correctly identifies when to adapt (2+ failures)"
+          - "Suggests best alternative agent based on history"
+          - "Extracts patterns from output text"
+          - "Generates actionable suggestions"
+        edge_cases:
+          - "No history available"
+          - "All agents tried"
+          - "Conflicting patterns"
+          - "Insufficient data for statistical significance"
+        example_skeleton: |
+          func TestAnalyzeFailures_TwoFailures(t *testing.T) {
+              store := setupTestStoreWithHistory(t, 2, "RED")
+              
+              analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+              require.NoError(t, err)
+              
+              assert.Equal(t, 2, analysis.FailedAttempts)
+              assert.True(t, analysis.ShouldTryDifferentAgent)
+              assert.NotEmpty(t, analysis.SuggestedAgent)
+          }
+
+      implementation:
+        approach: |
+          1. Create FailureAnalysis struct with metrics
+          2. Implement AnalyzeFailures to query and analyze history
+          3. Add pattern extraction with keyword matching
+          4. Implement agent suggestion algorithm (SQL queries)
+          5. Generate human-readable recommendations
+          6. Include statistical thresholds (min 5 executions for significance)
+
+        code_structure: |
+          type FailureAnalysis struct {
+              TotalAttempts      int
+              FailedAttempts     int
+              TriedAgents        []string
+              CommonPatterns     []string
+              SuggestedAgent     string
+              SuggestedApproach  string
+              ShouldTryDifferentAgent bool
+          }
+          
+          func (s *Store) AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*FailureAnalysis, error) {
+              // Query execution history
+              // Count failures and identify patterns
+              // Suggest alternative agent
+              // Generate recommendations
+          }
+
+        key_points:
+          - point: "Pattern detection via keyword matching"
+            details: "Check for: compilation_error, test_failure, dependency_missing, etc."
+          - point: "Statistical significance"
+            details: "Require min 5 executions before trusting agent suggestions"
+          - point: "Graceful degradation"
+            details: "Return general-purpose agent if no good alternatives found"
+
+        integration:
+          imports:
+            - "import \"strings\""
+            - "import \"context\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle empty history gracefully"
+            - "Return defaults when insufficient data"
+            - "Log analysis decisions at debug level"
+
+      verification:
+        manual_testing:
+          - step: "Run analysis tests"
+            command: "go test ./internal/learning/analysis_test.go -v"
+            expected: "All analysis logic passes"
+        automated_tests:
+          command: "go test ./internal/learning/ -run Analysis -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Correctly identifies 2+ failure threshold"
+          - "Suggests valid alternative agents"
+          - "Pattern extraction works reliably"
+
+      commit:
+        type: "feat"
+        message: "add failure analysis and agent suggestion logic"
+        body: |
+          Implement intelligent failure analysis:
+          - AnalyzeFailures examines execution history
+          - Pattern detection via keyword matching
+          - Agent suggestion algorithm with SQL queries
+          - Statistical significance thresholds
+          - Human-readable recommendations
+          - Comprehensive test coverage
+        files:
+          - "internal/learning/analysis.go"
+          - "internal/learning/analysis_test.go"
+
+    - task_number: 4
+      name: "Add pre-task hook for failure analysis and agent adaptation"
+      agent: "golang-pro"
+      worktree_group: "chain-2-executor-integration"
+      files:
+        - "internal/executor/task.go"
+        - "internal/executor/task_test.go"
+      depends_on: [3]
+      estimated_time: "1h 30m"
+
+      description: |
+        Integrate the pre-task hook into TaskExecutor that queries the learning database,
+        analyzes past failures, and adapts the agent/prompt before execution. This is the
+        first of three hook integration points.
+
+      test_first:
+        test_file: "internal/executor/task_test.go"
+        structure:
+          - "TestPreTaskHook_NoHistory"
+          - "TestPreTaskHook_AdaptsAgent"
+          - "TestPreTaskHook_EnhancesPrompt"
+          - "TestPreTaskHook_LearningDisabled"
+        mocks:
+          - "Mock LearningStore interface"
+        fixtures:
+          - "Task with various failure histories"
+        assertions:
+          - "Hook called before task execution"
+          - "Agent changed when 2+ failures detected"
+          - "Prompt enhanced with learning context"
+          - "No-op when learning disabled"
+        edge_cases:
+          - "Learning store returns error"
+          - "No suggested agent available"
+          - "Agent already optimal"
+        example_skeleton: |
+          func TestPreTaskHook_AdaptsAgent(t *testing.T) {
+              mockStore := &MockLearningStore{
+                  AnalysisResult: &FailureAnalysis{
+                      FailedAttempts: 2,
+                      TriedAgents: []string{"backend-developer"},
+                      SuggestedAgent: "golang-pro",
+                      ShouldTryDifferentAgent: true,
+                  },
+              }
+              
+              executor := NewTaskExecutor(Config{
+                  learningStore: mockStore,
+              })
+              
+              task := &Task{Agent: "backend-developer"}
+              executor.preTaskHook(ctx, task)
+              
+              assert.Equal(t, "golang-pro", task.Agent)
+          }
+
+      implementation:
+        approach: |
+          1. Add LearningStore field to TaskExecutor struct
+          2. Implement preTaskHook method
+          3. Call hook at start of Execute method
+          4. Query learning store for failure analysis
+          5. Adapt agent if ShouldTryDifferentAgent is true
+          6. Enhance prompt with learning context
+          7. Log decisions for observability
+
+        code_structure: |
+          type TaskExecutor struct {
+              // existing fields
+              learningStore *learning.Store
+              sessionID     string
+              runNumber     int
+              planFile      string
+          }
+          
+          func (e *TaskExecutor) preTaskHook(ctx context.Context, task *models.Task) error {
+              if e.learningStore == nil {
+                  return nil // Learning disabled
+              }
+              
+              analysis, err := e.learningStore.AnalyzeFailures(ctx, e.planFile, task.Number)
+              if err != nil {
+                  log.Warn("pre-task hook failed: %v", err)
+                  return nil // Don't break execution
+              }
+              
+              if analysis.ShouldTryDifferentAgent {
+                  oldAgent := task.Agent
+                  task.Agent = analysis.SuggestedAgent
+                  log.Info("Switching agent: %s → %s", oldAgent, task.Agent)
+              }
+              
+              if analysis.FailedAttempts > 0 {
+                  task.Prompt = enhancePromptWithLearning(task.Prompt, analysis)
+              }
+              
+              return nil
+          }
+
+        key_points:
+          - point: "Graceful degradation"
+            reference: "internal/executor/task.go"
+            details: "Learning failures never break task execution"
+          - point: "Logging for observability"
+            details: "Log all agent switches and learning decisions"
+          - point: "Respect user intent"
+            details: "Only switch if configured to do so"
+
+        integration:
+          imports:
+            - "import \"github.com/harrison/conductor/internal/learning\""
+          services_to_inject:
+            - "LearningStore from internal/learning"
+          config_values: []
+          error_handling:
+            - "Catch and log learning errors"
+            - "Never return error from hook (graceful degradation)"
+
+      verification:
+        manual_testing:
+          - step: "Run executor tests"
+            command: "go test ./internal/executor/ -run PreTaskHook -v"
+            expected: "All hook tests pass"
+        automated_tests:
+          command: "go test ./internal/executor/ -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Hook integrates without breaking existing tests"
+          - "Agent adaptation works correctly"
+          - "Learning failures don't break execution"
+
+      commit:
+        type: "feat"
+        message: "add pre-task hook with failure analysis"
+        body: |
+          Integrate pre-task hook into TaskExecutor:
+          - Query learning database before execution
+          - Adapt agent based on failure analysis
+          - Enhance prompts with learning context
+          - Graceful degradation on errors
+          - Comprehensive test coverage
+        files:
+          - "internal/executor/task.go"
+          - "internal/executor/task_test.go"
+
+    - task_number: 5
+      name: "Add QC-review hook for pattern extraction"
+      agent: "golang-pro"
+      worktree_group: "chain-2-executor-integration"
+      files:
+        - "internal/executor/task.go"
+        - "internal/executor/task_test.go"
+      depends_on: [4]
+      estimated_time: "1h"
+
+      description: |
+        Implement QC-review hook that captures quality control verdicts and extracts
+        failure patterns from output. This hook runs after QC review and before retries.
+
+      test_first:
+        test_file: "internal/executor/task_test.go"
+        structure:
+          - "TestQCReviewHook_ExtractsPatterns"
+          - "TestQCReviewHook_GreenVerdict"
+          - "TestQCReviewHook_RedVerdict"
+        mocks: []
+        fixtures:
+          - "QC outputs with various patterns"
+        assertions:
+          - "Patterns extracted from RED verdicts"
+          - "No patterns for GREEN verdicts"
+          - "Metadata stored in task"
+        edge_cases:
+          - "Empty QC feedback"
+          - "Multiple patterns in single output"
+        example_skeleton: |
+          func TestQCReviewHook_ExtractsPatterns(t *testing.T) {
+              output := "compilation failed: syntax error"
+              verdict := "RED"
+              
+              patterns := extractFailurePatterns(verdict, "", output)
+              
+              assert.Contains(t, patterns, "compilation_error")
+          }
+
+      implementation:
+        approach: |
+          1. Add qcReviewHook method to TaskExecutor
+          2. Call after QC review in Execute method
+          3. Extract patterns using keyword matching
+          4. Store patterns in task metadata for post-task hook
+          5. Log patterns at debug level
+
+        code_structure: |
+          func (e *TaskExecutor) qcReviewHook(ctx context.Context, task *models.Task, verdict, feedback, output string) {
+              patterns := extractFailurePatterns(verdict, feedback, output)
+              
+              if task.Metadata == nil {
+                  task.Metadata = make(map[string]interface{})
+              }
+              task.Metadata["qc_verdict"] = verdict
+              task.Metadata["failure_patterns"] = patterns
+          }
+          
+          func extractFailurePatterns(verdict, feedback, output string) []string {
+              // Keyword matching logic
+          }
+
+        key_points:
+          - point: "Pattern keywords"
+            details: "compilation_error, test_failure, dependency_missing, permission_error, timeout, runtime_error"
+          - point: "Case insensitive matching"
+            details: "strings.ToLower for all comparisons"
+
+        integration:
+          imports: []
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Never fail task execution on pattern extraction errors"
+
+      verification:
+        manual_testing:
+          - step: "Run QC hook tests"
+            command: "go test ./internal/executor/ -run QCReviewHook -v"
+            expected: "Pattern extraction works"
+        automated_tests:
+          command: "go test ./internal/executor/ -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Patterns correctly extracted"
+          - "Metadata stored properly"
+
+      commit:
+        type: "feat"
+        message: "add QC-review hook for pattern extraction"
+        body: |
+          Implement QC-review hook:
+          - Extract failure patterns from QC output
+          - Store patterns in task metadata
+          - Support for 6 pattern types
+          - Comprehensive test coverage
+        files:
+          - "internal/executor/task.go"
+          - "internal/executor/task_test.go"
+
+    - task_number: 6
+      name: "Add post-task hook for execution recording"
+      agent: "golang-pro"
+      worktree_group: "chain-2-executor-integration"
+      files:
+        - "internal/executor/task.go"
+        - "internal/executor/task_test.go"
+      depends_on: [5]
+      estimated_time: "1h"
+
+      description: |
+        Implement post-task hook that records complete execution history to the
+        learning database after task completion (success or failure).
+
+      test_first:
+        test_file: "internal/executor/task_test.go"
+        structure:
+          - "TestPostTaskHook_RecordsExecution"
+          - "TestPostTaskHook_IncludesPatterns"
+          - "TestPostTaskHook_HandlesStoreError"
+        mocks:
+          - "Mock LearningStore"
+        fixtures: []
+        assertions:
+          - "Execution recorded with all fields"
+          - "Patterns from metadata included"
+          - "Store errors logged but don't fail task"
+        edge_cases:
+          - "Store unavailable"
+          - "Missing metadata"
+        example_skeleton: |
+          func TestPostTaskHook_RecordsExecution(t *testing.T) {
+              mockStore := &MockLearningStore{}
+              executor := NewTaskExecutor(Config{learningStore: mockStore})
+              
+              task := &Task{Number: "Task 1"}
+              result := &TaskResult{Status: "GREEN"}
+              
+              executor.postTaskHook(ctx, task, result, "GREEN")
+              
+              assert.True(t, mockStore.RecordCalled)
+          }
+
+      implementation:
+        approach: |
+          1. Add postTaskHook method
+          2. Call at end of Execute method (after QC/retries)
+          3. Build TaskExecution struct from task+result
+          4. Extract patterns from task metadata
+          5. Call store.RecordExecution
+          6. Log success/failure
+
+        code_structure: |
+          func (e *TaskExecutor) postTaskHook(ctx context.Context, task *models.Task, result *models.TaskResult, verdict string) {
+              if e.learningStore == nil {
+                  return
+              }
+              
+              exec := &learning.TaskExecution{
+                  PlanFile:    e.planFile,
+                  TaskNumber:  task.Number,
+                  SessionID:   e.sessionID,
+                  RunNumber:   e.runNumber,
+                  AgentUsed:   task.Agent,
+                  QCVerdict:   verdict,
+                  // ... more fields
+              }
+              
+              if err := e.learningStore.RecordExecution(ctx, exec); err != nil {
+                  log.Warn("failed to record execution: %v", err)
+              }
+          }
+
+        key_points:
+          - point: "Extract metadata"
+            details: "Get failure_patterns from task.Metadata if present"
+          - point: "Graceful degradation"
+            details: "Log errors but don't fail task"
+
+        integration:
+          imports: []
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Catch and log all recording errors"
+            - "Never fail task on recording error"
+
+      verification:
+        manual_testing:
+          - step: "Run post-task hook tests"
+            command: "go test ./internal/executor/ -run PostTaskHook -v"
+            expected: "Recording works correctly"
+        automated_tests:
+          command: "go test ./internal/executor/ -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Execution recorded successfully"
+          - "All fields populated correctly"
+
+      commit:
+        type: "feat"
+        message: "add post-task hook with learning storage"
+        body: |
+          Implement post-task hook:
+          - Record complete execution history
+          - Extract patterns from metadata
+          - Graceful error handling
+          - Full test coverage
+        files:
+          - "internal/executor/task.go"
+          - "internal/executor/task_test.go"
+
+    - task_number: 7
+      name: "Integrate learning system into orchestrator with session management"
+      agent: "golang-pro"
+      worktree_group: "chain-2-executor-integration"
+      files:
+        - "internal/executor/orchestrator.go"
+        - "internal/executor/orchestrator_test.go"
+      depends_on: [6]
+      estimated_time: "1h 30m"
+
+      description: |
+        Update orchestrator to initialize learning store, generate session IDs,
+        track run numbers, and pass learning context to executors.
+
+      test_first:
+        test_file: "internal/executor/orchestrator_test.go"
+        structure:
+          - "TestOrchestrator_WithLearning"
+          - "TestOrchestrator_WithoutLearning"
+          - "TestOrchestrator_SessionIDGeneration"
+          - "TestOrchestrator_RunNumberTracking"
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Learning store passed to executors"
+          - "Session ID generated correctly"
+          - "Run number calculated from history"
+        edge_cases:
+          - "Learning disabled (nil store)"
+          - "First run vs subsequent runs"
+        example_skeleton: |
+          func TestOrchestrator_WithLearning(t *testing.T) {
+              config := OrchestratorConfig{
+                  LearningStore: mockStore,
+                  SessionID: "test-session",
+              }
+              
+              orch := NewOrchestrator(plan, config)
+              
+              assert.NotNil(t, orch.learningStore)
+          }
+
+      implementation:
+        approach: |
+          1. Add learning fields to OrchestratorConfig
+          2. Pass learning store to wave/task executors
+          3. Generate session ID if not provided
+          4. Query run number from learning store
+          5. Include session context in all executors
+
+        code_structure: |
+          type OrchestratorConfig struct {
+              // existing fields
+              LearningStore *learning.Store
+              SessionID     string
+              RunNumber     int
+              PlanFile      string
+          }
+          
+          func NewOrchestrator(plan *models.Plan, config OrchestratorConfig) *Orchestrator {
+              // Generate session ID if empty
+              if config.SessionID == "" {
+                  config.SessionID = generateSessionID()
+              }
+              
+              // Calculate run number
+              if config.LearningStore != nil && config.RunNumber == 0 {
+                  config.RunNumber = config.LearningStore.GetRunCount(config.PlanFile) + 1
+              }
+              
+              return &Orchestrator{...}
+          }
+
+        key_points:
+          - point: "Session ID format"
+            details: "session-YYYYMMDD-HHMM"
+          - point: "Run number starts at 1"
+            details: "First run of a plan is run 1"
+
+        integration:
+          imports: []
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle nil learning store gracefully"
+
+      verification:
+        manual_testing:
+          - step: "Run orchestrator tests"
+            command: "go test ./internal/executor/ -run Orchestrator -v"
+            expected: "Learning integration works"
+        automated_tests:
+          command: "go test ./internal/executor/ -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Orchestrator passes learning to executors"
+          - "Session management works correctly"
+
+      commit:
+        type: "feat"
+        message: "integrate learning system into orchestrator"
+        body: |
+          Add learning support to orchestrator:
+          - Pass learning store to executors
+          - Generate session IDs
+          - Track run numbers
+          - Full test coverage
+        files:
+          - "internal/executor/orchestrator.go"
+          - "internal/executor/orchestrator_test.go"
+
+    - task_number: 8
+      name: "Implement 'conductor learning stats' command"
+      agent: "golang-pro"
+      worktree_group: "chain-3-cli-commands"
+      files:
+        - "internal/cmd/learning_stats.go"
+        - "internal/cmd/learning_stats_test.go"
+      depends_on: [2]
+      estimated_time: "1h 30m"
+
+      description: |
+        Create CLI command to display learning statistics for a plan file including
+        success rates, agent performance, common failures, and task-level metrics.
+
+      test_first:
+        test_file: "internal/cmd/learning_stats_test.go"
+        structure:
+          - "TestStatsCommand_ValidPlan"
+          - "TestStatsCommand_NoData"
+          - "TestStatsCommand_InvalidPlan"
+          - "TestStatsCommand_FormattedOutput"
+        mocks:
+          - "Mock LearningStore"
+        fixtures:
+          - "Sample execution data"
+        assertions:
+          - "Correct statistics calculated"
+          - "Output formatted properly"
+          - "Handles missing data gracefully"
+        edge_cases:
+          - "No executions found"
+          - "Plan file doesn't exist"
+        example_skeleton: |
+          func TestStatsCommand_ValidPlan(t *testing.T) {
+              cmd := newStatsCommand()
+              output := captureOutput(func() {
+                  cmd.Run(cmd, []string{"plan.md"})
+              })
+              
+              assert.Contains(t, output, "Total executions:")
+              assert.Contains(t, output, "Success rate:")
+          }
+
+      implementation:
+        approach: |
+          1. Create cobra command for 'learning stats'
+          2. Accept plan file as argument
+          3. Query learning store for statistics
+          4. Calculate success rates, agent performance
+          5. Format output with tables
+          6. Handle errors gracefully
+
+        code_structure: |
+          func newStatsCommand() *cobra.Command {
+              return &cobra.Command{
+                  Use:   "stats [plan-file]",
+                  Short: "Show learning statistics for a plan",
+                  Args:  cobra.ExactArgs(1),
+                  RunE:  runStats,
+              }
+          }
+          
+          func runStats(cmd *cobra.Command, args []string) error {
+              planFile := args[0]
+              store := openLearningStore()
+              stats := store.GetStatistics(planFile)
+              printStatistics(stats)
+              return nil
+          }
+
+        key_points:
+          - point: "Table formatting"
+            details: "Use fatih/color for colored output"
+          - point: "Database path resolution"
+            details: "Check .conductor/learning/ relative to plan file"
+
+        integration:
+          imports:
+            - "import \"github.com/spf13/cobra\""
+            - "import \"github.com/fatih/color\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle missing database gracefully"
+            - "Show helpful message if no data"
+
+      verification:
+        manual_testing:
+          - step: "Run stats command"
+            command: "./conductor learning stats plan.md"
+            expected: "Statistics displayed"
+        automated_tests:
+          command: "go test ./internal/cmd/ -run Stats -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Command works end-to-end"
+          - "Output is readable and helpful"
+
+      commit:
+        type: "feat"
+        message: "add learning stats command"
+        body: |
+          Implement 'conductor learning stats':
+          - Display success rates
+          - Show agent performance
+          - List common failures
+          - Task-level metrics
+          - Formatted table output
+        files:
+          - "internal/cmd/learning_stats.go"
+          - "internal/cmd/learning_stats_test.go"
+
+    - task_number: 9
+      name: "Implement 'conductor learning show' command"
+      agent: "golang-pro"
+      worktree_group: "chain-3-cli-commands"
+      files:
+        - "internal/cmd/learning_show.go"
+        - "internal/cmd/learning_show_test.go"
+      depends_on: [8]
+      estimated_time: "1h"
+
+      description: |
+        Create CLI command to show detailed execution history for a specific task
+        including all attempts, agents used, verdicts, and timestamps.
+
+      test_first:
+        test_file: "internal/cmd/learning_show_test.go"
+        structure:
+          - "TestShowCommand_ValidTask"
+          - "TestShowCommand_NoHistory"
+          - "TestShowCommand_FormattedOutput"
+        mocks: []
+        fixtures: []
+        assertions:
+          - "History displayed chronologically"
+          - "All execution details shown"
+        edge_cases:
+          - "Task never executed"
+          - "Task name with spaces"
+        example_skeleton: |
+          func TestShowCommand_ValidTask(t *testing.T) {
+              cmd := newShowCommand()
+              output := captureOutput(func() {
+                  cmd.Run(cmd, []string{"plan.md", "Task 1"})
+              })
+              
+              assert.Contains(t, output, "Execution History")
+          }
+
+      implementation:
+        approach: |
+          1. Create cobra command for 'learning show'
+          2. Accept plan file and task number
+          3. Query execution history
+          4. Display chronologically with details
+          5. Highlight successes vs failures
+
+        code_structure: |
+          func newShowCommand() *cobra.Command {
+              return &cobra.Command{
+                  Use:   "show [plan-file] [task-number]",
+                  Short: "Show detailed history for a task",
+                  Args:  cobra.ExactArgs(2),
+                  RunE:  runShow,
+              }
+          }
+
+        key_points:
+          - point: "Chronological order"
+            details: "Most recent first"
+          - point: "Color coding"
+            details: "Green for GREEN, red for RED"
+
+        integration:
+          imports:
+            - "import \"github.com/spf13/cobra\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle missing history gracefully"
+
+      verification:
+        manual_testing:
+          - step: "Run show command"
+            command: "./conductor learning show plan.md \"Task 1\""
+            expected: "History displayed"
+        automated_tests:
+          command: "go test ./internal/cmd/ -run Show -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Detailed history shown"
+          - "Output is clear"
+
+      commit:
+        type: "feat"
+        message: "add learning show command for task details"
+        body: |
+          Implement 'conductor learning show':
+          - Display execution history
+          - Show all attempts
+          - Agent and verdict details
+          - Chronological ordering
+        files:
+          - "internal/cmd/learning_show.go"
+          - "internal/cmd/learning_show_test.go"
+
+    - task_number: 10
+      name: "Implement 'conductor learning clear' command"
+      agent: "golang-pro"
+      worktree_group: "chain-3-cli-commands"
+      files:
+        - "internal/cmd/learning_clear.go"
+        - "internal/cmd/learning_clear_test.go"
+      depends_on: [8]
+      estimated_time: "45m"
+
+      description: |
+        Create CLI command to clear learning data, either for a specific plan file
+        or the entire database, with confirmation prompt for safety.
+
+      test_first:
+        test_file: "internal/cmd/learning_clear_test.go"
+        structure:
+          - "TestClearCommand_SinglePlan"
+          - "TestClearCommand_AllData"
+          - "TestClearCommand_Confirmation"
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Data cleared correctly"
+          - "Confirmation required for --all"
+          - "Reports count of deleted records"
+        edge_cases:
+          - "No data to clear"
+          - "User cancels confirmation"
+        example_skeleton: |
+          func TestClearCommand_SinglePlan(t *testing.T) {
+              // Test clearing specific plan
+          }
+
+      implementation:
+        approach: |
+          1. Create cobra command for 'learning clear'
+          2. Support --all flag for entire database
+          3. Require confirmation prompt
+          4. Delete records from database
+          5. Report count of deleted records
+
+        code_structure: |
+          func newClearCommand() *cobra.Command {
+              cmd := &cobra.Command{
+                  Use:   "clear [plan-file]",
+                  Short: "Clear learning data",
+                  RunE:  runClear,
+              }
+              cmd.Flags().Bool("all", false, "Clear entire database")
+              return cmd
+          }
+
+        key_points:
+          - point: "Confirmation prompt"
+            details: "Require y/n confirmation for safety"
+          - point: "Report deleted count"
+            details: "Show how many records were deleted"
+
+        integration:
+          imports:
+            - "import \"bufio\""
+            - "import \"os\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle missing database gracefully"
+
+      verification:
+        manual_testing:
+          - step: "Run clear command"
+            command: "./conductor learning clear plan.md"
+            expected: "Data cleared after confirmation"
+        automated_tests:
+          command: "go test ./internal/cmd/ -run Clear -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Clears data correctly"
+          - "Confirmation works"
+
+      commit:
+        type: "feat"
+        message: "add learning clear command"
+        body: |
+          Implement 'conductor learning clear':
+          - Clear specific plan data
+          - Clear entire database with --all
+          - Confirmation prompt for safety
+          - Report deleted record count
+        files:
+          - "internal/cmd/learning_clear.go"
+          - "internal/cmd/learning_clear_test.go"
+
+    - task_number: 11
+      name: "Implement 'conductor learning export' command"
+      agent: "golang-pro"
+      worktree_group: "chain-3-cli-commands"
+      files:
+        - "internal/cmd/learning_export.go"
+        - "internal/cmd/learning_export_test.go"
+      depends_on: [8]
+      estimated_time: "1h"
+
+      description: |
+        Create CLI command to export learning data to JSON or CSV format for
+        external analysis or backup purposes.
+
+      test_first:
+        test_file: "internal/cmd/learning_export_test.go"
+        structure:
+          - "TestExportCommand_JSON"
+          - "TestExportCommand_CSV"
+          - "TestExportCommand_InvalidFormat"
+        mocks: []
+        fixtures: []
+        assertions:
+          - "JSON export valid"
+          - "CSV export valid"
+          - "Error on invalid format"
+        edge_cases:
+          - "Empty database"
+          - "Output to file vs stdout"
+        example_skeleton: |
+          func TestExportCommand_JSON(t *testing.T) {
+              // Test JSON export
+          }
+
+      implementation:
+        approach: |
+          1. Create cobra command for 'learning export'
+          2. Support --format flag (json/csv)
+          3. Query all executions
+          4. Marshal to requested format
+          5. Write to stdout or file
+
+        code_structure: |
+          func newExportCommand() *cobra.Command {
+              cmd := &cobra.Command{
+                  Use:   "export [plan-file]",
+                  Short: "Export learning data",
+                  RunE:  runExport,
+              }
+              cmd.Flags().String("format", "json", "Export format (json|csv)")
+              return cmd
+          }
+
+        key_points:
+          - point: "JSON marshaling"
+            details: "Use encoding/json with proper indentation"
+          - point: "CSV format"
+            details: "Use encoding/csv with headers"
+
+        integration:
+          imports:
+            - "import \"encoding/json\""
+            - "import \"encoding/csv\""
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Validate format flag"
+
+      verification:
+        manual_testing:
+          - step: "Export to JSON"
+            command: "./conductor learning export plan.md --format json"
+            expected: "Valid JSON output"
+        automated_tests:
+          command: "go test ./internal/cmd/ -run Export -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "Both formats work"
+          - "Output is valid"
+
+      commit:
+        type: "feat"
+        message: "add learning export command"
+        body: |
+          Implement 'conductor learning export':
+          - Export to JSON format
+          - Export to CSV format
+          - Output to stdout or file
+          - Full test coverage
+        files:
+          - "internal/cmd/learning_export.go"
+          - "internal/cmd/learning_export_test.go"
+
+    - task_number: 12
+      name: "Wire up learning subcommands to root command"
+      agent: "golang-pro"
+      worktree_group: "chain-3-cli-commands"
+      files:
+        - "internal/cmd/root.go"
+        - "internal/cmd/learning.go"
+        - "internal/cmd/root_test.go"
+      depends_on: [11]
+      estimated_time: "30m"
+
+      description: |
+        Create 'conductor learning' parent command and wire up all subcommands
+        (stats, show, clear, export) to make them accessible from CLI.
+
+      test_first:
+        test_file: "internal/cmd/root_test.go"
+        structure:
+          - "TestLearningCommand_SubcommandsRegistered"
+          - "TestLearningCommand_HelpText"
+        mocks: []
+        fixtures: []
+        assertions:
+          - "All subcommands registered"
+          - "Help text correct"
+        edge_cases: []
+        example_skeleton: |
+          func TestLearningCommand_SubcommandsRegistered(t *testing.T) {
+              rootCmd := NewRootCommand()
+              learningCmd := findCommand(rootCmd, "learning")
+              
+              assert.NotNil(t, learningCmd)
+              assert.Equal(t, 4, len(learningCmd.Commands()))
+          }
+
+      implementation:
+        approach: |
+          1. Create parent 'learning' command
+          2. Add all subcommands (stats, show, clear, export)
+          3. Register with root command
+          4. Add helpful description and examples
+
+        code_structure: |
+          func newLearningCommand() *cobra.Command {
+              cmd := &cobra.Command{
+                  Use:   "learning",
+                  Short: "Learning system commands",
+                  Long:  "Commands for viewing and managing conductor's learning system",
+              }
+              
+              cmd.AddCommand(newStatsCommand())
+              cmd.AddCommand(newShowCommand())
+              cmd.AddCommand(newClearCommand())
+              cmd.AddCommand(newExportCommand())
+              
+              return cmd
+          }
+          
+          // In root.go
+          rootCmd.AddCommand(newLearningCommand())
+
+        key_points:
+          - point: "Command organization"
+            details: "Parent command with 4 subcommands"
+          - point: "Help text"
+            details: "Clear descriptions and examples"
+
+        integration:
+          imports: []
+          services_to_inject: []
+          config_values: []
+          error_handling: []
+
+      verification:
+        manual_testing:
+          - step: "Run learning help"
+            command: "./conductor learning --help"
+            expected: "Shows all subcommands"
+          - step: "Run each subcommand"
+            command: "./conductor learning stats --help"
+            expected: "Command-specific help shown"
+        automated_tests:
+          command: "go test ./internal/cmd/ -v"
+          expected_output: "PASS"
+        success_criteria:
+          - "All commands accessible"
+          - "Help text correct"
+
+      commit:
+        type: "feat"
+        message: "integrate learning commands into CLI"
+        body: |
+          Wire up learning subcommands:
+          - Create parent 'learning' command
+          - Register all 4 subcommands
+          - Add to root command
+          - Complete CLI integration
+        files:
+          - "internal/cmd/root.go"
+          - "internal/cmd/learning.go"
+          - "internal/cmd/root_test.go"
+
