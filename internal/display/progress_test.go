@@ -132,9 +132,9 @@ func TestProgressIndicator_Step(t *testing.T) {
 				t.Errorf("Step() output missing format %q, got %q", tt.wantFormat, got)
 			}
 
-			// Check blue ANSI color code is present
-			if tt.wantColor && !strings.Contains(got, "\x1b[34m") {
-				t.Errorf("Step() output missing blue ANSI color code, got %q", got)
+			// Check cyan ANSI color code is present
+			if tt.wantColor && !strings.Contains(got, "\x1b[36m") {
+				t.Errorf("Step() output missing cyan ANSI color code, got %q", got)
 			}
 
 			// Check ANSI reset is present
@@ -307,19 +307,19 @@ func TestProgressIndicator_ANSIColors(t *testing.T) {
 	tests := []struct {
 		name      string
 		method    string
-		wantBlue  bool
+		wantCyan  bool
 		wantGreen bool
 	}{
 		{
-			name:      "Step uses blue color",
+			name:      "Step uses cyan color",
 			method:    "step",
-			wantBlue:  true,
+			wantCyan:  true,
 			wantGreen: false,
 		},
 		{
 			name:      "Complete uses green color",
 			method:    "complete",
-			wantBlue:  false,
+			wantCyan:  false,
 			wantGreen: true,
 		},
 	}
@@ -338,10 +338,10 @@ func TestProgressIndicator_ANSIColors(t *testing.T) {
 
 			got := buf.String()
 
-			// Check for blue ANSI code (34m)
-			hasBlue := strings.Contains(got, "\x1b[34m")
-			if hasBlue != tt.wantBlue {
-				t.Errorf("Blue ANSI code present = %v, want %v, output = %q", hasBlue, tt.wantBlue, got)
+			// Check for cyan ANSI code (36m)
+			hasCyan := strings.Contains(got, "\x1b[36m")
+			if hasCyan != tt.wantCyan {
+				t.Errorf("Cyan ANSI code present = %v, want %v, output = %q", hasCyan, tt.wantCyan, got)
 			}
 
 			// Check for green ANSI code (32m)

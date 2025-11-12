@@ -27,12 +27,12 @@ func (p *ProgressIndicator) Start() {
 	fmt.Fprintf(p.writer, "Loading plan files:\n")
 }
 
-// Step displays progress for current item: [N/Total] filename (blue)
+// Step displays progress for current item: [N/Total] filename (cyan)
 func (p *ProgressIndicator) Step(filename string) {
 	p.current++
 	basename := filepath.Base(filename)
-	// Output with blue ANSI around entire line for visibility
-	fmt.Fprintf(p.writer, "\x1b[34m  [%d/%d] %s\x1b[0m\n", p.current, p.totalFiles, basename)
+	// Output with cyan ANSI around entire line for visibility
+	fmt.Fprintf(p.writer, "\x1b[36m  [%d/%d] %s\x1b[0m\n", p.current, p.totalFiles, basename)
 }
 
 // Complete displays success message with green checkmark
