@@ -222,8 +222,12 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 			seenTasks[task.Number] = true
 		}
 
-		// Add tasks
-		merged.Tasks = append(merged.Tasks, plan.Tasks...)
+		// Add tasks with SourceFile populated for multi-file tracking
+		for _, task := range plan.Tasks {
+			// Set SourceFile to track which plan file this task comes from
+			task.SourceFile = plan.FilePath
+			merged.Tasks = append(merged.Tasks, task)
+		}
 
 		// Track file-to-task mapping
 		if plan.FilePath != "" {

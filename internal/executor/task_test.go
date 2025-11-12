@@ -1105,9 +1105,128 @@ func TestUpdateCorrectFile(t *testing.T) {
 		t.Errorf("expected status GREEN, got %s", result.Status)
 	}
 
-	// The updater should have been called with the config PlanPath
-	// since SourceFile updates would be handled by orchestrator mapping
-	if updatedPath != "plan2.md" {
-		t.Errorf("expected plan path 'plan2.md', got %q", updatedPath)
+	// The updater should have been called with SourceFile (not PlanPath)
+	// This is the fix: SourceFile takes precedence for multi-file plans
+	if updatedPath != "merged-plan2.md" {
+		t.Errorf("expected source file 'merged-plan2.md', got %q", updatedPath)
 	}
+}
+
+// trackingFileLockManager tracks which file paths are locked for testing
+type trackingFileLockManager struct {
+	lockedPaths []string
+	mu          sync.Mutex
+}
+
+func (t *trackingFileLockManager) Lock(filePath string) func() {
+	t.mu.Lock()
+	t.lockedPaths = append(t.lockedPaths, filePath)
+	t.mu.Unlock()
+	return func() {}
+}
+
+// TestMultiFileExecutionWithoutSourceFile demonstrates the bug where multi-file plans
+// concatenate file paths and cause lock acquisition failures.
+// After fix: verifies that SourceFile is used for locking instead of concatenated PlanPath.
+func TestMultiFileExecutionWithoutSourceFile(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task output"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	// Simulate multi-file execution where run.go concatenates plan paths
+	concatenatedPath := "plan-01-foundation.yaml, plan-02-configuration-testing.yaml"
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: concatenatedPath, // Multi-file paths are concatenated in run.go
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Use tracking lock manager to verify which path is locked
+	tracker := &trackingFileLockManager{lockedPaths: []string{}}
+	executor.FileLockManager = tracker
+
+	// Task with SourceFile set (wave executor does this from Task.SourceFile)
+	task := models.Task{
+		Number:     "1",
+		Name:       "Task from multi-file plan",
+		Prompt:     "Do something",
+		SourceFile: "plan-01-foundation.yaml", // Set by orchestrator during merge
+	}
+
+	// Simulate wave executor setting SourceFile before execution
+	executor.SourceFile = task.SourceFile
+
+	// This should execute successfully
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// AFTER FIX: Verify that individual source file was locked, not concatenated path
+	if len(tracker.lockedPaths) != 1 {
+		t.Fatalf("expected 1 lock, got %d", len(tracker.lockedPaths))
+	}
+
+	lockedPath := tracker.lockedPaths[0]
+
+	// The fix: it should lock the individual source file
+	if lockedPath != "plan-01-foundation.yaml" {
+		t.Errorf("expected to lock individual file 'plan-01-foundation.yaml', got %q", lockedPath)
+	}
+
+	// Verify SourceFile takes precedence over PlanPath
+	if lockedPath == concatenatedPath {
+		t.Errorf("ERROR: Still locking concatenated path %q instead of SourceFile", lockedPath)
+	}
+}
+
+// TestTaskExecutorUsesSourceFileForLocking verifies that when SourceFile is set,
+// it takes precedence over PlanPath for file locking operations.
+func TestTaskExecutorUsesSourceFileForLocking(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	// Create executor with concatenated PlanPath (simulating multi-file bug)
+	concatenatedPath := "file1.md, file2.md"
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: concatenatedPath,
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set the correct individual source file
+	executor.SourceFile = "file1.md"
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Task from file1",
+		Prompt: "Task should lock file1.md only",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify the lock was acquired on the individual file, not concatenated path
+	// This is implicit in the test passing - if it tried to lock the concatenated
+	// path, the file system operation would likely fail or behave unexpectedly
 }

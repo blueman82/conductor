@@ -157,9 +157,14 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
 	result := models.TaskResult{Task: task}
 
-	// Determine which file to lock - prefer SourceFile over PlanPath
+	// Determine which file to lock and update - priority order:
+	// 1. task.SourceFile (set for multi-file plans)
+	// 2. te.SourceFile (set by legacy code or single-file plans)
+	// 3. te.cfg.PlanPath (fallback)
 	fileToLock := te.cfg.PlanPath
-	if te.SourceFile != "" {
+	if task.SourceFile != "" {
+		fileToLock = task.SourceFile
+	} else if te.SourceFile != "" {
 		fileToLock = te.SourceFile
 	}
 
@@ -173,7 +178,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		result.Task.Agent = te.cfg.DefaultAgent
 	}
 
-	if err := te.updatePlanStatus(task.Number, StatusInProgress, false); err != nil {
+	if err := te.updatePlanStatus(task, StatusInProgress, false); err != nil {
 		result.Status = models.StatusFailed
 		result.Error = err
 		return result, err
@@ -195,12 +200,12 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 				timeoutErr.Context = "task execution timeout"
 				result.Status = models.StatusFailed
 				result.Error = timeoutErr
-				_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
 				return result, timeoutErr
 			}
 			result.Status = models.StatusFailed
 			result.Error = err
-			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			_ = te.updatePlanStatus(task, StatusFailed, false)
 			return result, err
 		}
 
@@ -212,12 +217,12 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 				timeoutErr.Context = "invoker timeout"
 				result.Status = models.StatusFailed
 				result.Error = timeoutErr
-				_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
 				return result, timeoutErr
 			}
 			result.Status = models.StatusFailed
 			result.Error = err
-			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			_ = te.updatePlanStatus(task, StatusFailed, false)
 			return result, err
 		}
 
@@ -227,14 +232,14 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			taskErr := NewTaskError(task.Number, "task invocation failed", invocation.Error)
 			result.Status = models.StatusFailed
 			result.Error = taskErr
-			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			_ = te.updatePlanStatus(task, StatusFailed, false)
 			return result, taskErr
 		}
 		if invocation.ExitCode != 0 {
 			taskErr := NewTaskError(task.Number, fmt.Sprintf("task exited with code %d", invocation.ExitCode), nil)
 			result.Status = models.StatusFailed
 			result.Error = taskErr
-			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			_ = te.updatePlanStatus(task, StatusFailed, false)
 			return result, taskErr
 		}
 
@@ -256,7 +261,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		if !te.qcEnabled || te.reviewer == nil {
 			result.Status = models.StatusGreen
 			result.RetryCount = attempt
-			if err := te.updatePlanStatus(task.Number, StatusCompleted, true); err != nil {
+			if err := te.updatePlanStatus(task, StatusCompleted, true); err != nil {
 				result.Status = models.StatusFailed
 				result.Error = err
 				return result, err
@@ -268,7 +273,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		if reviewErr != nil {
 			result.Status = models.StatusFailed
 			result.Error = reviewErr
-			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			_ = te.updatePlanStatus(task, StatusFailed, false)
 			return result, reviewErr
 		}
 
@@ -282,7 +287,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		case review.Flag == models.StatusGreen:
 			result.Status = models.StatusGreen
 			result.RetryCount = attempt
-			if err := te.updatePlanStatus(task.Number, StatusCompleted, true); err != nil {
+			if err := te.updatePlanStatus(task, StatusCompleted, true); err != nil {
 				result.Status = models.StatusFailed
 				result.Error = err
 				return result, err
@@ -291,7 +296,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		case review.Flag == models.StatusYellow:
 			result.Status = models.StatusYellow
 			result.RetryCount = attempt
-			if err := te.updatePlanStatus(task.Number, StatusCompleted, true); err != nil {
+			if err := te.updatePlanStatus(task, StatusCompleted, true); err != nil {
 				result.Status = models.StatusFailed
 				result.Error = err
 				return result, err
@@ -312,7 +317,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			result.Status = models.StatusRed
 			result.RetryCount = attempt
 			result.Error = lastErr
-			_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+			_ = te.updatePlanStatus(task, StatusFailed, false)
 			return result, lastErr
 		}
 	}
@@ -324,11 +329,11 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	result.Status = models.StatusRed
 	result.RetryCount = te.retryLimit
 	result.Error = lastErr
-	_ = te.updatePlanStatus(task.Number, StatusFailed, false)
+	_ = te.updatePlanStatus(task, StatusFailed, false)
 	return result, lastErr
 }
 
-func (te *DefaultTaskExecutor) updatePlanStatus(taskNumber string, status string, markComplete bool) error {
+func (te *DefaultTaskExecutor) updatePlanStatus(task models.Task, status string, markComplete bool) error {
 	if te.planUpdater == nil {
 		return nil
 	}
@@ -339,12 +344,16 @@ func (te *DefaultTaskExecutor) updatePlanStatus(taskNumber string, status string
 		completedAt = &ts
 	}
 
-	// Determine which file to update - prefer SourceFile over PlanPath
-	// This ensures multi-file plans update the correct source file for each task
+	// Determine which file to update - priority order:
+	// 1. task.SourceFile (set for multi-file plans)
+	// 2. te.SourceFile (set by legacy code or single-file plans)
+	// 3. te.cfg.PlanPath (fallback)
 	fileToUpdate := te.cfg.PlanPath
-	if te.SourceFile != "" {
+	if task.SourceFile != "" {
+		fileToUpdate = task.SourceFile
+	} else if te.SourceFile != "" {
 		fileToUpdate = te.SourceFile
 	}
 
-	return te.planUpdater.Update(fileToUpdate, taskNumber, status, completedAt)
+	return te.planUpdater.Update(fileToUpdate, task.Number, status, completedAt)
 }
