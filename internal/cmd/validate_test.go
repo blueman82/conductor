@@ -651,3 +651,482 @@ func TestValidateSplitBoundaries(t *testing.T) {
 		t.Logf("Split boundaries validation successful: %s", outputStr)
 	}
 }
+
+// ============================================================================
+// MULTI-FILE VALIDATION TESTS
+// ============================================================================
+
+// TestValidateCommand_MultipleFiles tests validation with multiple file arguments
+func TestValidateCommand_MultipleFiles(t *testing.T) {
+	// Setup test agents
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	// Create temporary plan files
+	tmpDir := t.TempDir()
+
+	// Plan 1: Markdown file with tasks 1-2
+	plan1Content := `# Plan Part 1
+
+## Task 1: Setup
+**Files**: main.go
+**Agent**: golang-pro
+
+Initialize the project.
+
+## Task 2: Database
+**Files**: db.go
+**Depends on**: 1
+**Agent**: golang-pro
+
+Setup database connection.
+`
+	plan1Path := filepath.Join(tmpDir, "plan-01-setup.md")
+	if err := os.WriteFile(plan1Path, []byte(plan1Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan file 1: %v", err)
+	}
+
+	// Plan 2: YAML file with tasks 3-4
+	plan2Content := `plan:
+  tasks:
+    - task_number: 3
+      name: "API Server"
+      files: ["api.go"]
+      depends_on: [2]
+      agent: "golang-pro"
+      description: "Build API server"
+    - task_number: 4
+      name: "Tests"
+      files: ["api_test.go"]
+      depends_on: [3]
+      agent: "golang-pro"
+      description: "Write tests"
+`
+	plan2Path := filepath.Join(tmpDir, "plan-02-api.yaml")
+	if err := os.WriteFile(plan2Path, []byte(plan2Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan file 2: %v", err)
+	}
+
+	// Test validation with multiple file arguments
+	var output bytes.Buffer
+	err := validateMultipleFiles([]string{plan1Path, plan2Path}, registry, &output)
+
+	if err != nil {
+		t.Errorf("validateMultipleFiles() failed for valid multi-file plan: %v", err)
+	}
+
+	outputStr := output.String()
+
+	// Verify output mentions multiple files
+	if !strings.Contains(outputStr, "Validating 2 plan file(s)") {
+		t.Errorf("Expected output to mention 2 plan files, got: %s", outputStr)
+	}
+
+	// Verify task count
+	if !strings.Contains(outputStr, "Parsed 4 tasks") {
+		t.Errorf("Expected 4 tasks from merged plan, got: %s", outputStr)
+	}
+
+	// Verify cross-file dependency validation
+	if !strings.Contains(outputStr, "No circular dependencies") {
+		t.Errorf("Expected dependency validation message, got: %s", outputStr)
+	}
+
+	// Verify success message
+	if !strings.Contains(outputStr, "Plan is valid") {
+		t.Errorf("Expected validation success message, got: %s", outputStr)
+	}
+}
+
+// TestValidateCommand_MultipleFiles_CrossFileDependencies tests cross-file dependency validation
+func TestValidateCommand_MultipleFiles_CrossFileDependencies(t *testing.T) {
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	tmpDir := t.TempDir()
+
+	// Plan 1: Task 1
+	plan1Content := `# Plan Part 1
+
+## Task 1: Foundation
+**Files**: base.go
+**Agent**: golang-pro
+
+Build foundation.
+`
+	plan1Path := filepath.Join(tmpDir, "plan-01.md")
+	if err := os.WriteFile(plan1Path, []byte(plan1Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan file 1: %v", err)
+	}
+
+	// Plan 2: Task 2 depends on Task 1 (cross-file dependency)
+	plan2Content := `plan:
+  tasks:
+    - task_number: 2
+      name: "Feature"
+      files: ["feature.go"]
+      depends_on: [1]
+      agent: "golang-pro"
+      description: "Build feature on top of foundation"
+`
+	plan2Path := filepath.Join(tmpDir, "plan-02.yaml")
+	if err := os.WriteFile(plan2Path, []byte(plan2Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan file 2: %v", err)
+	}
+
+	// Test validation - should succeed with valid cross-file dependency
+	var output bytes.Buffer
+	err := validateMultipleFiles([]string{plan1Path, plan2Path}, registry, &output)
+
+	if err != nil {
+		t.Errorf("validateMultipleFiles() failed for valid cross-file dependencies: %v", err)
+	}
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "Plan is valid") {
+		t.Errorf("Expected validation to pass with cross-file dependencies, got: %s", outputStr)
+	}
+}
+
+// TestValidateCommand_MultipleFiles_MissingDependency tests invalid cross-file dependencies
+func TestValidateCommand_MultipleFiles_MissingDependency(t *testing.T) {
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	tmpDir := t.TempDir()
+
+	// Plan 1: Task 1
+	plan1Content := `# Plan Part 1
+
+## Task 1: Base
+**Files**: base.go
+**Agent**: golang-pro
+
+Build base.
+`
+	plan1Path := filepath.Join(tmpDir, "plan-01.md")
+	if err := os.WriteFile(plan1Path, []byte(plan1Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan file 1: %v", err)
+	}
+
+	// Plan 2: Task 2 depends on non-existent Task 99
+	plan2Content := `plan:
+  tasks:
+    - task_number: 2
+      name: "Feature"
+      files: ["feature.go"]
+      depends_on: [99]
+      agent: "golang-pro"
+      description: "Build feature with broken dependency"
+`
+	plan2Path := filepath.Join(tmpDir, "plan-02.yaml")
+	if err := os.WriteFile(plan2Path, []byte(plan2Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan file 2: %v", err)
+	}
+
+	// Test validation - should fail due to missing dependency
+	var output bytes.Buffer
+	err := validateMultipleFiles([]string{plan1Path, plan2Path}, registry, &output)
+
+	if err == nil {
+		t.Error("validateMultipleFiles() should fail for missing cross-file dependency")
+	}
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "Validation failed") {
+		t.Errorf("Expected validation failure message, got: %s", outputStr)
+	}
+}
+
+// TestValidateCommand_DirectoryWithPlanFiles tests validation of directory with plan-* files
+func TestValidateCommand_DirectoryWithPlanFiles(t *testing.T) {
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	tmpDir := t.TempDir()
+
+	// Create plan-*.md files that should be included
+	plan1Content := `# Plan 1
+
+## Task 1: Task One
+**Files**: one.go
+**Agent**: golang-pro
+
+Do task one.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-01-first.md"), []byte(plan1Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan-01-first.md: %v", err)
+	}
+
+	// Create plan-*.yaml files that should be included
+	plan2Content := `plan:
+  tasks:
+    - task_number: 2
+      name: "Task Two"
+      files: ["two.go"]
+      depends_on: [1]
+      agent: "golang-pro"
+      description: "Do task two"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "plan-02-second.yaml"), []byte(plan2Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan-02-second.yaml: %v", err)
+	}
+
+	// Create non-plan files that should be filtered out
+	if err := os.WriteFile(filepath.Join(tmpDir, "readme.md"), []byte("# README"), 0644); err != nil {
+		t.Fatalf("Failed to create readme.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "setup.yaml"), []byte("key: value"), 0644); err != nil {
+		t.Fatalf("Failed to create setup.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "notes.txt"), []byte("notes"), 0644); err != nil {
+		t.Fatalf("Failed to create notes.txt: %v", err)
+	}
+
+	// Filter plan files from directory
+	planFiles, err := filterPlanFiles([]string{tmpDir})
+	if err != nil {
+		t.Fatalf("filterPlanFiles() failed: %v", err)
+	}
+
+	// Should only find 2 plan files
+	if len(planFiles) != 2 {
+		t.Errorf("Expected 2 plan files, got %d", len(planFiles))
+	}
+
+	// Validate the filtered files
+	var output bytes.Buffer
+	err = validateMultipleFiles(planFiles, registry, &output)
+
+	if err != nil {
+		t.Errorf("validateMultipleFiles() failed: %v", err)
+	}
+
+	outputStr := output.String()
+
+	// Verify correct number of files and tasks
+	if !strings.Contains(outputStr, "Validating 2 plan file(s)") {
+		t.Errorf("Expected 2 plan files, got: %s", outputStr)
+	}
+
+	if !strings.Contains(outputStr, "Parsed 2 tasks") {
+		t.Errorf("Expected 2 tasks, got: %s", outputStr)
+	}
+
+	if !strings.Contains(outputStr, "Plan is valid") {
+		t.Errorf("Expected validation success, got: %s", outputStr)
+	}
+}
+
+// TestValidateCommand_MixedDirectoryAndFiles tests validation with both directory and file arguments
+func TestValidateCommand_MixedDirectoryAndFiles(t *testing.T) {
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	tmpDir := t.TempDir()
+
+	// Create a subdirectory with plan files
+	subDir := filepath.Join(tmpDir, "plans")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create subdirectory: %v", err)
+	}
+
+	// Plan 1 in subdirectory
+	plan1Content := `# Plan 1
+
+## Task 1: Base
+**Files**: base.go
+**Agent**: golang-pro
+
+Build base.
+`
+	if err := os.WriteFile(filepath.Join(subDir, "plan-01.md"), []byte(plan1Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan-01.md: %v", err)
+	}
+
+	// Plan 2 as standalone file in parent directory
+	plan2Content := `plan:
+  tasks:
+    - task_number: 2
+      name: "Extra Feature"
+      files: ["extra.go"]
+      depends_on: [1]
+      agent: "golang-pro"
+      description: "Add extra feature"
+`
+	plan2Path := filepath.Join(tmpDir, "plan-extra.yaml")
+	if err := os.WriteFile(plan2Path, []byte(plan2Content), 0644); err != nil {
+		t.Fatalf("Failed to create plan-extra.yaml: %v", err)
+	}
+
+	// Filter both directory and standalone file
+	planFiles, err := filterPlanFiles([]string{subDir, plan2Path})
+	if err != nil {
+		t.Fatalf("filterPlanFiles() failed: %v", err)
+	}
+
+	// Should find 2 plan files (1 from dir + 1 standalone)
+	if len(planFiles) != 2 {
+		t.Errorf("Expected 2 plan files, got %d", len(planFiles))
+	}
+
+	// Validate the filtered files
+	var output bytes.Buffer
+	err = validateMultipleFiles(planFiles, registry, &output)
+
+	if err != nil {
+		t.Errorf("validateMultipleFiles() failed: %v", err)
+	}
+
+	outputStr := output.String()
+
+	if !strings.Contains(outputStr, "Validating 2 plan file(s)") {
+		t.Errorf("Expected 2 plan files, got: %s", outputStr)
+	}
+
+	if !strings.Contains(outputStr, "Parsed 2 tasks") {
+		t.Errorf("Expected 2 tasks, got: %s", outputStr)
+	}
+
+	if !strings.Contains(outputStr, "Plan is valid") {
+		t.Errorf("Expected validation success, got: %s", outputStr)
+	}
+}
+
+// TestValidateCommand_PlanFileFiltering tests that only plan-* files are validated
+func TestValidateCommand_PlanFileFiltering(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create various files with different naming patterns
+	testFiles := map[string]bool{
+		"plan-01-setup.md":       true,  // Should be included
+		"plan-02-features.yaml":  true,  // Should be included
+		"plan-test.yml":          true,  // Should be included
+		"plan-final.markdown":    true,  // Should be included
+		"setup.md":               false, // Should be filtered out
+		"readme.md":              false, // Should be filtered out
+		"config.yaml":            false, // Should be filtered out
+		"notes.txt":              false, // Should be filtered out
+		"plan.txt":               false, // Wrong extension
+		"myplan-01.md":           false, // Doesn't start with "plan-"
+	}
+
+	for filename := range testFiles {
+		content := "test content"
+		if err := os.WriteFile(filepath.Join(tmpDir, filename), []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create %s: %v", filename, err)
+		}
+	}
+
+	// Filter plan files
+	planFiles, err := filterPlanFiles([]string{tmpDir})
+	if err != nil {
+		t.Fatalf("filterPlanFiles() failed: %v", err)
+	}
+
+	// Count expected files
+	expectedCount := 0
+	for _, shouldInclude := range testFiles {
+		if shouldInclude {
+			expectedCount++
+		}
+	}
+
+	if len(planFiles) != expectedCount {
+		t.Errorf("Expected %d plan files, got %d", expectedCount, len(planFiles))
+	}
+
+	// Verify only plan-* files are included
+	for _, planFile := range planFiles {
+		basename := filepath.Base(planFile)
+		if !strings.HasPrefix(basename, "plan-") {
+			t.Errorf("Non-plan file included: %s", basename)
+		}
+
+		ext := strings.ToLower(filepath.Ext(basename))
+		validExt := ext == ".md" || ext == ".markdown" || ext == ".yaml" || ext == ".yml"
+		if !validExt {
+			t.Errorf("File with invalid extension included: %s", basename)
+		}
+	}
+}
+
+// TestValidateCommand_EmptyDirectory tests validation of directory with no plan files
+func TestValidateCommand_EmptyDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create non-plan files
+	if err := os.WriteFile(filepath.Join(tmpDir, "readme.md"), []byte("# README"), 0644); err != nil {
+		t.Fatalf("Failed to create readme.md: %v", err)
+	}
+
+	// Try to filter plan files - should return error
+	_, err := filterPlanFiles([]string{tmpDir})
+
+	if err == nil {
+		t.Error("filterPlanFiles() should fail for directory with no plan files")
+	}
+
+	if !strings.Contains(err.Error(), "no plan files") {
+		t.Errorf("Expected 'no plan files' error, got: %v", err)
+	}
+}
+
+// TestValidateCommand_DuplicateFiles tests that duplicate files are handled correctly
+func TestValidateCommand_DuplicateFiles(t *testing.T) {
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	tmpDir := t.TempDir()
+
+	// Create a plan file
+	planContent := `# Plan
+
+## Task 1: Test
+**Files**: test.go
+**Agent**: golang-pro
+
+Test task.
+`
+	planPath := filepath.Join(tmpDir, "plan-01.md")
+	if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+		t.Fatalf("Failed to create plan file: %v", err)
+	}
+
+	// Filter with same file specified multiple times
+	planFiles, err := filterPlanFiles([]string{planPath, planPath, tmpDir})
+	if err != nil {
+		t.Fatalf("filterPlanFiles() failed: %v", err)
+	}
+
+	// Should deduplicate to 1 file
+	if len(planFiles) != 1 {
+		t.Errorf("Expected 1 unique plan file, got %d", len(planFiles))
+	}
+
+	// Validate should succeed
+	var output bytes.Buffer
+	err = validateMultipleFiles(planFiles, registry, &output)
+
+	if err != nil {
+		t.Errorf("validateMultipleFiles() failed: %v", err)
+	}
+}
