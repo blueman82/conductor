@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,22 @@ var ErrQualityGateFailed = errors.New("quality control failed after maximum retr
 type Reviewer interface {
 	Review(ctx context.Context, task models.Task, output string) (*ReviewResult, error)
 	ShouldRetry(result *ReviewResult, currentAttempt int) bool
+}
+
+// LearningStore defines the interface for adaptive learning storage.
+type LearningStore interface {
+	AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*FailureAnalysis, error)
+}
+
+// FailureAnalysis contains metrics and recommendations from analyzing task execution history.
+type FailureAnalysis struct {
+	TotalAttempts           int
+	FailedAttempts          int
+	TriedAgents             []string
+	CommonPatterns          []string
+	SuggestedAgent          string
+	SuggestedApproach       string
+	ShouldTryDifferentAgent bool
 }
 
 // PlanUpdater abstracts plan status updates to allow fakes in tests.
@@ -102,6 +119,10 @@ type DefaultTaskExecutor struct {
 	retryLimit      int
 	SourceFile      string          // Track which file this task comes from
 	FileLockManager FileLockManager // Per-file locking strategy
+	learningStore   LearningStore   // Adaptive learning store (optional)
+	planFile        string          // Plan file path for learning queries
+	sessionID       string          // Session ID for learning tracking
+	runNumber       int             // Run number for learning tracking
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -153,6 +174,70 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 	return te, nil
 }
 
+// preTaskHook queries the learning database and adapts agent/prompt before execution.
+// This hook enables adaptive learning from past failures.
+func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Task) error {
+	// Learning disabled - no-op
+	if te.learningStore == nil {
+		return nil
+	}
+
+	// Query learning store for failure analysis
+	analysis, err := te.learningStore.AnalyzeFailures(ctx, te.planFile, task.Number)
+	if err != nil {
+		// Log warning but don't break execution (graceful degradation)
+		// In production, this would use a proper logger
+		// For now, just continue without learning
+		return nil
+	}
+
+	// No analysis available
+	if analysis == nil {
+		return nil
+	}
+
+	// Adapt agent if recommended and suggestion available
+	if analysis.ShouldTryDifferentAgent && analysis.SuggestedAgent != "" {
+		// Only switch if different from current agent
+		if task.Agent != analysis.SuggestedAgent {
+			// Log agent switch for observability
+			// In production: log.Info("Switching agent: %s → %s", task.Agent, analysis.SuggestedAgent)
+			task.Agent = analysis.SuggestedAgent
+		}
+	}
+
+	// Enhance prompt with learning context if there are past failures
+	if analysis.FailedAttempts > 0 {
+		task.Prompt = enhancePromptWithLearning(task.Prompt, analysis)
+	}
+
+	return nil
+}
+
+// enhancePromptWithLearning adds learning context to the task prompt.
+func enhancePromptWithLearning(originalPrompt string, analysis *FailureAnalysis) string {
+	if analysis == nil || analysis.FailedAttempts == 0 {
+		return originalPrompt
+	}
+
+	// Build learning context
+	learningContext := fmt.Sprintf("\n\nNote: This task has %d past failures. ", analysis.FailedAttempts)
+
+	if len(analysis.TriedAgents) > 0 {
+		learningContext += fmt.Sprintf("Previously tried agents: %s. ", strings.Join(analysis.TriedAgents, ", "))
+	}
+
+	if len(analysis.CommonPatterns) > 0 {
+		learningContext += fmt.Sprintf("Common issues: %s. ", strings.Join(analysis.CommonPatterns, ", "))
+	}
+
+	if analysis.SuggestedApproach != "" {
+		learningContext += fmt.Sprintf("\n\nRecommended approach: %s", analysis.SuggestedApproach)
+	}
+
+	return originalPrompt + learningContext
+}
+
 // Execute runs an individual task, handling agent invocation, quality control, and plan updates.
 func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
 	result := models.TaskResult{Task: task}
@@ -172,11 +257,20 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	unlock := te.FileLockManager.Lock(fileToLock)
 	defer unlock()
 
-	// Apply default agent if provided.
+	// Pre-task hook: Query learning database and adapt agent/prompt
+	if err := te.preTaskHook(ctx, &task); err != nil {
+		// Hook errors are non-fatal but should be logged
+		// For now, continue without learning adaptation
+	}
+
+	// Apply default agent if provided and task still has no agent.
 	if task.Agent == "" && te.cfg.DefaultAgent != "" {
 		task.Agent = te.cfg.DefaultAgent
 		result.Task.Agent = te.cfg.DefaultAgent
 	}
+
+	// Update result task to reflect any changes from hook
+	result.Task = task
 
 	if err := te.updatePlanStatus(task, StatusInProgress, false); err != nil {
 		result.Status = models.StatusFailed

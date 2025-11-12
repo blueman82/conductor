@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1109,6 +1110,421 @@ func TestUpdateCorrectFile(t *testing.T) {
 	// This is the fix: SourceFile takes precedence for multi-file plans
 	if updatedPath != "merged-plan2.md" {
 		t.Errorf("expected source file 'merged-plan2.md', got %q", updatedPath)
+	}
+}
+
+// MockLearningStore implements a mock learning store for testing pre-task hooks
+type MockLearningStore struct {
+	AnalysisResult *FailureAnalysis
+	AnalysisError  error
+	CallCount      int
+	LastPlanFile   string
+	LastTaskNumber string
+}
+
+func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*FailureAnalysis, error) {
+	m.CallCount++
+	m.LastPlanFile = planFile
+	m.LastTaskNumber = taskNumber
+
+	if m.AnalysisError != nil {
+		return nil, m.AnalysisError
+	}
+
+	// Return default empty analysis if none configured
+	if m.AnalysisResult == nil {
+		return &FailureAnalysis{
+			TriedAgents:    make([]string, 0),
+			CommonPatterns: make([]string, 0),
+		}, nil
+	}
+
+	return m.AnalysisResult, nil
+}
+
+// TestPreTaskHook_NoHistory verifies that hook is no-op when no failure history exists
+func TestPreTaskHook_NoHistory(t *testing.T) {
+	mockStore := &MockLearningStore{
+		AnalysisResult: &FailureAnalysis{
+			TotalAttempts:  0,
+			FailedAttempts: 0,
+			TriedAgents:    []string{},
+			CommonPatterns: []string{},
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set learning store and related fields
+	executor.learningStore = mockStore
+	executor.planFile = "plan.md"
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		Agent:  "backend-developer",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify hook was called
+	if mockStore.CallCount != 1 {
+		t.Errorf("expected AnalyzeFailures called once, got %d", mockStore.CallCount)
+	}
+
+	// Verify agent was not changed
+	if result.Task.Agent != "backend-developer" {
+		t.Errorf("expected agent unchanged, got %s", result.Task.Agent)
+	}
+}
+
+// TestPreTaskHook_AdaptsAgent verifies that agent is changed when 2+ failures detected
+func TestPreTaskHook_AdaptsAgent(t *testing.T) {
+	mockStore := &MockLearningStore{
+		AnalysisResult: &FailureAnalysis{
+			TotalAttempts:           3,
+			FailedAttempts:          2,
+			TriedAgents:             []string{"backend-developer"},
+			SuggestedAgent:          "golang-pro",
+			ShouldTryDifferentAgent: true,
+			SuggestedApproach:       "Try using golang-pro agent with focus on Go-specific patterns",
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed with golang-pro"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set learning store and related fields
+	executor.learningStore = mockStore
+	executor.planFile = "plan.md"
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		Agent:  "backend-developer",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify hook was called
+	if mockStore.CallCount != 1 {
+		t.Errorf("expected AnalyzeFailures called once, got %d", mockStore.CallCount)
+	}
+
+	// Verify agent was changed
+	if result.Task.Agent != "golang-pro" {
+		t.Errorf("expected agent changed to 'golang-pro', got %s", result.Task.Agent)
+	}
+
+	// Verify the invoker received the modified agent
+	if len(invoker.calls) != 1 {
+		t.Fatalf("expected 1 invocation, got %d", len(invoker.calls))
+	}
+	if invoker.calls[0].Agent != "golang-pro" {
+		t.Errorf("expected invoker called with 'golang-pro', got %s", invoker.calls[0].Agent)
+	}
+}
+
+// TestPreTaskHook_EnhancesPrompt verifies that prompt is enhanced with learning context
+func TestPreTaskHook_EnhancesPrompt(t *testing.T) {
+	mockStore := &MockLearningStore{
+		AnalysisResult: &FailureAnalysis{
+			TotalAttempts:     2,
+			FailedAttempts:    1,
+			TriedAgents:       []string{"backend-developer"},
+			CommonPatterns:    []string{"syntax_error", "compilation_error"},
+			SuggestedApproach: "Focus on fixing syntax and compilation errors",
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set learning store and related fields
+	executor.learningStore = mockStore
+	executor.planFile = "plan.md"
+
+	originalPrompt := "Write a function"
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: originalPrompt,
+		Agent:  "backend-developer",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify hook was called
+	if mockStore.CallCount != 1 {
+		t.Errorf("expected AnalyzeFailures called once, got %d", mockStore.CallCount)
+	}
+
+	// Verify prompt was enhanced (contains learning context)
+	if len(invoker.calls) != 1 {
+		t.Fatalf("expected 1 invocation, got %d", len(invoker.calls))
+	}
+
+	invokedPrompt := invoker.calls[0].Prompt
+	if invokedPrompt == originalPrompt {
+		t.Error("expected prompt to be enhanced, but it was unchanged")
+	}
+
+	// Should contain learning context about past failures
+	if !strings.Contains(invokedPrompt, "past failures") && !strings.Contains(invokedPrompt, "previous attempts") {
+		t.Errorf("expected prompt to contain learning context, got: %s", invokedPrompt)
+	}
+}
+
+// TestPreTaskHook_LearningDisabled verifies that hook is no-op when learning disabled
+func TestPreTaskHook_LearningDisabled(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Do NOT set learning store - simulates disabled learning
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		Agent:  "backend-developer",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was not changed
+	if result.Task.Agent != "backend-developer" {
+		t.Errorf("expected agent unchanged, got %s", result.Task.Agent)
+	}
+}
+
+// TestPreTaskHook_LearningStoreError verifies graceful degradation on learning errors
+func TestPreTaskHook_LearningStoreError(t *testing.T) {
+	mockStore := &MockLearningStore{
+		AnalysisError: fmt.Errorf("database connection failed"),
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set learning store that will return error
+	executor.learningStore = mockStore
+	executor.planFile = "plan.md"
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		Agent:  "backend-developer",
+	}
+
+	// Learning error should not break task execution
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute should not fail on learning error, got: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify hook was attempted
+	if mockStore.CallCount != 1 {
+		t.Errorf("expected AnalyzeFailures called once, got %d", mockStore.CallCount)
+	}
+
+	// Verify agent was not changed (graceful degradation)
+	if result.Task.Agent != "backend-developer" {
+		t.Errorf("expected agent unchanged on error, got %s", result.Task.Agent)
+	}
+}
+
+// TestPreTaskHook_NoSuggestedAgent verifies handling when no alternative agent available
+func TestPreTaskHook_NoSuggestedAgent(t *testing.T) {
+	mockStore := &MockLearningStore{
+		AnalysisResult: &FailureAnalysis{
+			TotalAttempts:           3,
+			FailedAttempts:          2,
+			TriedAgents:             []string{"backend-developer"},
+			SuggestedAgent:          "", // No suggestion available
+			ShouldTryDifferentAgent: true,
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set learning store
+	executor.learningStore = mockStore
+	executor.planFile = "plan.md"
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		Agent:  "backend-developer",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was NOT changed when no suggestion available
+	if result.Task.Agent != "backend-developer" {
+		t.Errorf("expected agent unchanged when no suggestion, got %s", result.Task.Agent)
+	}
+}
+
+// TestPreTaskHook_AgentAlreadyOptimal verifies no change when suggested agent is current
+func TestPreTaskHook_AgentAlreadyOptimal(t *testing.T) {
+	mockStore := &MockLearningStore{
+		AnalysisResult: &FailureAnalysis{
+			TotalAttempts:           3,
+			FailedAttempts:          2,
+			TriedAgents:             []string{"backend-developer"},
+			SuggestedAgent:          "golang-pro", // Suggested agent
+			ShouldTryDifferentAgent: true,
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set learning store
+	executor.learningStore = mockStore
+	executor.planFile = "plan.md"
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		Agent:  "golang-pro", // Already using suggested agent
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent remains golang-pro (no redundant change)
+	if result.Task.Agent != "golang-pro" {
+		t.Errorf("expected agent to remain 'golang-pro', got %s", result.Task.Agent)
 	}
 }
 
