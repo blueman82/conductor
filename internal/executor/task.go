@@ -339,5 +339,12 @@ func (te *DefaultTaskExecutor) updatePlanStatus(taskNumber string, status string
 		completedAt = &ts
 	}
 
-	return te.planUpdater.Update(te.cfg.PlanPath, taskNumber, status, completedAt)
+	// Determine which file to update - prefer SourceFile over PlanPath
+	// This ensures multi-file plans update the correct source file for each task
+	fileToUpdate := te.cfg.PlanPath
+	if te.SourceFile != "" {
+		fileToUpdate = te.SourceFile
+	}
+
+	return te.planUpdater.Update(fileToUpdate, taskNumber, status, completedAt)
 }
