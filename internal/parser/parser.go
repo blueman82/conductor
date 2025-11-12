@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/harrison/conductor/internal/fileutil"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -307,6 +308,13 @@ func FilterPlanFiles(paths []string) ([]string, error) {
 	// Regex pattern for plan-* files with valid extensions
 	planPattern := regexp.MustCompile(`^plan-.*\.(md|markdown|yaml|yml)$`)
 
+	// Configure scan options for fileutil
+	opts := fileutil.ScanOptions{
+		Pattern:    "^plan-.*", // Match plan-* prefix
+		Extensions: []string{".md", ".markdown", ".yaml", ".yml"},
+		Recursive:  true, // Recursively scan directories
+	}
+
 	for _, path := range paths {
 		// Convert to absolute path
 		absPath, err := filepath.Abs(path)
@@ -324,30 +332,17 @@ func FilterPlanFiles(paths []string) ([]string, error) {
 		}
 
 		if info.IsDir() {
-			// Recursively scan directory for plan files
-			err := filepath.WalkDir(absPath, func(filePath string, d os.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-
-				// Skip directories
-				if d.IsDir() {
-					return nil
-				}
-
-				// Check if filename matches pattern
-				filename := filepath.Base(filePath)
-				if planPattern.MatchString(filename) {
-					planFiles[filePath] = true
-				}
-
-				return nil
-			})
+			// Scan directory for plan files using fileutil
+			result, err := fileutil.ScanDirectory(absPath, opts)
 			if err != nil {
 				return nil, fmt.Errorf("failed to scan directory %q: %w", absPath, err)
 			}
+			// Add all matched files to our deduplication map
+			for _, file := range result.Files {
+				planFiles[file] = true
+			}
 		} else {
-			// Check if file matches pattern
+			// Single file - add directly if it matches criteria
 			filename := filepath.Base(absPath)
 			if planPattern.MatchString(filename) {
 				planFiles[absPath] = true

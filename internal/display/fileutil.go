@@ -1,11 +1,11 @@
 package display
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"unicode"
+
+	"github.com/harrison/conductor/internal/fileutil"
 )
 
 // IsNumberedFile checks if filename matches pattern: ^\d+-.*\.(md|markdown|yaml|yml)$
@@ -75,39 +75,26 @@ func IsNumberedFile(filename string) bool {
 // Only scans the immediate directory (not recursive)
 // Returns error if path doesn't exist or is not a directory
 func FindNumberedFiles(dirPath string) ([]string, error) {
-	// Check if path exists and is a directory
-	info, err := os.Stat(dirPath)
+	// Use fileutil.ScanDirectory to find files matching numbered pattern
+	opts := fileutil.ScanOptions{
+		Pattern:    `^\d+-.*`,                                        // Match files starting with digits followed by dash
+		Extensions: []string{".md", ".markdown", ".yaml", ".yml"},    // Valid plan file extensions
+		Recursive:  false,                                            // Only scan top level
+	}
+
+	result, err := fileutil.ScanDirectory(dirPath, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to access path: %w", err)
+		return nil, err
 	}
 
-	if !info.IsDir() {
-		return nil, fmt.Errorf("path is not a directory: %s", dirPath)
-	}
-
-	// Read directory entries
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	// Find numbered files
-	var numberedFiles []string
-	for _, entry := range entries {
-		// Skip directories
-		if entry.IsDir() {
-			continue
+	// Convert absolute paths to basenames to maintain API compatibility
+	numberedFiles := make([]string, 0, len(result.Files))
+	for _, absPath := range result.Files {
+		basename := filepath.Base(absPath)
+		// Double-check with IsNumberedFile for extra validation
+		if IsNumberedFile(basename) {
+			numberedFiles = append(numberedFiles, basename)
 		}
-
-		// Check if filename matches numbered pattern
-		if IsNumberedFile(entry.Name()) {
-			numberedFiles = append(numberedFiles, entry.Name())
-		}
-	}
-
-	// Return empty slice instead of nil if no files found
-	if numberedFiles == nil {
-		numberedFiles = []string{}
 	}
 
 	return numberedFiles, nil
