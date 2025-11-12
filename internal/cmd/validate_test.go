@@ -201,8 +201,8 @@ func TestNewValidateCommand(t *testing.T) {
 		t.Fatal("NewValidateCommand() returned nil")
 	}
 
-	if cmd.Use != "validate <plan-file>" {
-		t.Errorf("Expected Use to be 'validate <plan-file>', got: %s", cmd.Use)
+	if cmd.Use != "validate <plan-file-or-directory>..." {
+		t.Errorf("Expected Use to be 'validate <plan-file-or-directory>...', got: %s", cmd.Use)
 	}
 
 	if cmd.Short == "" {
@@ -472,7 +472,8 @@ func TestValidatePlanFile(t *testing.T) {
 	}
 
 	// This should use the default registry and stdout
-	err = validatePlanFile(absPath)
+	// validatePlanFile now accepts []string
+	err = validatePlanFile([]string{absPath})
 
 	// We expect this to potentially fail if agents aren't found,
 	// but it should at least run without panic

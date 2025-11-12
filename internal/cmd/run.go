@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
@@ -55,28 +57,45 @@ func (l *consoleLogger) LogSummary(result models.ExecutionResult) {
 // NewRunCommand creates the run command
 func NewRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run [plan-file]",
+		Use:   "run <plan-file-or-directory>...",
 		Short: "Execute an implementation plan",
 		Long: `Execute an implementation plan by orchestrating multiple Claude Code agents.
 
-The run command parses the specified plan file (Markdown or YAML format),
+The run command parses the specified plan file(s) or directory (Markdown or YAML format),
 calculates task dependencies, and executes tasks in parallel waves while
 maintaining proper dependency ordering.
+
+For multiple files, only files matching pattern plan-*.md or plan-*.yaml are loaded
+and merged into a single unified plan with cross-file dependency resolution.
 
 Configuration is loaded from .conductor/config.yaml if present.
 CLI flags override configuration file settings.
 
 Examples:
-  conductor run plan.md                    # Execute plan.md
+  # Single file execution
+  conductor run plan.md
+
+  # Directory execution (loads numbered files: 1-*.md, 2-*.yaml, etc.)
+  conductor run docs/plans/adaptive-learning-system/
+
+  # Multi-file execution (filters plan-*.md and plan-*.yaml files)
+  conductor run plan-01-foundation.md plan-02-features.yaml
+
+  # Multi-directory execution (filters plan-* files from each directory)
+  conductor run docs/plans/backend/ docs/plans/frontend/
+
+  # Glob patterns (shell expands before conductor sees them)
+  conductor run docs/plans/*/plan-*.md --max-concurrency 5
+
+  # Other options
   conductor run --dry-run plan.yaml        # Validate without executing
-  conductor run --max-concurrency 5 plan.md  # Limit to 5 parallel tasks
   conductor run --timeout 2h plan.md       # Set 2 hour timeout
   conductor run --verbose plan.md          # Show detailed progress
   conductor run --log-dir ./logs plan.md   # Use custom log directory
   conductor run --config custom.yaml plan.md  # Use custom config file
   conductor run --skip-completed plan.md   # Skip already completed tasks
   conductor run --retry-failed plan.md     # Retry failed tasks`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: runCommand,
 	}
 
@@ -93,6 +112,89 @@ Examples:
 	cmd.Flags().Bool("no-retry-failed", false, "Do not retry failed tasks (overrides config)")
 
 	return cmd
+}
+
+// loadAndMergePlanFiles loads multiple plan files and merges them into a single plan.
+// It filters paths to only include files matching the pattern plan-*.md or plan-*.yaml.
+// For directories, it loads all matching plan files from that directory.
+func loadAndMergePlanFiles(paths []string) (*models.Plan, error) {
+	var planFilesToMerge []string
+	planFilePattern := regexp.MustCompile(`^plan-.*\.(md|markdown|yaml|yml)$`)
+
+	for _, path := range paths {
+		// Check if path exists
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access path %s: %w", path, err)
+		}
+
+		if info.IsDir() {
+			// Directory: collect all plan-*.md and plan-*.yaml files
+			entries, err := os.ReadDir(path)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read directory %s: %w", path, err)
+			}
+
+			for _, entry := range entries {
+				if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+					continue
+				}
+
+				// Check if filename matches plan-* pattern
+				if planFilePattern.MatchString(entry.Name()) {
+					fullPath := filepath.Join(path, entry.Name())
+					planFilesToMerge = append(planFilesToMerge, fullPath)
+				}
+			}
+		} else {
+			// File: check if it matches plan-* pattern
+			filename := filepath.Base(path)
+			if planFilePattern.MatchString(filename) {
+				planFilesToMerge = append(planFilesToMerge, path)
+			} else {
+				return nil, fmt.Errorf("file %s does not match pattern plan-*.md or plan-*.yaml", path)
+			}
+		}
+	}
+
+	if len(planFilesToMerge) == 0 {
+		return nil, fmt.Errorf("no plan files found matching pattern plan-*.md or plan-*.yaml")
+	}
+
+	// Parse all collected plan files
+	var plans []*models.Plan
+	for _, planFile := range planFilesToMerge {
+		plan, err := parser.ParseFile(planFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse %s: %w", planFile, err)
+		}
+		plans = append(plans, plan)
+	}
+
+	// Merge all plans into a single unified plan
+	mergedPlan, err := parser.MergePlans(plans...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge plans: %w", err)
+	}
+
+	// Build FileToTaskMap for multi-file tracking
+	fileToTaskMap := make(map[string][]string)
+	for i, plan := range plans {
+		if plan.FilePath != "" {
+			for _, task := range plan.Tasks {
+				fileToTaskMap[plan.FilePath] = append(fileToTaskMap[plan.FilePath], task.Number)
+			}
+		} else if i < len(planFilesToMerge) {
+			// Fallback: use the original file path if plan.FilePath is not set
+			for _, task := range plan.Tasks {
+				absPath, _ := filepath.Abs(planFilesToMerge[i])
+				fileToTaskMap[absPath] = append(fileToTaskMap[absPath], task.Number)
+			}
+		}
+	}
+	mergedPlan.FileToTaskMap = fileToTaskMap
+
+	return mergedPlan, nil
 }
 
 // runCommand implements the run command logic
@@ -188,17 +290,31 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	logDir := cfg.LogDir
 
-	// Get plan file path
-	if len(args) == 0 {
-		return fmt.Errorf("plan file argument required")
-	}
-	planFile := args[0]
+	// Load and parse plan file(s)
+	var plan *models.Plan
+	var planPath string
 
-	// Load and parse plan file
-	fmt.Fprintf(cmd.OutOrStdout(), "Loading plan from %s...\n", planFile)
-	plan, err := parser.ParseFile(planFile)
-	if err != nil {
-		return fmt.Errorf("failed to load plan file: %w", err)
+	if len(args) == 1 {
+		// Single file or directory - use existing parser.ParseFile() logic
+		planPath = args[0]
+		fmt.Fprintf(cmd.OutOrStdout(), "Loading plan from %s...\n", planPath)
+		plan, err = parser.ParseFile(planPath)
+		if err != nil {
+			return fmt.Errorf("failed to load plan file: %w", err)
+		}
+	} else {
+		// Multiple files - use new merge helper
+		fmt.Fprintf(cmd.OutOrStdout(), "Loading and merging plans from %d files...\n", len(args))
+		plan, err = loadAndMergePlanFiles(args)
+		if err != nil {
+			return fmt.Errorf("failed to load and merge plan files: %w", err)
+		}
+		// For multi-file plans, use the FilePath from the merged plan (should be set by merge logic)
+		// or use the first argument as a fallback
+		planPath = plan.FilePath
+		if planPath == "" {
+			planPath = args[0]
+		}
 	}
 
 	// Validate plan has tasks
@@ -298,7 +414,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Create task executor config
 	taskExecCfg := executor.TaskExecutorConfig{
-		PlanPath:       planFile,
+		PlanPath:       planPath,
 		DefaultAgent:   plan.DefaultAgent,
 		QualityControl: plan.QualityControl,
 	}

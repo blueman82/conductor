@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/executor"
@@ -16,19 +17,25 @@ import (
 // NewValidateCommand creates and returns the validate subcommand
 func NewValidateCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "validate <plan-file>",
-		Short: "Validate a plan file",
-		Long: `Parse and validate a plan file, checking for:
+		Use:   "validate <plan-file-or-directory>...",
+		Short: "Validate one or more plan files or directories",
+		Long: `Parse and validate plan files, checking for:
   - Task validation (names, prompts, etc.)
   - Circular dependencies
   - File overlaps in parallel tasks
   - Referenced agents exist
   - Task dependencies point to valid tasks
 
+Supports multiple input modes:
+  - Single file: conductor validate plan.md
+  - Single directory: conductor validate docs/plans/ (filters plan-*.md and plan-*.yaml)
+  - Multiple files: conductor validate plan-01.md plan-02.yaml
+  - Shell globs: conductor validate docs/plans/*/plan-*.md
+
 Exit code: 0 if valid, 1 if errors found`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return validatePlanFile(args[0])
+			return validatePlanFile(args)
 		},
 		SilenceUsage: true,
 	}
@@ -37,10 +44,223 @@ Exit code: 0 if valid, 1 if errors found`,
 }
 
 // validatePlanFile is the main entry point that uses default registry and stdout
-func validatePlanFile(filePath string) error {
+// Supports single file, single directory, or multiple files
+func validatePlanFile(paths []string) error {
 	registry := agent.NewRegistry("")
 	registry.Discover()
-	return validatePlan(filePath, registry, os.Stdout)
+
+	// Handle three cases:
+	// 1. Single directory - use existing validatePlanDirectory
+	// 2. Single file - use existing validatePlan
+	// 3. Multiple files - filter, parse, merge, and validate
+
+	if len(paths) == 1 {
+		path := paths[0]
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("failed to access path: %w", err)
+		}
+
+		if info.IsDir() {
+			// Single directory - filter plan-* files
+			planFiles, err := filterPlanFiles([]string{path})
+			if err != nil {
+				return err
+			}
+			return validateMultipleFiles(planFiles, registry, os.Stdout)
+		}
+
+		// Single file - use existing validatePlan
+		return validatePlan(path, registry, os.Stdout)
+	}
+
+	// Multiple paths provided - filter and validate together
+	planFiles, err := filterPlanFiles(paths)
+	if err != nil {
+		return err
+	}
+
+	return validateMultipleFiles(planFiles, registry, os.Stdout)
+}
+
+// filterPlanFiles filters paths to only include plan-*.md and plan-*.yaml files
+// For directories, scans for matching files
+// For files, only includes those matching the pattern
+// Returns absolute paths to all matching plan files
+func filterPlanFiles(paths []string) ([]string, error) {
+	var planFiles []string
+	seenFiles := make(map[string]bool) // Deduplicate files
+
+	for _, path := range paths {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get absolute path for %s: %w", path, err)
+		}
+
+		info, err := os.Stat(absPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access path %s: %w", absPath, err)
+		}
+
+		if info.IsDir() {
+			// Scan directory for plan-*.md and plan-*.yaml files
+			err := filepath.Walk(absPath, func(filePath string, fileInfo os.FileInfo, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+
+				if fileInfo.IsDir() {
+					return nil
+				}
+
+				fileName := filepath.Base(filePath)
+				if isPlanFile(fileName) {
+					absFilePath, err := filepath.Abs(filePath)
+					if err != nil {
+						return err
+					}
+					if !seenFiles[absFilePath] {
+						planFiles = append(planFiles, absFilePath)
+						seenFiles[absFilePath] = true
+					}
+				}
+
+				return nil
+			})
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to scan directory %s: %w", absPath, err)
+			}
+		} else {
+			// Single file - check if it matches plan-* pattern
+			fileName := filepath.Base(absPath)
+			if isPlanFile(fileName) {
+				if !seenFiles[absPath] {
+					planFiles = append(planFiles, absPath)
+					seenFiles[absPath] = true
+				}
+			}
+		}
+	}
+
+	if len(planFiles) == 0 {
+		return nil, fmt.Errorf("no plan files matching pattern 'plan-*.md' or 'plan-*.yaml' found")
+	}
+
+	return planFiles, nil
+}
+
+// isPlanFile checks if a filename matches the plan-* pattern
+func isPlanFile(filename string) bool {
+	if !strings.HasPrefix(filename, "plan-") {
+		return false
+	}
+
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".md" || ext == ".markdown" || ext == ".yaml" || ext == ".yml"
+}
+
+// validateMultipleFiles validates multiple plan files as a merged plan
+func validateMultipleFiles(planFiles []string, registry *agent.Registry, output io.Writer) error {
+	var errors []string
+
+	fmt.Fprintf(output, "✓ Validating %d plan file(s)\n", len(planFiles))
+
+	// Parse all plan files and collect tasks
+	allTasks := []models.Task{}
+	groupsMap := make(map[string]*models.WorktreeGroup)
+	var defaultAgent string
+	var qcConfig models.QualityControlConfig
+
+	for _, planFile := range planFiles {
+		plan, err := parser.ParseFile(planFile)
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to parse %s: %v", filepath.Base(planFile), err)
+			errors = append(errors, errMsg)
+			fmt.Fprintf(output, "✗ %s\n", errMsg)
+			continue
+		}
+
+		allTasks = append(allTasks, plan.Tasks...)
+
+		// Collect worktree groups from each file
+		for _, group := range plan.WorktreeGroups {
+			groupsMap[group.GroupID] = &group
+		}
+
+		// Use first non-empty default agent
+		if defaultAgent == "" && plan.DefaultAgent != "" {
+			defaultAgent = plan.DefaultAgent
+		}
+
+		// Use first QC config that's enabled
+		if !qcConfig.Enabled && plan.QualityControl.Enabled {
+			qcConfig = plan.QualityControl
+		}
+	}
+
+	fmt.Fprintf(output, "✓ Parsed %d tasks from plan files\n", len(allTasks))
+
+	// Validate individual tasks
+	for _, task := range allTasks {
+		if err := task.Validate(); err != nil {
+			errors = append(errors, fmt.Sprintf("Task %s: %v", task.Number, err))
+		}
+	}
+
+	// Validate task dependencies (check all deps reference valid tasks)
+	if err := executor.ValidateTasks(allTasks); err != nil {
+		errors = append(errors, err.Error())
+	}
+
+	// Check for circular dependencies
+	graph := executor.BuildDependencyGraph(allTasks)
+	if graph.HasCycle() {
+		errors = append(errors, "Circular dependency detected in task dependencies")
+		fmt.Fprintf(output, "✗ Circular dependency detected\n")
+	} else {
+		fmt.Fprintf(output, "✓ No circular dependencies detected\n")
+	}
+
+	// Calculate waves and check file overlaps (only if no dependency errors)
+	if len(errors) == 0 {
+		waves, err := executor.CalculateWaves(allTasks)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Wave calculation failed: %v", err))
+		} else {
+			fmt.Fprintf(output, "✓ No file overlaps in parallel tasks\n")
+		}
+		_ = waves // waves calculated but not used for anything else
+	}
+
+	// Validate agents
+	tempPlan := &models.Plan{
+		Tasks:          allTasks,
+		DefaultAgent:   defaultAgent,
+		QualityControl: qcConfig,
+	}
+	agentErrors := validateAgents(tempPlan, registry)
+	if len(agentErrors) == 0 {
+		fmt.Fprintf(output, "✓ All agents available\n")
+	} else {
+		errors = append(errors, agentErrors...)
+	}
+
+	// Final validation check
+	if len(errors) == 0 {
+		fmt.Fprintf(output, "✓ All task dependencies valid\n")
+		fmt.Fprintf(output, "\n✓ Plan is valid!\n")
+		return nil
+	}
+
+	// Report all validation errors
+	fmt.Fprintf(output, "\n✗ Validation failed\n")
+	for _, errMsg := range errors {
+		fmt.Fprintf(output, "  ✗ %s\n", errMsg)
+	}
+	fmt.Fprintf(output, "\nFound %d validation error(s)!\n", len(errors))
+
+	return fmt.Errorf("validation failed with %d error(s)", len(errors))
 }
 
 // validatePlan performs comprehensive validation of a plan file

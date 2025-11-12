@@ -280,3 +280,92 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 	}
 	return result, nil
 }
+
+// FilterPlanFiles accepts an array of file and/or directory paths and returns
+// a deduplicated list of absolute file paths that match the plan-* pattern.
+//
+// Pattern matching rules:
+//   - Files MUST start with "plan-" prefix
+//   - Files MUST have extension: .md, .markdown, .yaml, or .yml
+//   - Examples: plan-01-setup.md, plan-02-features.yaml, plan-database.yml
+//
+// For directories, recursively scans for files matching the pattern.
+// For files, checks if filename matches the pattern.
+//
+// Returns error if:
+//   - No paths provided (empty input array)
+//   - Any path doesn't exist
+//   - No valid plan files are found
+func FilterPlanFiles(paths []string) ([]string, error) {
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("no paths provided")
+	}
+
+	// Use map for deduplication
+	planFiles := make(map[string]bool)
+
+	// Regex pattern for plan-* files with valid extensions
+	planPattern := regexp.MustCompile(`^plan-.*\.(md|markdown|yaml|yml)$`)
+
+	for _, path := range paths {
+		// Convert to absolute path
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve path %q: %w", path, err)
+		}
+
+		// Check if path exists
+		info, err := os.Stat(absPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fmt.Errorf("path %q does not exist", absPath)
+			}
+			return nil, fmt.Errorf("failed to access path %q: %w", absPath, err)
+		}
+
+		if info.IsDir() {
+			// Recursively scan directory for plan files
+			err := filepath.WalkDir(absPath, func(filePath string, d os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+
+				// Skip directories
+				if d.IsDir() {
+					return nil
+				}
+
+				// Check if filename matches pattern
+				filename := filepath.Base(filePath)
+				if planPattern.MatchString(filename) {
+					planFiles[filePath] = true
+				}
+
+				return nil
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to scan directory %q: %w", absPath, err)
+			}
+		} else {
+			// Check if file matches pattern
+			filename := filepath.Base(absPath)
+			if planPattern.MatchString(filename) {
+				planFiles[absPath] = true
+			}
+		}
+	}
+
+	// Check if we found any plan files
+	if len(planFiles) == 0 {
+		return nil, fmt.Errorf("no plan files found matching pattern plan-*.{md,markdown,yaml,yml}")
+	}
+
+	// Convert map to sorted slice for consistent output
+	result := make([]string, 0, len(planFiles))
+	for path := range planFiles {
+		result = append(result, path)
+	}
+	sort.Strings(result)
+
+	return result, nil
+}

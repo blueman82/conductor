@@ -137,12 +137,7 @@ func TestRunCommand_ErrorCases(t *testing.T) {
 		{
 			name:           "missing plan file argument",
 			args:           []string{"run"},
-			wantErrContain: "accepts 1 arg",
-		},
-		{
-			name:           "too many arguments",
-			args:           []string{"run", "file1.md", "file2.md"},
-			wantErrContain: "accepts 1 arg",
+			wantErrContain: "requires at least 1 arg",
 		},
 		{
 			name:           "plan file not found",
@@ -161,8 +156,7 @@ func TestRunCommand_ErrorCases(t *testing.T) {
 			// Create a valid plan file if args don't already have one
 			args := tt.args
 			if !strings.Contains(tt.name, "plan file not found") &&
-				!strings.Contains(tt.name, "missing plan file") &&
-				!strings.Contains(tt.name, "too many arguments") {
+				!strings.Contains(tt.name, "missing plan file") {
 				// Create a valid plan file for other cases
 				planFile := createTestPlanFile(t, "# Test\n## Task 1: Test\n**Status**: pending\n")
 				// Replace dummy.md with actual plan file
@@ -273,8 +267,8 @@ Test timeout parsing.
 func TestNewRunCommand(t *testing.T) {
 	cmd := NewRunCommand()
 
-	if cmd.Use != "run [plan-file]" {
-		t.Errorf("Expected Use to be 'run [plan-file]', got: %s", cmd.Use)
+	if cmd.Use != "run <plan-file-or-directory>..." {
+		t.Errorf("Expected Use to be 'run <plan-file-or-directory>...', got: %s", cmd.Use)
 	}
 
 	if cmd.Short == "" {

@@ -570,3 +570,276 @@ Description.`, i, i)
 		t.Error("IsSplitPlan() expected true for split plan, got false")
 	}
 }
+
+// TestFilterPlanFiles tests filtering and discovery of plan files
+func TestFilterPlanFiles(t *testing.T) {
+	// Create a temporary directory structure for testing
+	tmpDir := t.TempDir()
+
+	// Helper to create files
+	createFile := func(path string) {
+		fullPath := filepath.Join(tmpDir, path)
+		dir := filepath.Dir(fullPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create dir %s: %v", dir, err)
+		}
+		if err := os.WriteFile(fullPath, []byte("test content"), 0644); err != nil {
+			t.Fatalf("Failed to create file %s: %v", path, err)
+		}
+	}
+
+	// Create valid plan files
+	createFile("plan-01-setup.md")
+	createFile("plan-02-features.yaml")
+	createFile("plan-03-testing.yml")
+	createFile("plan-database.markdown")
+
+	// Create invalid files (should be filtered out)
+	createFile("setup.md")           // no plan- prefix
+	createFile("myplan-01.md")       // doesn't start with plan-
+	createFile("plan.txt")           // wrong extension
+	createFile("plan-broken")        // no extension
+	createFile("README.md")          // no plan- prefix
+	createFile("plan-01-setup.json") // wrong extension
+
+	// Create subdirectory with plan files
+	createFile("subdir/plan-04-deployment.md")
+	createFile("subdir/plan-05-monitoring.yaml")
+	createFile("subdir/notaplan.md")
+
+	tests := []struct {
+		name      string
+		paths     []string
+		wantCount int
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:      "single valid file",
+			paths:     []string{filepath.Join(tmpDir, "plan-01-setup.md")},
+			wantCount: 1,
+			wantErr:   false,
+		},
+		{
+			name: "multiple valid files",
+			paths: []string{
+				filepath.Join(tmpDir, "plan-01-setup.md"),
+				filepath.Join(tmpDir, "plan-02-features.yaml"),
+				filepath.Join(tmpDir, "plan-03-testing.yml"),
+			},
+			wantCount: 3,
+			wantErr:   false,
+		},
+		{
+			name:      "directory with plan files",
+			paths:     []string{tmpDir},
+			wantCount: 6, // plan-01-setup.md, plan-02-features.yaml, plan-03-testing.yml, plan-database.markdown + 2 from subdir (recursive)
+			wantErr:   false,
+		},
+		{
+			name:      "subdirectory with plan files",
+			paths:     []string{filepath.Join(tmpDir, "subdir")},
+			wantCount: 2, // plan-04-deployment.md, plan-05-monitoring.yaml
+			wantErr:   false,
+		},
+		{
+			name: "mixed directory and file paths",
+			paths: []string{
+				filepath.Join(tmpDir, "plan-01-setup.md"),
+				filepath.Join(tmpDir, "subdir"),
+			},
+			wantCount: 3, // plan-01-setup.md + 2 from subdir
+			wantErr:   false,
+		},
+		{
+			name: "filtering - excludes non-plan files",
+			paths: []string{
+				filepath.Join(tmpDir, "plan-01-setup.md"),
+				filepath.Join(tmpDir, "setup.md"), // should be filtered
+				filepath.Join(tmpDir, "README.md"), // should be filtered
+			},
+			wantCount: 1, // only plan-01-setup.md
+			wantErr:   false,
+		},
+		{
+			name:      "empty input array",
+			paths:     []string{},
+			wantCount: 0,
+			wantErr:   true,
+			errMsg:    "no paths provided",
+		},
+		{
+			name:      "non-existent file",
+			paths:     []string{filepath.Join(tmpDir, "nonexistent.md")},
+			wantCount: 0,
+			wantErr:   true,
+			errMsg:    "does not exist",
+		},
+		{
+			name:      "directory with no plan files",
+			paths:     []string{t.TempDir()},
+			wantCount: 0,
+			wantErr:   true,
+			errMsg:    "no plan files found",
+		},
+		{
+			name: "duplicate paths - should deduplicate",
+			paths: []string{
+				filepath.Join(tmpDir, "plan-01-setup.md"),
+				filepath.Join(tmpDir, "plan-01-setup.md"),
+				filepath.Join(tmpDir, "plan-02-features.yaml"),
+			},
+			wantCount: 2, // deduplicated
+			wantErr:   false,
+		},
+		{
+			name: "all file extensions",
+			paths: []string{
+				filepath.Join(tmpDir, "plan-01-setup.md"),
+				filepath.Join(tmpDir, "plan-02-features.yaml"),
+				filepath.Join(tmpDir, "plan-03-testing.yml"),
+				filepath.Join(tmpDir, "plan-database.markdown"),
+			},
+			wantCount: 4,
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := FilterPlanFiles(tt.paths)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("FilterPlanFiles() expected error, got nil")
+					return
+				}
+				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("FilterPlanFiles() error = %q, want error containing %q", err.Error(), tt.errMsg)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("FilterPlanFiles() unexpected error: %v", err)
+				return
+			}
+
+			if len(got) != tt.wantCount {
+				t.Errorf("FilterPlanFiles() returned %d files, want %d", len(got), tt.wantCount)
+				t.Logf("Got files: %v", got)
+			}
+
+			// Verify all returned paths are absolute
+			for _, path := range got {
+				if !filepath.IsAbs(path) {
+					t.Errorf("FilterPlanFiles() returned relative path: %q", path)
+				}
+			}
+
+			// Verify all returned paths match the plan-* pattern
+			for _, path := range got {
+				base := filepath.Base(path)
+				if !strings.HasPrefix(base, "plan-") {
+					t.Errorf("FilterPlanFiles() returned file without plan- prefix: %q", base)
+				}
+			}
+
+			// Verify no duplicates
+			seen := make(map[string]bool)
+			for _, path := range got {
+				if seen[path] {
+					t.Errorf("FilterPlanFiles() returned duplicate path: %q", path)
+				}
+				seen[path] = true
+			}
+		})
+	}
+}
+
+// TestFilterPlanFiles_RelativePaths tests conversion to absolute paths
+func TestFilterPlanFiles_RelativePaths(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a plan file
+	planFile := filepath.Join(tmpDir, "plan-test.md")
+	if err := os.WriteFile(planFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Change to temp directory
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(oldWd)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Test with relative path
+	got, err := FilterPlanFiles([]string{"plan-test.md"})
+	if err != nil {
+		t.Fatalf("FilterPlanFiles() error = %v", err)
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("FilterPlanFiles() returned %d files, want 1", len(got))
+	}
+
+	// Verify it's converted to absolute path
+	if !filepath.IsAbs(got[0]) {
+		t.Errorf("FilterPlanFiles() should convert to absolute path, got: %q", got[0])
+	}
+
+	// Verify it points to the right file
+	// Use EvalSymlinks to handle macOS /private/var -> /var symlink
+	gotResolved, _ := filepath.EvalSymlinks(got[0])
+	planResolved, _ := filepath.EvalSymlinks(planFile)
+	if gotResolved != planResolved {
+		t.Errorf("FilterPlanFiles() = %q, want %q", got[0], planFile)
+	}
+}
+
+// TestFilterPlanFiles_RecursiveDirectory tests recursive directory scanning
+func TestFilterPlanFiles_RecursiveDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Helper to create files
+	createFile := func(path string) {
+		fullPath := filepath.Join(tmpDir, path)
+		dir := filepath.Dir(fullPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create dir %s: %v", dir, err)
+		}
+		if err := os.WriteFile(fullPath, []byte("test"), 0644); err != nil {
+			t.Fatalf("Failed to create file %s: %v", path, err)
+		}
+	}
+
+	// Create nested directory structure
+	createFile("plan-root.md")
+	createFile("level1/plan-l1.yaml")
+	createFile("level1/level2/plan-l2.yml")
+	createFile("level1/level2/level3/plan-l3.markdown")
+	createFile("level1/notaplan.md")
+
+	got, err := FilterPlanFiles([]string{tmpDir})
+	if err != nil {
+		t.Fatalf("FilterPlanFiles() error = %v", err)
+	}
+
+	// Should find all 4 plan-* files recursively
+	if len(got) != 4 {
+		t.Errorf("FilterPlanFiles() found %d files, want 4", len(got))
+		t.Logf("Got files: %v", got)
+	}
+
+	// Verify all are absolute paths
+	for _, path := range got {
+		if !filepath.IsAbs(path) {
+			t.Errorf("FilterPlanFiles() returned relative path: %q", path)
+		}
+	}
+}
