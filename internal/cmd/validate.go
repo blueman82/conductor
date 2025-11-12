@@ -164,15 +164,19 @@ func isPlanFile(filename string) bool {
 func validateMultipleFiles(planFiles []string, registry *agent.Registry, output io.Writer) error {
 	var errors []string
 
-	fmt.Fprintf(output, "✓ Validating %d plan file(s)\n", len(planFiles))
+	fmt.Fprintf(output, "Validating plan files:\n")
 
-	// Parse all plan files and collect tasks
+	// Parse all plan files and collect tasks with progress indicator
 	allTasks := []models.Task{}
 	groupsMap := make(map[string]*models.WorktreeGroup)
 	var defaultAgent string
 	var qcConfig models.QualityControlConfig
 
-	for _, planFile := range planFiles {
+	for i, planFile := range planFiles {
+		// Show colorful progress: [N/Total] filename
+		// Blue color for progress counter
+		fmt.Fprintf(output, "  [\x1b[34m%d/%d\x1b[0m] %s\n", i+1, len(planFiles), filepath.Base(planFile))
+
 		plan, err := parser.ParseFile(planFile)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to parse %s: %v", filepath.Base(planFile), err)
@@ -199,7 +203,8 @@ func validateMultipleFiles(planFiles []string, registry *agent.Registry, output 
 		}
 	}
 
-	fmt.Fprintf(output, "✓ Parsed %d tasks from plan files\n", len(allTasks))
+	// Show completion message in green
+	fmt.Fprintf(output, "\x1b[32m✓\x1b[0m Parsed %d tasks from %d plan files\n", len(allTasks), len(planFiles))
 
 	// Validate individual tasks
 	for _, task := range allTasks {

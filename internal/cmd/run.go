@@ -249,17 +249,24 @@ func runCommand(cmd *cobra.Command, args []string) error {
 			}
 		} else {
 			// Multiple plan files - merge them
-			fmt.Fprintf(cmd.OutOrStdout(), "Loading and merging plans from %d files...\n", len(planFiles))
+			fmt.Fprintf(cmd.OutOrStdout(), "Loading plan files:\n")
 
-			// Parse all plan files
+			// Parse all plan files with progress indicator
 			var plans []*models.Plan
-			for _, pf := range planFiles {
+			for i, pf := range planFiles {
+				// Show colorful progress: [N/Total] filename
+				// Blue color for progress counter
+				fmt.Fprintf(cmd.OutOrStdout(), "  [\x1b[34m%d/%d\x1b[0m] %s\n", i+1, len(planFiles), filepath.Base(pf))
+
 				p, err := parser.ParseFile(pf)
 				if err != nil {
 					return fmt.Errorf("failed to parse %s: %w", pf, err)
 				}
 				plans = append(plans, p)
 			}
+
+			// Show completion message in green
+			fmt.Fprintf(cmd.OutOrStdout(), "\x1b[32m✓\x1b[0m Loaded %d plan files\n", len(planFiles))
 
 			// Merge all plans into a single unified plan
 			plan, err = parser.MergePlans(plans...)

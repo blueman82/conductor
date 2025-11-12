@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1372,9 +1373,9 @@ Setup database connection.
 		t.Errorf("Unexpected error: %v\nOutput: %s", err, output)
 	}
 
-	// Verify merged plan execution
-	if !strings.Contains(output, "Loading and merging plans from 2 files") {
-		t.Errorf("Expected message about merging 2 files, got: %s", output)
+	// Verify multi-file loading with progress
+	if !strings.Contains(output, "Loading plan files") || !strings.Contains(output, "Loaded 2 plan files") {
+		t.Errorf("Expected loading message with progress, got: %s", output)
 	}
 
 	// Verify total task count
@@ -1520,9 +1521,9 @@ Do task one.
 		t.Error("Expected both 'First Task' and 'Second Task' in output")
 	}
 
-	// Verify the multi-file merge message is shown
-	if !strings.Contains(output, "Loading and merging plans from 2 files") {
-		t.Error("Expected multi-file merge message for 2 plan files")
+	// Verify the multi-file loading message is shown
+	if !strings.Contains(output, "Loading plan files") || !strings.Contains(output, "Loaded 2 plan files") {
+		t.Error("Expected multi-file loading message for 2 plan files")
 	}
 
 	// Verify non-plan files were filtered out (readme.md and notes.txt should not appear)
@@ -2076,8 +2077,8 @@ Other task (not a plan-* file).
 
 	// CRITICAL: After refactoring, should load ONLY 2 files (plan-01.md and plan-02.yaml)
 	// The other.md file should be filtered out by FilterPlanFiles()
-	if !strings.Contains(output, "Loading and merging plans from 2 files") {
-		t.Errorf("Expected message about loading 2 files (after FilterPlanFiles filtering), got: %s", output)
+	if !strings.Contains(output, "Loading plan files") || !strings.Contains(output, "Loaded 2 plan files") {
+		t.Errorf("Expected loading message with 2 files (after FilterPlanFiles filtering), got: %s", output)
 	}
 
 	// Should have 2 tasks total (Task 1 from plan-01.md, Task 3 from plan-02.yaml)
@@ -2171,8 +2172,8 @@ Documentation file.
 
 	// CRITICAL: After refactoring, FilterPlanFiles() should accept all 5 paths
 	// but filter down to ONLY the 3 plan-* files
-	if !strings.Contains(output, "Loading and merging plans from 3 files") {
-		t.Errorf("Expected message about loading 3 plan-* files (filtered), got: %s", output)
+	if !strings.Contains(output, "Loading plan files") || !strings.Contains(output, "Loaded 3 plan files") {
+		t.Errorf("Expected loading message with 3 plan-* files (filtered), got: %s", output)
 	}
 
 	// Should have 3 tasks from plan-* files only (Task 1, 3, 4)
@@ -2230,5 +2231,159 @@ Other task.
 	// Error should also mention the pattern format
 	if !strings.Contains(err.Error(), "plan-*.") {
 		t.Errorf("Expected error to mention 'plan-*.' pattern, got: %v", err)
+	}
+}
+
+// ============================================================================
+// PROGRESS INDICATOR TESTS (TDD RED Phase)
+// ============================================================================
+
+// TestRunCommand_ProgressIndicator verifies colorful progress indicator during multi-file loading
+func TestRunCommand_ProgressIndicator(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create 5 plan files to show progress
+	for i := 1; i <= 5; i++ {
+		planContent := fmt.Sprintf(`# Plan %d
+
+## Task %d: Task %d
+**Status**: pending
+**Files**: file%d.go
+
+Task %d description.
+`, i, i, i, i, i)
+		planPath := filepath.Join(tmpDir, fmt.Sprintf("plan-%02d-test.md", i))
+		if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+			t.Fatalf("Failed to create plan file %d: %v", i, err)
+		}
+	}
+
+	// Execute with directory argument (will load 5 plan files)
+	args := []string{"run", "--dry-run", tmpDir}
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\nOutput: %s", err, output)
+	}
+
+	// Verify progress header is shown
+	if !strings.Contains(output, "Loading plan files") {
+		t.Error("Expected 'Loading plan files' header in output")
+	}
+
+	// Verify progress indicators are shown for each file (e.g., 1/5, 2/5, etc.)
+	// ANSI codes are included so we look for "1/5" pattern within the colored brackets
+	for i := 1; i <= 5; i++ {
+		progressIndicator := fmt.Sprintf("%d/5", i)
+		if !strings.Contains(output, progressIndicator) {
+			t.Errorf("Expected progress indicator '%s' in output", progressIndicator)
+		}
+	}
+
+	// Verify ANSI color codes are present (blue or cyan for progress)
+	// ANSI escape sequences start with \x1b[ or \033[
+	hasAnsiColors := strings.Contains(output, "\x1b[") || strings.Contains(output, "\033[")
+	if !hasAnsiColors {
+		t.Error("Expected ANSI color codes in progress output")
+	}
+
+	// Verify completion message is shown
+	if !strings.Contains(output, "Loaded") && !strings.Contains(output, "plan files") {
+		t.Error("Expected completion message after loading files")
+	}
+
+	// Verify total tasks from all files
+	if !strings.Contains(output, "Total tasks: 5") {
+		t.Error("Expected 5 tasks from 5 plan files")
+	}
+}
+
+// TestRunCommand_ProgressIndicator_SingleFile verifies NO progress indicator for single file
+func TestRunCommand_ProgressIndicator_SingleFile(t *testing.T) {
+	planContent := `# Single Plan
+
+## Task 1: Single Task
+**Status**: pending
+**Files**: file.go
+
+Single task.
+`
+	planFile := createTestPlanFile(t, planContent)
+
+	// Execute with single file
+	args := []string{"run", "--dry-run", planFile}
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Verify NO progress indicator for single file (should just say "Loading plan from...")
+	if strings.Contains(output, "[1/1]") {
+		t.Error("Should NOT show progress indicator for single file")
+	}
+
+	// Should show simple loading message
+	if !strings.Contains(output, "Loading plan from") {
+		t.Error("Expected simple 'Loading plan from' message for single file")
+	}
+}
+
+// TestRunCommand_ProgressIndicator_TwoFiles verifies progress indicator for 2 files
+func TestRunCommand_ProgressIndicator_TwoFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create 2 plan files
+	plan1 := `# Plan 1
+
+## Task 1: First
+**Status**: pending
+**Files**: first.go
+
+First task.
+`
+	plan1Path := filepath.Join(tmpDir, "plan-01-first.md")
+	if err := os.WriteFile(plan1Path, []byte(plan1), 0644); err != nil {
+		t.Fatalf("Failed to create plan 1: %v", err)
+	}
+
+	plan2 := `plan:
+  tasks:
+    - task_number: 2
+      name: "Second"
+      files: ["second.go"]
+      status: "pending"
+      description: "Second task"
+`
+	plan2Path := filepath.Join(tmpDir, "plan-02-second.yaml")
+	if err := os.WriteFile(plan2Path, []byte(plan2), 0644); err != nil {
+		t.Fatalf("Failed to create plan 2: %v", err)
+	}
+
+	// Execute with 2 files
+	args := []string{"run", "--dry-run", plan1Path, plan2Path}
+	output, err := executeRunCommand(t, args)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Verify progress indicators for 2 files (with ANSI color codes)
+	// Format: [[34m1/2[0m] where [34m is blue color
+	if !strings.Contains(output, "1/2") {
+		t.Error("Expected 1/2 progress indicator")
+	}
+
+	if !strings.Contains(output, "2/2") {
+		t.Error("Expected 2/2 progress indicator")
+	}
+
+	// Verify filenames are shown
+	if !strings.Contains(output, "plan-01-first.md") {
+		t.Error("Expected first filename in progress")
+	}
+
+	if !strings.Contains(output, "plan-02-second.yaml") {
+		t.Error("Expected second filename in progress")
 	}
 }

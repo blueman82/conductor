@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -720,9 +721,9 @@ Setup database connection.
 
 	outputStr := output.String()
 
-	// Verify output mentions multiple files
-	if !strings.Contains(outputStr, "Validating 2 plan file(s)") {
-		t.Errorf("Expected output to mention 2 plan files, got: %s", outputStr)
+	// Verify output shows multi-file validation
+	if !strings.Contains(outputStr, "Validating plan files") || !strings.Contains(outputStr, "Parsed 4 tasks from 2 plan files") {
+		t.Errorf("Expected output to mention 2 plan files with progress, got: %s", outputStr)
 	}
 
 	// Verify task count
@@ -917,8 +918,8 @@ Do task one.
 	outputStr := output.String()
 
 	// Verify correct number of files and tasks
-	if !strings.Contains(outputStr, "Validating 2 plan file(s)") {
-		t.Errorf("Expected 2 plan files, got: %s", outputStr)
+	if !strings.Contains(outputStr, "Validating plan files") || !strings.Contains(outputStr, "Parsed 2 tasks from 2 plan files") {
+		t.Errorf("Expected 2 plan files with progress, got: %s", outputStr)
 	}
 
 	if !strings.Contains(outputStr, "Parsed 2 tasks") {
@@ -995,8 +996,8 @@ Build base.
 
 	outputStr := output.String()
 
-	if !strings.Contains(outputStr, "Validating 2 plan file(s)") {
-		t.Errorf("Expected 2 plan files, got: %s", outputStr)
+	if !strings.Contains(outputStr, "Validating plan files") || !strings.Contains(outputStr, "Parsed 2 tasks from 2 plan files") {
+		t.Errorf("Expected 2 plan files with progress, got: %s", outputStr)
 	}
 
 	if !strings.Contains(outputStr, "Parsed 2 tasks") {
@@ -1236,5 +1237,190 @@ func TestValidateCommand_MultipleNonPlanFiles_SpecificError(t *testing.T) {
 	// Should suggest file naming or pattern
 	if !strings.Contains(errMsg, "plan-") {
 		t.Errorf("Expected error to suggest plan-* prefix, got: %v", errMsg)
+	}
+}
+
+// ============================================================================
+// PROGRESS INDICATOR TESTS (TDD RED Phase)
+// ============================================================================
+
+// TestValidateCommand_ProgressIndicator verifies colorful progress indicator during multi-file validation
+func TestValidateCommand_ProgressIndicator(t *testing.T) {
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	tmpDir := t.TempDir()
+
+	// Create 5 plan files to show progress
+	for i := 1; i <= 5; i++ {
+		planContent := fmt.Sprintf(`# Plan %d
+
+## Task %d: Task %d
+**Files**: file%d.go
+**Agent**: golang-pro
+
+Task %d description.
+`, i, i, i, i, i)
+		planPath := filepath.Join(tmpDir, fmt.Sprintf("plan-%02d-test.md", i))
+		if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+			t.Fatalf("Failed to create plan file %d: %v", i, err)
+		}
+	}
+
+	// Filter plan files
+	planFiles, err := filterPlanFiles([]string{tmpDir})
+	if err != nil {
+		t.Fatalf("filterPlanFiles() failed: %v", err)
+	}
+
+	// Validate with multiple files
+	var output bytes.Buffer
+	err = validateMultipleFiles(planFiles, registry, &output)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	outputStr := output.String()
+
+	// Verify progress indicators are shown for each file (e.g., 1/5, 2/5, etc.)
+	// ANSI codes are included so we look for "1/5" pattern within the colored brackets
+	for i := 1; i <= 5; i++ {
+		progressIndicator := fmt.Sprintf("%d/5", i)
+		if !strings.Contains(outputStr, progressIndicator) {
+			t.Errorf("Expected progress indicator '%s' in output", progressIndicator)
+		}
+	}
+
+	// Verify ANSI color codes are present (blue or cyan for progress)
+	// ANSI escape sequences start with \x1b[ or \033[
+	hasAnsiColors := strings.Contains(outputStr, "\x1b[") || strings.Contains(outputStr, "\033[")
+	if !hasAnsiColors {
+		t.Error("Expected ANSI color codes in progress output")
+	}
+
+	// Verify completion message is shown
+	if !strings.Contains(outputStr, "Parsed") {
+		t.Error("Expected completion message after loading files")
+	}
+
+	// Verify validation success
+	if !strings.Contains(outputStr, "Plan is valid") {
+		t.Error("Expected validation success message")
+	}
+}
+
+// TestValidateCommand_ProgressIndicator_SingleFile verifies NO progress indicator for single file
+func TestValidateCommand_ProgressIndicator_SingleFile(t *testing.T) {
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	tmpDir := t.TempDir()
+
+	// Create single plan file
+	planContent := `# Single Plan
+
+## Task 1: Single Task
+**Files**: file.go
+**Agent**: golang-pro
+
+Single task.
+`
+	planPath := filepath.Join(tmpDir, "plan-01.md")
+	if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+		t.Fatalf("Failed to create plan file: %v", err)
+	}
+
+	// Validate single file
+	var output bytes.Buffer
+	err := validatePlan(planPath, registry, &output)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	outputStr := output.String()
+
+	// Verify NO progress indicator for single file
+	if strings.Contains(outputStr, "[1/1]") {
+		t.Error("Should NOT show progress indicator for single file")
+	}
+
+	// Should show simple validation message
+	if !strings.Contains(outputStr, "Validating plan from") {
+		t.Error("Expected simple 'Validating plan from' message for single file")
+	}
+}
+
+// TestValidateCommand_ProgressIndicator_TwoFiles verifies progress indicator for 2 files
+func TestValidateCommand_ProgressIndicator_TwoFiles(t *testing.T) {
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	tmpDir := t.TempDir()
+
+	// Create 2 plan files
+	plan1 := `# Plan 1
+
+## Task 1: First
+**Files**: first.go
+**Agent**: golang-pro
+
+First task.
+`
+	plan1Path := filepath.Join(tmpDir, "plan-01-first.md")
+	if err := os.WriteFile(plan1Path, []byte(plan1), 0644); err != nil {
+		t.Fatalf("Failed to create plan 1: %v", err)
+	}
+
+	plan2 := `plan:
+  tasks:
+    - task_number: 2
+      name: "Second"
+      files: ["second.go"]
+      agent: "golang-pro"
+      description: "Second task"
+`
+	plan2Path := filepath.Join(tmpDir, "plan-02-second.yaml")
+	if err := os.WriteFile(plan2Path, []byte(plan2), 0644); err != nil {
+		t.Fatalf("Failed to create plan 2: %v", err)
+	}
+
+	// Validate with 2 files
+	var output bytes.Buffer
+	err := validateMultipleFiles([]string{plan1Path, plan2Path}, registry, &output)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	outputStr := output.String()
+
+	// Verify progress indicators for 2 files (with ANSI color codes)
+	// Format: [[34m1/2[0m] where [34m is blue color
+	if !strings.Contains(outputStr, "1/2") {
+		t.Error("Expected 1/2 progress indicator")
+	}
+
+	if !strings.Contains(outputStr, "2/2") {
+		t.Error("Expected 2/2 progress indicator")
+	}
+
+	// Verify filenames are shown
+	if !strings.Contains(outputStr, "plan-01-first.md") {
+		t.Error("Expected first filename in progress")
+	}
+
+	if !strings.Contains(outputStr, "plan-02-second.yaml") {
+		t.Error("Expected second filename in progress")
 	}
 }
