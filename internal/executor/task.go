@@ -32,6 +32,24 @@ type Reviewer interface {
 // LearningStore defines the interface for adaptive learning storage.
 type LearningStore interface {
 	AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*FailureAnalysis, error)
+	RecordExecution(ctx context.Context, exec *TaskExecution) error
+}
+
+// TaskExecution represents a single task execution record for learning storage.
+type TaskExecution struct {
+	PlanFile        string
+	RunNumber       int
+	TaskNumber      string
+	TaskName        string
+	Agent           string
+	Prompt          string
+	Success         bool
+	Output          string
+	ErrorMessage    string
+	DurationSecs    int64
+	QCVerdict       string
+	QCFeedback      string
+	FailurePatterns []string
 }
 
 // FailureAnalysis contains metrics and recommendations from analyzing task execution history.
@@ -238,6 +256,128 @@ func enhancePromptWithLearning(originalPrompt string, analysis *FailureAnalysis)
 	return originalPrompt + learningContext
 }
 
+// extractFailurePatterns identifies common failure patterns from QC output using keyword matching.
+// Only extracts patterns for RED verdicts. Returns empty slice for GREEN/YELLOW verdicts.
+func extractFailurePatterns(verdict, feedback, output string) []string {
+	// Only extract patterns for RED verdicts
+	if verdict != models.StatusRed {
+		return []string{}
+	}
+
+	patterns := []string{}
+	patternKeywords := map[string][]string{
+		"compilation_error":   {"compilation", "compile", "syntax error"},
+		"test_failure":        {"test fail", "tests fail", "test failure"},
+		"dependency_missing":  {"dependency", "package not found", "module not found"},
+		"permission_error":    {"permission", "access denied", "forbidden"},
+		"timeout":             {"timeout", "deadline", "timed out"},
+		"runtime_error":       {"runtime error", "panic", "segfault", "nil pointer"},
+	}
+
+	// Combine all text sources for pattern matching (case insensitive)
+	combinedText := strings.ToLower(feedback + " " + output)
+
+	// Check each pattern
+	for pattern, keywords := range patternKeywords {
+		for _, keyword := range keywords {
+			if strings.Contains(combinedText, strings.ToLower(keyword)) {
+				patterns = append(patterns, pattern)
+				break // Only add pattern once
+			}
+		}
+	}
+
+	return patterns
+}
+
+// qcReviewHook runs after QC review to extract patterns and store metadata.
+// This hook captures failure patterns for the post-task hook to use.
+func (te *DefaultTaskExecutor) qcReviewHook(ctx context.Context, task *models.Task, verdict, feedback, output string) {
+	// Extract failure patterns from QC output
+	patterns := extractFailurePatterns(verdict, feedback, output)
+
+	// Initialize metadata map if needed
+	if task.Metadata == nil {
+		task.Metadata = make(map[string]interface{})
+	}
+
+	// Store QC verdict and patterns in task metadata
+	task.Metadata["qc_verdict"] = verdict
+	task.Metadata["failure_patterns"] = patterns
+
+	// Log patterns at debug level (would use proper logger in production)
+	// For now, this is a no-op, but in production we'd log:
+	// log.Debug("QC verdict: %s, patterns: %v", verdict, patterns)
+}
+
+// postTaskHook records complete execution history to the learning database.
+// Called after task completion (success or failure) with all execution details.
+func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Task, result *models.TaskResult, verdict string) {
+	// Learning disabled - no-op
+	if te.learningStore == nil {
+		return
+	}
+
+	// Extract failure patterns from metadata if present
+	var failurePatterns []string
+	if task.Metadata != nil {
+		if patterns, ok := task.Metadata["failure_patterns"].([]string); ok {
+			failurePatterns = patterns
+		}
+	}
+
+	// Extract QC feedback if present
+	qcFeedback := ""
+	if result != nil {
+		qcFeedback = result.ReviewFeedback
+	}
+
+	// Determine success status
+	success := verdict == models.StatusGreen || verdict == models.StatusYellow
+
+	// Extract error message if task failed
+	errorMessage := ""
+	if result != nil && result.Error != nil {
+		errorMessage = result.Error.Error()
+	}
+
+	// Calculate duration in seconds
+	durationSecs := int64(0)
+	if result != nil {
+		durationSecs = int64(result.Duration.Seconds())
+	}
+
+	// Extract output
+	output := ""
+	if result != nil {
+		output = result.Output
+	}
+
+	// Build TaskExecution record
+	exec := &TaskExecution{
+		PlanFile:        te.planFile,
+		RunNumber:       te.runNumber,
+		TaskNumber:      task.Number,
+		TaskName:        task.Name,
+		Agent:           task.Agent,
+		Prompt:          task.Prompt,
+		Success:         success,
+		Output:          output,
+		ErrorMessage:    errorMessage,
+		DurationSecs:    durationSecs,
+		QCVerdict:       verdict,
+		QCFeedback:      qcFeedback,
+		FailurePatterns: failurePatterns,
+	}
+
+	// Record execution (graceful degradation on error)
+	if err := te.learningStore.RecordExecution(ctx, exec); err != nil {
+		// Log warning but don't fail task (graceful degradation)
+		// In production: log.Warn("failed to record execution: %v", err)
+		// For now, silently continue
+	}
+}
+
 // Execute runs an individual task, handling agent invocation, quality control, and plan updates.
 func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
 	result := models.TaskResult{Task: task}
@@ -358,8 +498,10 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			if err := te.updatePlanStatus(task, StatusCompleted, true); err != nil {
 				result.Status = models.StatusFailed
 				result.Error = err
+				te.postTaskHook(ctx, &task, &result, models.StatusFailed)
 				return result, err
 			}
+			te.postTaskHook(ctx, &task, &result, models.StatusGreen)
 			return result, nil
 		}
 
@@ -373,6 +515,10 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 		if review != nil {
 			result.ReviewFeedback = review.Feedback
+			// Call QC review hook to extract patterns and store metadata
+			te.qcReviewHook(ctx, &task, review.Flag, review.Feedback, output)
+			// Update result task to include metadata
+			result.Task = task
 		}
 
 		switch {
@@ -384,8 +530,10 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			if err := te.updatePlanStatus(task, StatusCompleted, true); err != nil {
 				result.Status = models.StatusFailed
 				result.Error = err
+				te.postTaskHook(ctx, &task, &result, models.StatusFailed)
 				return result, err
 			}
+			te.postTaskHook(ctx, &task, &result, models.StatusGreen)
 			return result, nil
 		case review.Flag == models.StatusYellow:
 			result.Status = models.StatusYellow
@@ -393,8 +541,10 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			if err := te.updatePlanStatus(task, StatusCompleted, true); err != nil {
 				result.Status = models.StatusFailed
 				result.Error = err
+				te.postTaskHook(ctx, &task, &result, models.StatusFailed)
 				return result, err
 			}
+			te.postTaskHook(ctx, &task, &result, models.StatusYellow)
 			return result, nil
 		case review.Flag == models.StatusRed:
 			lastErr = ErrQualityGateFailed
@@ -412,6 +562,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			result.RetryCount = attempt
 			result.Error = lastErr
 			_ = te.updatePlanStatus(task, StatusFailed, false)
+			te.postTaskHook(ctx, &task, &result, models.StatusRed)
 			return result, lastErr
 		}
 	}
@@ -424,6 +575,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	result.RetryCount = te.retryLimit
 	result.Error = lastErr
 	_ = te.updatePlanStatus(task, StatusFailed, false)
+	te.postTaskHook(ctx, &task, &result, models.StatusRed)
 	return result, lastErr
 }
 

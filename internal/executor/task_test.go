@@ -1113,16 +1113,21 @@ func TestUpdateCorrectFile(t *testing.T) {
 	}
 }
 
-// MockLearningStore implements a mock learning store for testing pre-task hooks
+// MockLearningStore implements a mock learning store for testing pre-task and post-task hooks
 type MockLearningStore struct {
-	AnalysisResult *FailureAnalysis
-	AnalysisError  error
-	CallCount      int
-	LastPlanFile   string
-	LastTaskNumber string
+	mu                   sync.Mutex
+	AnalysisResult       *FailureAnalysis
+	AnalysisError        error
+	CallCount            int
+	LastPlanFile         string
+	LastTaskNumber       string
+	RecordedExecutions   []*TaskExecution
+	RecordExecutionError error
 }
 
 func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*FailureAnalysis, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.CallCount++
 	m.LastPlanFile = planFile
 	m.LastTaskNumber = taskNumber
@@ -1140,6 +1145,24 @@ func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskN
 	}
 
 	return m.AnalysisResult, nil
+}
+
+func (m *MockLearningStore) RecordExecution(ctx context.Context, exec *TaskExecution) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.RecordExecutionError != nil {
+		return m.RecordExecutionError
+	}
+
+	m.RecordedExecutions = append(m.RecordedExecutions, exec)
+	return nil
+}
+
+func (m *MockLearningStore) GetRecordedExecutions() []*TaskExecution {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]*TaskExecution{}, m.RecordedExecutions...)
 }
 
 // TestPreTaskHook_NoHistory verifies that hook is no-op when no failure history exists
@@ -1645,4 +1668,433 @@ func TestTaskExecutorUsesSourceFileForLocking(t *testing.T) {
 	// Verify the lock was acquired on the individual file, not concatenated path
 	// This is implicit in the test passing - if it tried to lock the concatenated
 	// path, the file system operation would likely fail or behave unexpectedly
+}
+
+// TestQCReviewHook_ExtractsPatterns verifies pattern extraction from QC output
+func TestQCReviewHook_ExtractsPatterns(t *testing.T) {
+	tests := []struct {
+		name            string
+		verdict         string
+		feedback        string
+		output          string
+		expectedPattern string
+	}{
+		{
+			name:            "Compilation error detected",
+			verdict:         "RED",
+			feedback:        "Code has compilation errors",
+			output:          "compilation failed: syntax error at line 42",
+			expectedPattern: "compilation_error",
+		},
+		{
+			name:            "Test failure detected",
+			verdict:         "RED",
+			feedback:        "Tests are failing",
+			output:          "test failure: expected 5 but got 3",
+			expectedPattern: "test_failure",
+		},
+		{
+			name:            "Dependency missing detected",
+			verdict:         "RED",
+			feedback:        "Missing dependencies",
+			output:          "dependency missing: package not found",
+			expectedPattern: "dependency_missing",
+		},
+		{
+			name:            "Permission error detected",
+			verdict:         "RED",
+			feedback:        "Permission denied",
+			output:          "permission error: access denied to file",
+			expectedPattern: "permission_error",
+		},
+		{
+			name:            "Timeout detected",
+			verdict:         "RED",
+			feedback:        "Task timed out",
+			output:          "timeout: operation exceeded deadline",
+			expectedPattern: "timeout",
+		},
+		{
+			name:            "Runtime error detected",
+			verdict:         "RED",
+			feedback:        "Runtime panic",
+			output:          "runtime error: nil pointer dereference",
+			expectedPattern: "runtime_error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			found := false
+			for _, p := range patterns {
+				if p == tt.expectedPattern {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected pattern %q in %v", tt.expectedPattern, patterns)
+			}
+		})
+	}
+}
+
+// TestQCReviewHook_GreenVerdict verifies no patterns extracted for GREEN verdict
+func TestQCReviewHook_GreenVerdict(t *testing.T) {
+	patterns := extractFailurePatterns("GREEN", "Everything looks good", "Task completed successfully")
+
+	if len(patterns) != 0 {
+		t.Errorf("expected no patterns for GREEN verdict, got %v", patterns)
+	}
+}
+
+// TestQCReviewHook_RedVerdictMultiplePatterns verifies multiple patterns detected
+func TestQCReviewHook_RedVerdictMultiplePatterns(t *testing.T) {
+	output := "compilation failed: syntax error. test failure: expected result"
+	patterns := extractFailurePatterns("RED", "", output)
+
+	expectedPatterns := []string{"compilation_error", "test_failure"}
+	for _, expected := range expectedPatterns {
+		found := false
+		for _, p := range patterns {
+			if p == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected pattern %q in %v", expected, patterns)
+		}
+	}
+}
+
+// TestQCReviewHook_EmptyOutput verifies graceful handling of empty output
+func TestQCReviewHook_EmptyOutput(t *testing.T) {
+	patterns := extractFailurePatterns("RED", "", "")
+
+	if patterns == nil {
+		t.Error("expected empty slice, got nil")
+	}
+	if len(patterns) != 0 {
+		t.Errorf("expected empty patterns for empty output, got %v", patterns)
+	}
+}
+
+// TestQCReviewHook_MetadataStorage verifies patterns stored in task metadata
+func TestQCReviewHook_MetadataStorage(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"compilation failed"}`,
+		ExitCode: 0,
+	})
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "Compilation error"},
+		},
+		retryDecisions: map[int]bool{0: false},
+	}
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	task := models.Task{
+		Number:   "1",
+		Name:     "Test task",
+		Prompt:   "Do something",
+		Metadata: make(map[string]interface{}),
+	}
+
+	// Execute will fail on RED verdict
+	result, _ := executor.Execute(context.Background(), task)
+
+	// Check that metadata was set on the result task
+	if result.Task.Metadata == nil {
+		t.Fatal("expected metadata to be set")
+	}
+
+	verdict, ok := result.Task.Metadata["qc_verdict"]
+	if !ok {
+		t.Error("expected qc_verdict in metadata")
+	}
+	if verdict != "RED" {
+		t.Errorf("expected verdict RED, got %v", verdict)
+	}
+
+	patterns, ok := result.Task.Metadata["failure_patterns"]
+	if !ok {
+		t.Error("expected failure_patterns in metadata")
+	}
+
+	patternSlice, ok := patterns.([]string)
+	if !ok {
+		t.Fatalf("expected patterns to be []string, got %T", patterns)
+	}
+
+	if len(patternSlice) == 0 {
+		t.Error("expected at least one pattern to be extracted")
+	}
+}
+
+// TestPostTaskHook_RecordsExecution verifies that successful task execution is recorded.
+func TestPostTaskHook_RecordsExecution(t *testing.T) {
+	mockStore := &MockLearningStore{}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed successfully"}`,
+		ExitCode: 0,
+		Duration: 500 * time.Millisecond,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Configure learning
+	executor.learningStore = mockStore
+	executor.planFile = "test-plan.md"
+	executor.sessionID = "session-123"
+	executor.runNumber = 5
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Prompt: "Do something",
+		Agent:  "test-agent",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify execution was recorded
+	executions := mockStore.GetRecordedExecutions()
+	if len(executions) != 1 {
+		t.Fatalf("expected 1 recorded execution, got %d", len(executions))
+	}
+
+	exec := executions[0]
+	if exec.PlanFile != "test-plan.md" {
+		t.Errorf("expected PlanFile 'test-plan.md', got '%s'", exec.PlanFile)
+	}
+	if exec.RunNumber != 5 {
+		t.Errorf("expected RunNumber 5, got %d", exec.RunNumber)
+	}
+	if exec.TaskNumber != "Task 1" {
+		t.Errorf("expected TaskNumber 'Task 1', got '%s'", exec.TaskNumber)
+	}
+	if exec.TaskName != "Test Task" {
+		t.Errorf("expected TaskName 'Test Task', got '%s'", exec.TaskName)
+	}
+	if exec.Agent != "test-agent" {
+		t.Errorf("expected Agent 'test-agent', got '%s'", exec.Agent)
+	}
+	if !exec.Success {
+		t.Error("expected Success true")
+	}
+	if exec.QCVerdict != "GREEN" {
+		t.Errorf("expected QCVerdict 'GREEN', got '%s'", exec.QCVerdict)
+	}
+}
+
+// TestPostTaskHook_IncludesPatterns verifies that failure patterns are included in recorded execution.
+func TestPostTaskHook_IncludesPatterns(t *testing.T) {
+	mockStore := &MockLearningStore{}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"compilation error occurred"}`,
+		ExitCode: 0,
+	})
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "Compilation failed"},
+		},
+		retryDecisions: map[int]bool{0: false},
+	}
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Configure learning
+	executor.learningStore = mockStore
+	executor.planFile = "test-plan.md"
+	executor.sessionID = "session-456"
+	executor.runNumber = 3
+
+	task := models.Task{
+		Number:   "Task 2",
+		Name:     "Failing Task",
+		Prompt:   "Do something that fails",
+		Agent:    "test-agent",
+		Metadata: make(map[string]interface{}),
+	}
+
+	// This will fail on RED verdict
+	_, _ = executor.Execute(context.Background(), task)
+
+	// Verify execution was recorded
+	executions := mockStore.GetRecordedExecutions()
+	if len(executions) != 1 {
+		t.Fatalf("expected 1 recorded execution, got %d", len(executions))
+	}
+
+	exec := executions[0]
+	if exec.Success {
+		t.Error("expected Success false for RED verdict")
+	}
+	if exec.QCVerdict != "RED" {
+		t.Errorf("expected QCVerdict 'RED', got '%s'", exec.QCVerdict)
+	}
+
+	// Check that failure patterns were extracted and included
+	if len(exec.FailurePatterns) == 0 {
+		t.Error("expected failure patterns to be recorded")
+	}
+
+	// Verify specific pattern from "compilation error"
+	foundCompilation := false
+	for _, pattern := range exec.FailurePatterns {
+		if pattern == "compilation_error" {
+			foundCompilation = true
+			break
+		}
+	}
+	if !foundCompilation {
+		t.Errorf("expected 'compilation_error' pattern, got %v", exec.FailurePatterns)
+	}
+}
+
+// TestPostTaskHook_HandlesStoreError verifies graceful degradation when store fails.
+func TestPostTaskHook_HandlesStoreError(t *testing.T) {
+	mockStore := &MockLearningStore{
+		RecordExecutionError: fmt.Errorf("database connection failed"),
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Configure learning with failing store
+	executor.learningStore = mockStore
+	executor.planFile = "test-plan.md"
+	executor.sessionID = "session-789"
+	executor.runNumber = 1
+
+	task := models.Task{
+		Number: "Task 3",
+		Name:   "Test Task",
+		Prompt: "Do something",
+	}
+
+	// Execute should succeed despite store error (graceful degradation)
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify that recording was attempted (error should be logged but not fail task)
+	executions := mockStore.GetRecordedExecutions()
+	if len(executions) != 0 {
+		t.Error("expected no executions recorded when store fails")
+	}
+}
+
+// TestPostTaskHook_MissingMetadata verifies handling when metadata is not set.
+func TestPostTaskHook_MissingMetadata(t *testing.T) {
+	mockStore := &MockLearningStore{}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Configure learning
+	executor.learningStore = mockStore
+	executor.planFile = "test-plan.md"
+	executor.sessionID = "session-999"
+	executor.runNumber = 2
+
+	// Task without metadata
+	task := models.Task{
+		Number: "Task 4",
+		Name:   "Test Task",
+		Prompt: "Do something",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify execution was recorded with empty patterns
+	executions := mockStore.GetRecordedExecutions()
+	if len(executions) != 1 {
+		t.Fatalf("expected 1 recorded execution, got %d", len(executions))
+	}
+
+	exec := executions[0]
+	// FailurePatterns can be nil or empty slice when metadata is missing
+	if exec.FailurePatterns != nil && len(exec.FailurePatterns) != 0 {
+		t.Errorf("expected empty or nil FailurePatterns for missing metadata, got %v", exec.FailurePatterns)
+	}
 }
