@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,27 @@ const (
 	// DefaultMaxConcurrency is the default maximum number of concurrent tasks per wave
 	DefaultMaxConcurrency = 10
 )
+
+// parseTaskNumber extracts the numeric portion from task number strings.
+// Handles formats like "1", "Task 1", "Task 10", etc.
+// Returns a large number (999999) for unparseable strings so they sort last.
+func parseTaskNumber(taskNum string) int {
+	// Try parsing the string directly first
+	if num, err := strconv.Atoi(taskNum); err == nil {
+		return num
+	}
+
+	// Try extracting number from formats like "Task 1", "Task 10"
+	fields := strings.Fields(taskNum)
+	for _, field := range fields {
+		if num, err := strconv.Atoi(field); err == nil {
+			return num
+		}
+	}
+
+	// Return large number for unparseable strings (they sort last)
+	return 999999
+}
 
 // DependencyGraph represents a directed graph of task dependencies
 type DependencyGraph struct {
@@ -236,6 +258,11 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 		if len(currentWave) == 0 {
 			return nil, fmt.Errorf("graph error: no tasks with zero in-degree")
 		}
+
+		// Sort tasks numerically within the wave for better readability
+		sort.Slice(currentWave, func(i, j int) bool {
+			return parseTaskNumber(currentWave[i]) < parseTaskNumber(currentWave[j])
+		})
 
 		// Build group metadata for this wave
 		groupInfo := make(map[string][]string)

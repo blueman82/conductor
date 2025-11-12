@@ -676,3 +676,130 @@ func TestWaveGroupMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskNumericalSorting(t *testing.T) {
+	tests := []struct {
+		name         string
+		tasks        []models.Task
+		expectedWave []string
+	}{
+		{
+			name: "sort multi-digit task numbers",
+			tasks: []models.Task{
+				{Number: "21", Name: "Task 21", DependsOn: []string{}},
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "16", Name: "Task 16", DependsOn: []string{}},
+				{Number: "17", Name: "Task 17", DependsOn: []string{}},
+				{Number: "13", Name: "Task 13", DependsOn: []string{}},
+				{Number: "14", Name: "Task 14", DependsOn: []string{}},
+			},
+			expectedWave: []string{"1", "13", "14", "16", "17", "21"},
+		},
+		{
+			name: "sort single-digit task numbers",
+			tasks: []models.Task{
+				{Number: "3", Name: "Task 3", DependsOn: []string{}},
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "2", Name: "Task 2", DependsOn: []string{}},
+			},
+			expectedWave: []string{"1", "2", "3"},
+		},
+		{
+			name: "sort mixed format task numbers",
+			tasks: []models.Task{
+				{Number: "Task 5", Name: "Task 5", DependsOn: []string{}},
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "Task 10", Name: "Task 10", DependsOn: []string{}},
+				{Number: "3", Name: "Task 3", DependsOn: []string{}},
+			},
+			expectedWave: []string{"1", "3", "Task 5", "Task 10"},
+		},
+		{
+			name: "unparseable strings sort last",
+			tasks: []models.Task{
+				{Number: "invalid", Name: "Invalid Task", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{}},
+				{Number: "alpha", Name: "Alpha Task", DependsOn: []string{}},
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+			},
+			expectedWave: []string{"1", "5", "alpha", "invalid"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			waves, err := CalculateWaves(tt.tasks)
+			if err != nil {
+				t.Fatalf("CalculateWaves() failed: %v", err)
+			}
+
+			if len(waves) != 1 {
+				t.Fatalf("Expected 1 wave, got %d", len(waves))
+			}
+
+			actualWave := waves[0].TaskNumbers
+			if len(actualWave) != len(tt.expectedWave) {
+				t.Fatalf("Expected %d tasks in wave, got %d", len(tt.expectedWave), len(actualWave))
+			}
+
+			for i, expected := range tt.expectedWave {
+				if actualWave[i] != expected {
+					t.Errorf("Task at position %d: expected %q, got %q", i, expected, actualWave[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseTaskNumber(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{
+			name:     "simple number",
+			input:    "1",
+			expected: 1,
+		},
+		{
+			name:     "multi-digit number",
+			input:    "42",
+			expected: 42,
+		},
+		{
+			name:     "Task prefix format",
+			input:    "Task 5",
+			expected: 5,
+		},
+		{
+			name:     "Task prefix with multi-digit",
+			input:    "Task 100",
+			expected: 100,
+		},
+		{
+			name:     "unparseable string",
+			input:    "invalid",
+			expected: 999999,
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: 999999,
+		},
+		{
+			name:     "alphabetic string",
+			input:    "alpha",
+			expected: 999999,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseTaskNumber(tt.input)
+			if result != tt.expected {
+				t.Errorf("parseTaskNumber(%q) = %d, expected %d", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
