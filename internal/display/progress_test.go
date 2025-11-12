@@ -56,12 +56,12 @@ func TestProgressIndicator_Start(t *testing.T) {
 		{
 			name:       "displays header for multiple files",
 			totalFiles: 3,
-			wantOutput: "Loading 3 plan files...\n",
+			wantOutput: "Loading plan files:\n",
 		},
 		{
 			name:       "displays header for single file",
 			totalFiles: 1,
-			wantOutput: "Loading 1 plan files...\n",
+			wantOutput: "Loading plan files:\n",
 		},
 	}
 
@@ -212,14 +212,14 @@ func TestProgressIndicator_Complete(t *testing.T) {
 			totalFiles:     3,
 			wantCheckmark:  true,
 			wantGreenColor: true,
-			wantMessage:    "Successfully loaded 3 plan files",
+			wantMessage:    "Loaded 3 plan files",
 		},
 		{
 			name:           "shows success for single file",
 			totalFiles:     1,
 			wantCheckmark:  true,
 			wantGreenColor: true,
-			wantMessage:    "Successfully loaded 1 plan files",
+			wantMessage:    "Loaded 1 plan files",
 		},
 	}
 
@@ -266,7 +266,7 @@ func TestProgressIndicator_FullWorkflow(t *testing.T) {
 	// Start
 	pi.Start()
 	output := buf.String()
-	if !strings.Contains(output, "Loading 3 plan files...") {
+	if !strings.Contains(output, "Loading plan files:") {
 		t.Errorf("Start() missing header, got %q", output)
 	}
 
@@ -298,7 +298,7 @@ func TestProgressIndicator_FullWorkflow(t *testing.T) {
 	buf.Reset()
 	pi.Complete()
 	output = buf.String()
-	if !strings.Contains(output, "✓") || !strings.Contains(output, "Successfully loaded 3 plan files") {
+	if !strings.Contains(output, "✓") || !strings.Contains(output, "Loaded 3 plan files") {
 		t.Errorf("Complete() missing expected format, got %q", output)
 	}
 }
@@ -365,19 +365,19 @@ func TestDisplaySingleFile(t *testing.T) {
 		wantMsg  string
 	}{
 		{
-			name:     "displays single file message with basename",
+			name:     "displays single file message with full path",
 			filename: "plan.md",
-			wantMsg:  "Loading plan file: plan.md...",
+			wantMsg:  "Loading plan from plan.md...",
 		},
 		{
-			name:     "strips path for single file",
+			name:     "shows full path for single file",
 			filename: "/Users/harrison/docs/plan.yaml",
-			wantMsg:  "Loading plan file: plan.yaml...",
+			wantMsg:  "Loading plan from /Users/harrison/docs/plan.yaml...",
 		},
 		{
 			name:     "handles nested paths",
 			filename: "a/b/c/implementation.md",
-			wantMsg:  "Loading plan file: implementation.md...",
+			wantMsg:  "Loading plan from a/b/c/implementation.md...",
 		},
 	}
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/display"
 	"github.com/harrison/conductor/internal/executor"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/parser"
@@ -73,7 +74,15 @@ func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 				return err
 			}
 			// Detect and warn about numbered files
-			detectAndWarnNumberedFilesValidate(output, []string{path})
+			numberedFiles, _ := display.FindNumberedFiles(path)
+			if len(numberedFiles) > 0 {
+				warning := display.Warning{
+					Title:      fmt.Sprintf("Found numbered files (%s) in directory", strings.Join(numberedFiles, ", ")),
+					Message:    "Conductor only processes plan-*.{md,yaml} files",
+					Suggestion: "To use these files, rename them to: plan-01-setup.md, plan-02-api.yaml, etc.",
+				}
+				warning.Display(output)
+			}
 			return validateMultipleFiles(planFiles, registry, output)
 		}
 
@@ -88,7 +97,25 @@ func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 	}
 
 	// Detect and warn about numbered files in directories
-	detectAndWarnNumberedFilesValidate(output, paths)
+	var allNumberedFiles []string
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if info.IsDir() {
+			numberedFiles, _ := display.FindNumberedFiles(path)
+			allNumberedFiles = append(allNumberedFiles, numberedFiles...)
+		}
+	}
+	if len(allNumberedFiles) > 0 {
+		warning := display.Warning{
+			Title:      fmt.Sprintf("Found numbered files (%s) in directory", strings.Join(allNumberedFiles, ", ")),
+			Message:    "Conductor only processes plan-*.{md,yaml} files",
+			Suggestion: "To use these files, rename them to: plan-01-setup.md, plan-02-api.yaml, etc.",
+		}
+		warning.Display(output)
+	}
 
 	return validateMultipleFiles(planFiles, registry, output)
 }
@@ -174,18 +201,17 @@ func isPlanFile(filename string) bool {
 func validateMultipleFiles(planFiles []string, registry *agent.Registry, output io.Writer) error {
 	var errors []string
 
+	// Parse all plan files and collect tasks with progress indicator
+	progress := display.NewProgressIndicator(output, len(planFiles))
 	fmt.Fprintf(output, "Validating plan files:\n")
 
-	// Parse all plan files and collect tasks with progress indicator
 	allTasks := []models.Task{}
 	groupsMap := make(map[string]*models.WorktreeGroup)
 	var defaultAgent string
 	var qcConfig models.QualityControlConfig
 
-	for i, planFile := range planFiles {
-		// Show colorful progress: [N/Total] filename
-		// Blue color for progress counter
-		fmt.Fprintf(output, "  [\x1b[34m%d/%d\x1b[0m] %s\n", i+1, len(planFiles), filepath.Base(planFile))
+	for _, planFile := range planFiles {
+		progress.Step(planFile)
 
 		plan, err := parser.ParseFile(planFile)
 		if err != nil {
@@ -561,84 +587,4 @@ func validateCrossFileDependencies(tasks *[]models.Task) []string {
 	}
 
 	return errors
-}
-
-// detectAndWarnNumberedFilesValidate scans paths for numbered files (e.g., 1-*.md, 2-*.yaml)
-// and displays a helpful warning if any are found
-func detectAndWarnNumberedFilesValidate(output io.Writer, paths []string) {
-	numberedFiles := findNumberedFilesValidate(paths)
-
-	// If numbered files found, display warning
-	if len(numberedFiles) > 0 {
-		// Yellow color for warning
-		fmt.Fprintf(output, "\n\x1b[33m⚠️  Warning:\x1b[0m Found numbered files (%s) in directory\n", strings.Join(numberedFiles, ", "))
-		fmt.Fprintf(output, "    Conductor only processes plan-*.{md,yaml} files\n")
-		fmt.Fprintf(output, "    To use these files, rename them to: plan-01-setup.md, plan-02-api.yaml, etc.\n\n")
-	}
-}
-
-// findNumberedFilesValidate scans paths for numbered files and returns their basenames
-func findNumberedFilesValidate(paths []string) []string {
-	var numberedFiles []string
-
-	for _, path := range paths {
-		info, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
-
-		if info.IsDir() {
-			// Scan directory for numbered files
-			err := filepath.Walk(path, func(filePath string, fileInfo os.FileInfo, walkErr error) error {
-				if walkErr != nil || fileInfo.IsDir() {
-					return walkErr
-				}
-
-				fileName := filepath.Base(filePath)
-				if isNumberedFileValidate(fileName) {
-					numberedFiles = append(numberedFiles, fileName)
-				}
-				return nil
-			})
-			if err != nil {
-				continue
-			}
-		}
-	}
-
-	return numberedFiles
-}
-
-// isNumberedFileValidate checks if a filename matches the numbered file pattern (e.g., 1-*.md, 2-*.yaml)
-func isNumberedFileValidate(filename string) bool {
-	// Pattern: starts with digit(s), followed by dash
-	if len(filename) < 3 {
-		return false
-	}
-
-	// Check if first character is a digit
-	if filename[0] < '0' || filename[0] > '9' {
-		return false
-	}
-
-	// Find the first dash
-	dashIdx := -1
-	for i := 1; i < len(filename); i++ {
-		if filename[i] == '-' {
-			dashIdx = i
-			break
-		}
-		// If not a digit before dash, not a numbered file
-		if filename[i] < '0' || filename[i] > '9' {
-			return false
-		}
-	}
-
-	if dashIdx == -1 {
-		return false
-	}
-
-	// Check if extension is valid
-	ext := strings.ToLower(filepath.Ext(filename))
-	return ext == ".md" || ext == ".markdown" || ext == ".yaml" || ext == ".yml"
 }

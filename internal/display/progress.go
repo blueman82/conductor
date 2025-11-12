@@ -24,7 +24,7 @@ func NewProgressIndicator(w io.Writer, total int) *ProgressIndicator {
 
 // Start displays the header message
 func (p *ProgressIndicator) Start() {
-	fmt.Fprintf(p.writer, "Loading %d plan files...\n", p.totalFiles)
+	fmt.Fprintf(p.writer, "Loading plan files:\n")
 }
 
 // Step displays progress for current item: [N/Total] filename (blue)
@@ -37,11 +37,10 @@ func (p *ProgressIndicator) Step(filename string) {
 
 // Complete displays success message with green checkmark
 func (p *ProgressIndicator) Complete() {
-	fmt.Fprintf(p.writer, "\x1b[32m✓\x1b[0m Successfully loaded %d plan files\n", p.totalFiles)
+	fmt.Fprintf(p.writer, "\x1b[32m✓\x1b[0m Loaded %d plan files\n", p.totalFiles)
 }
 
 // DisplaySingleFile shows simple loading message for single file
 func DisplaySingleFile(w io.Writer, filename string) {
-	basename := filepath.Base(filename)
-	fmt.Fprintf(w, "Loading plan file: %s...\n", basename)
+	fmt.Fprintf(w, "Loading plan from %s...\n", filename)
 }

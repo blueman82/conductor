@@ -11,6 +11,7 @@ import (
 
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/config"
+	"github.com/harrison/conductor/internal/display"
 	"github.com/harrison/conductor/internal/executor"
 	"github.com/harrison/conductor/internal/logger"
 	"github.com/harrison/conductor/internal/models"
@@ -227,7 +228,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	if useDirectParse {
 		// Single file specified directly - parse without filtering
 		planFile = args[0]
-		fmt.Fprintf(cmd.OutOrStdout(), "Loading plan from %s...\n", planFile)
+		display.DisplaySingleFile(cmd.OutOrStdout(), planFile)
 		plan, err = parser.ParseFile(planFile)
 		if err != nil {
 			return fmt.Errorf("failed to load plan file: %w", err)
@@ -240,26 +241,32 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 
 		// Detect and warn about numbered files in directories
-		detectAndWarnNumberedFiles(cmd.OutOrStdout(), args)
+		numberedFiles, _ := display.FindNumberedFiles(args[0])
+		if len(numberedFiles) > 0 {
+			warning := display.Warning{
+				Title:      fmt.Sprintf("Found numbered files (%s) in directory", strings.Join(numberedFiles, ", ")),
+				Message:    "Conductor only processes plan-*.{md,yaml} files",
+				Suggestion: "To use these files, rename them to: plan-01-setup.md, plan-02-api.yaml, etc.",
+			}
+			warning.Display(cmd.OutOrStdout())
+		}
 
 		if len(planFiles) == 1 {
 			// Single plan file found after filtering
 			planFile = planFiles[0]
-			fmt.Fprintf(cmd.OutOrStdout(), "Loading plan from %s...\n", planFile)
+			display.DisplaySingleFile(cmd.OutOrStdout(), planFile)
 			plan, err = parser.ParseFile(planFile)
 			if err != nil {
 				return fmt.Errorf("failed to load plan file: %w", err)
 			}
 		} else {
 			// Multiple plan files - merge them
-			fmt.Fprintf(cmd.OutOrStdout(), "Loading plan files:\n")
+			progress := display.NewProgressIndicator(cmd.OutOrStdout(), len(planFiles))
+			progress.Start()
 
-			// Parse all plan files with progress indicator
 			var plans []*models.Plan
-			for i, pf := range planFiles {
-				// Show colorful progress: [N/Total] filename
-				// Blue color for progress counter
-				fmt.Fprintf(cmd.OutOrStdout(), "  [\x1b[34m%d/%d\x1b[0m] %s\n", i+1, len(planFiles), filepath.Base(pf))
+			for _, pf := range planFiles {
+				progress.Step(pf)
 
 				p, err := parser.ParseFile(pf)
 				if err != nil {
@@ -268,8 +275,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 				plans = append(plans, p)
 			}
 
-			// Show completion message in green
-			fmt.Fprintf(cmd.OutOrStdout(), "\x1b[32m✓\x1b[0m Loaded %d plan files\n", len(planFiles))
+			progress.Complete()
 
 			// Merge all plans into a single unified plan
 			plan, err = parser.MergePlans(plans...)
@@ -490,82 +496,3 @@ func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	return nil, false
 }
 
-// detectAndWarnNumberedFiles scans paths for numbered files (e.g., 1-*.md, 2-*.yaml)
-// and displays a helpful warning if any are found
-func detectAndWarnNumberedFiles(output io.Writer, paths []string) {
-	numberedFiles := findNumberedFiles(paths)
-
-	// If numbered files found, display warning
-	if len(numberedFiles) > 0 {
-		// Yellow color for warning
-		fmt.Fprintf(output, "\n\x1b[33m⚠️  Warning:\x1b[0m Found numbered files (%s) in directory\n", strings.Join(numberedFiles, ", "))
-		fmt.Fprintf(output, "    Conductor only processes plan-*.{md,yaml} files\n")
-		fmt.Fprintf(output, "    To use these files, rename them to: plan-01-setup.md, plan-02-api.yaml, etc.\n\n")
-	}
-}
-
-// findNumberedFiles scans paths for numbered files and returns their basenames
-func findNumberedFiles(paths []string) []string {
-	var numberedFiles []string
-
-	for _, path := range paths {
-		info, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
-
-		if info.IsDir() {
-			// Scan directory for numbered files
-			err := filepath.Walk(path, func(filePath string, fileInfo os.FileInfo, walkErr error) error {
-				if walkErr != nil || fileInfo.IsDir() {
-					return walkErr
-				}
-
-				fileName := filepath.Base(filePath)
-				if isNumberedFile(fileName) {
-					numberedFiles = append(numberedFiles, fileName)
-				}
-				return nil
-			})
-			if err != nil {
-				continue
-			}
-		}
-	}
-
-	return numberedFiles
-}
-
-// isNumberedFile checks if a filename matches the numbered file pattern (e.g., 1-*.md, 2-*.yaml)
-func isNumberedFile(filename string) bool {
-	// Pattern: starts with digit(s), followed by dash
-	if len(filename) < 3 {
-		return false
-	}
-
-	// Check if first character is a digit
-	if filename[0] < '0' || filename[0] > '9' {
-		return false
-	}
-
-	// Find the first dash
-	dashIdx := -1
-	for i := 1; i < len(filename); i++ {
-		if filename[i] == '-' {
-			dashIdx = i
-			break
-		}
-		// If not a digit before dash, not a numbered file
-		if filename[i] < '0' || filename[i] > '9' {
-			return false
-		}
-	}
-
-	if dashIdx == -1 {
-		return false
-	}
-
-	// Check if extension is valid
-	ext := strings.ToLower(filepath.Ext(filename))
-	return ext == ".md" || ext == ".markdown" || ext == ".yaml" || ext == ".yml"
-}
