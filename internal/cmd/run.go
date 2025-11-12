@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -114,89 +113,6 @@ Examples:
 	return cmd
 }
 
-// loadAndMergePlanFiles loads multiple plan files and merges them into a single plan.
-// It filters paths to only include files matching the pattern plan-*.md or plan-*.yaml.
-// For directories, it loads all matching plan files from that directory.
-func loadAndMergePlanFiles(paths []string) (*models.Plan, error) {
-	var planFilesToMerge []string
-	planFilePattern := regexp.MustCompile(`^plan-.*\.(md|markdown|yaml|yml)$`)
-
-	for _, path := range paths {
-		// Check if path exists
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, fmt.Errorf("failed to access path %s: %w", path, err)
-		}
-
-		if info.IsDir() {
-			// Directory: collect all plan-*.md and plan-*.yaml files
-			entries, err := os.ReadDir(path)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read directory %s: %w", path, err)
-			}
-
-			for _, entry := range entries {
-				if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-					continue
-				}
-
-				// Check if filename matches plan-* pattern
-				if planFilePattern.MatchString(entry.Name()) {
-					fullPath := filepath.Join(path, entry.Name())
-					planFilesToMerge = append(planFilesToMerge, fullPath)
-				}
-			}
-		} else {
-			// File: check if it matches plan-* pattern
-			filename := filepath.Base(path)
-			if planFilePattern.MatchString(filename) {
-				planFilesToMerge = append(planFilesToMerge, path)
-			} else {
-				return nil, fmt.Errorf("file %s does not match pattern plan-*.md or plan-*.yaml", path)
-			}
-		}
-	}
-
-	if len(planFilesToMerge) == 0 {
-		return nil, fmt.Errorf("no plan files found matching pattern plan-*.md or plan-*.yaml")
-	}
-
-	// Parse all collected plan files
-	var plans []*models.Plan
-	for _, planFile := range planFilesToMerge {
-		plan, err := parser.ParseFile(planFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse %s: %w", planFile, err)
-		}
-		plans = append(plans, plan)
-	}
-
-	// Merge all plans into a single unified plan
-	mergedPlan, err := parser.MergePlans(plans...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to merge plans: %w", err)
-	}
-
-	// Build FileToTaskMap for multi-file tracking
-	fileToTaskMap := make(map[string][]string)
-	for i, plan := range plans {
-		if plan.FilePath != "" {
-			for _, task := range plan.Tasks {
-				fileToTaskMap[plan.FilePath] = append(fileToTaskMap[plan.FilePath], task.Number)
-			}
-		} else if i < len(planFilesToMerge) {
-			// Fallback: use the original file path if plan.FilePath is not set
-			for _, task := range plan.Tasks {
-				absPath, _ := filepath.Abs(planFilesToMerge[i])
-				fileToTaskMap[absPath] = append(fileToTaskMap[absPath], task.Number)
-			}
-		}
-	}
-	mergedPlan.FileToTaskMap = fileToTaskMap
-
-	return mergedPlan, nil
-}
-
 // runCommand implements the run command logic
 func runCommand(cmd *cobra.Command, args []string) error {
 	// Load configuration from file
@@ -292,28 +208,76 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Load and parse plan file(s)
 	var plan *models.Plan
-	var planPath string
+	var planFile string
 
+	// Check if we should use FilterPlanFiles or direct ParseFile
+	// Use FilterPlanFiles for: multiple args, or single directory arg
+	// Use ParseFile for: single file arg (maintains backward compatibility)
+	useDirectParse := false
 	if len(args) == 1 {
-		// Single file or directory - use existing parser.ParseFile() logic
-		planPath = args[0]
-		fmt.Fprintf(cmd.OutOrStdout(), "Loading plan from %s...\n", planPath)
-		plan, err = parser.ParseFile(planPath)
+		// Check if single arg is a file (not directory)
+		// If stat fails, assume it's a file path (error will be caught by ParseFile)
+		info, err := os.Stat(args[0])
+		if err != nil || !info.IsDir() {
+			// Single file (or non-existent path) - use direct ParseFile (no filtering)
+			useDirectParse = true
+		}
+	}
+
+	if useDirectParse {
+		// Single file specified directly - parse without filtering
+		planFile = args[0]
+		fmt.Fprintf(cmd.OutOrStdout(), "Loading plan from %s...\n", planFile)
+		plan, err = parser.ParseFile(planFile)
 		if err != nil {
 			return fmt.Errorf("failed to load plan file: %w", err)
 		}
 	} else {
-		// Multiple files - use new merge helper
-		fmt.Fprintf(cmd.OutOrStdout(), "Loading and merging plans from %d files...\n", len(args))
-		plan, err = loadAndMergePlanFiles(args)
+		// Multiple args or directory - use FilterPlanFiles to get plan-* files
+		planFiles, err := parser.FilterPlanFiles(args)
 		if err != nil {
-			return fmt.Errorf("failed to load and merge plan files: %w", err)
+			return fmt.Errorf("failed to filter plan files: %w", err)
 		}
-		// For multi-file plans, use the FilePath from the merged plan (should be set by merge logic)
-		// or use the first argument as a fallback
-		planPath = plan.FilePath
-		if planPath == "" {
-			planPath = args[0]
+
+		if len(planFiles) == 1 {
+			// Single plan file found after filtering
+			planFile = planFiles[0]
+			fmt.Fprintf(cmd.OutOrStdout(), "Loading plan from %s...\n", planFile)
+			plan, err = parser.ParseFile(planFile)
+			if err != nil {
+				return fmt.Errorf("failed to load plan file: %w", err)
+			}
+		} else {
+			// Multiple plan files - merge them
+			fmt.Fprintf(cmd.OutOrStdout(), "Loading and merging plans from %d files...\n", len(planFiles))
+
+			// Parse all plan files
+			var plans []*models.Plan
+			for _, pf := range planFiles {
+				p, err := parser.ParseFile(pf)
+				if err != nil {
+					return fmt.Errorf("failed to parse %s: %w", pf, err)
+				}
+				plans = append(plans, p)
+			}
+
+			// Merge all plans into a single unified plan
+			plan, err = parser.MergePlans(plans...)
+			if err != nil {
+				return fmt.Errorf("failed to merge plans: %w", err)
+			}
+
+			// Build FileToTaskMap for multi-file tracking
+			fileToTaskMap := make(map[string][]string)
+			for _, p := range plans {
+				for _, task := range p.Tasks {
+					fileToTaskMap[p.FilePath] = append(fileToTaskMap[p.FilePath], task.Number)
+				}
+			}
+			plan.FileToTaskMap = fileToTaskMap
+
+			// For display/config, use comma-separated list of plan files
+			planFile = strings.Join(planFiles, ", ")
 		}
 	}
 
@@ -414,7 +378,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Create task executor config
 	taskExecCfg := executor.TaskExecutorConfig{
-		PlanPath:       planPath,
+		PlanPath:       planFile,
 		DefaultAgent:   plan.DefaultAgent,
 		QualityControl: plan.QualityControl,
 	}

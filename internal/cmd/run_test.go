@@ -1592,16 +1592,19 @@ Other task.
 		t.Logf("Single non-plan file accepted by ParseFile(): %v", output2)
 	}
 
-	// Test 3: Multiple files including non-plan file should fail
+	// Test 3: Multiple files including non-plan file should filter out non-plan files
 	args3 := []string{"run", "--dry-run", plan1Path, otherPath}
-	_, err3 := executeRunCommand(t, args3)
+	output3, err3 := executeRunCommand(t, args3)
 
-	if err3 == nil {
-		t.Error("Expected error when non-plan file included in multi-file args")
+	// After refactoring with FilterPlanFiles(), non-plan files are silently filtered
+	// This is lenient behavior - only plan-* files are loaded
+	if err3 != nil {
+		t.Errorf("Unexpected error when mixing plan and non-plan files: %v", err3)
 	}
 
-	if !strings.Contains(err3.Error(), "does not match pattern") {
-		t.Errorf("Expected pattern matching error, got: %v", err3)
+	// Should have only 1 task (from plan-01.md), other.md is filtered out
+	if !strings.Contains(output3, "Total tasks: 1") {
+		t.Errorf("Expected 1 task from plan-01.md only (other.md filtered out), got: %s", output3)
 	}
 }
 
@@ -1680,7 +1683,7 @@ func TestRunCommand_MultipleFiles_ErrorHandling(t *testing.T) {
 			setupFunc: func(t *testing.T) []string {
 				return []string{"/nonexistent/plan-01.md", "/nonexistent/plan-02.yaml"}
 			},
-			wantErrContain: "failed to access path",
+			wantErrContain: "does not exist",
 		},
 		{
 			name: "circular dependency across files",
@@ -1716,21 +1719,6 @@ Task one.
 				return []string{plan1Path, plan2Path}
 			},
 			wantErrContain: "circular dependency",
-		},
-		{
-			name: "non-plan file with multiple args",
-			setupFunc: func(t *testing.T) []string {
-				tmpDir := t.TempDir()
-				// Create a non-plan file
-				plan1Path := filepath.Join(tmpDir, "plan-01.md")
-				os.WriteFile(plan1Path, []byte("# Plan\n## Task 1: Test\n**Status**: pending\n**Files**: test.go\nTest."), 0644)
-
-				nonPlanPath := filepath.Join(tmpDir, "other.md")
-				os.WriteFile(nonPlanPath, []byte("# Other\n## Task 2: Other\n**Status**: pending\n**Files**: other.go\nOther."), 0644)
-
-				return []string{plan1Path, nonPlanPath}
-			},
-			wantErrContain: "does not match pattern",
 		},
 	}
 
