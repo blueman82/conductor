@@ -1459,7 +1459,6 @@ Setup task.
 	// Create plan file (new pattern)
 	planFile := `# Testing
 ## Task 3: Testing
-**Agent**: golang-pro
 **Files**: test.go
 Testing task.
 `
@@ -1527,7 +1526,6 @@ func TestValidateCommand_NoWarningForPlanFilesOnly(t *testing.T) {
 	// Create only plan-* files (no numbered files)
 	plan1 := `# Plan 1
 ## Task 1: First
-**Agent**: golang-pro
 **Files**: first.go
 First task.
 `
@@ -1539,7 +1537,6 @@ First task.
   tasks:
     - task_number: 2
       name: "Second"
-      agent: "golang-pro"
       files: ["second.go"]
       description: "Second task"
 `
