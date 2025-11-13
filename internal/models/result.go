@@ -34,20 +34,18 @@ type ExecutionResult struct {
 	AvgTaskDuration time.Duration  `json:"avg_task_duration" yaml:"avg_task_duration"` // Average duration per task
 }
 
-// NewExecutionResult creates a new ExecutionResult with calculated metrics
-func NewExecutionResult(results []TaskResult, success bool, totalDuration time.Duration) *ExecutionResult {
-	er := &ExecutionResult{
-		TotalTasks:      len(results),
-		Duration:        totalDuration,
-		FailedTasks:     []TaskResult{},
-		StatusBreakdown: make(map[string]int),
-		AgentUsage:      make(map[string]int),
-	}
-
+// calculateMetricsFromResults calculates all metrics from a slice of TaskResults.
+// This is a private helper function that consolidates metric calculation logic
+// to eliminate duplication between NewExecutionResult and CalculateMetrics.
+func (er *ExecutionResult) calculateMetricsFromResults(results []TaskResult) {
 	// Initialize all status keys to ensure they exist even with zero values
 	er.StatusBreakdown[StatusGreen] = 0
 	er.StatusBreakdown[StatusYellow] = 0
 	er.StatusBreakdown[StatusRed] = 0
+
+	// Reset counters
+	er.Completed = 0
+	er.Failed = 0
 
 	// Track unique files using a map (set)
 	uniqueFiles := make(map[string]bool)
@@ -59,72 +57,12 @@ func NewExecutionResult(results []TaskResult, success bool, totalDuration time.D
 			er.StatusBreakdown[result.Status]++
 		}
 
-		// Track agent usage
+		// Track agent usage (count empty agents too)
 		if result.Task.Agent != "" {
 			er.AgentUsage[result.Task.Agent]++
 		} else {
-			// Still count tasks with no agent
+			// Count tasks with no agent
 			er.AgentUsage[""]++
-		}
-
-		// Collect unique files
-		for _, file := range result.Task.Files {
-			uniqueFiles[file] = true
-		}
-
-		// Track failed tasks
-		if result.Status == StatusRed || result.Status == StatusFailed {
-			er.Failed++
-			er.FailedTasks = append(er.FailedTasks, result)
-		} else {
-			er.Completed++
-		}
-	}
-
-	// Calculate total unique files
-	er.TotalFiles = len(uniqueFiles)
-
-	// Calculate average task duration
-	if len(results) > 0 {
-		totalDur := time.Duration(0)
-		for _, result := range results {
-			totalDur += result.Duration
-		}
-		er.AvgTaskDuration = totalDur / time.Duration(len(results))
-	}
-
-	// Remove empty agent entry if it only has zero value
-	if er.AgentUsage[""] == 0 {
-		delete(er.AgentUsage, "")
-	}
-
-	return er
-}
-
-// CalculateMetrics updates the result with calculated metrics (used for existing results)
-func (er *ExecutionResult) CalculateMetrics(results []TaskResult) {
-	// Clear and reinitialize maps
-	er.StatusBreakdown = make(map[string]int)
-	er.AgentUsage = make(map[string]int)
-
-	// Initialize all status keys
-	er.StatusBreakdown[StatusGreen] = 0
-	er.StatusBreakdown[StatusYellow] = 0
-	er.StatusBreakdown[StatusRed] = 0
-
-	uniqueFiles := make(map[string]bool)
-	er.Completed = 0
-	er.Failed = 0
-
-	for _, result := range results {
-		// Count statuses
-		if result.Status != "" {
-			er.StatusBreakdown[result.Status]++
-		}
-
-		// Track agent usage
-		if result.Task.Agent != "" {
-			er.AgentUsage[result.Task.Agent]++
 		}
 
 		// Collect unique files
@@ -135,6 +73,10 @@ func (er *ExecutionResult) CalculateMetrics(results []TaskResult) {
 		// Track completed/failed
 		if result.Status == StatusRed || result.Status == StatusFailed {
 			er.Failed++
+			// Only append to FailedTasks if it's initialized (not nil)
+			if er.FailedTasks != nil {
+				er.FailedTasks = append(er.FailedTasks, result)
+			}
 		} else {
 			er.Completed++
 		}
@@ -151,4 +93,35 @@ func (er *ExecutionResult) CalculateMetrics(results []TaskResult) {
 		}
 		er.AvgTaskDuration = totalDur / time.Duration(len(results))
 	}
+
+	// Remove empty agent entry if it has zero count
+	if er.AgentUsage[""] == 0 {
+		delete(er.AgentUsage, "")
+	}
+}
+
+// NewExecutionResult creates a new ExecutionResult with calculated metrics
+func NewExecutionResult(results []TaskResult, success bool, totalDuration time.Duration) *ExecutionResult {
+	er := &ExecutionResult{
+		TotalTasks:      len(results),
+		Duration:        totalDuration,
+		FailedTasks:     []TaskResult{},
+		StatusBreakdown: make(map[string]int),
+		AgentUsage:      make(map[string]int),
+	}
+
+	// Use the consolidated helper to calculate all metrics
+	er.calculateMetricsFromResults(results)
+
+	return er
+}
+
+// CalculateMetrics updates the result with calculated metrics (used for existing results)
+func (er *ExecutionResult) CalculateMetrics(results []TaskResult) {
+	// Clear and reinitialize maps
+	er.StatusBreakdown = make(map[string]int)
+	er.AgentUsage = make(map[string]int)
+
+	// Use the consolidated helper to calculate all metrics
+	er.calculateMetricsFromResults(results)
 }
