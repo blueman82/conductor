@@ -67,7 +67,7 @@ func (w *WaveExecutor) ExecutePlan(ctx context.Context, plan *models.Plan) ([]mo
 	var firstErr error
 
 	for _, wave := range plan.Waves {
-		waveResults, err := w.executeWave(ctx, wave, taskMap)
+		waveResults, err := w.executeWave(ctx, wave, taskMap, plan.Tasks)
 		allResults = append(allResults, waveResults...)
 		if err != nil {
 			if firstErr == nil {
@@ -87,7 +87,7 @@ type taskExecutionResult struct {
 	err        error
 }
 
-func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMap map[string]models.Task) ([]models.TaskResult, error) {
+func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMap map[string]models.Task, allTasks []models.Task) ([]models.TaskResult, error) {
 	taskCount := len(wave.TaskNumbers)
 	if taskCount == 0 {
 		return []models.TaskResult{}, nil
@@ -227,6 +227,21 @@ launchComplete:
 				// Log error but don't fail execution
 				// Task completed but logging failed - not a critical failure
 			}
+		}
+
+		// Log progress with all tasks (update task statuses as results arrive)
+		if w.logger != nil {
+			tasksForProgress := make([]models.Task, len(allTasks))
+			copy(tasksForProgress, allTasks)
+
+			// Update status for completed task in the progress snapshot
+			for i, task := range tasksForProgress {
+				if task.Number == executionResult.taskNumber && resultMap[task.Number].Status != "" {
+					tasksForProgress[i].Status = "completed"
+				}
+			}
+
+			w.logger.LogProgress(tasksForProgress)
 		}
 	}
 

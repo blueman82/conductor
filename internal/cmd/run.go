@@ -528,6 +528,13 @@ func (ml *multiLogger) LogTaskResult(result models.TaskResult) error {
 	return lastErr
 }
 
+// LogProgress forwards to all loggers
+func (ml *multiLogger) LogProgress(tasks []models.Task) {
+	for _, logger := range ml.loggers {
+		logger.LogProgress(tasks)
+	}
+}
+
 // LogSummary forwards to all loggers
 func (ml *multiLogger) LogSummary(result models.ExecutionResult) {
 	for _, logger := range ml.loggers {

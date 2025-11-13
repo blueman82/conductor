@@ -990,6 +990,10 @@ func (n *NoOpLogger) LogTaskResult(result models.TaskResult) error {
 	return nil
 }
 
+// LogProgress is a no-op implementation.
+func (n *NoOpLogger) LogProgress(tasks []models.Task) {
+}
+
 // LogSummary is a no-op implementation.
 func (n *NoOpLogger) LogSummary(result models.ExecutionResult) {
 }

@@ -288,6 +288,12 @@ func (fl *FileLogger) LogTaskResult(result models.TaskResult) error {
 	return nil
 }
 
+// LogProgress logs the current execution progress (no-op for file logger).
+// Progress is displayed on console but not written to log files.
+func (fl *FileLogger) LogProgress(tasks []models.Task) {
+	// No-op: progress bars are console-only for now
+}
+
 // Close flushes and closes the run log file.
 // It should be called when the logger is no longer needed.
 func (fl *FileLogger) Close() error {
