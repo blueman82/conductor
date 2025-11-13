@@ -1,4 +1,4 @@
-.PHONY: help build build-patch build-minor build-major test test-coverage test-verbose test-race fmt lint clean run validate learning-stats learning-export learning-clear
+.PHONY: help build build-patch build-minor build-major test test-coverage test-verbose test-race fmt lint clean run validate learning-stats learning-export learning-clear install
 
 # Variables
 BINARY_NAME = conductor
@@ -45,6 +45,16 @@ build:
 	@echo "Building conductor v$(CURRENT_VERSION)..."
 	$(GO) build $(GOFLAGS) -ldflags "-X main.Version=$(CURRENT_VERSION)" -o $(BINARY_NAME) ./cmd/conductor
 	@echo "Binary built: ./$(BINARY_NAME)"
+
+# Install binary to ~/bin (user directory)
+install: build
+	@echo "Installing conductor to ~/bin..."
+	mkdir -p ~/bin
+	cp $(BINARY_NAME) ~/bin/$(BINARY_NAME)
+	chmod +x ~/bin/$(BINARY_NAME)
+	@echo "Installed: ~/bin/$(BINARY_NAME)"
+	@echo "Make sure ~/bin is in your PATH"
+	@echo "Verify with: ~/bin/conductor --version"
 
 # Helper function to increment version
 define increment_version
