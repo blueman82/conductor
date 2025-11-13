@@ -277,7 +277,8 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 }
 
 // LogTaskResult logs the completion of a task at DEBUG level.
-// Format: "[HH:MM:SS] Task <number> (<name>): <status>"
+// Enhanced format: "[HH:MM:SS] ✓/⚠/✗ Task <number> (<name>): STATUS (duration, agent: X, Y files)"
+// Shows single-line format with progress counter, duration, agent, and file count.
 // Returns nil for successful logging, or an error if logging failed.
 func (cl *ConsoleLogger) LogTaskResult(result models.TaskResult) error {
 	if cl.writer == nil {
@@ -293,31 +294,93 @@ func (cl *ConsoleLogger) LogTaskResult(result models.TaskResult) error {
 	defer cl.mutex.Unlock()
 
 	ts := timestamp()
-	taskInfo := fmt.Sprintf("Task %s (%s)", result.Task.Number, result.Task.Name)
+
+	// Build status icon and status text
+	statusIcon := getStatusIcon(result.Status)
+	statusText := result.Status
+
+	// Build task identifier
+	taskID := fmt.Sprintf("Task %s (%s)", result.Task.Number, result.Task.Name)
+
+	// Build duration string
+	durationStr := formatDurationWithDecimal(result.Duration)
+
+	// Build details (agent and file count)
+	details := buildTaskDetails(result.Task)
 
 	var message string
 	if cl.colorOutput {
 		// Color code based on status
-		var statusText string
+		var statusColor *color.Color
 		switch result.Status {
 		case models.StatusGreen:
-			statusText = color.New(color.FgGreen).Sprint("GREEN")
-		case models.StatusRed:
-			statusText = color.New(color.FgRed).Sprint("RED")
+			statusColor = color.New(color.FgGreen)
+		case models.StatusRed, models.StatusFailed:
+			statusColor = color.New(color.FgRed)
 		case models.StatusYellow:
-			statusText = color.New(color.FgYellow).Sprint("YELLOW")
-		case models.StatusFailed:
-			statusText = color.New(color.FgRed).Sprint("FAILED")
+			statusColor = color.New(color.FgYellow)
 		default:
-			statusText = string(result.Status)
+			statusColor = color.New(color.FgWhite)
 		}
-		message = fmt.Sprintf("[%s] %s: %s\n", ts, taskInfo, statusText)
+
+		// Cyan for status icon
+		iconColored := color.New(color.FgCyan).Sprint(statusIcon)
+		statusColored := statusColor.Sprint(statusText)
+
+		if details != "" {
+			message = fmt.Sprintf("[%s] %s %s: %s (%s, %s)\n", ts, iconColored, taskID, statusColored, durationStr, details)
+		} else {
+			message = fmt.Sprintf("[%s] %s %s: %s (%s)\n", ts, iconColored, taskID, statusColored, durationStr)
+		}
 	} else {
-		message = fmt.Sprintf("[%s] %s: %s\n", ts, taskInfo, result.Status)
+		// Plain text format
+		if details != "" {
+			message = fmt.Sprintf("[%s] %s %s: %s (%s, %s)\n", ts, statusIcon, taskID, statusText, durationStr, details)
+		} else {
+			message = fmt.Sprintf("[%s] %s %s: %s (%s)\n", ts, statusIcon, taskID, statusText, durationStr)
+		}
 	}
 
 	_, err := cl.writer.Write([]byte(message))
 	return err
+}
+
+// getStatusIcon returns a visual icon for the task status.
+func getStatusIcon(status string) string {
+	switch status {
+	case models.StatusGreen:
+		return "✓"
+	case models.StatusRed, models.StatusFailed:
+		return "✗"
+	case models.StatusYellow:
+		return "⚠"
+	default:
+		return "•"
+	}
+}
+
+// buildTaskDetails constructs the details string (agent and file count).
+// Returns empty string if no agent and no files.
+func buildTaskDetails(task models.Task) string {
+	var parts []string
+
+	// Add agent info (only if agent is specified)
+	if task.Agent != "" {
+		parts = append(parts, fmt.Sprintf("agent: %s", task.Agent))
+	}
+
+	// Add file count (only if files were modified)
+	totalFiles := task.FilesModified + task.FilesCreated + task.FilesDeleted
+	if totalFiles > 0 {
+		fileLabel := "file"
+		if totalFiles > 1 {
+			fileLabel = "files"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", totalFiles, fileLabel))
+	}
+
+	// Join parts with ", "
+	return strings.Join(parts, ", ")
 }
 
 // LogSummary logs the execution summary with completion statistics at INFO level.
