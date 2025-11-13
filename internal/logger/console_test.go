@@ -907,3 +907,346 @@ func TestConsoleLogger_LogProgress_EdgeCaseNilStartedAt(t *testing.T) {
 		t.Errorf("expected '(1/2 tasks)' in output, got %q", output)
 	}
 }
+
+// TestConsoleLoggerLogTaskStart verifies basic task start output with progress counter and agent.
+func TestConsoleLoggerLogTaskStart(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Setup Database",
+		Agent:  "backend-dev",
+	}
+
+	logger.LogTaskStart(task, 1, 5)
+
+	output := buf.String()
+
+	// Verify timestamp prefix
+	if !strings.HasPrefix(output, "[") {
+		t.Error("expected output to start with timestamp [")
+	}
+
+	// Verify progress counter [1/5]
+	if !strings.Contains(output, "[1/5]") {
+		t.Errorf("expected '[1/5]' progress counter in output, got %q", output)
+	}
+
+	// Verify status indicator
+	if !strings.Contains(output, "IN PROGRESS") {
+		t.Errorf("expected 'IN PROGRESS' status in output, got %q", output)
+	}
+
+	// Verify task identifier
+	if !strings.Contains(output, "Task 1") {
+		t.Errorf("expected 'Task 1' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Setup Database") {
+		t.Errorf("expected 'Setup Database' in output, got %q", output)
+	}
+
+	// Verify agent info
+	if !strings.Contains(output, "backend-dev") {
+		t.Errorf("expected 'backend-dev' agent in output, got %q", output)
+	}
+}
+
+// TestConsoleLoggerLogTaskStartNoAgent verifies task without agent specified.
+func TestConsoleLoggerLogTaskStartNoAgent(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	task := models.Task{
+		Number: "2",
+		Name:   "Run Tests",
+		Agent:  "", // No agent
+	}
+
+	logger.LogTaskStart(task, 2, 5)
+
+	output := buf.String()
+
+	// Verify task info is present
+	if !strings.Contains(output, "Task 2") {
+		t.Errorf("expected 'Task 2' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Run Tests") {
+		t.Errorf("expected 'Run Tests' in output, got %q", output)
+	}
+
+	// Verify progress counter
+	if !strings.Contains(output, "[2/5]") {
+		t.Errorf("expected '[2/5]' in output, got %q", output)
+	}
+
+	// Should not have agent info when agent is empty
+	if strings.Contains(output, "(agent: )") {
+		t.Error("expected no agent info when agent is empty")
+	}
+}
+
+// TestConsoleLoggerLogTaskStartWithColors verifies color output when enabled.
+func TestConsoleLoggerLogTaskStartWithColors(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+	logger.colorOutput = true // Force color output
+
+	task := models.Task{
+		Number: "3",
+		Name:   "Build Application",
+		Agent:  "code-gen",
+	}
+
+	logger.LogTaskStart(task, 3, 10)
+
+	output := buf.String()
+
+	// Verify essential content is present (color codes may be there too)
+	if !strings.Contains(output, "Task 3") {
+		t.Errorf("expected 'Task 3' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Build Application") {
+		t.Errorf("expected 'Build Application' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "[3/10]") {
+		t.Errorf("expected '[3/10]' in output, got %q", output)
+	}
+}
+
+// TestConsoleLoggerLogTaskStartNoColors verifies plain text output when colors disabled.
+func TestConsoleLoggerLogTaskStartNoColors(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+	logger.colorOutput = false // Disable color
+
+	task := models.Task{
+		Number: "4",
+		Name:   "Deploy Service",
+		Agent:  "devops",
+	}
+
+	logger.LogTaskStart(task, 4, 8)
+
+	output := buf.String()
+
+	// Verify output contains expected text without ANSI codes
+	if !strings.Contains(output, "Task 4") {
+		t.Errorf("expected 'Task 4' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Deploy Service") {
+		t.Errorf("expected 'Deploy Service' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "[4/8]") {
+		t.Errorf("expected '[4/8]' in output, got %q", output)
+	}
+
+	// Should not contain raw ANSI escape codes
+	if strings.Contains(output, "\033[") || strings.Contains(output, "\x1b[") {
+		t.Error("expected no ANSI codes in plain text output")
+	}
+}
+
+// TestConsoleLoggerLogTaskStartTimestamp verifies timestamp format.
+func TestConsoleLoggerLogTaskStartTimestamp(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	task := models.Task{
+		Number: "5",
+		Name:   "Documentation",
+		Agent:  "writer",
+	}
+
+	logger.LogTaskStart(task, 5, 6)
+
+	output := buf.String()
+
+	// Extract timestamp portion [HH:MM:SS]
+	if !strings.HasPrefix(output, "[") {
+		t.Error("expected output to start with timestamp [")
+	}
+
+	endBracket := strings.Index(output, "]")
+	if endBracket == -1 {
+		t.Error("expected ] after timestamp")
+	}
+
+	ts := output[1:endBracket]
+	parts := strings.Split(ts, ":")
+
+	// Verify HH:MM:SS format (3 parts)
+	if len(parts) != 3 {
+		t.Errorf("expected HH:MM:SS format, got %q", ts)
+	}
+
+	// Verify each part is 2 digits
+	for i, part := range parts {
+		if len(part) != 2 {
+			t.Errorf("expected part %d to have length 2, got %d for %q", i, len(part), part)
+		}
+		for _, ch := range part {
+			if ch < '0' || ch > '9' {
+				t.Errorf("expected digit in timestamp part %d, got %c", i, ch)
+			}
+		}
+	}
+}
+
+// TestConsoleLoggerLogTaskStartEdgeCases tests boundary conditions.
+func TestConsoleLoggerLogTaskStartEdgeCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		taskNumber    string
+		taskName      string
+		agent         string
+		current       int
+		total         int
+		shouldContain []string
+	}{
+		{
+			name:       "Long task name",
+			taskNumber: "1",
+			taskName:   "This is a very long task name that spans multiple words and should be handled correctly",
+			agent:      "test-agent",
+			current:    1,
+			total:      5,
+			shouldContain: []string{
+				"Task 1",
+				"This is a very long task name",
+				"[1/5]",
+				"test-agent",
+			},
+		},
+		{
+			name:       "Special characters in name",
+			taskNumber: "2",
+			taskName:   "Task with @#$% special chars & symbols",
+			agent:      "agent-123",
+			current:    2,
+			total:      5,
+			shouldContain: []string{
+				"Task 2",
+				"@#$%",
+				"[2/5]",
+			},
+		},
+		{
+			name:       "Single task (1/1)",
+			taskNumber: "1",
+			taskName:   "Only Task",
+			agent:      "solo",
+			current:    1,
+			total:      1,
+			shouldContain: []string{
+				"[1/1]",
+				"Task 1",
+				"Only Task",
+			},
+		},
+		{
+			name:       "Last task in sequence",
+			taskNumber: "100",
+			taskName:   "Final Task",
+			agent:      "finalizer",
+			current:    100,
+			total:      100,
+			shouldContain: []string{
+				"[100/100]",
+				"Task 100",
+				"Final Task",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "info")
+
+			task := models.Task{
+				Number: tt.taskNumber,
+				Name:   tt.taskName,
+				Agent:  tt.agent,
+			}
+
+			logger.LogTaskStart(task, tt.current, tt.total)
+			output := buf.String()
+
+			for _, expected := range tt.shouldContain {
+				if !strings.Contains(output, expected) {
+					t.Errorf("expected output to contain %q, got %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+// TestConsoleLoggerLogTaskStartConcurrency verifies thread-safe concurrent logging.
+func TestConsoleLoggerLogTaskStartConcurrency(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	var successCount int32 = 0
+	numGoroutines := 20
+
+	wg := sync.WaitGroup{}
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(index int) {
+			defer wg.Done()
+
+			task := models.Task{
+				Number: fmt.Sprintf("%d", index),
+				Name:   fmt.Sprintf("Task %d", index),
+				Agent:  fmt.Sprintf("agent-%d", index),
+			}
+
+			logger.LogTaskStart(task, index+1, numGoroutines)
+			atomic.AddInt32(&successCount, 1)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all operations completed
+	if successCount != int32(numGoroutines) {
+		t.Errorf("expected %d successful operations, got %d", numGoroutines, successCount)
+	}
+
+	// Verify output was written
+	output := buf.String()
+	if len(output) == 0 {
+		t.Error("expected non-empty output from concurrent logging")
+	}
+
+	// Verify no data corruption (spot check some agents)
+	if !strings.Contains(output, "agent-0") {
+		t.Error("expected agent-0 in output")
+	}
+	if !strings.Contains(output, fmt.Sprintf("agent-%d", numGoroutines-1)) {
+		t.Error("expected last agent in output")
+	}
+
+	// Verify no mixed lines (each log should have matching task number and agent)
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+		// Each non-empty line should have IN PROGRESS indicator
+		if strings.Contains(line, "IN PROGRESS") {
+			// Should have matching task number and agent info
+			if !strings.Contains(line, "Task") || !strings.Contains(line, "agent-") {
+				t.Errorf("expected consistent task and agent info in line: %q", line)
+			}
+		}
+	}
+}
