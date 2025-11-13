@@ -68,6 +68,12 @@ func serializeAgentToJSON(agent *Agent) (string, error) {
 	return string(jsonBytes), nil
 }
 
+// PrepareAgentPrompt adds formatting instructions to agent prompts for consistent output
+func PrepareAgentPrompt(prompt string) string {
+	const instructionPrefix = "Do not use markdown formatting or emojis in your response. "
+	return instructionPrefix + prompt
+}
+
 // BuildCommandArgs constructs the command-line arguments for invoking claude CLI
 // Uses Method 1: --agents JSON flag to pass agent definition explicitly for better automation reliability
 //
@@ -107,6 +113,9 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 		// Reference agent in prompt (still needed with Method 1)
 		prompt = fmt.Sprintf("use the %s subagent to: %s", task.Agent, task.Prompt)
 	}
+
+	// Add formatting instructions to the prompt
+	prompt = PrepareAgentPrompt(prompt)
 
 	// Add -p flag for non-interactive print mode (essential for automation)
 	args = append(args, "-p", prompt)

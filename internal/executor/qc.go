@@ -39,7 +39,7 @@ func NewQualityController(invoker InvokerInterface) *QualityController {
 
 // BuildReviewPrompt creates a comprehensive review prompt for the QC agent
 func (qc *QualityController) BuildReviewPrompt(task models.Task, output string) string {
-	return fmt.Sprintf(`Review the following task execution:
+	basePrompt := fmt.Sprintf(`Review the following task execution:
 
 Task: %s
 
@@ -55,6 +55,9 @@ Feedback: [your detailed feedback]
 
 Respond with GREEN if all requirements met, RED if needs rework, YELLOW if minor issues.
 `, task.Name, task.Prompt, output)
+
+	// Add formatting instructions
+	return agent.PrepareAgentPrompt(basePrompt)
 }
 
 // ParseReviewResponse extracts the QC flag and feedback from agent output

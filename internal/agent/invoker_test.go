@@ -132,16 +132,17 @@ func TestBuildCommandArgs(t *testing.T) {
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Verify prompt is included
+					// Verify prompt includes formatting instruction and task prompt
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do something") {
+						if strings.Contains(arg, "Do not use markdown formatting or emojis") &&
+							strings.Contains(arg, "Do something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Command should include the task prompt")
+						t.Error("Command should include formatting instructions and the task prompt")
 					}
 				},
 			},
@@ -176,16 +177,17 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify agent reference in prompt
+					// Verify agent reference in prompt and formatting instruction prefix
 					hasAgentRef := false
 					for _, arg := range args {
-						if strings.Contains(arg, "use the swiftdev subagent to:") {
+						if strings.Contains(arg, "Do not use markdown formatting or emojis") &&
+							strings.Contains(arg, "use the swiftdev subagent to:") {
 							hasAgentRef = true
 							break
 						}
 					}
 					if !hasAgentRef {
-						t.Error("Prompt should reference agent with 'use the swiftdev subagent to:'")
+						t.Error("Prompt should include formatting instructions and reference agent with 'use the swiftdev subagent to:'")
 					}
 				},
 			},
@@ -206,16 +208,18 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt is used as-is without agent reference
-					hasOriginalPrompt := false
+					// Verify prompt includes formatting instruction prefix
+					expectedPrefix := "Do not use markdown formatting or emojis in your response. "
+					expectedPrompt := expectedPrefix + "Do work"
+					hasPrompt := false
 					for _, arg := range args {
-						if arg == "Do work" {
-							hasOriginalPrompt = true
+						if arg == expectedPrompt {
+							hasPrompt = true
 							break
 						}
 					}
-					if !hasOriginalPrompt {
-						t.Error("Prompt should be used as-is when agent doesn't exist in registry")
+					if !hasPrompt {
+						t.Error("Prompt should include formatting instructions when agent doesn't exist in registry")
 					}
 				},
 			},
@@ -232,16 +236,18 @@ Swift agent content
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt is used as-is without agent reference
-					hasOriginalPrompt := false
+					// Verify prompt includes formatting instruction prefix
+					expectedPrefix := "Do not use markdown formatting or emojis in your response. "
+					expectedPrompt := expectedPrefix + "Create something"
+					hasPrompt := false
 					for _, arg := range args {
-						if arg == "Create something" {
-							hasOriginalPrompt = true
+						if arg == expectedPrompt {
+							hasPrompt = true
 							break
 						}
 					}
-					if !hasOriginalPrompt {
-						t.Error("Prompt should be used as-is when no registry is available")
+					if !hasPrompt {
+						t.Error("Prompt should include formatting instructions when no registry is available")
 					}
 				},
 			},
