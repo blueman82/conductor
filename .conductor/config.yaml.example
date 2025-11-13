@@ -25,6 +25,16 @@ log_level: info
 # Logs will be written to this directory (default: .conductor/logs)
 log_dir: .conductor/logs
 
+# Console output configuration
+console:
+  # Color output control
+  # - auto: Auto-detect based on TTY (isatty check) - default
+  # - true: Force colors on
+  # - false: Force colors off
+  # Note: The NO_COLOR environment variable is NOT checked.
+  # Color control is exclusively via this config setting.
+  colors_enabled: auto
+
 # Dry run mode
 # When true, validates and shows what would run without executing (default: false)
 dry_run: false
