@@ -1808,3 +1808,698 @@ func TestConsoleLoggerLogTaskResultConcurrency(t *testing.T) {
 		t.Error("expected last agent in output")
 	}
 }
+
+// TestConsoleLoggerLogTaskResultVerbose verifies basic verbose output with multi-line format.
+func TestConsoleLoggerLogTaskResultVerbose(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+	logger.SetVerbose(true)
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "1",
+			Name:          "Setup Database",
+			Agent:         "backend-dev",
+			Files:         []string{"db.go", "schema.sql"},
+			FilesModified: 1,
+			FilesCreated:  1,
+			FilesDeleted:  0,
+		},
+		Status:         models.StatusGreen,
+		Duration:       5*time.Second + 300*time.Millisecond,
+		ReviewFeedback: "Great work on the database schema!",
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify multi-line format (should contain newlines)
+	if !strings.Contains(output, "\n") {
+		t.Error("expected multi-line output in verbose mode")
+	}
+
+	// Verify header line with status
+	if !strings.Contains(output, "GREEN") {
+		t.Errorf("expected 'GREEN' status in verbose output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Task 1") {
+		t.Errorf("expected 'Task 1' in verbose output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Setup Database") {
+		t.Errorf("expected 'Setup Database' in verbose output, got %q", output)
+	}
+
+	// Verify duration section
+	if !strings.Contains(output, "Duration:") {
+		t.Errorf("expected 'Duration:' in verbose output, got %q", output)
+	}
+
+	if !strings.Contains(output, "5.3s") {
+		t.Errorf("expected duration '5.3s' in verbose output, got %q", output)
+	}
+
+	// Verify agent section
+	if !strings.Contains(output, "Agent:") {
+		t.Errorf("expected 'Agent:' in verbose output, got %q", output)
+	}
+
+	if !strings.Contains(output, "backend-dev") {
+		t.Errorf("expected agent 'backend-dev' in verbose output, got %q", output)
+	}
+
+	// Verify files section
+	if !strings.Contains(output, "Files:") {
+		t.Errorf("expected 'Files:' in verbose output, got %q", output)
+	}
+
+	// Verify QC feedback section
+	if !strings.Contains(output, "Feedback:") {
+		t.Errorf("expected 'Feedback:' in verbose output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Great work on the database schema!") {
+		t.Errorf("expected feedback text in verbose output, got %q", output)
+	}
+}
+
+// TestConsoleLoggerLogTaskResultVerboseNoFiles verifies verbose output without files.
+func TestConsoleLoggerLogTaskResultVerboseNoFiles(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+	logger.SetVerbose(true)
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "2",
+			Name:          "Validate Config",
+			Agent:         "validator",
+			Files:         []string{},
+			FilesModified: 0,
+			FilesCreated:  0,
+			FilesDeleted:  0,
+		},
+		Status:         models.StatusYellow,
+		Duration:       2 * time.Second,
+		ReviewFeedback: "Config is valid but needs cleanup",
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify basic info is present
+	if !strings.Contains(output, "Task 2") {
+		t.Errorf("expected 'Task 2' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "YELLOW") {
+		t.Errorf("expected 'YELLOW' status in output, got %q", output)
+	}
+
+	// Verify Duration and Agent are present
+	if !strings.Contains(output, "Duration:") {
+		t.Errorf("expected 'Duration:' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Agent:") {
+		t.Errorf("expected 'Agent:' in output, got %q", output)
+	}
+
+	// Verify Files section is omitted (gracefully handled)
+	// The output should not have a "Files:" line if no files exist
+}
+
+// TestConsoleLoggerLogTaskResultVerboseNoQCFeedback verifies verbose output without QC feedback.
+func TestConsoleLoggerLogTaskResultVerboseNoQCFeedback(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+	logger.SetVerbose(true)
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "3",
+			Name:          "Build Service",
+			Agent:         "builder",
+			Files:         []string{"main.go"},
+			FilesModified: 1,
+			FilesCreated:  0,
+			FilesDeleted:  0,
+		},
+		Status:         models.StatusGreen,
+		Duration:       10 * time.Second,
+		ReviewFeedback: "", // No feedback
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify basic info is present
+	if !strings.Contains(output, "Task 3") {
+		t.Errorf("expected 'Task 3' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Build Service") {
+		t.Errorf("expected 'Build Service' in output, got %q", output)
+	}
+
+	// Verify Duration, Agent, and Files are present
+	if !strings.Contains(output, "Duration:") {
+		t.Errorf("expected 'Duration:' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Agent:") {
+		t.Errorf("expected 'Agent:' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Files:") {
+		t.Errorf("expected 'Files:' in output, got %q", output)
+	}
+
+	// Feedback section should be omitted when empty
+}
+
+// TestConsoleLoggerLogTaskResultVerboseWithColors verifies colored verbose output.
+func TestConsoleLoggerLogTaskResultVerboseWithColors(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+	logger.colorOutput = true // Force color output
+	logger.SetVerbose(true)
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "4",
+			Name:          "Deploy App",
+			Agent:         "devops",
+			Files:         []string{"deploy.sh"},
+			FilesModified: 1,
+		},
+		Status:         models.StatusGreen,
+		Duration:       15 * time.Second,
+		ReviewFeedback: "Deployment successful",
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify content is present (color codes will be there too)
+	if !strings.Contains(output, "Task 4") {
+		t.Errorf("expected 'Task 4' in colored output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Deploy App") {
+		t.Errorf("expected 'Deploy App' in colored output, got %q", output)
+	}
+
+	if !strings.Contains(output, "GREEN") {
+		t.Errorf("expected 'GREEN' status in colored output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Duration:") {
+		t.Errorf("expected 'Duration:' in colored output, got %q", output)
+	}
+}
+
+// TestConsoleLoggerLogTaskResultVerboseToggle verifies toggling verbose mode on/off.
+func TestConsoleLoggerLogTaskResultVerboseToggle(t *testing.T) {
+	t.Run("toggle on and off", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "debug")
+
+		// Initially should not be verbose
+		if logger.IsVerbose() {
+			t.Error("expected IsVerbose() to return false initially")
+		}
+
+		// Enable verbose
+		logger.SetVerbose(true)
+		if !logger.IsVerbose() {
+			t.Error("expected IsVerbose() to return true after SetVerbose(true)")
+		}
+
+		// Disable verbose
+		logger.SetVerbose(false)
+		if logger.IsVerbose() {
+			t.Error("expected IsVerbose() to return false after SetVerbose(false)")
+		}
+	})
+
+	t.Run("verbose mode affects output format", func(t *testing.T) {
+		// Compare verbose vs non-verbose output
+		defaultBuf := &bytes.Buffer{}
+		defaultLogger := NewConsoleLogger(defaultBuf, "debug")
+		defaultLogger.SetVerbose(false)
+
+		verboseBuf := &bytes.Buffer{}
+		verboseLogger := NewConsoleLogger(verboseBuf, "debug")
+		verboseLogger.SetVerbose(true)
+
+		result := models.TaskResult{
+			Task: models.Task{
+				Number:        "1",
+				Name:          "Test Task",
+				Agent:         "test-agent",
+				Files:         []string{"test.go"},
+				FilesModified: 1,
+			},
+			Status:         models.StatusGreen,
+			Duration:       5 * time.Second,
+			ReviewFeedback: "Looks good",
+		}
+
+		defaultLogger.LogTaskResult(result)
+		verboseLogger.LogTaskResult(result)
+
+		defaultOutput := defaultBuf.String()
+		verboseOutput := verboseBuf.String()
+
+		// Verbose output should be longer (more details)
+		if len(verboseOutput) <= len(defaultOutput) {
+			t.Error("expected verbose output to be longer than default output")
+		}
+
+		// Verbose output should have Duration section
+		if !strings.Contains(verboseOutput, "Duration:") {
+			t.Error("expected verbose output to have 'Duration:' section")
+		}
+
+		// Default output should not have Duration section (it's inline)
+		if strings.Contains(defaultOutput, "\nDuration:") {
+			t.Error("expected default output to not have 'Duration:' section on new line")
+		}
+	})
+}
+
+// TestConsoleLoggerLogTaskResultVerboseLongQCFeedback verifies wrapping of long QC feedback.
+func TestConsoleLoggerLogTaskResultVerboseLongQCFeedback(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+	logger.SetVerbose(true)
+
+	longFeedback := `This is a very long QC feedback message that contains multiple sentences and detailed information about the task execution. It includes observations about code quality, performance, and any warnings or issues found during the review process. The feedback should be displayed in full in verbose mode even if it spans multiple lines.`
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "5",
+			Name:          "Code Review",
+			Agent:         "reviewer",
+			Files:         []string{"code.go"},
+			FilesModified: 1,
+		},
+		Status:         models.StatusYellow,
+		Duration:       8 * time.Second,
+		ReviewFeedback: longFeedback,
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify the long feedback is present
+	if !strings.Contains(output, "very long QC feedback") {
+		t.Errorf("expected long feedback content in output, got %q", output)
+	}
+
+	// Verify it's in a Feedback section
+	if !strings.Contains(output, "Feedback:") {
+		t.Errorf("expected 'Feedback:' section in output, got %q", output)
+	}
+
+	// Output should be multi-line due to long feedback
+	if !strings.Contains(output, "\n") {
+		t.Error("expected multi-line output for long feedback")
+	}
+}
+
+// TestConsoleLoggerVerboseModeProperty tests SetVerbose and IsVerbose methods.
+func TestConsoleLoggerVerboseModeProperty(t *testing.T) {
+	t.Run("default is non-verbose", func(t *testing.T) {
+		logger := NewConsoleLogger(&bytes.Buffer{}, "info")
+		if logger.IsVerbose() {
+			t.Error("expected new logger to not be verbose by default")
+		}
+	})
+
+	t.Run("set and get verbose", func(t *testing.T) {
+		logger := NewConsoleLogger(&bytes.Buffer{}, "info")
+
+		// Set to true
+		logger.SetVerbose(true)
+		if !logger.IsVerbose() {
+			t.Error("expected IsVerbose() to return true after SetVerbose(true)")
+		}
+
+		// Set to false
+		logger.SetVerbose(false)
+		if logger.IsVerbose() {
+			t.Error("expected IsVerbose() to return false after SetVerbose(false)")
+		}
+
+		// Set to true again
+		logger.SetVerbose(true)
+		if !logger.IsVerbose() {
+			t.Error("expected IsVerbose() to return true again after SetVerbose(true)")
+		}
+	})
+
+	t.Run("verbose mode persists across calls", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "debug")
+		logger.SetVerbose(true)
+
+		// Log multiple results - verbose mode should persist
+		for i := 0; i < 3; i++ {
+			result := models.TaskResult{
+				Task: models.Task{
+					Number: fmt.Sprintf("%d", i+1),
+					Name:   fmt.Sprintf("Task %d", i+1),
+					Agent:  "test",
+				},
+				Status:   models.StatusGreen,
+				Duration: 1 * time.Second,
+			}
+			logger.LogTaskResult(result)
+		}
+
+		if !logger.IsVerbose() {
+			t.Error("expected IsVerbose() to remain true after multiple LogTaskResult calls")
+		}
+
+		// All outputs should be verbose format
+		output := buf.String()
+		// Each result should have Duration section (verbose indicator)
+		lines := strings.Split(output, "\n")
+		durationCount := 0
+		for _, line := range lines {
+			if strings.Contains(line, "Duration:") {
+				durationCount++
+			}
+		}
+
+		if durationCount < 3 {
+			t.Errorf("expected at least 3 'Duration:' sections in verbose output, got %d", durationCount)
+		}
+	})
+}
+
+// TestLogSummary_StatusBreakdown verifies status breakdown shows correct counts
+func TestLogSummary_StatusBreakdown(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	result := models.ExecutionResult{
+		TotalTasks:      10,
+		Completed:       7,
+		Failed:          3,
+		Duration:        5 * time.Minute,
+		StatusBreakdown: map[string]int{models.StatusGreen: 6, models.StatusYellow: 1, models.StatusRed: 3},
+		AgentUsage:      map[string]int{"backend": 5, "frontend": 5},
+		TotalFiles:      15,
+		FailedTasks: []models.TaskResult{
+			{Task: models.Task{Name: "Auth"}, Status: models.StatusRed},
+			{Task: models.Task{Name: "API"}, Status: models.StatusRed},
+			{Task: models.Task{Name: "UI"}, Status: models.StatusRed},
+		},
+	}
+
+	logger.LogSummary(result)
+	output := buf.String()
+
+	// Verify status breakdown section exists
+	if !strings.Contains(output, "Status Breakdown") {
+		t.Error("expected 'Status Breakdown' in output")
+	}
+
+	// Verify status counts
+	if !strings.Contains(output, "GREEN") || !strings.Contains(output, "6") {
+		t.Error("expected GREEN status count in output")
+	}
+
+	if !strings.Contains(output, "YELLOW") || !strings.Contains(output, "1") {
+		t.Error("expected YELLOW status count in output")
+	}
+
+	if !strings.Contains(output, "RED") || !strings.Contains(output, "3") {
+		t.Error("expected RED status count in output")
+	}
+}
+
+// TestLogSummary_AgentUsage verifies agent usage statistics
+func TestLogSummary_AgentUsage(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	result := models.ExecutionResult{
+		TotalTasks: 10,
+		Completed:  10,
+		Failed:     0,
+		Duration:   2 * time.Minute,
+		StatusBreakdown: map[string]int{
+			models.StatusGreen: 10,
+		},
+		AgentUsage: map[string]int{
+			"backend-dev":    4,
+			"frontend-dev":   3,
+			"devops":         2,
+			"quality-review": 1,
+		},
+		TotalFiles:  8,
+		FailedTasks: []models.TaskResult{},
+	}
+
+	logger.LogSummary(result)
+	output := buf.String()
+
+	// Verify agent usage section
+	if !strings.Contains(output, "Agent Usage") {
+		t.Error("expected 'Agent Usage' section in output")
+	}
+
+	// Verify agents and counts are present
+	if !strings.Contains(output, "backend-dev") {
+		t.Error("expected backend-dev agent in output")
+	}
+
+	if !strings.Contains(output, "frontend-dev") {
+		t.Error("expected frontend-dev agent in output")
+	}
+
+	if !strings.Contains(output, "4") {
+		t.Error("expected agent count 4 in output")
+	}
+}
+
+// TestLogSummary_FileModifications verifies file modification tracking
+func TestLogSummary_FileModifications(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	result := models.ExecutionResult{
+		TotalTasks: 5,
+		Completed:  5,
+		Failed:     0,
+		Duration:   1 * time.Minute,
+		StatusBreakdown: map[string]int{
+			models.StatusGreen: 5,
+		},
+		AgentUsage: map[string]int{
+			"code-gen": 5,
+		},
+		TotalFiles:  12,
+		FailedTasks: []models.TaskResult{},
+	}
+
+	logger.LogSummary(result)
+	output := buf.String()
+
+	// Verify file modifications section
+	if !strings.Contains(output, "Files Modified") || !strings.Contains(output, "12") {
+		t.Error("expected 'Files Modified' section with count 12 in output")
+	}
+}
+
+// TestLogSummary_FailedTaskDetails verifies failed task details formatting
+func TestLogSummary_FailedTaskDetails(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	result := models.ExecutionResult{
+		TotalTasks: 5,
+		Completed:  2,
+		Failed:     3,
+		Duration:   2 * time.Minute,
+		StatusBreakdown: map[string]int{
+			models.StatusGreen: 2,
+			models.StatusRed:   3,
+		},
+		AgentUsage: map[string]int{
+			"code-gen": 5,
+		},
+		TotalFiles: 5,
+		FailedTasks: []models.TaskResult{
+			{
+				Task:           models.Task{Number: "2", Name: "Setup Database"},
+				Status:         models.StatusRed,
+				ReviewFeedback: "Schema validation failed",
+			},
+			{
+				Task:           models.Task{Number: "3", Name: "Configure API"},
+				Status:         models.StatusRed,
+				ReviewFeedback: "Port binding error",
+			},
+			{
+				Task:           models.Task{Number: "4", Name: "Deploy Service"},
+				Status:         models.StatusRed,
+				ReviewFeedback: "Network configuration issue",
+			},
+		},
+	}
+
+	logger.LogSummary(result)
+	output := buf.String()
+
+	// Verify failed task section
+	if !strings.Contains(output, "Failed tasks") {
+		t.Error("expected 'Failed tasks' section in output")
+	}
+
+	// Verify each failed task is listed
+	if !strings.Contains(output, "Setup Database") {
+		t.Error("expected 'Setup Database' failed task in output")
+	}
+
+	if !strings.Contains(output, "Configure API") {
+		t.Error("expected 'Configure API' failed task in output")
+	}
+
+	if !strings.Contains(output, "Deploy Service") {
+		t.Error("expected 'Deploy Service' failed task in output")
+	}
+
+	// Verify feedback is included
+	if !strings.Contains(output, "Schema validation failed") {
+		t.Error("expected QC feedback in output")
+	}
+}
+
+// TestLogSummary_AverageDuration verifies average duration calculation
+func TestLogSummary_AverageDuration(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	result := models.ExecutionResult{
+		TotalTasks: 4,
+		Completed:  4,
+		Failed:     0,
+		Duration:   12 * time.Second,
+		AvgTaskDuration: 3 * time.Second, // 12s / 4 = 3s
+		StatusBreakdown: map[string]int{
+			models.StatusGreen: 4,
+		},
+		AgentUsage: map[string]int{
+			"agent": 4,
+		},
+		TotalFiles:  4,
+		FailedTasks: []models.TaskResult{},
+	}
+
+	logger.LogSummary(result)
+	output := buf.String()
+
+	// Verify average duration is displayed
+	if !strings.Contains(output, "Average Duration") || !strings.Contains(output, "3.0s") {
+		t.Error("expected average duration 3.0s in output")
+	}
+}
+
+// TestLogSummary_EmptySummary verifies empty summary handling
+func TestLogSummary_EmptySummary(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	result := models.ExecutionResult{
+		TotalTasks:      0,
+		Completed:       0,
+		Failed:          0,
+		Duration:        0,
+		StatusBreakdown: map[string]int{},
+		AgentUsage:      map[string]int{},
+		TotalFiles:      0,
+		FailedTasks:     []models.TaskResult{},
+	}
+
+	logger.LogSummary(result)
+	output := buf.String()
+
+	// Should handle gracefully without panic
+	if !strings.Contains(output, "Total tasks: 0") {
+		t.Error("expected zero task count in output")
+	}
+
+	if !strings.Contains(output, "Completed: 0") {
+		t.Error("expected zero completed count in output")
+	}
+}
+
+// TestLogSummary_ColorDisabled verifies no-color mode
+func TestLogSummary_ColorDisabled(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+	logger.colorOutput = false // Explicitly disable colors
+
+	result := models.ExecutionResult{
+		TotalTasks: 10,
+		Completed:  8,
+		Failed:     2,
+		Duration:   5 * time.Minute,
+		StatusBreakdown: map[string]int{
+			models.StatusGreen: 8,
+			models.StatusRed:   2,
+		},
+		AgentUsage: map[string]int{
+			"agent": 10,
+		},
+		TotalFiles: 6,
+		FailedTasks: []models.TaskResult{
+			{Task: models.Task{Name: "Task A"}, Status: models.StatusRed},
+			{Task: models.Task{Name: "Task B"}, Status: models.StatusRed},
+		},
+	}
+
+	logger.LogSummary(result)
+	output := buf.String()
+
+	// Verify no ANSI color codes are present
+	if strings.Contains(output, "\033[") || strings.Contains(output, "\x1b[") {
+		t.Error("expected no ANSI color codes in output when colors disabled")
+	}
+
+	// Verify content is still present
+	if !strings.Contains(output, "Total tasks: 10") {
+		t.Error("expected content to be present even without colors")
+	}
+}
