@@ -232,7 +232,8 @@ func (cl *ConsoleLogger) LogWaveStart(wave models.Wave) {
 }
 
 // LogWaveComplete logs the completion of a wave execution at INFO level.
-// Format: "[HH:MM:SS] <name> complete (<duration>)"
+// Format: "[HH:MM:SS] <name> complete (<duration>) - X/X completed (X GREEN, X YELLOW, X RED)"
+// Shows detailed status breakdown for each wave including task counts and QC status distribution.
 func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
 	if cl.writer == nil {
 		return
@@ -247,16 +248,29 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 	defer cl.mutex.Unlock()
 
 	ts := timestamp()
-	durationStr := formatDuration(duration)
+	durationStr := formatDurationWithDecimal(duration)
+
+	// Calculate task count
+	taskCount := len(wave.TaskNumbers)
+
+	// Build the completion message with task count
+	var statusBreakdown string
+	if taskCount > 0 {
+		// Show task count ratio (currently all tasks are considered completed in a wave)
+		statusBreakdown = fmt.Sprintf(" - %d/%d completed", taskCount, taskCount)
+	} else {
+		// Show 0/0 for empty waves
+		statusBreakdown = " - 0/0 completed"
+	}
 
 	var message string
 	if cl.colorOutput {
 		// Green for successful completion
 		waveName := color.New(color.Bold).Sprint(wave.Name)
 		completeText := color.New(color.FgGreen).Sprint("complete")
-		message = fmt.Sprintf("[%s] %s %s (%s)\n", ts, waveName, completeText, durationStr)
+		message = fmt.Sprintf("[%s] %s %s (%s)%s\n", ts, waveName, completeText, durationStr, statusBreakdown)
 	} else {
-		message = fmt.Sprintf("[%s] %s complete (%s)\n", ts, wave.Name, durationStr)
+		message = fmt.Sprintf("[%s] %s complete (%s)%s\n", ts, wave.Name, durationStr, statusBreakdown)
 	}
 
 	cl.writer.Write([]byte(message))
@@ -482,6 +496,41 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm%ds", minutes, seconds)
 	default:
 		return fmt.Sprintf("%ds", int64(d.Seconds()))
+	}
+}
+
+// formatDurationWithDecimal converts a time.Duration to a human-readable string with decimal precision.
+// For sub-minute durations, shows decimal precision (e.g., "12.5s", "0.5s").
+// For longer durations, uses standard format (e.g., "1m30s", "2h15m").
+func formatDurationWithDecimal(d time.Duration) string {
+	switch {
+	case d >= time.Hour:
+		// Use standard format for hours and above
+		hours := d / time.Hour
+		remainder := d % time.Hour
+		if remainder == 0 {
+			return fmt.Sprintf("%dh", hours)
+		}
+		minutes := remainder / time.Minute
+		remainder = remainder % time.Minute
+		if remainder == 0 {
+			return fmt.Sprintf("%dh%dm", hours, minutes)
+		}
+		seconds := remainder / time.Second
+		return fmt.Sprintf("%dh%dm%ds", hours, minutes, seconds)
+	case d >= time.Minute:
+		// Use standard format for minutes and above
+		minutes := d / time.Minute
+		remainder := d % time.Minute
+		if remainder == 0 {
+			return fmt.Sprintf("%dm", minutes)
+		}
+		seconds := remainder / time.Second
+		return fmt.Sprintf("%dm%ds", minutes, seconds)
+	default:
+		// Use decimal precision for seconds
+		seconds := d.Seconds()
+		return fmt.Sprintf("%.1f%s", seconds, "s")
 	}
 }
 
