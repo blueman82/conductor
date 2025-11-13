@@ -112,7 +112,7 @@ func TestLogWaveComplete(t *testing.T) {
 				MaxConcurrency: 1,
 			},
 			duration:     5 * time.Second,
-			expectedText: "Wave 1 complete (5s)",
+			expectedText: "Wave 1 complete (5.0s) - 1/1 completed",
 		},
 		{
 			name: "90 seconds (1m30s)",
@@ -122,7 +122,7 @@ func TestLogWaveComplete(t *testing.T) {
 				MaxConcurrency: 2,
 			},
 			duration:     90 * time.Second,
-			expectedText: "Wave 2 complete (1m30s)",
+			expectedText: "Wave 2 complete (1m30s) - 2/2 completed",
 		},
 		{
 			name: "zero duration",
@@ -132,7 +132,7 @@ func TestLogWaveComplete(t *testing.T) {
 				MaxConcurrency: 1,
 			},
 			duration:     0 * time.Second,
-			expectedText: "Wave 3 complete (0s)",
+			expectedText: "Wave 3 complete (0.0s) - 1/1 completed",
 		},
 	}
 
