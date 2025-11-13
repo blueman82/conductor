@@ -30,11 +30,13 @@ const (
 // All output is prefixed with [HH:MM:SS] timestamps for tracking execution flow.
 // It supports log level filtering to control message verbosity.
 // Color output is automatically enabled for terminal output (os.Stdout/os.Stderr).
+// Verbose mode extends task result output to multi-line format with detailed information.
 type ConsoleLogger struct {
 	writer      io.Writer
 	logLevel    string
 	mutex       sync.Mutex
 	colorOutput bool
+	verbose     bool
 }
 
 // NewConsoleLogger creates a ConsoleLogger that writes to the provided io.Writer.
@@ -73,6 +75,22 @@ func isTerminal(w io.Writer) bool {
 	}
 
 	return false
+}
+
+// SetVerbose sets the verbose mode for task result logging.
+// When true, LogTaskResult() outputs multi-line detailed format.
+// When false, LogTaskResult() outputs compact single-line format.
+func (cl *ConsoleLogger) SetVerbose(verbose bool) {
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+	cl.verbose = verbose
+}
+
+// IsVerbose returns whether verbose mode is enabled for task result logging.
+func (cl *ConsoleLogger) IsVerbose() bool {
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+	return cl.verbose
 }
 
 // normalizeLogLevel converts a log level string to lowercase and validates it.
@@ -277,8 +295,9 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 }
 
 // LogTaskResult logs the completion of a task at DEBUG level.
-// Enhanced format: "[HH:MM:SS] ✓/⚠/✗ Task <number> (<name>): STATUS (duration, agent: X, Y files)"
-// Shows single-line format with progress counter, duration, agent, and file count.
+// Supports two output modes:
+// - Default (single-line): "[HH:MM:SS] ✓/⚠/✗ Task <number> (<name>): STATUS (duration, agent: X, Y files)"
+// - Verbose (multi-line): Header with indented Duration, Agent, Files, and Feedback sections
 // Returns nil for successful logging, or an error if logging failed.
 func (cl *ConsoleLogger) LogTaskResult(result models.TaskResult) error {
 	if cl.writer == nil {
@@ -293,6 +312,15 @@ func (cl *ConsoleLogger) LogTaskResult(result models.TaskResult) error {
 	cl.mutex.Lock()
 	defer cl.mutex.Unlock()
 
+	// Check verbose mode and call appropriate logger
+	if cl.verbose {
+		return cl.logTaskResultVerbose(result)
+	}
+	return cl.logTaskResultDefault(result)
+}
+
+// logTaskResultDefault logs a task result in single-line format.
+func (cl *ConsoleLogger) logTaskResultDefault(result models.TaskResult) error {
 	ts := timestamp()
 
 	// Build status icon and status text
@@ -345,6 +373,85 @@ func (cl *ConsoleLogger) LogTaskResult(result models.TaskResult) error {
 	return err
 }
 
+// logTaskResultVerbose logs a task result in multi-line verbose format.
+// Format:
+// [HH:MM:SS] ✓/⚠/✗ Task N (name): STATUS
+//   Duration: X.XsX
+//   Agent: agent-name
+//   Files: list of files (with operation types)
+//   Feedback: QC review feedback
+func (cl *ConsoleLogger) logTaskResultVerbose(result models.TaskResult) error {
+	ts := timestamp()
+
+	// Build status icon and status text
+	statusIcon := getStatusIcon(result.Status)
+	statusText := result.Status
+
+	// Build task identifier
+	taskID := fmt.Sprintf("Task %s (%s)", result.Task.Number, result.Task.Name)
+
+	// Build duration string
+	durationStr := formatDurationWithDecimal(result.Duration)
+
+	// Build the header line
+	var headerLine string
+	if cl.colorOutput {
+		// Color code based on status
+		var statusColor *color.Color
+		switch result.Status {
+		case models.StatusGreen:
+			statusColor = color.New(color.FgGreen)
+		case models.StatusRed, models.StatusFailed:
+			statusColor = color.New(color.FgRed)
+		case models.StatusYellow:
+			statusColor = color.New(color.FgYellow)
+		default:
+			statusColor = color.New(color.FgWhite)
+		}
+
+		// Cyan for status icon
+		iconColored := color.New(color.FgCyan).Sprint(statusIcon)
+		statusColored := statusColor.Sprint(statusText)
+
+		headerLine = fmt.Sprintf("[%s] %s %s: %s\n", ts, iconColored, taskID, statusColored)
+	} else {
+		// Plain text format
+		headerLine = fmt.Sprintf("[%s] %s %s: %s\n", ts, statusIcon, taskID, statusText)
+	}
+
+	// Build detailed sections (with proper indentation)
+	var output strings.Builder
+	output.WriteString(headerLine)
+
+	// Duration section
+	output.WriteString(fmt.Sprintf("[%s]   Duration: %s\n", ts, durationStr))
+
+	// Agent section
+	if result.Task.Agent != "" {
+		if cl.colorOutput {
+			agentColored := color.New(color.FgMagenta).Sprint(result.Task.Agent)
+			output.WriteString(fmt.Sprintf("[%s]   Agent: %s\n", ts, agentColored))
+		} else {
+			output.WriteString(fmt.Sprintf("[%s]   Agent: %s\n", ts, result.Task.Agent))
+		}
+	}
+
+	// Files section (only if files exist)
+	totalFiles := result.Task.FilesModified + result.Task.FilesCreated + result.Task.FilesDeleted
+	if totalFiles > 0 {
+		filesList := buildVerboseFilesList(result.Task)
+		output.WriteString(fmt.Sprintf("[%s]   Files: %s\n", ts, filesList))
+	}
+
+	// QC Feedback section (only if feedback exists)
+	if result.ReviewFeedback != "" {
+		output.WriteString(fmt.Sprintf("[%s]   Feedback: %s\n", ts, result.ReviewFeedback))
+	}
+
+	_, err := cl.writer.Write([]byte(output.String()))
+	return err
+}
+
 // getStatusIcon returns a visual icon for the task status.
 func getStatusIcon(status string) string {
 	switch status {
@@ -383,8 +490,46 @@ func buildTaskDetails(task models.Task) string {
 	return strings.Join(parts, ", ")
 }
 
-// LogSummary logs the execution summary with completion statistics at INFO level.
-// Format: "[HH:MM:SS] === Execution Summary ===\n[HH:MM:SS] Total tasks: <n>\n[HH:MM:SS] Completed: <n>\n[HH:MM:SS] Failed: <n>\n[HH:MM:SS] Duration: <d>\n"
+// buildVerboseFilesList constructs a verbose files list with operation types.
+// Returns a string showing file counts by operation type (modified, created, deleted).
+// Example: "2 modified, 1 created, 1 deleted"
+func buildVerboseFilesList(task models.Task) string {
+	var parts []string
+
+	if task.FilesModified > 0 {
+		fileLabel := "file"
+		if task.FilesModified > 1 {
+			fileLabel = "files"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s modified", task.FilesModified, fileLabel))
+	}
+
+	if task.FilesCreated > 0 {
+		fileLabel := "file"
+		if task.FilesCreated > 1 {
+			fileLabel = "files"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s created", task.FilesCreated, fileLabel))
+	}
+
+	if task.FilesDeleted > 0 {
+		fileLabel := "file"
+		if task.FilesDeleted > 1 {
+			fileLabel = "files"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s deleted", task.FilesDeleted, fileLabel))
+	}
+
+	// If no files, return empty (caller should handle)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return strings.Join(parts, ", ")
+}
+
+// LogSummary logs the execution summary with comprehensive statistics at INFO level.
+// Includes status breakdown, agent usage, file modifications, failed task details, and average duration.
 func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 	if cl.writer == nil {
 		return
@@ -404,7 +549,7 @@ func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 	var output string
 
 	if cl.colorOutput {
-		// Colorized summary
+		// Colorized summary with enhanced statistics
 		header := color.New(color.Bold).Sprint("=== Execution Summary ===")
 		output = fmt.Sprintf("[%s] %s\n", ts, header)
 		output += fmt.Sprintf("[%s] Total tasks: %d\n", ts, result.TotalTasks)
@@ -423,12 +568,68 @@ func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 
 		output += fmt.Sprintf("[%s] Duration: %s\n", ts, durationStr)
 
+		// Status Breakdown section
+		if len(result.StatusBreakdown) > 0 {
+			breakdownHeader := color.New(color.Bold).Sprint("Status Breakdown:")
+			output += fmt.Sprintf("[%s] %s\n", ts, breakdownHeader)
+
+			// Display in consistent order: GREEN, YELLOW, RED
+			for _, status := range []string{models.StatusGreen, models.StatusYellow, models.StatusRed} {
+				count := result.StatusBreakdown[status]
+				if count > 0 || status == models.StatusGreen { // Always show GREEN (even if 0)
+					var statusColored string
+					switch status {
+					case models.StatusGreen:
+						statusColored = color.New(color.FgGreen).Sprint(status)
+					case models.StatusYellow:
+						statusColored = color.New(color.FgYellow).Sprint(status)
+					case models.StatusRed:
+						statusColored = color.New(color.FgRed).Sprint(status)
+					}
+					output += fmt.Sprintf("[%s]   %s: %d\n", ts, statusColored, count)
+				}
+			}
+		}
+
+		// Agent Usage section (sorted by count, descending)
+		if len(result.AgentUsage) > 0 {
+			agentHeader := color.New(color.Bold).Sprint("Agent Usage:")
+			output += fmt.Sprintf("[%s] %s\n", ts, agentHeader)
+
+			// Sort agents by count (descending)
+			agents := sortAgentsByCount(result.AgentUsage)
+			for _, agent := range agents {
+				agentColored := color.New(color.FgCyan).Sprint(agent.Name)
+				output += fmt.Sprintf("[%s]   %s: %d tasks\n", ts, agentColored, agent.Count)
+			}
+		}
+
+		// Files Modified section
+		if result.TotalFiles > 0 {
+			filesStr := fmt.Sprintf("%d", result.TotalFiles)
+			filesColored := color.New(color.FgGreen).Sprint(filesStr)
+			output += fmt.Sprintf("[%s] Files Modified: %s files\n", ts, filesColored)
+		}
+
+		// Average Duration section
+		if result.AvgTaskDuration > 0 {
+			avgStr := formatDurationWithDecimal(result.AvgTaskDuration)
+			output += fmt.Sprintf("[%s] Average Duration: %s/task\n", ts, avgStr)
+		}
+
+		// Failed tasks section with enhanced details
 		if result.Failed > 0 && len(result.FailedTasks) > 0 {
 			failedHeader := color.New(color.FgRed).Sprint("Failed tasks:")
 			output += fmt.Sprintf("[%s] %s\n", ts, failedHeader)
 			for _, failedTask := range result.FailedTasks {
-				taskName := color.New(color.FgRed).Sprint(failedTask.Task.Name)
-				output += fmt.Sprintf("[%s]   - Task %s: %s\n", ts, taskName, failedTask.Status)
+				taskHeader := fmt.Sprintf("Task %s (%s)", failedTask.Task.Number, failedTask.Task.Name)
+				taskColored := color.New(color.FgRed).Sprint(taskHeader)
+				output += fmt.Sprintf("[%s]   - %s: %s\n", ts, taskColored, failedTask.Status)
+
+				// Include QC feedback if available
+				if failedTask.ReviewFeedback != "" {
+					output += fmt.Sprintf("[%s]     Feedback: %s\n", ts, failedTask.ReviewFeedback)
+				}
 			}
 		}
 	} else {
@@ -439,15 +640,83 @@ func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 		output += fmt.Sprintf("[%s] Failed: %d\n", ts, result.Failed)
 		output += fmt.Sprintf("[%s] Duration: %s\n", ts, durationStr)
 
+		// Status Breakdown section
+		if len(result.StatusBreakdown) > 0 {
+			output += fmt.Sprintf("[%s] Status Breakdown:\n", ts)
+			for _, status := range []string{models.StatusGreen, models.StatusYellow, models.StatusRed} {
+				count := result.StatusBreakdown[status]
+				if count > 0 || status == models.StatusGreen {
+					output += fmt.Sprintf("[%s]   %s: %d\n", ts, status, count)
+				}
+			}
+		}
+
+		// Agent Usage section
+		if len(result.AgentUsage) > 0 {
+			output += fmt.Sprintf("[%s] Agent Usage:\n", ts)
+			agents := sortAgentsByCount(result.AgentUsage)
+			for _, agent := range agents {
+				output += fmt.Sprintf("[%s]   %s: %d tasks\n", ts, agent.Name, agent.Count)
+			}
+		}
+
+		// Files Modified section
+		if result.TotalFiles > 0 {
+			output += fmt.Sprintf("[%s] Files Modified: %d files\n", ts, result.TotalFiles)
+		}
+
+		// Average Duration section
+		if result.AvgTaskDuration > 0 {
+			avgStr := formatDurationWithDecimal(result.AvgTaskDuration)
+			output += fmt.Sprintf("[%s] Average Duration: %s/task\n", ts, avgStr)
+		}
+
+		// Failed tasks section with enhanced details
 		if result.Failed > 0 && len(result.FailedTasks) > 0 {
 			output += fmt.Sprintf("[%s] Failed tasks:\n", ts)
 			for _, failedTask := range result.FailedTasks {
-				output += fmt.Sprintf("[%s]   - Task %s: %s\n", ts, failedTask.Task.Name, failedTask.Status)
+				output += fmt.Sprintf("[%s]   - Task %s (%s): %s\n", ts, failedTask.Task.Number, failedTask.Task.Name, failedTask.Status)
+
+				// Include QC feedback if available
+				if failedTask.ReviewFeedback != "" {
+					output += fmt.Sprintf("[%s]     Feedback: %s\n", ts, failedTask.ReviewFeedback)
+				}
 			}
 		}
 	}
 
 	cl.writer.Write([]byte(output))
+}
+
+// AgentCount represents an agent and its task count
+type AgentCount struct {
+	Name  string
+	Count int
+}
+
+// sortAgentsByCount sorts agents by task count in descending order
+func sortAgentsByCount(agentUsage map[string]int) []AgentCount {
+	var agents []AgentCount
+
+	for name, count := range agentUsage {
+		// Skip empty agent names
+		if name == "" {
+			continue
+		}
+		agents = append(agents, AgentCount{Name: name, Count: count})
+	}
+
+	// Sort by count descending, then by name for consistency
+	for i := 0; i < len(agents); i++ {
+		for j := i + 1; j < len(agents); j++ {
+			if agents[j].Count > agents[i].Count ||
+				(agents[j].Count == agents[i].Count && agents[j].Name < agents[i].Name) {
+				agents[i], agents[j] = agents[j], agents[i]
+			}
+		}
+	}
+
+	return agents
 }
 
 // timestamp returns the current time formatted as "15:04:05" (HH:MM:SS).
