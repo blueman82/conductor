@@ -13,10 +13,12 @@ import (
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/display"
 	"github.com/harrison/conductor/internal/executor"
+	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/logger"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/parser"
 	"github.com/spf13/cobra"
+	"github.com/google/uuid"
 )
 
 // consoleLogger implements executor.Logger interface for console output
@@ -114,6 +116,11 @@ Examples:
 	return cmd
 }
 
+// generateSessionID generates a unique session ID for tracking task executions
+func generateSessionID() string {
+	return uuid.NewString()
+}
+
 // runCommand implements the run command logic
 func runCommand(cmd *cobra.Command, args []string) error {
 	// Load configuration from file
@@ -198,6 +205,17 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Validate merged configuration
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Initialize learning store if enabled
+	var learningStore *learning.Store
+	if cfg.Learning.Enabled {
+		store, err := learning.NewStore(cfg.Learning.DBPath)
+		if err != nil {
+			return fmt.Errorf("failed to initialize learning store: %w", err)
+		}
+		learningStore = store
+		defer store.Close()
 	}
 
 	// Use merged config values
@@ -420,11 +438,27 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create task executor: %w", err)
 	}
 
+	// Wire learning system to task executor
+	sessionID := generateSessionID()
+	taskExec.LearningStore = learningStore
+	taskExec.PlanFile = planFile
+	taskExec.SessionID = sessionID
+	taskExec.RunNumber = 1 // Increment per plan re-run
+
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithConfig(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
 
-	// Create orchestrator with wave executor and logger
-	orch := executor.NewOrchestratorWithConfig(waveExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
+	// Create orchestrator with learning integration
+	orch := executor.NewOrchestratorFromConfig(executor.OrchestratorConfig{
+		WaveExecutor:  waveExec,
+		Logger:        multiLog,
+		LearningStore: learningStore,
+		SessionID:     sessionID,
+		RunNumber:     taskExec.RunNumber,
+		PlanFile:      planFile,
+		SkipCompleted: cfg.SkipCompleted,
+		RetryFailed:   cfg.RetryFailed,
+	})
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

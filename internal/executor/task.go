@@ -32,8 +32,8 @@ type Reviewer interface {
 
 // LearningStore defines the interface for adaptive learning storage.
 type LearningStore interface {
-	AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*FailureAnalysis, error)
-	RecordExecution(ctx context.Context, exec *TaskExecution) error
+	AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*learning.FailureAnalysis, error)
+	RecordExecution(ctx context.Context, exec *learning.TaskExecution) error
 }
 
 // TaskExecution represents a single task execution record for learning storage.
@@ -138,10 +138,10 @@ type DefaultTaskExecutor struct {
 	retryLimit      int
 	SourceFile      string                   // Track which file this task comes from
 	FileLockManager FileLockManager          // Per-file locking strategy
-	learningStore   LearningStore            // Adaptive learning store (optional)
-	planFile        string                   // Plan file path for learning queries
-	sessionID       string                   // Session ID for learning tracking
-	runNumber       int                      // Run number for learning tracking
+	LearningStore   LearningStore            // Adaptive learning store (optional)
+	PlanFile        string                   // Plan file path for learning queries
+	SessionID       string                   // Session ID for learning tracking
+	RunNumber       int                      // Run number for learning tracking
 	metrics         *learning.PatternMetrics // Pattern detection metrics (optional)
 }
 
@@ -198,12 +198,12 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 // This hook enables adaptive learning from past failures.
 func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Task) error {
 	// Learning disabled - no-op
-	if te.learningStore == nil {
+	if te.LearningStore == nil {
 		return nil
 	}
 
 	// Query learning store for failure analysis
-	analysis, err := te.learningStore.AnalyzeFailures(ctx, te.planFile, task.Number)
+	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number)
 	if err != nil {
 		// Log warning but don't break execution (graceful degradation)
 		// In production, this would use a proper logger
@@ -235,7 +235,7 @@ func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Tas
 }
 
 // enhancePromptWithLearning adds learning context to the task prompt.
-func enhancePromptWithLearning(originalPrompt string, analysis *FailureAnalysis) string {
+func enhancePromptWithLearning(originalPrompt string, analysis *learning.FailureAnalysis) string {
 	if analysis == nil || analysis.FailedAttempts == 0 {
 		return originalPrompt
 	}
@@ -356,7 +356,7 @@ func (te *DefaultTaskExecutor) qcReviewHook(ctx context.Context, task *models.Ta
 // Called after task completion (success or failure) with all execution details.
 func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Task, result *models.TaskResult, verdict string) {
 	// Learning disabled - no-op
-	if te.learningStore == nil {
+	if te.LearningStore == nil {
 		return
 	}
 
@@ -396,9 +396,9 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 	}
 
 	// Build TaskExecution record
-	exec := &TaskExecution{
-		PlanFile:        te.planFile,
-		RunNumber:       te.runNumber,
+	exec := &learning.TaskExecution{
+		PlanFile:        te.PlanFile,
+		RunNumber:       te.RunNumber,
 		TaskNumber:      task.Number,
 		TaskName:        task.Name,
 		Agent:           task.Agent,
@@ -413,7 +413,7 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 	}
 
 	// Record execution (graceful degradation on error)
-	if err := te.learningStore.RecordExecution(ctx, exec); err != nil {
+	if err := te.LearningStore.RecordExecution(ctx, exec); err != nil {
 		// Log warning but don't fail task (graceful degradation)
 		// In production: log.Warn("failed to record execution: %v", err)
 		// For now, silently continue

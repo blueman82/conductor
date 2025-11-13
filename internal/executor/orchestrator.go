@@ -220,21 +220,58 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (
 // aggregateResults processes task results and creates an ExecutionResult summary.
 func (o *Orchestrator) aggregateResults(plan *models.Plan, results []models.TaskResult, duration time.Duration) *models.ExecutionResult {
 	executionResult := &models.ExecutionResult{
-		TotalTasks:  len(plan.Tasks),
-		Completed:   0,
-		Failed:      0,
-		Duration:    duration,
-		FailedTasks: []models.TaskResult{},
+		TotalTasks:      len(plan.Tasks),
+		Completed:       0,
+		Failed:          0,
+		Duration:        duration,
+		FailedTasks:     []models.TaskResult{},
+		StatusBreakdown: make(map[string]int),
+		AgentUsage:      make(map[string]int),
 	}
+
+	// Initialize status breakdown keys
+	executionResult.StatusBreakdown[models.StatusGreen] = 0
+	executionResult.StatusBreakdown[models.StatusYellow] = 0
+	executionResult.StatusBreakdown[models.StatusRed] = 0
+
+	// Track unique files and total duration
+	uniqueFiles := make(map[string]bool)
+	var totalTaskDuration time.Duration
 
 	// Count completed and failed tasks (handles empty results slice gracefully)
 	for _, result := range results {
+		// Count status breakdown
+		if result.Status != "" {
+			executionResult.StatusBreakdown[result.Status]++
+		}
+
+		// Track agent usage
+		if result.Task.Agent != "" {
+			executionResult.AgentUsage[result.Task.Agent]++
+		}
+
+		// Collect unique files
+		for _, file := range result.Task.Files {
+			uniqueFiles[file] = true
+		}
+
+		// Accumulate task duration
+		totalTaskDuration += result.Duration
+
 		if isCompleted(result) {
 			executionResult.Completed++
 		} else if isFailed(result) {
 			executionResult.Failed++
 			executionResult.FailedTasks = append(executionResult.FailedTasks, result)
 		}
+	}
+
+	// Calculate total unique files
+	executionResult.TotalFiles = len(uniqueFiles)
+
+	// Calculate average task duration
+	if len(results) > 0 {
+		executionResult.AvgTaskDuration = totalTaskDuration / time.Duration(len(results))
 	}
 
 	return executionResult
