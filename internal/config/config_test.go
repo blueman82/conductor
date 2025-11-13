@@ -731,8 +731,8 @@ func TestConfig_LearningDefaults(t *testing.T) {
 	if !cfg.Learning.Enabled {
 		t.Errorf("Learning.Enabled = %v, want true", cfg.Learning.Enabled)
 	}
-	if cfg.Learning.DBPath != ".conductor/learning" {
-		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, ".conductor/learning")
+	if cfg.Learning.DBPath != ".conductor/learning/executions.db" {
+		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, ".conductor/learning/executions.db")
 	}
 	if cfg.Learning.AutoAdaptAgent {
 		t.Errorf("Learning.AutoAdaptAgent = %v, want false", cfg.Learning.AutoAdaptAgent)
@@ -772,8 +772,8 @@ func TestConfig_LearningDisabled(t *testing.T) {
 		t.Errorf("Learning.Enabled = %v, want false", cfg.Learning.Enabled)
 	}
 	// Other fields should have defaults
-	if cfg.Learning.DBPath != ".conductor/learning" {
-		t.Errorf("Learning.DBPath = %q, want %q (default)", cfg.Learning.DBPath, ".conductor/learning")
+	if cfg.Learning.DBPath != ".conductor/learning/executions.db" {
+		t.Errorf("Learning.DBPath = %q, want %q (default)", cfg.Learning.DBPath, ".conductor/learning/executions.db")
 	}
 }
 
@@ -844,8 +844,8 @@ timeout: 30m
 	if !cfg.Learning.Enabled {
 		t.Errorf("Learning.Enabled = %v, want true (default)", cfg.Learning.Enabled)
 	}
-	if cfg.Learning.DBPath != ".conductor/learning" {
-		t.Errorf("Learning.DBPath = %q, want %q (default)", cfg.Learning.DBPath, ".conductor/learning")
+	if cfg.Learning.DBPath != ".conductor/learning/executions.db" {
+		t.Errorf("Learning.DBPath = %q, want %q (default)", cfg.Learning.DBPath, ".conductor/learning/executions.db")
 	}
 }
 
@@ -860,7 +860,7 @@ func TestConfig_LearningValidation(t *testing.T) {
 			name: "valid learning config",
 			config: `learning:
   enabled: true
-  db_path: .conductor/learning
+  db_path: .conductor/learning/executions.db
   min_failures_before_adapt: 2
   keep_executions_days: 90
   max_executions_per_task: 100

@@ -78,8 +78,9 @@ learning:
   # Enable or disable the learning system (default: true)
   enabled: true
 
-  # Database path for learning data (default: .conductor/learning)
-  db_path: .conductor/learning
+  # Database path for learning data (default: .conductor/learning/executions.db)
+  # This should be a file path, not a directory
+  db_path: .conductor/learning/executions.db
 
   # Auto-adapt agent selection based on learned patterns (default: false)
   # When enabled, conductor will automatically suggest or switch agents based on past successes
@@ -105,9 +106,9 @@ learning:
 # learning:
 #   enabled: false
 
-# Example: Custom learning database path
+# Example: Custom learning database path (must be a file path, not directory)
 # learning:
-#   db_path: /var/lib/conductor/learning.db
+#   db_path: /var/lib/conductor/learning/executions.db
 
 # Example: Enable automatic agent adaptation
 # learning:

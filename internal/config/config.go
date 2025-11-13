@@ -117,7 +117,7 @@ func DefaultConfig() *Config {
 		Console:        DefaultConsoleConfig(),
 		Learning: LearningConfig{
 			Enabled:                true,
-			DBPath:                 ".conductor/learning",
+			DBPath:                 ".conductor/learning/executions.db",
 			AutoAdaptAgent:         false,
 			EnhancePrompts:         true,
 			MinFailuresBeforeAdapt: 2,
