@@ -392,6 +392,63 @@ func timestamp() string {
 	return time.Now().Format("15:04:05")
 }
 
+// LogTaskStart logs the start of a task execution at INFO level.
+// Format: "[HH:MM:SS] ⏳ IN PROGRESS [current/total] Task number (name) (agent: agent-name)"
+// Displays task start with timestamp, progress counter, status indicator, task identifier, and agent info.
+// Agent info is only included if agent is not empty.
+// Thread-safe with mutex protection.
+func (cl *ConsoleLogger) LogTaskStart(task models.Task, current int, total int) {
+	if cl.writer == nil {
+		return
+	}
+
+	// Task logging is at INFO level
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	// Build task identifier
+	taskID := fmt.Sprintf("Task %s (%s)", task.Number, task.Name)
+
+	// Build progress counter
+	progress := fmt.Sprintf("[%d/%d]", current, total)
+
+	// Build agent info (only if agent is specified)
+	var agentInfo string
+	if task.Agent != "" {
+		agentInfo = fmt.Sprintf(" (agent: %s)", task.Agent)
+	}
+
+	var message string
+	if cl.colorOutput {
+		// Cyan for progress counter
+		progressColored := color.New(color.FgCyan).Sprint(progress)
+		// White/default for status
+		statusColored := color.New(color.FgWhite).Sprint("⏳ IN PROGRESS")
+		// Magenta for agent info if present
+		var agentColored string
+		if agentInfo != "" {
+			agentColored = color.New(color.FgMagenta).Sprint(agentInfo)
+		}
+
+		message = fmt.Sprintf("[%s] %s %s %s %s%s\n", ts, statusColored, progressColored, taskID, agentColored, "")
+		// Clean up the message to avoid extra space at the end
+		if agentInfo == "" {
+			message = fmt.Sprintf("[%s] %s %s %s\n", ts, statusColored, progressColored, taskID)
+		}
+	} else {
+		// Plain text format
+		message = fmt.Sprintf("[%s] ⏳ IN PROGRESS %s %s%s\n", ts, progress, taskID, agentInfo)
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
 // LogProgress logs real-time progress of task execution with percentage, counts, and average duration.
 // Format: "[HH:MM:SS] Progress: [████░░░░░░] 50% (4/8 tasks) - Avg: 3.2s/task"
 // Handles edge cases: zero tasks, all completed, no duration data.
