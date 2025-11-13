@@ -397,6 +397,406 @@ func TestAnalyzeFailures_AllAgentsTried(t *testing.T) {
 	})
 }
 
+// TestAnalyzeFailures_ExpandedKeywordMatching verifies expanded keywords are detected in analysis
+func TestAnalyzeFailures_ExpandedKeywordMatching(t *testing.T) {
+	tests := []struct {
+		name             string
+		outputs          []string
+		expectedPatterns []string
+	}{
+		{
+			name: "Build fail detected in analysis",
+			outputs: []string{
+				"Build failed during compilation phase",
+				"Unable to build the project successfully",
+			},
+			expectedPatterns: []string{"compilation_error"},
+		},
+		{
+			name: "Parse error detected in analysis",
+			outputs: []string{
+				"Parse error in source file",
+				"Parser failed to process input",
+			},
+			expectedPatterns: []string{"compilation_error"},
+		},
+		{
+			name: "Assertion fail detected in analysis",
+			outputs: []string{
+				"Assertion failure in test suite",
+				"Multiple assertion fail messages",
+			},
+			expectedPatterns: []string{"test_failure"},
+		},
+		{
+			name: "Verification fail detected in analysis",
+			outputs: []string{
+				"Verification failed for expected outcome",
+				"Check failed during validation",
+			},
+			expectedPatterns: []string{"test_failure"},
+		},
+		{
+			name: "Missing package detected in analysis",
+			outputs: []string{
+				"Missing package in dependencies",
+				"Unable to locate required module",
+			},
+			expectedPatterns: []string{"dependency_missing"},
+		},
+		{
+			name: "Import error detected in analysis",
+			outputs: []string{
+				"Import error for required module",
+				"Cannot find module in registry",
+			},
+			expectedPatterns: []string{"dependency_missing"},
+		},
+		{
+			name: "Segmentation fault detected in analysis",
+			outputs: []string{
+				"Segmentation fault occurred during runtime",
+				"Nil pointer dereference detected",
+			},
+			expectedPatterns: []string{"runtime_error"},
+		},
+		{
+			name: "Stack overflow detected in analysis",
+			outputs: []string{
+				"Stack overflow error in recursive call",
+				"Null reference exception thrown",
+			},
+			expectedPatterns: []string{"runtime_error"},
+		},
+		{
+			name: "Deadline exceeded detected in analysis",
+			outputs: []string{
+				"Deadline exceeded for operation",
+				"Request timed out after waiting",
+			},
+			expectedPatterns: []string{"timeout"},
+		},
+		{
+			name: "Execution timeout detected in analysis",
+			outputs: []string{
+				"Execution timeout reached",
+				"Operation timed out",
+			},
+			expectedPatterns: []string{"timeout"},
+		},
+		{
+			name: "Access denied detected in analysis",
+			outputs: []string{
+				"Access denied to protected resource",
+				"Forbidden operation attempted",
+			},
+			expectedPatterns: []string{"permission_denied"},
+		},
+		{
+			name: "Unauthorized detected in analysis",
+			outputs: []string{
+				"Unauthorized access attempt",
+				"Permission denied for file system",
+			},
+			expectedPatterns: []string{"permission_denied"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.outputs)
+
+			for _, expected := range tt.expectedPatterns {
+				found := false
+				for _, p := range patterns {
+					if p == expected {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected pattern %q in %v", expected, patterns)
+				}
+			}
+		})
+	}
+}
+
+// TestAnalyzeFailures_KeywordCombinations verifies multiple patterns detected and deduplicated
+func TestAnalyzeFailures_KeywordCombinations(t *testing.T) {
+	tests := []struct {
+		name             string
+		outputs          []string
+		expectedPatterns []string
+		minPatternCount  int
+	}{
+		{
+			name: "Multiple different error types",
+			outputs: []string{
+				"Build error occurred during compilation",
+				"Assertion fail in unit tests",
+				"Missing package dependency",
+			},
+			expectedPatterns: []string{"compilation_error", "test_failure", "dependency_missing"},
+			minPatternCount:  3,
+		},
+		{
+			name: "Same pattern from multiple outputs - deduplication",
+			outputs: []string{
+				"Build fail in first attempt",
+				"Build error in second attempt",
+				"Unable to build in third attempt",
+			},
+			expectedPatterns: []string{"compilation_error"},
+			minPatternCount:  1,
+		},
+		{
+			name: "Runtime and permission errors together",
+			outputs: []string{
+				"Segmentation fault in process",
+				"Access denied to file",
+				"Nil pointer dereference",
+				"Forbidden operation",
+			},
+			expectedPatterns: []string{"runtime_error", "permission_denied"},
+			minPatternCount:  2,
+		},
+		{
+			name: "Timeout and dependency errors mixed",
+			outputs: []string{
+				"Deadline exceeded waiting for response",
+				"Import error for module",
+				"Request timed out",
+				"Cannot find module",
+			},
+			expectedPatterns: []string{"timeout", "dependency_missing"},
+			minPatternCount:  2,
+		},
+		{
+			name: "All error types in comprehensive failure",
+			outputs: []string{
+				"Build fail detected",
+				"Verification fail in tests",
+				"Missing package xyz",
+				"Segmentation fault",
+				"Deadline exceeded",
+				"Access denied",
+			},
+			expectedPatterns: []string{
+				"compilation_error",
+				"test_failure",
+				"dependency_missing",
+				"runtime_error",
+				"timeout",
+				"permission_denied",
+			},
+			minPatternCount: 6,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.outputs)
+
+			// Check that all expected patterns are present
+			for _, expected := range tt.expectedPatterns {
+				found := false
+				for _, p := range patterns {
+					if p == expected {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected pattern %q in %v", expected, patterns)
+				}
+			}
+
+			// Check minimum pattern count (deduplication should work)
+			if len(patterns) < tt.minPatternCount {
+				t.Errorf("expected at least %d patterns, got %d: %v",
+					tt.minPatternCount, len(patterns), patterns)
+			}
+		})
+	}
+}
+
+// TestAnalyzeFailures_HistoricalPatternRecovery verifies pattern extraction from historical data
+func TestAnalyzeFailures_HistoricalPatternRecovery(t *testing.T) {
+	t.Run("recovers patterns from multiple failed execution history", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Simulate 3 failed runs with different expanded keyword errors
+		executions := []struct {
+			output string
+		}{
+			{output: "Build error occurred during first attempt"},
+			{output: "Parse error found in second attempt"},
+			{output: "Unable to build in third attempt"},
+		}
+
+		for i, exec := range executions {
+			taskExec := &TaskExecution{
+				PlanFile:     "plan.md",
+				RunNumber:    i + 1,
+				TaskNumber:   "Task 1",
+				TaskName:     "Build Project",
+				Agent:        "golang-pro",
+				Prompt:       "Build the project",
+				Success:      false,
+				Output:       exec.output,
+				ErrorMessage: "compilation failed",
+				DurationSecs: 30,
+			}
+			require.NoError(t, store.RecordExecution(ctx, taskExec))
+		}
+
+		// Analyze should detect compilation_error pattern from all 3 outputs
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		require.NoError(t, err)
+
+		assert.Equal(t, 3, analysis.TotalAttempts)
+		assert.Equal(t, 3, analysis.FailedAttempts)
+
+		// Should detect compilation_error pattern from expanded keywords
+		found := false
+		for _, pattern := range analysis.CommonPatterns {
+			if pattern == "compilation_error" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected compilation_error pattern in %v", analysis.CommonPatterns)
+		}
+	})
+
+	t.Run("recovers mixed patterns from diverse failure history", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Simulate failures with various error types using expanded keywords
+		executions := []struct {
+			output string
+		}{
+			{output: "Build fail - compilation phase failed"},
+			{output: "Assertion fail in unit test suite"},
+			{output: "Missing package required for build"},
+			{output: "Segmentation fault during runtime"},
+			{output: "Deadline exceeded waiting for response"},
+			{output: "Access denied to configuration file"},
+		}
+
+		for i, exec := range executions {
+			taskExec := &TaskExecution{
+				PlanFile:     "plan.md",
+				RunNumber:    i + 1,
+				TaskNumber:   "Task 2",
+				TaskName:     "Complex Task",
+				Agent:        "backend-developer",
+				Prompt:       "Execute complex task",
+				Success:      false,
+				Output:       exec.output,
+				ErrorMessage: "task failed",
+				DurationSecs: 45,
+			}
+			require.NoError(t, store.RecordExecution(ctx, taskExec))
+		}
+
+		// Analyze should detect all pattern types
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 2")
+		require.NoError(t, err)
+
+		assert.Equal(t, 6, analysis.TotalAttempts)
+		assert.Equal(t, 6, analysis.FailedAttempts)
+
+		// Should detect at least 5 different patterns (could be 6 if permission_denied counted separately)
+		expectedPatterns := []string{
+			"compilation_error",
+			"test_failure",
+			"dependency_missing",
+			"runtime_error",
+			"timeout",
+		}
+
+		for _, expected := range expectedPatterns {
+			found := false
+			for _, pattern := range analysis.CommonPatterns {
+				if pattern == expected {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected pattern %q in %v from historical analysis", expected, analysis.CommonPatterns)
+			}
+		}
+
+		// Should have at least 5 common patterns
+		if len(analysis.CommonPatterns) < 5 {
+			t.Errorf("expected at least 5 common patterns, got %d: %v",
+				len(analysis.CommonPatterns), analysis.CommonPatterns)
+		}
+	})
+
+	t.Run("handles case where only some outputs have keywords", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Mix of outputs with and without expanded keywords
+		executions := []struct {
+			output string
+		}{
+			{output: "Something went wrong"},                  // No specific keyword
+			{output: "Build error in compilation phase"},      // Has keyword
+			{output: "Generic error message"},                 // No specific keyword
+			{output: "Unable to build the project"},           // Has keyword
+			{output: "An unexpected error occurred"},          // No specific keyword
+			{output: "Parse error in source file"},            // Has keyword
+		}
+
+		for i, exec := range executions {
+			taskExec := &TaskExecution{
+				PlanFile:     "plan.md",
+				RunNumber:    i + 1,
+				TaskNumber:   "Task 3",
+				TaskName:     "Partial Pattern Task",
+				Agent:        "general-purpose",
+				Prompt:       "Execute task",
+				Success:      false,
+				Output:       exec.output,
+				ErrorMessage: "task failed",
+				DurationSecs: 20,
+			}
+			require.NoError(t, store.RecordExecution(ctx, taskExec))
+		}
+
+		// Analyze should still detect compilation_error from the outputs that have keywords
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 3")
+		require.NoError(t, err)
+
+		assert.Equal(t, 6, analysis.TotalAttempts)
+		assert.Equal(t, 6, analysis.FailedAttempts)
+
+		// Should detect compilation_error from 3 outputs with keywords
+		found := false
+		for _, pattern := range analysis.CommonPatterns {
+			if pattern == "compilation_error" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected compilation_error pattern even with partial keyword coverage, got %v",
+				analysis.CommonPatterns)
+		}
+	})
+}
+
 func TestAnalyzeFailures_InsufficientData(t *testing.T) {
 	t.Run("handles insufficient data gracefully", func(t *testing.T) {
 		ctx := context.Background()

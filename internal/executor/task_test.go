@@ -1783,6 +1783,623 @@ func TestQCReviewHook_EmptyOutput(t *testing.T) {
 	}
 }
 
+// TestExtractFailurePatterns_CompilationVariants verifies expanded compilation error keywords
+func TestExtractFailurePatterns_CompilationVariants(t *testing.T) {
+	tests := []struct {
+		name            string
+		verdict         string
+		feedback        string
+		output          string
+		expectedPattern string
+	}{
+		{
+			name:            "Build fail detected",
+			verdict:         "RED",
+			feedback:        "Build failed during compilation",
+			output:          "build process terminated with errors",
+			expectedPattern: "compilation_error",
+		},
+		{
+			name:            "Build error detected",
+			verdict:         "RED",
+			feedback:        "Build error occurred",
+			output:          "unable to complete build",
+			expectedPattern: "compilation_error",
+		},
+		{
+			name:            "Parse error detected",
+			verdict:         "RED",
+			feedback:        "Parse error in source code",
+			output:          "parser failed to process file",
+			expectedPattern: "compilation_error",
+		},
+		{
+			name:            "Code won't compile detected",
+			verdict:         "RED",
+			feedback:        "Code won't compile - syntax issues",
+			output:          "compilation stopped",
+			expectedPattern: "compilation_error",
+		},
+		{
+			name:            "Unable to build detected",
+			verdict:         "RED",
+			feedback:        "Unable to build the project",
+			output:          "build system failed",
+			expectedPattern: "compilation_error",
+		},
+		{
+			name:            "Case insensitive - BUILD FAIL",
+			verdict:         "RED",
+			feedback:        "BUILD FAIL during setup",
+			output:          "errors detected",
+			expectedPattern: "compilation_error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			found := false
+			for _, p := range patterns {
+				if p == tt.expectedPattern {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected pattern %q in %v", tt.expectedPattern, patterns)
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_TestFailureVariants verifies expanded test failure keywords
+func TestExtractFailurePatterns_TestFailureVariants(t *testing.T) {
+	tests := []struct {
+		name            string
+		verdict         string
+		feedback        string
+		output          string
+		expectedPattern string
+	}{
+		{
+			name:            "Assertion fail detected",
+			verdict:         "RED",
+			feedback:        "Assertion failure in test suite",
+			output:          "expected value did not match",
+			expectedPattern: "test_failure",
+		},
+		{
+			name:            "Verification fail detected",
+			verdict:         "RED",
+			feedback:        "Verification failed for test case",
+			output:          "test verification unsuccessful",
+			expectedPattern: "test_failure",
+		},
+		{
+			name:            "Check fail detected",
+			verdict:         "RED",
+			feedback:        "Check failed in unit test",
+			output:          "validation check did not pass",
+			expectedPattern: "test_failure",
+		},
+		{
+			name:            "Validation fail detected",
+			verdict:         "RED",
+			feedback:        "Validation fail during testing",
+			output:          "test validation unsuccessful",
+			expectedPattern: "test_failure",
+		},
+		{
+			name:            "Case insensitive - ASSERTION FAIL",
+			verdict:         "RED",
+			feedback:        "ASSERTION FAIL in test",
+			output:          "test output",
+			expectedPattern: "test_failure",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			found := false
+			for _, p := range patterns {
+				if p == tt.expectedPattern {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected pattern %q in %v", tt.expectedPattern, patterns)
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_DependencyVariants verifies expanded dependency error keywords
+func TestExtractFailurePatterns_DependencyVariants(t *testing.T) {
+	tests := []struct {
+		name            string
+		verdict         string
+		feedback        string
+		output          string
+		expectedPattern string
+	}{
+		{
+			name:            "Unable to locate detected",
+			verdict:         "RED",
+			feedback:        "Unable to locate required package",
+			output:          "dependency resolution failed",
+			expectedPattern: "dependency_missing",
+		},
+		{
+			name:            "Missing package detected",
+			verdict:         "RED",
+			feedback:        "Missing package in dependencies",
+			output:          "package xyz not found",
+			expectedPattern: "dependency_missing",
+		},
+		{
+			name:            "Import error detected",
+			verdict:         "RED",
+			feedback:        "Import error for module",
+			output:          "failed to import dependency",
+			expectedPattern: "dependency_missing",
+		},
+		{
+			name:            "Cannot find module detected",
+			verdict:         "RED",
+			feedback:        "Cannot find module in registry",
+			output:          "module resolution failed",
+			expectedPattern: "dependency_missing",
+		},
+		{
+			name:            "Case insensitive - MISSING PACKAGE",
+			verdict:         "RED",
+			feedback:        "MISSING PACKAGE error",
+			output:          "dependency check failed",
+			expectedPattern: "dependency_missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			found := false
+			for _, p := range patterns {
+				if p == tt.expectedPattern {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected pattern %q in %v", tt.expectedPattern, patterns)
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_RuntimeErrorVariants verifies expanded runtime error keywords
+func TestExtractFailurePatterns_RuntimeErrorVariants(t *testing.T) {
+	tests := []struct {
+		name            string
+		verdict         string
+		feedback        string
+		output          string
+		expectedPattern string
+	}{
+		{
+			name:            "Segmentation fault detected",
+			verdict:         "RED",
+			feedback:        "Segmentation fault occurred",
+			output:          "program crashed with segfault",
+			expectedPattern: "runtime_error",
+		},
+		{
+			name:            "Nil pointer detected",
+			verdict:         "RED",
+			feedback:        "Nil pointer dereference",
+			output:          "attempted to access nil reference",
+			expectedPattern: "runtime_error",
+		},
+		{
+			name:            "Null reference detected",
+			verdict:         "RED",
+			feedback:        "Null reference exception",
+			output:          "object reference not set",
+			expectedPattern: "runtime_error",
+		},
+		{
+			name:            "Stack overflow detected",
+			verdict:         "RED",
+			feedback:        "Stack overflow error",
+			output:          "call stack exceeded maximum depth",
+			expectedPattern: "runtime_error",
+		},
+		{
+			name:            "Case insensitive - SEGMENTATION FAULT",
+			verdict:         "RED",
+			feedback:        "SEGMENTATION FAULT detected",
+			output:          "crash report",
+			expectedPattern: "runtime_error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			found := false
+			for _, p := range patterns {
+				if p == tt.expectedPattern {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected pattern %q in %v", tt.expectedPattern, patterns)
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_TimeoutVariants verifies expanded timeout keywords
+func TestExtractFailurePatterns_TimeoutVariants(t *testing.T) {
+	tests := []struct {
+		name            string
+		verdict         string
+		feedback        string
+		output          string
+		expectedPattern string
+	}{
+		{
+			name:            "Deadline exceeded detected",
+			verdict:         "RED",
+			feedback:        "Deadline exceeded for operation",
+			output:          "context timeout",
+			expectedPattern: "timeout",
+		},
+		{
+			name:            "Timed out detected",
+			verdict:         "RED",
+			feedback:        "Request timed out",
+			output:          "operation did not complete in time",
+			expectedPattern: "timeout",
+		},
+		{
+			name:            "Request timeout detected",
+			verdict:         "RED",
+			feedback:        "Request timeout occurred",
+			output:          "client connection timeout",
+			expectedPattern: "timeout",
+		},
+		{
+			name:            "Execution timeout detected",
+			verdict:         "RED",
+			feedback:        "Execution timeout reached",
+			output:          "maximum time limit exceeded",
+			expectedPattern: "timeout",
+		},
+		{
+			name:            "Case insensitive - DEADLINE EXCEEDED",
+			verdict:         "RED",
+			feedback:        "DEADLINE EXCEEDED error",
+			output:          "timeout error",
+			expectedPattern: "timeout",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			found := false
+			for _, p := range patterns {
+				if p == tt.expectedPattern {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected pattern %q in %v", tt.expectedPattern, patterns)
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_PermissionVariants verifies expanded permission error keywords
+func TestExtractFailurePatterns_PermissionVariants(t *testing.T) {
+	tests := []struct {
+		name            string
+		verdict         string
+		feedback        string
+		output          string
+		expectedPattern string
+	}{
+		{
+			name:            "Access denied detected",
+			verdict:         "RED",
+			feedback:        "Access denied to resource",
+			output:          "permission check failed",
+			expectedPattern: "permission_error",
+		},
+		{
+			name:            "Forbidden detected",
+			verdict:         "RED",
+			feedback:        "Forbidden operation attempted",
+			output:          "403 forbidden",
+			expectedPattern: "permission_error",
+		},
+		{
+			name:            "Unauthorized detected",
+			verdict:         "RED",
+			feedback:        "Unauthorized access attempt",
+			output:          "401 unauthorized",
+			expectedPattern: "permission_error",
+		},
+		{
+			name:            "Permission denied detected",
+			verdict:         "RED",
+			feedback:        "Permission denied for file",
+			output:          "insufficient privileges",
+			expectedPattern: "permission_error",
+		},
+		{
+			name:            "Case insensitive - ACCESS DENIED",
+			verdict:         "RED",
+			feedback:        "ACCESS DENIED error",
+			output:          "permission error",
+			expectedPattern: "permission_error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			found := false
+			for _, p := range patterns {
+				if p == tt.expectedPattern {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected pattern %q in %v", tt.expectedPattern, patterns)
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_MultiplePatterns verifies multiple patterns extracted from single output
+func TestExtractFailurePatterns_MultiplePatterns(t *testing.T) {
+	tests := []struct {
+		name             string
+		verdict          string
+		feedback         string
+		output           string
+		expectedPatterns []string
+	}{
+		{
+			name:     "Compilation and test failure",
+			verdict:  "RED",
+			feedback: "Build error detected and test failure occurred",
+			output:   "compilation failed, multiple tests failed",
+			expectedPatterns: []string{
+				"compilation_error",
+				"test_failure",
+			},
+		},
+		{
+			name:     "Dependency and timeout",
+			verdict:  "RED",
+			feedback: "Missing package caused timeout",
+			output:   "unable to locate dependency, operation timed out",
+			expectedPatterns: []string{
+				"dependency_missing",
+				"timeout",
+			},
+		},
+		{
+			name:     "Runtime error and permission",
+			verdict:  "RED",
+			feedback: "Segmentation fault with access denied",
+			output:   "runtime crash, permission denied",
+			expectedPatterns: []string{
+				"runtime_error",
+				"permission_error",
+			},
+		},
+		{
+			name:     "Triple pattern detection",
+			verdict:  "RED",
+			feedback: "Build fail, assertion fail, import error",
+			output:   "multiple errors occurred",
+			expectedPatterns: []string{
+				"compilation_error",
+				"test_failure",
+				"dependency_missing",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			for _, expected := range tt.expectedPatterns {
+				found := false
+				for _, p := range patterns {
+					if p == expected {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected pattern %q in %v", expected, patterns)
+				}
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_CaseSensitivity verifies case-insensitive matching
+func TestExtractFailurePatterns_CaseSensitivity(t *testing.T) {
+	tests := []struct {
+		name            string
+		verdict         string
+		feedback        string
+		output          string
+		expectedPattern string
+	}{
+		{
+			name:            "UPPERCASE compilation error",
+			verdict:         "RED",
+			feedback:        "COMPILATION ERROR OCCURRED",
+			output:          "BUILD FAILED",
+			expectedPattern: "compilation_error",
+		},
+		{
+			name:            "MiXeD cAsE test failure",
+			verdict:         "RED",
+			feedback:        "Test FAIL during execution",
+			output:          "AsSeRtIoN fAiL detected",
+			expectedPattern: "test_failure",
+		},
+		{
+			name:            "UPPERCASE permission denied",
+			verdict:         "RED",
+			feedback:        "PERMISSION DENIED",
+			output:          "ACCESS DENIED TO FILE",
+			expectedPattern: "permission_error",
+		},
+		{
+			name:            "lowercase nil pointer",
+			verdict:         "RED",
+			feedback:        "nil pointer dereference",
+			output:          "segmentation fault",
+			expectedPattern: "runtime_error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			found := false
+			for _, p := range patterns {
+				if p == tt.expectedPattern {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected pattern %q in %v for case-insensitive match", tt.expectedPattern, patterns)
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_NoFalsePositives verifies non-matching keywords don't create patterns
+func TestExtractFailurePatterns_NoFalsePositives(t *testing.T) {
+	tests := []struct {
+		name     string
+		verdict  string
+		feedback string
+		output   string
+	}{
+		{
+			name:     "Success keywords",
+			verdict:  "RED",
+			feedback: "Task completed successfully",
+			output:   "All tests passed, build successful",
+		},
+		{
+			name:     "Generic message",
+			verdict:  "RED",
+			feedback: "Something went wrong",
+			output:   "An error occurred",
+		},
+		{
+			name:     "Unrelated keywords",
+			verdict:  "RED",
+			feedback: "Performance degradation detected",
+			output:   "Slowness observed during execution",
+		},
+		{
+			name:     "Partial keyword match should not trigger",
+			verdict:  "RED",
+			feedback: "The compiler is working fine",
+			output:   "Testing framework operational",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			if len(patterns) > 0 {
+				t.Errorf("expected no patterns for non-matching keywords, got %v", patterns)
+			}
+		})
+	}
+}
+
+// TestExtractFailurePatterns_REDVerdictOnly verifies patterns only extracted for RED verdicts
+func TestExtractFailurePatterns_REDVerdictOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		verdict  string
+		feedback string
+		output   string
+	}{
+		{
+			name:     "GREEN verdict with error keywords",
+			verdict:  "GREEN",
+			feedback: "Build error was fixed, compilation successful",
+			output:   "Tests passed despite earlier timeout",
+		},
+		{
+			name:     "YELLOW verdict with error keywords",
+			verdict:  "YELLOW",
+			feedback: "Minor compilation warning, nil pointer check needed",
+			output:   "Test failure in edge case, permission error possible",
+		},
+		{
+			name:     "Empty verdict with error keywords",
+			verdict:  "",
+			feedback: "Segmentation fault detected",
+			output:   "Access denied to file",
+		},
+		{
+			name:     "Invalid verdict with error keywords",
+			verdict:  "UNKNOWN",
+			feedback: "Build fail and import error",
+			output:   "Assertion fail in tests",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := extractFailurePatterns(tt.verdict, tt.feedback, tt.output)
+
+			if len(patterns) != 0 {
+				t.Errorf("expected no patterns for non-RED verdict %q, got %v", tt.verdict, patterns)
+			}
+		})
+	}
+}
+
 // TestQCReviewHook_MetadataStorage verifies patterns stored in task metadata
 func TestQCReviewHook_MetadataStorage(t *testing.T) {
 	invoker := newStubInvoker(&agent.InvocationResult{
