@@ -1213,3 +1213,206 @@ func TestEmptyConsoleSection(t *testing.T) {
 		t.Errorf("Console.EnableProgressBar = %v, want true (default)", cfg.Console.EnableProgressBar)
 	}
 }
+
+// TestConsoleConfigEnvOverrideEnableColor tests CONDUCTOR_CONSOLE_COLOR environment variable
+func TestConsoleConfigEnvOverrideEnableColor(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `console:
+  enable_color: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	// Test with env var set to false
+	t.Setenv("CONDUCTOR_CONSOLE_COLOR", "false")
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.Console.EnableColor {
+		t.Errorf("Console.EnableColor = %v, want false (from env override)", cfg.Console.EnableColor)
+	}
+}
+
+// TestConsoleConfigEnvOverrideMultiple tests multiple environment variable overrides
+func TestConsoleConfigEnvOverrideMultiple(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `console:
+  enable_color: true
+  enable_progress_bar: false
+  compact_mode: false
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	// Set multiple environment variables
+	t.Setenv("CONDUCTOR_CONSOLE_COLOR", "false")
+	t.Setenv("CONDUCTOR_CONSOLE_PROGRESS_BAR", "true")
+	t.Setenv("CONDUCTOR_CONSOLE_COMPACT", "true")
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.Console.EnableColor {
+		t.Errorf("Console.EnableColor = %v, want false (env override)", cfg.Console.EnableColor)
+	}
+	if !cfg.Console.EnableProgressBar {
+		t.Errorf("Console.EnableProgressBar = %v, want true (env override)", cfg.Console.EnableProgressBar)
+	}
+	if !cfg.Console.CompactMode {
+		t.Errorf("Console.CompactMode = %v, want true (env override)", cfg.Console.CompactMode)
+	}
+}
+
+// TestConsoleConfigEnvOverrideTrueVariants tests different "true" values for env vars
+func TestConsoleConfigEnvOverrideTrueVariants(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		want     bool
+	}{
+		{"true lowercase", "true", true},
+		{"1", "1", true},
+		{"TRUE uppercase", "TRUE", false}, // Only lowercase "true" or "1" are recognized
+		{"yes", "yes", false},             // Other values treated as false
+		{"empty string", "", false},       // Empty string treated as false
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			// Start with enable_color: false in config
+			configContent := `console:
+  enable_color: false
+`
+			if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			if tt.envValue != "" {
+				t.Setenv("CONDUCTOR_CONSOLE_COLOR", tt.envValue)
+			} else {
+				t.Setenv("CONDUCTOR_CONSOLE_COLOR", "")
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			if cfg.Console.EnableColor != tt.want {
+				t.Errorf("Console.EnableColor = %v, want %v", cfg.Console.EnableColor, tt.want)
+			}
+		})
+	}
+}
+
+// TestConsoleConfigEnvOverrideAllFields tests environment overrides for all console fields
+func TestConsoleConfigEnvOverrideAllFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Start with all defaults
+	configContent := `console:
+  enable_color: true
+  enable_progress_bar: true
+  enable_task_details: true
+  enable_qc_feedback: true
+  compact_mode: false
+  show_agent_names: true
+  show_file_counts: true
+  show_durations: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	// Override all fields via environment variables
+	t.Setenv("CONDUCTOR_CONSOLE_COLOR", "false")
+	t.Setenv("CONDUCTOR_CONSOLE_PROGRESS_BAR", "false")
+	t.Setenv("CONDUCTOR_CONSOLE_TASK_DETAILS", "false")
+	t.Setenv("CONDUCTOR_CONSOLE_QC_FEEDBACK", "false")
+	t.Setenv("CONDUCTOR_CONSOLE_COMPACT", "true")
+	t.Setenv("CONDUCTOR_CONSOLE_AGENT_NAMES", "false")
+	t.Setenv("CONDUCTOR_CONSOLE_FILE_COUNTS", "false")
+	t.Setenv("CONDUCTOR_CONSOLE_DURATIONS", "false")
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Verify all overrides
+	if cfg.Console.EnableColor {
+		t.Errorf("EnableColor = %v, want false", cfg.Console.EnableColor)
+	}
+	if cfg.Console.EnableProgressBar {
+		t.Errorf("EnableProgressBar = %v, want false", cfg.Console.EnableProgressBar)
+	}
+	if cfg.Console.EnableTaskDetails {
+		t.Errorf("EnableTaskDetails = %v, want false", cfg.Console.EnableTaskDetails)
+	}
+	if cfg.Console.EnableQCFeedback {
+		t.Errorf("EnableQCFeedback = %v, want false", cfg.Console.EnableQCFeedback)
+	}
+	if !cfg.Console.CompactMode {
+		t.Errorf("CompactMode = %v, want true", cfg.Console.CompactMode)
+	}
+	if cfg.Console.ShowAgentNames {
+		t.Errorf("ShowAgentNames = %v, want false", cfg.Console.ShowAgentNames)
+	}
+	if cfg.Console.ShowFileCounts {
+		t.Errorf("ShowFileCounts = %v, want false", cfg.Console.ShowFileCounts)
+	}
+	if cfg.Console.ShowDurations {
+		t.Errorf("ShowDurations = %v, want false", cfg.Console.ShowDurations)
+	}
+}
+
+// TestConsoleConfigEnvOverridePrecedence tests that env vars override config file
+func TestConsoleConfigEnvOverridePrecedence(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `console:
+  enable_color: true
+  compact_mode: false
+max_concurrency: 5
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	// Set env var to override config
+	t.Setenv("CONDUCTOR_CONSOLE_COLOR", "false")
+	t.Setenv("CONDUCTOR_CONSOLE_COMPACT", "true")
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Env overrides config file
+	if cfg.Console.EnableColor {
+		t.Errorf("EnableColor = %v, want false (env overrides config)", cfg.Console.EnableColor)
+	}
+	if !cfg.Console.CompactMode {
+		t.Errorf("CompactMode = %v, want true (env overrides config)", cfg.Console.CompactMode)
+	}
+
+	// Non-console config values should not be affected
+	if cfg.MaxConcurrency != 5 {
+		t.Errorf("MaxConcurrency = %d, want 5 (unaffected)", cfg.MaxConcurrency)
+	}
+}
