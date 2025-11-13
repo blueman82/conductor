@@ -526,9 +526,9 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 				output = parsedOutput.Content
 			} else if parsedOutput.Error != "" {
 				output = parsedOutput.Error
-			} else {
-				output = ""
 			}
+			// If parsed output is empty, fall back to original output for QC review
+			// This ensures QC always has something to review
 		}
 
 		result.Output = output

@@ -229,19 +229,15 @@ launchComplete:
 			}
 		}
 
-		// Log progress with all tasks (update task statuses as results arrive)
+		// Log progress with task results (pass results with actual duration data)
 		if w.logger != nil {
-			tasksForProgress := make([]models.Task, len(allTasks))
-			copy(tasksForProgress, allTasks)
-
-			// Update status for completed task in the progress snapshot
-			for i, task := range tasksForProgress {
-				if task.Number == executionResult.taskNumber && resultMap[task.Number].Status != "" {
-					tasksForProgress[i].Status = "completed"
+			var resultsForProgress []models.TaskResult
+			for _, taskNum := range wave.TaskNumbers {
+				if result, ok := resultMap[taskNum]; ok {
+					resultsForProgress = append(resultsForProgress, result)
 				}
 			}
-
-			w.logger.LogProgress(tasksForProgress)
+			w.logger.LogProgress(resultsForProgress)
 		}
 	}
 

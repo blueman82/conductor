@@ -32,7 +32,7 @@ type ReviewResult struct {
 func NewQualityController(invoker InvokerInterface) *QualityController {
 	return &QualityController{
 		Invoker:     invoker,
-		ReviewAgent: "quality-control",
+		ReviewAgent: "conductor-qc",
 		MaxRetries:  2,
 	}
 }
@@ -43,32 +43,70 @@ func (qc *QualityController) BuildReviewPrompt(task models.Task, output string) 
 
 Task: %s
 
-Output:
+Requirements:
+%s
+
+Agent Output:
 %s
 
 Provide quality control review in this format:
 Quality Control: [GREEN/RED/YELLOW]
-
 Feedback: [your detailed feedback]
 
 Respond with GREEN if all requirements met, RED if needs rework, YELLOW if minor issues.
-`, task.Name, output)
+`, task.Name, task.Prompt, output)
 }
 
 // ParseReviewResponse extracts the QC flag and feedback from agent output
 func ParseReviewResponse(output string) (flag string, feedback string) {
-	// Parse "Quality Control: GREEN/RED/YELLOW" using regex
+	// If output is JSON-wrapped (from claude CLI invocation), extract the "result" field
+	if strings.Contains(output, `"result"`) && strings.Contains(output, `"type"`) {
+		// Try to extract result field from JSON
+		resultRegex := regexp.MustCompile(`"result":\s*"([^"]*(?:\\.[^"]*)*)`)
+		matches := resultRegex.FindStringSubmatch(output)
+		if len(matches) > 1 {
+			// Unescape the JSON string
+			result := matches[1]
+			result = strings.ReplaceAll(result, `\"`, `"`)
+			result = strings.ReplaceAll(result, `\\n`, "\n")
+			result = strings.ReplaceAll(result, `\\`, `\`)
+			output = result
+		}
+	}
+
+	// Try exact format first: "Quality Control: GREEN/RED/YELLOW"
 	flagRegex := regexp.MustCompile(`Quality Control:\s*(GREEN|RED|YELLOW)`)
 	matches := flagRegex.FindStringSubmatch(output)
 	if len(matches) > 1 {
 		flag = matches[1]
 	}
 
-	// Extract feedback after the flag line
-	// Split on newline after the Quality Control line
-	parts := strings.SplitN(output, "\n", 2)
-	if len(parts) > 1 {
-		feedback = strings.TrimSpace(parts[1])
+	// Fallback: look for verdict keywords anywhere in output if exact format not found
+	if flag == "" {
+		if strings.Contains(output, "GREEN") {
+			flag = "GREEN"
+		} else if strings.Contains(output, "RED") {
+			flag = "RED"
+		} else if strings.Contains(output, "YELLOW") {
+			flag = "YELLOW"
+		}
+	}
+
+	// Extract feedback: try "Feedback:" line first
+	feedbackRegex := regexp.MustCompile(`Feedback:\s*(.+?)(?:\n|$)`)
+	feedbackMatches := feedbackRegex.FindStringSubmatch(output)
+	if len(feedbackMatches) > 1 {
+		feedback = strings.TrimSpace(feedbackMatches[1])
+	} else {
+		// Fallback: use first non-empty line after flag
+		lines := strings.Split(output, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" && !strings.Contains(trimmed, "Quality Control") && !strings.Contains(trimmed, "Feedback") {
+				feedback = trimmed
+				break
+			}
+		}
 	}
 
 	return flag, feedback

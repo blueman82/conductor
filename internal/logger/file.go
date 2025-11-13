@@ -290,7 +290,7 @@ func (fl *FileLogger) LogTaskResult(result models.TaskResult) error {
 
 // LogProgress logs the current execution progress (no-op for file logger).
 // Progress is displayed on console but not written to log files.
-func (fl *FileLogger) LogProgress(tasks []models.Task) {
+func (fl *FileLogger) LogProgress(results []models.TaskResult) {
 	// No-op: progress bars are console-only for now
 }
 

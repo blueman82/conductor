@@ -34,7 +34,7 @@ type Logger interface {
 	LogWaveStart(wave models.Wave)
 	LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult)
 	LogTaskResult(result models.TaskResult) error
-	LogProgress(tasks []models.Task)
+	LogProgress(results []models.TaskResult)
 	LogSummary(result models.ExecutionResult)
 }
 

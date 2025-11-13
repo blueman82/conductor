@@ -829,7 +829,7 @@ func (cl *ConsoleLogger) LogTaskStart(task models.Task, current int, total int) 
 // LogProgress logs real-time progress of task execution with percentage, counts, and average duration.
 // Format: "[HH:MM:SS] Progress: [████░░░░░░] 50% (4/8 tasks) - Avg: 3.2s/task"
 // Handles edge cases: zero tasks, all completed, no duration data.
-func (cl *ConsoleLogger) LogProgress(tasks []models.Task) {
+func (cl *ConsoleLogger) LogProgress(results []models.TaskResult) {
 	if cl.writer == nil {
 		return
 	}
@@ -844,22 +844,19 @@ func (cl *ConsoleLogger) LogProgress(tasks []models.Task) {
 
 	ts := timestamp()
 
-	// Count completed tasks
+	// Count completed tasks and sum durations from results
 	completed := 0
 	totalDuration := time.Duration(0)
 
-	for _, task := range tasks {
-		if task.Status == "completed" {
+	for _, result := range results {
+		if result.Status != "" {
 			completed++
-
-			// Calculate duration if we have both StartedAt and CompletedAt
-			if task.StartedAt != nil && task.CompletedAt != nil {
-				totalDuration += task.CompletedAt.Sub(*task.StartedAt)
-			}
+			// Use the Duration field from TaskResult
+			totalDuration += result.Duration
 		}
 	}
 
-	total := len(tasks)
+	total := len(results)
 
 	// Calculate percentage
 	var percentage int
@@ -881,7 +878,7 @@ func (cl *ConsoleLogger) LogProgress(tasks []models.Task) {
 	var avgDurationStr string
 	if completed > 0 {
 		avgDuration := totalDuration / time.Duration(completed)
-		avgDurationStr = fmt.Sprintf(" - Avg: %s/task", formatDuration(avgDuration))
+		avgDurationStr = fmt.Sprintf(" - Avg: %s/task", formatDurationWithDecimal(avgDuration))
 	}
 
 	// Build progress message
@@ -889,12 +886,8 @@ func (cl *ConsoleLogger) LogProgress(tasks []models.Task) {
 
 	var output string
 	if cl.colorOutput {
-		// Apply cyan color for in-progress, green for complete
-		if percentage < 100 {
-			progressMsg = color.New(color.FgCyan).Sprint(progressMsg)
-		} else if percentage == 100 && total > 0 {
-			progressMsg = color.New(color.FgGreen).Sprint(progressMsg)
-		}
+		// Always use cyan for progress (doesn't turn green even when 100% since RED/YELLOW tasks are counted)
+		progressMsg = color.New(color.FgCyan).Sprint(progressMsg)
 		output = fmt.Sprintf("[%s] %s\n", ts, progressMsg)
 	} else {
 		output = fmt.Sprintf("[%s] %s\n", ts, progressMsg)
@@ -991,7 +984,7 @@ func (n *NoOpLogger) LogTaskResult(result models.TaskResult) error {
 }
 
 // LogProgress is a no-op implementation.
-func (n *NoOpLogger) LogProgress(tasks []models.Task) {
+func (n *NoOpLogger) LogProgress(results []models.TaskResult) {
 }
 
 // LogSummary is a no-op implementation.

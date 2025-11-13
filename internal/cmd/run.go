@@ -39,6 +39,16 @@ func (l *consoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration
 	fmt.Fprintf(l.writer, "[%s] Completed %s in %s\n", timestamp, wave.Name, duration.Round(time.Second))
 }
 
+// LogTaskResult logs the completion of a task (no-op in this simple logger)
+func (l *consoleLogger) LogTaskResult(result models.TaskResult) error {
+	return nil
+}
+
+// LogProgress logs real-time progress (no-op in this simple logger)
+func (l *consoleLogger) LogProgress(results []models.TaskResult) {
+	// No-op: progress bars handled by main logger
+}
+
 // LogSummary logs the execution summary
 func (l *consoleLogger) LogSummary(result models.ExecutionResult) {
 	fmt.Fprintf(l.writer, "\n")
@@ -529,9 +539,9 @@ func (ml *multiLogger) LogTaskResult(result models.TaskResult) error {
 }
 
 // LogProgress forwards to all loggers
-func (ml *multiLogger) LogProgress(tasks []models.Task) {
+func (ml *multiLogger) LogProgress(results []models.TaskResult) {
 	for _, logger := range ml.loggers {
-		logger.LogProgress(tasks)
+		logger.LogProgress(results)
 	}
 }
 
