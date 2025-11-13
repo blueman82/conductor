@@ -9,7 +9,8 @@ import (
 // GetConductorHome returns the conductor home directory
 // Priority order:
 //   1. CONDUCTOR_HOME environment variable (if set)
-//   2. ~/.conductor (default)
+//   2. Conductor repository root (detected by finding go.mod)
+//   3. Current working directory (fallback)
 // The directory is created if it doesn't exist
 func GetConductorHome() (string, error) {
 	// Try env var first
@@ -17,13 +18,24 @@ func GetConductorHome() (string, error) {
 		return home, nil
 	}
 
-	// Fall back to ~/.conductor
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("get user home directory: %w", err)
+	// Try to find conductor repo root by looking for go.mod
+	repoRoot, err := findConductorRepoRoot()
+	if err == nil && repoRoot != "" {
+		conductorHome := filepath.Join(repoRoot, ".conductor")
+		// Ensure directory exists
+		if err := os.MkdirAll(conductorHome, 0755); err != nil {
+			return "", fmt.Errorf("create conductor home directory: %w", err)
+		}
+		return conductorHome, nil
 	}
 
-	conductorHome := filepath.Join(homeDir, ".conductor")
+	// Fallback to current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("get working directory: %w", err)
+	}
+
+	conductorHome := filepath.Join(cwd, ".conductor")
 
 	// Ensure directory exists
 	if err := os.MkdirAll(conductorHome, 0755); err != nil {
@@ -31,6 +43,36 @@ func GetConductorHome() (string, error) {
 	}
 
 	return conductorHome, nil
+}
+
+// findConductorRepoRoot finds the conductor repository root by looking for
+// the cmd/conductor/main.go file, which uniquely identifies the conductor repo
+func findConductorRepoRoot() (string, error) {
+	// Start from current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	// Walk up the directory tree looking for cmd/conductor/main.go
+	current := cwd
+	for {
+		conductorMainPath := filepath.Join(current, "cmd", "conductor", "main.go")
+		if _, err := os.Stat(conductorMainPath); err == nil {
+			// Found conductor's main.go - this is the repo root
+			return current, nil
+		}
+
+		// Move up one directory
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached filesystem root
+			break
+		}
+		current = parent
+	}
+
+	return "", fmt.Errorf("conductor repository root not found (looking for cmd/conductor/main.go)")
 }
 
 // GetLearningDBPath returns the absolute path to the learning database
