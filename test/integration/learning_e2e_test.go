@@ -407,7 +407,16 @@ func buildConductorBinary(t *testing.T) string {
 	t.Helper()
 
 	tmpBinary := filepath.Join(t.TempDir(), "conductor-test")
-	cmd := exec.Command("go", "build", "-o", tmpBinary, "../../cmd/conductor")
+
+	// Calculate the conductor repo root (from test/integration/ perspective, it's ../..)
+	repoRoot, err := filepath.Abs(filepath.Join(".", "..", ".."))
+	if err != nil {
+		t.Fatalf("Failed to determine repo root: %v", err)
+	}
+
+	// Build with ldflags to inject the conductor repo root
+	ldflags := fmt.Sprintf("-X github.com/harrison/conductor/internal/cmd.ConductorRepoRoot=%s", repoRoot)
+	cmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", tmpBinary, "../../cmd/conductor")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("Failed to build conductor binary: %v\nOutput: %s", err, output)
 	}

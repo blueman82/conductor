@@ -6,22 +6,44 @@ import (
 	"path/filepath"
 )
 
+// buildTimeRepoRoot is set by cmd during initialization
+// It contains the conductor repository root injected at build time
+var buildTimeRepoRoot string
+
+// SetBuildTimeRepoRoot sets the conductor repository root (injected at build time)
+// This should be called early during app initialization (from cmd)
+func SetBuildTimeRepoRoot(root string) {
+	buildTimeRepoRoot = root
+}
+
 // GetConductorHome returns the conductor home directory
 // Priority order:
 //   1. CONDUCTOR_HOME environment variable (if set)
-//   2. Conductor repository root (detected by finding go.mod)
-//   3. Current working directory (fallback)
+//   2. Conductor repository root (injected at build time)
+// If neither is available, returns an error (NO fallback to cwd)
 // The directory is created if it doesn't exist
 func GetConductorHome() (string, error) {
+	return GetConductorHomeWithRoot(buildTimeRepoRoot)
+}
+
+// GetConductorHomeWithRoot is the testable version that accepts the build-time root
+// Priority order:
+//   1. CONDUCTOR_HOME environment variable (if set)
+//   2. Build-time injected conductor repository root
+// Returns error if neither is available
+func GetConductorHomeWithRoot(buildTimeRoot string) (string, error) {
 	// Try env var first
 	if home := os.Getenv("CONDUCTOR_HOME"); home != "" {
+		// Ensure directory exists
+		if err := os.MkdirAll(home, 0755); err != nil {
+			return "", fmt.Errorf("create conductor home directory: %w", err)
+		}
 		return home, nil
 	}
 
-	// Try to find conductor repo root by looking for go.mod
-	repoRoot, err := findConductorRepoRoot()
-	if err == nil && repoRoot != "" {
-		conductorHome := filepath.Join(repoRoot, ".conductor")
+	// Try build-time injected root
+	if buildTimeRoot != "" {
+		conductorHome := filepath.Join(buildTimeRoot, ".conductor")
 		// Ensure directory exists
 		if err := os.MkdirAll(conductorHome, 0755); err != nil {
 			return "", fmt.Errorf("create conductor home directory: %w", err)
@@ -29,20 +51,8 @@ func GetConductorHome() (string, error) {
 		return conductorHome, nil
 	}
 
-	// Fallback to current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("get working directory: %w", err)
-	}
-
-	conductorHome := filepath.Join(cwd, ".conductor")
-
-	// Ensure directory exists
-	if err := os.MkdirAll(conductorHome, 0755); err != nil {
-		return "", fmt.Errorf("create conductor home directory: %w", err)
-	}
-
-	return conductorHome, nil
+	// No configuration available
+	return "", fmt.Errorf("conductor home not configured: set CONDUCTOR_HOME environment variable or rebuild with conductor repo path injected")
 }
 
 // findConductorRepoRoot finds the conductor repository root by looking for
@@ -101,7 +111,12 @@ func indexOf(s, substr string) int {
 // GetLearningDBPath returns the absolute path to the learning database
 // Always returns: $CONDUCTOR_HOME/learning/executions.db
 func GetLearningDBPath() (string, error) {
-	home, err := GetConductorHome()
+	return GetLearningDBPathWithRoot(buildTimeRepoRoot)
+}
+
+// GetLearningDBPathWithRoot is the testable version that accepts the build-time root
+func GetLearningDBPathWithRoot(buildTimeRoot string) (string, error) {
+	home, err := GetConductorHomeWithRoot(buildTimeRoot)
 	if err != nil {
 		return "", err
 	}
@@ -111,7 +126,12 @@ func GetLearningDBPath() (string, error) {
 
 // GetLearningDir returns the learning directory path
 func GetLearningDir() (string, error) {
-	home, err := GetConductorHome()
+	return GetLearningDirWithRoot(buildTimeRepoRoot)
+}
+
+// GetLearningDirWithRoot is the testable version that accepts the build-time root
+func GetLearningDirWithRoot(buildTimeRoot string) (string, error) {
+	home, err := GetConductorHomeWithRoot(buildTimeRoot)
 	if err != nil {
 		return "", err
 	}

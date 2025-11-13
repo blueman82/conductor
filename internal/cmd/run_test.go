@@ -30,6 +30,19 @@ func createTestPlanFile(t *testing.T, content string) string {
 func executeRunCommand(t *testing.T, args []string) (string, error) {
 	t.Helper()
 
+	// Set CONDUCTOR_HOME for tests to ensure database location is configured
+	// This simulates the build-time injection that happens in production
+	conductorHome := filepath.Join(t.TempDir(), ".conductor")
+	oldHome := os.Getenv("CONDUCTOR_HOME")
+	defer func() {
+		if oldHome == "" {
+			os.Unsetenv("CONDUCTOR_HOME")
+		} else {
+			os.Setenv("CONDUCTOR_HOME", oldHome)
+		}
+	}()
+	t.Setenv("CONDUCTOR_HOME", conductorHome)
+
 	// Create a new root command and run command
 	rootCmd := &cobra.Command{Use: "conductor"}
 	runCmd := NewRunCommand()
