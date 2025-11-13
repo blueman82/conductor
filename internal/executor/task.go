@@ -266,12 +266,36 @@ func extractFailurePatterns(verdict, feedback, output string) []string {
 
 	patterns := []string{}
 	patternKeywords := map[string][]string{
-		"compilation_error":  {"compilation", "compile", "syntax error"},
-		"test_failure":       {"test fail", "tests fail", "test failure"},
-		"dependency_missing": {"dependency", "package not found", "module not found"},
-		"permission_error":   {"permission", "access denied", "forbidden"},
-		"timeout":            {"timeout", "deadline", "timed out"},
-		"runtime_error":      {"runtime error", "panic", "segfault", "nil pointer"},
+		"compilation_error": {
+			"compilation error", "compilation fail", "syntax error", // Original (more specific)
+			"build fail", "build error", "parse error", // NEW
+			"code won't compile", "unable to build", // NEW
+			"compilation failed", // NEW - needed for test cases
+		},
+		"test_failure": {
+			"test fail", "tests fail", "test failure", // Original
+			"assertion fail", "verification fail", // NEW
+			"check fail", "validation fail", // NEW
+		},
+		"dependency_missing": {
+			"dependency", "package not found", "module not found", // Original
+			"unable to locate", "missing package", // NEW
+			"import error", "cannot find module", // NEW
+		},
+		"permission_error": {
+			"permission", "access denied", "forbidden", // Original
+			"unauthorized", // NEW
+		},
+		"timeout": {
+			"timeout", "deadline", "timed out", // Original
+			"request timeout", "execution timeout", // NEW
+			"deadline exceeded", // NEW
+		},
+		"runtime_error": {
+			"runtime error", "panic", "segfault", "nil pointer", // Original
+			"null reference", "stack overflow", // NEW
+			"segmentation fault", // NEW
+		},
 	}
 
 	// Combine all text sources for pattern matching (case insensitive)
