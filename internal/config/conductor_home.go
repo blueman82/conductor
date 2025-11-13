@@ -46,7 +46,7 @@ func GetConductorHome() (string, error) {
 }
 
 // findConductorRepoRoot finds the conductor repository root by looking for
-// the cmd/conductor/main.go file, which uniquely identifies the conductor repo
+// go.mod containing the conductor module path, or a .conductor-root marker
 func findConductorRepoRoot() (string, error) {
 	// Start from current working directory
 	cwd, err := os.Getwd()
@@ -54,13 +54,21 @@ func findConductorRepoRoot() (string, error) {
 		return "", err
 	}
 
-	// Walk up the directory tree looking for cmd/conductor/main.go
 	current := cwd
 	for {
-		conductorMainPath := filepath.Join(current, "cmd", "conductor", "main.go")
-		if _, err := os.Stat(conductorMainPath); err == nil {
-			// Found conductor's main.go - this is the repo root
+		// First check for .conductor-root marker file (highest priority)
+		markerPath := filepath.Join(current, ".conductor-root")
+		if _, err := os.Stat(markerPath); err == nil {
 			return current, nil
+		}
+
+		// Check for go.mod with conductor module path
+		goModPath := filepath.Join(current, "go.mod")
+		if data, err := os.ReadFile(goModPath); err == nil {
+			// Check if this go.mod contains the conductor module path
+			if contains(string(data), "github.com/harrison/conductor") {
+				return current, nil
+			}
 		}
 
 		// Move up one directory
@@ -72,7 +80,22 @@ func findConductorRepoRoot() (string, error) {
 		current = parent
 	}
 
-	return "", fmt.Errorf("conductor repository root not found (looking for cmd/conductor/main.go)")
+	return "", fmt.Errorf("conductor repository root not found (looking for .conductor-root or go.mod with github.com/harrison/conductor)")
+}
+
+// contains checks if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) && indexOf(s, substr) >= 0)
+}
+
+// indexOf returns the index of substr in s, or -1 if not found
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }
 
 // GetLearningDBPath returns the absolute path to the learning database

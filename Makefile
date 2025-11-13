@@ -1,225 +1,132 @@
-# Makefile for Conductor - Autonomous Multi-Agent Orchestration CLI
+.PHONY: help build build-patch build-minor build-major test test-coverage test-verbose test-race fmt lint clean run validate learning-stats learning-export learning-clear
 
 # Variables
-BINARY_NAME=conductor
-CMD_PATH=./cmd/conductor
-GO_VERSION=1.25.4
-COVERAGE_FILE=coverage.out
-COVERAGE_HTML=coverage.html
+BINARY_NAME = conductor
+VERSION_FILE = VERSION
+CURRENT_VERSION := $(shell cat $(VERSION_FILE))
+GO = go
+GOFLAGS = -v
 
-# Build information
-VERSION=$(shell cat VERSION 2>/dev/null || echo "0.0.0")
-BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
-GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-LDFLAGS=-ldflags "-X github.com/harrison/conductor/internal/cmd.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
-
-# Go commands
-GOCMD=go
-GOBUILD=$(GOCMD) build
-GOTEST=$(GOCMD) test
-GOCLEAN=$(GOCMD) clean
-GOINSTALL=$(GOCMD) install
-GOFMT=$(GOCMD) fmt
-GOVET=$(GOCMD) vet
-GOMOD=$(GOCMD) mod
-
-# Detect OS for proper clean commands
-ifeq ($(OS),Windows_NT)
-    RM=del /Q
-    RMDIR=rmdir /S /Q
-    BINARY_EXT=.exe
-else
-    RM=rm -f
-    RMDIR=rm -rf
-    BINARY_EXT=
-endif
-
-# Phony targets (not actual files)
-.PHONY: all build build-patch build-minor build-major test test-verbose coverage clean install help fmt vet lint tidy check deps
-
-# Default target
-all: clean fmt vet build test
-
-## help: Show this help message
 help:
-	@echo "Conductor - Makefile targets:"
+	@echo "Conductor Build System"
 	@echo ""
-	@echo "  make build          - Build the conductor binary to ./$(BINARY_NAME)"
-	@echo "  make build-patch    - Bump patch version and build (1.1.0 → 1.1.1)"
-	@echo "  make build-minor    - Bump minor version and build (1.1.0 → 1.2.0)"
-	@echo "  make build-major    - Bump major version and build (1.1.0 → 2.0.0)"
-	@echo "  make test           - Run all tests with coverage"
-	@echo "  make test-verbose   - Run tests with verbose output"
-	@echo "  make coverage       - Generate coverage report and open HTML"
-	@echo "  make clean          - Remove build artifacts"
-	@echo "  make install        - Install to \$$GOPATH/bin"
-	@echo "  make fmt            - Format code with gofmt"
-	@echo "  make vet            - Run go vet"
-	@echo "  make lint           - Run golangci-lint (if installed)"
-	@echo "  make tidy           - Tidy go modules"
-	@echo "  make check          - Run fmt, vet, and test"
-	@echo "  make deps           - Download dependencies"
-	@echo "  make all            - Run clean, fmt, vet, build, and test"
-	@echo "  make help           - Show this help message"
+	@echo "Build targets:"
+	@echo "  make build              - Build binary with current version"
+	@echo "  make build-patch        - Increment patch version (1.0.0 → 1.0.1) and build"
+	@echo "  make build-minor        - Increment minor version (1.0.0 → 1.1.0) and build"
+	@echo "  make build-major        - Increment major version (1.0.0 → 2.0.0) and build"
 	@echo ""
+	@echo "Build targets:"
+	@echo "  make test               - Run all tests"
+	@echo "  make test-verbose       - Run tests with verbose output"
+	@echo "  make test-race          - Run tests with race detection"
+	@echo "  make test-coverage      - Run tests with coverage report"
+	@echo ""
+	@echo "Quality targets:"
+	@echo "  make fmt                - Format all Go code"
+	@echo "  make lint               - Run linter (requires golangci-lint)"
+	@echo ""
+	@echo "Execution targets:"
+	@echo "  make run                - Run conductor from source"
+	@echo "  make validate           - Show validate command help"
+	@echo ""
+	@echo "Learning system targets:"
+	@echo "  make learning-stats     - View learning statistics"
+	@echo "  make learning-export    - Export learning data to JSON"
+	@echo "  make learning-clear     - Clear learning history"
+	@echo ""
+	@echo "Cleanup:"
+	@echo "  make clean              - Remove binary and coverage files"
+	@echo ""
+	@echo "Current version: $(CURRENT_VERSION)"
 
-## build: Build the conductor binary
+# Build with current version
 build:
-	@echo "Building $(BINARY_NAME)..."
-	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME)$(BINARY_EXT) $(CMD_PATH)
-	@echo "Build complete: ./$(BINARY_NAME)$(BINARY_EXT)"
+	@echo "Building conductor v$(CURRENT_VERSION)..."
+	$(GO) build $(GOFLAGS) -ldflags "-X main.Version=$(CURRENT_VERSION)" -o $(BINARY_NAME) ./cmd/conductor
+	@echo "Binary built: ./$(BINARY_NAME)"
 
-## build-patch: Bump patch version (x.y.Z) and build
+# Helper function to increment version
+define increment_version
+	@echo "Current version: $(CURRENT_VERSION)"
+	@python3 -c "import sys; parts = '$(CURRENT_VERSION)'.split('.'); \
+		$(1); \
+		print('.'.join(map(str, parts)))" > $(VERSION_FILE)_tmp && \
+	mv $(VERSION_FILE)_tmp $(VERSION_FILE)
+	@echo "New version: $$(cat $(VERSION_FILE))"
+endef
+
+# Increment patch version and build
 build-patch:
-	@echo "Bumping patch version..."
-	@current=$$(cat VERSION); \
-	major=$$(echo $$current | cut -d. -f1); \
-	minor=$$(echo $$current | cut -d. -f2); \
-	patch=$$(echo $$current | cut -d. -f3); \
-	patch=$$(($$patch + 1)); \
-	echo "$$major.$$minor.$$patch" > VERSION; \
-	echo "Version bumped: $$current → $$major.$$minor.$$patch"
+	$(call increment_version,parts[2] = str(int(parts[2]) + 1))
 	@$(MAKE) build
 
-## build-minor: Bump minor version (x.Y.0) and build
+# Increment minor version and build
 build-minor:
-	@echo "Bumping minor version..."
-	@current=$$(cat VERSION); \
-	major=$$(echo $$current | cut -d. -f1); \
-	minor=$$(echo $$current | cut -d. -f2); \
-	minor=$$(($$minor + 1)); \
-	echo "$$major.$$minor.0" > VERSION; \
-	echo "Version bumped: $$current → $$major.$$minor.0"
+	$(call increment_version,parts[1] = str(int(parts[1]) + 1); parts[2] = '0')
 	@$(MAKE) build
 
-## build-major: Bump major version (X.0.0) and build
+# Increment major version and build
 build-major:
-	@echo "Bumping major version..."
-	@current=$$(cat VERSION); \
-	major=$$(echo $$current | cut -d. -f1); \
-	major=$$(($$major + 1)); \
-	echo "$$major.0.0" > VERSION; \
-	echo "Version bumped: $$current → $$major.0.0"
+	$(call increment_version,parts[0] = str(int(parts[0]) + 1); parts[1] = '0'; parts[2] = '0')
 	@$(MAKE) build
 
-## test: Run all tests with coverage
+# Run all tests
 test:
-	@echo "Running tests with coverage..."
-	$(GOTEST) -v ./... -cover -coverprofile=$(COVERAGE_FILE)
-	@echo "Test coverage:"
-	@$(GOCMD) tool cover -func=$(COVERAGE_FILE) | grep total
+	@echo "Running all tests..."
+	$(GO) test ./...
 
-## test-verbose: Run tests with verbose output
+# Run tests with verbose output
 test-verbose:
-	@echo "Running tests with verbose output..."
-	$(GOTEST) -v ./... -cover
+	@echo "Running all tests (verbose)..."
+	$(GO) test -v ./...
 
-## coverage: Generate coverage report and open HTML
-coverage:
-	@echo "Generating coverage report..."
-	$(GOTEST) ./... -coverprofile=$(COVERAGE_FILE)
-	$(GOCMD) tool cover -html=$(COVERAGE_FILE) -o $(COVERAGE_HTML)
-	@echo "Coverage report generated: $(COVERAGE_HTML)"
-	@echo "Opening coverage report in browser..."
-ifeq ($(OS),Windows_NT)
-	start $(COVERAGE_HTML)
-else ifeq ($(shell uname -s),Darwin)
-	open $(COVERAGE_HTML)
-else
-	xdg-open $(COVERAGE_HTML) 2>/dev/null || echo "Please open $(COVERAGE_HTML) in your browser"
-endif
+# Run tests with race detection
+test-race:
+	@echo "Running tests with race detection..."
+	$(GO) test -race ./...
 
-## clean: Remove build artifacts
-clean:
-	@echo "Cleaning build artifacts..."
-	$(GOCLEAN)
-	$(RM) $(BINARY_NAME)$(BINARY_EXT)
-	$(RM) $(COVERAGE_FILE)
-	$(RM) $(COVERAGE_HTML)
-	$(RM) main$(BINARY_EXT)
-	$(RMDIR) dist 2>/dev/null || true
-	@echo "Clean complete"
+# Run tests with coverage
+test-coverage:
+	@echo "Running tests with coverage..."
+	$(GO) test -coverprofile=coverage.out ./...
+	@echo "Coverage report generated: coverage.out"
+	@echo "View in browser: go tool cover -html=coverage.out"
+	@$(GO) tool cover -func=coverage.out | grep total
 
-## install: Install to $GOPATH/bin with optional PATH configuration
-install:
-	@echo "Installing $(BINARY_NAME) to \$$GOPATH/bin..."
-	$(GOINSTALL) $(LDFLAGS) $(CMD_PATH)
-	@echo "Install complete: $$(go env GOPATH)/bin/$(BINARY_NAME)"
-	@echo ""
-	@bash -c '\
-		GOPATH=$$(go env GOPATH); \
-		GOBIN=$$GOPATH/bin; \
-		if echo $$PATH | grep -q "$$GOBIN"; then \
-			echo "✓ $$GOBIN is already in your PATH"; \
-		else \
-			echo "✗ $$GOBIN is NOT in your PATH"; \
-			echo ""; \
-			read -p "Would you like to add it? (y/n) " -n 1 -r; \
-			echo ""; \
-			if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-				SHELL_RC=""; \
-				if [ -f ~/.zshrc ]; then \
-					SHELL_RC=~/.zshrc; \
-				elif [ -f ~/.bash_profile ]; then \
-					SHELL_RC=~/.bash_profile; \
-				elif [ -f ~/.bashrc ]; then \
-					SHELL_RC=~/.bashrc; \
-				fi; \
-				if [ -z "$$SHELL_RC" ]; then \
-					echo "Could not find shell config file. Please add manually:"; \
-					echo "  export PATH=\$$PATH:$$GOBIN"; \
-				else \
-					if ! grep -q "$$GOBIN" "$$SHELL_RC"; then \
-						echo "export PATH=\$$PATH:$$GOBIN" >> "$$SHELL_RC"; \
-						echo "✓ Added to $$SHELL_RC"; \
-						echo ""; \
-						echo "Reload your shell:"; \
-						echo "  source $$SHELL_RC"; \
-					else \
-						echo "✓ Already configured in $$SHELL_RC"; \
-					fi; \
-				fi; \
-			else \
-				echo ""; \
-				echo "To use conductor globally, add this to your shell config:"; \
-				echo "  export PATH=\$$PATH:$$GOBIN"; \
-				echo ""; \
-				echo "Or use the full path: $$GOBIN/$(BINARY_NAME)"; \
-			fi; \
-		fi; \
-	'
-
-## fmt: Format code with gofmt
+# Format all Go code
 fmt:
 	@echo "Formatting code..."
-	$(GOFMT) ./...
-	@echo "Format complete"
+	$(GO) fmt ./...
+	@echo "Code formatted"
 
-## vet: Run go vet
-vet:
-	@echo "Running go vet..."
-	$(GOVET) ./...
-	@echo "Vet complete"
-
-## lint: Run golangci-lint (if installed)
+# Run linter (requires golangci-lint)
 lint:
-	@echo "Running golangci-lint..."
-	@which golangci-lint > /dev/null || (echo "golangci-lint not installed. Install: https://golangci-lint.run/usage/install/" && exit 1)
+	@echo "Running linter..."
+	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not installed. Install with: brew install golangci-lint"; exit 1; }
 	golangci-lint run
-	@echo "Lint complete"
 
-## tidy: Tidy go modules
-tidy:
-	@echo "Tidying go modules..."
-	$(GOMOD) tidy
-	@echo "Tidy complete"
+# Run conductor from source
+run:
+	$(GO) run ./cmd/conductor
 
-## check: Run fmt, vet, and test
-check: fmt vet test
-	@echo "All checks passed!"
+# Show validate command help
+validate:
+	$(GO) run ./cmd/conductor validate --help
 
-## deps: Download dependencies
-deps:
-	@echo "Downloading dependencies..."
-	$(GOMOD) download
-	@echo "Dependencies downloaded"
+# Learning system commands
+learning-stats:
+	$(GO) run ./cmd/conductor learning stats
+
+learning-export:
+	$(GO) run ./cmd/conductor learning export
+
+learning-clear:
+	$(GO) run ./cmd/conductor learning clear
+
+# Clean build artifacts
+clean:
+	@echo "Cleaning up..."
+	rm -f $(BINARY_NAME)
+	rm -f coverage.out
+	@echo "Cleaned"
