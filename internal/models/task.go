@@ -20,6 +20,15 @@ type Task struct {
 	CompletedAt   *time.Time             // Timestamp when task was completed (nil if not completed)
 	SourceFile    string                 // Source plan file this task originates from (for multi-file plans)
 	Metadata      map[string]interface{} // Additional metadata for hooks and extensions
+
+	// Execution metadata for enhanced console output
+	ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`
+	ExecutionEndTime   time.Time     `json:"execution_end_time,omitempty" yaml:"execution_end_time,omitempty"`
+	ExecutionDuration  time.Duration `json:"execution_duration,omitempty" yaml:"execution_duration,omitempty"`
+	ExecutedBy         string        `json:"executed_by,omitempty" yaml:"executed_by,omitempty"` // Agent name
+	FilesModified      int           `json:"files_modified,omitempty" yaml:"files_modified,omitempty"`
+	FilesCreated       int           `json:"files_created,omitempty" yaml:"files_created,omitempty"`
+	FilesDeleted       int           `json:"files_deleted,omitempty" yaml:"files_deleted,omitempty"`
 }
 
 // Validate checks if the task has all required fields
@@ -45,6 +54,41 @@ func (t *Task) IsCompleted() bool {
 // (i.e., it's already completed or marked as skipped)
 func (t *Task) CanSkip() bool {
 	return t.Status == "completed" || t.Status == "skipped"
+}
+
+// CalculateDuration computes the duration between ExecutionStartTime and ExecutionEndTime
+// Returns 0 if either timestamp is zero, or if end time is before start time
+func (t *Task) CalculateDuration() time.Duration {
+	if t.ExecutionStartTime.IsZero() || t.ExecutionEndTime.IsZero() {
+		return 0
+	}
+	duration := t.ExecutionEndTime.Sub(t.ExecutionStartTime)
+	// Return negative durations as-is (don't clamp to 0)
+	return duration
+}
+
+// RecordFileOperation increments the appropriate file operation counter
+// Recognizes "modified", "created", and "deleted" operations
+// Unknown operations are ignored
+func (t *Task) RecordFileOperation(operation string) {
+	switch operation {
+	case "modified":
+		t.FilesModified++
+	case "created":
+		t.FilesCreated++
+	case "deleted":
+		t.FilesDeleted++
+	}
+}
+
+// TotalFileOperations returns the sum of all file operations
+func (t *Task) TotalFileOperations() int {
+	return t.FilesModified + t.FilesCreated + t.FilesDeleted
+}
+
+// GetFormattedDuration returns the ExecutionDuration in human-readable format
+func (t *Task) GetFormattedDuration() string {
+	return t.ExecutionDuration.String()
 }
 
 // HasCyclicDependencies detects circular dependencies in a list of tasks
