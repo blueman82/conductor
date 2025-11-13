@@ -23,9 +23,132 @@ type TaskResult struct {
 
 // ExecutionResult represents the aggregate result of executing a plan
 type ExecutionResult struct {
-	TotalTasks  int           // Total number of tasks
-	Completed   int           // Number of completed tasks
-	Failed      int           // Number of failed tasks
-	Duration    time.Duration // Total execution time
-	FailedTasks []TaskResult  // Details of failed tasks
+	TotalTasks      int                `json:"total_tasks" yaml:"total_tasks"`           // Total number of tasks
+	Completed       int                `json:"completed" yaml:"completed"`               // Number of completed tasks
+	Failed          int                `json:"failed" yaml:"failed"`                     // Number of failed tasks
+	Duration        time.Duration      `json:"duration" yaml:"duration"`                 // Total execution time
+	FailedTasks     []TaskResult       `json:"failed_tasks" yaml:"failed_tasks"`         // Details of failed tasks
+	StatusBreakdown map[string]int     `json:"status_breakdown" yaml:"status_breakdown"` // Count by QC status (GREEN/YELLOW/RED)
+	AgentUsage      map[string]int     `json:"agent_usage" yaml:"agent_usage"`           // Count by agent name
+	TotalFiles      int                `json:"total_files" yaml:"total_files"`           // Count of unique files modified
+	AvgTaskDuration time.Duration      `json:"avg_task_duration" yaml:"avg_task_duration"` // Average duration per task
+}
+
+// NewExecutionResult creates a new ExecutionResult with calculated metrics
+func NewExecutionResult(results []TaskResult, success bool, totalDuration time.Duration) *ExecutionResult {
+	er := &ExecutionResult{
+		TotalTasks:      len(results),
+		Duration:        totalDuration,
+		FailedTasks:     []TaskResult{},
+		StatusBreakdown: make(map[string]int),
+		AgentUsage:      make(map[string]int),
+	}
+
+	// Initialize all status keys to ensure they exist even with zero values
+	er.StatusBreakdown[StatusGreen] = 0
+	er.StatusBreakdown[StatusYellow] = 0
+	er.StatusBreakdown[StatusRed] = 0
+
+	// Track unique files using a map (set)
+	uniqueFiles := make(map[string]bool)
+
+	// Process all results to calculate metrics
+	for _, result := range results {
+		// Count statuses
+		if result.Status != "" {
+			er.StatusBreakdown[result.Status]++
+		}
+
+		// Track agent usage
+		if result.Task.Agent != "" {
+			er.AgentUsage[result.Task.Agent]++
+		} else {
+			// Still count tasks with no agent
+			er.AgentUsage[""]++
+		}
+
+		// Collect unique files
+		for _, file := range result.Task.Files {
+			uniqueFiles[file] = true
+		}
+
+		// Track failed tasks
+		if result.Status == StatusRed || result.Status == StatusFailed {
+			er.Failed++
+			er.FailedTasks = append(er.FailedTasks, result)
+		} else {
+			er.Completed++
+		}
+	}
+
+	// Calculate total unique files
+	er.TotalFiles = len(uniqueFiles)
+
+	// Calculate average task duration
+	if len(results) > 0 {
+		totalDur := time.Duration(0)
+		for _, result := range results {
+			totalDur += result.Duration
+		}
+		er.AvgTaskDuration = totalDur / time.Duration(len(results))
+	}
+
+	// Remove empty agent entry if it only has zero value
+	if er.AgentUsage[""] == 0 {
+		delete(er.AgentUsage, "")
+	}
+
+	return er
+}
+
+// CalculateMetrics updates the result with calculated metrics (used for existing results)
+func (er *ExecutionResult) CalculateMetrics(results []TaskResult) {
+	// Clear and reinitialize maps
+	er.StatusBreakdown = make(map[string]int)
+	er.AgentUsage = make(map[string]int)
+
+	// Initialize all status keys
+	er.StatusBreakdown[StatusGreen] = 0
+	er.StatusBreakdown[StatusYellow] = 0
+	er.StatusBreakdown[StatusRed] = 0
+
+	uniqueFiles := make(map[string]bool)
+	er.Completed = 0
+	er.Failed = 0
+
+	for _, result := range results {
+		// Count statuses
+		if result.Status != "" {
+			er.StatusBreakdown[result.Status]++
+		}
+
+		// Track agent usage
+		if result.Task.Agent != "" {
+			er.AgentUsage[result.Task.Agent]++
+		}
+
+		// Collect unique files
+		for _, file := range result.Task.Files {
+			uniqueFiles[file] = true
+		}
+
+		// Track completed/failed
+		if result.Status == StatusRed || result.Status == StatusFailed {
+			er.Failed++
+		} else {
+			er.Completed++
+		}
+	}
+
+	// Calculate total unique files
+	er.TotalFiles = len(uniqueFiles)
+
+	// Calculate average task duration
+	if len(results) > 0 {
+		totalDur := time.Duration(0)
+		for _, result := range results {
+			totalDur += result.Duration
+		}
+		er.AvgTaskDuration = totalDur / time.Duration(len(results))
+	}
 }
