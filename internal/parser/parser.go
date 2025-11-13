@@ -238,6 +238,31 @@ func parseFile(path string) (*models.Plan, error) {
 	return plan, nil
 }
 
+// ApplyRetryOnRedFallback applies fallback logic for retry_on_red configuration.
+// Fallback chain (in order of precedence):
+// 1. Use plan.QualityControl.RetryOnRed if explicitly set (non-zero)
+// 2. Fall back to configMinFailures if provided (non-zero)
+// 3. Fall back to default value of 2
+//
+// This ensures plans without retry_on_red specified get sensible defaults.
+func ApplyRetryOnRedFallback(plan *models.Plan, configMinFailures int) {
+	if plan == nil {
+		return
+	}
+
+	// If retry_on_red is already set (non-zero), use it as-is
+	if plan.QualityControl.RetryOnRed != 0 {
+		return
+	}
+
+	// Apply fallback chain: config value -> default of 2
+	if configMinFailures > 0 {
+		plan.QualityControl.RetryOnRed = configMinFailures
+	} else {
+		plan.QualityControl.RetryOnRed = 2 // Default retry count
+	}
+}
+
 // MergePlans combines multiple plans into a single plan
 // while preserving all task dependencies.
 func MergePlans(plans ...*models.Plan) (*models.Plan, error) {

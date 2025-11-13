@@ -1173,3 +1173,173 @@ Test task description.`
 		t.Errorf("ParseFile() inconsistent FilePath: first=%q, second=%q", plan.FilePath, plan2.FilePath)
 	}
 }
+
+// TestApplyRetryOnRedFallback tests the retry_on_red fallback logic
+func TestApplyRetryOnRedFallback(t *testing.T) {
+	tests := []struct {
+		name               string
+		planRetryOnRed     int
+		configMinFailures  int
+		expectedRetryOnRed int
+		description        string
+	}{
+		{
+			name:               "plan has explicit value - use it",
+			planRetryOnRed:     5,
+			configMinFailures:  3,
+			expectedRetryOnRed: 5,
+			description:        "When plan explicitly sets retry_on_red, use that value (no fallback)",
+		},
+		{
+			name:               "plan unset, config has value - use config",
+			planRetryOnRed:     0,
+			configMinFailures:  3,
+			expectedRetryOnRed: 3,
+			description:        "When plan doesn't set retry_on_red, fall back to config.learning.min_failures_before_adapt",
+		},
+		{
+			name:               "plan unset, config unset - use default",
+			planRetryOnRed:     0,
+			configMinFailures:  0,
+			expectedRetryOnRed: 2,
+			description:        "When both plan and config are unset, use default value of 2",
+		},
+		{
+			name:               "plan has explicit zero - should fallback",
+			planRetryOnRed:     0,
+			configMinFailures:  5,
+			expectedRetryOnRed: 5,
+			description:        "Zero is treated as unset, so fallback applies",
+		},
+		{
+			name:               "config has negative value - use default",
+			planRetryOnRed:     0,
+			configMinFailures:  -1,
+			expectedRetryOnRed: 2,
+			description:        "Negative config values are treated as invalid, use default",
+		},
+		{
+			name:               "plan has 1, config has 10 - use plan",
+			planRetryOnRed:     1,
+			configMinFailures:  10,
+			expectedRetryOnRed: 1,
+			description:        "Plan value takes precedence even if smaller than config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := &models.Plan{
+				QualityControl: models.QualityControlConfig{
+					RetryOnRed: tt.planRetryOnRed,
+				},
+			}
+
+			ApplyRetryOnRedFallback(plan, tt.configMinFailures)
+
+			if plan.QualityControl.RetryOnRed != tt.expectedRetryOnRed {
+				t.Errorf("Expected RetryOnRed=%d, got %d\nDescription: %s",
+					tt.expectedRetryOnRed, plan.QualityControl.RetryOnRed, tt.description)
+			}
+		})
+	}
+}
+
+// TestApplyRetryOnRedFallback_NilPlan tests that ApplyRetryOnRedFallback doesn't panic with nil plan
+func TestApplyRetryOnRedFallback_NilPlan(t *testing.T) {
+	// Should not panic with nil plan
+	ApplyRetryOnRedFallback(nil, 3)
+}
+
+// TestApplyRetryOnRedFallback_PreservesOtherFields tests that fallback logic doesn't modify other fields
+func TestApplyRetryOnRedFallback_PreservesOtherFields(t *testing.T) {
+	plan := &models.Plan{
+		Name:         "Test Plan",
+		DefaultAgent: "godev",
+		QualityControl: models.QualityControlConfig{
+			Enabled:     true,
+			ReviewAgent: "quality-control",
+			RetryOnRed:  0, // Unset, should be filled in
+		},
+	}
+
+	ApplyRetryOnRedFallback(plan, 4)
+
+	// Check that fallback was applied
+	if plan.QualityControl.RetryOnRed != 4 {
+		t.Errorf("Expected RetryOnRed=4, got %d", plan.QualityControl.RetryOnRed)
+	}
+
+	// Check that other fields are preserved
+	if plan.Name != "Test Plan" {
+		t.Errorf("Plan name was modified: expected 'Test Plan', got '%s'", plan.Name)
+	}
+	if plan.DefaultAgent != "godev" {
+		t.Errorf("DefaultAgent was modified: expected 'godev', got '%s'", plan.DefaultAgent)
+	}
+	if !plan.QualityControl.Enabled {
+		t.Error("QualityControl.Enabled was modified")
+	}
+	if plan.QualityControl.ReviewAgent != "quality-control" {
+		t.Errorf("ReviewAgent was modified: expected 'quality-control', got '%s'", plan.QualityControl.ReviewAgent)
+	}
+}
+
+// TestApplyRetryOnRedFallback_Integration tests real-world fallback scenarios
+func TestApplyRetryOnRedFallback_Integration(t *testing.T) {
+	// Simulate real-world scenarios
+
+	t.Run("plan with explicit retry_on_red=3", func(t *testing.T) {
+		plan := &models.Plan{
+			QualityControl: models.QualityControlConfig{
+				Enabled:     true,
+				ReviewAgent: "quality-control",
+				RetryOnRed:  3, // Explicitly set
+			},
+		}
+
+		// Config has min_failures_before_adapt=5
+		ApplyRetryOnRedFallback(plan, 5)
+
+		// Should use plan's explicit value, not config
+		if plan.QualityControl.RetryOnRed != 3 {
+			t.Errorf("Expected plan's explicit value 3, got %d", plan.QualityControl.RetryOnRed)
+		}
+	})
+
+	t.Run("plan without retry_on_red, config has min_failures=5", func(t *testing.T) {
+		plan := &models.Plan{
+			QualityControl: models.QualityControlConfig{
+				Enabled:     true,
+				ReviewAgent: "quality-control",
+				RetryOnRed:  0, // Not set
+			},
+		}
+
+		// Config has min_failures_before_adapt=5
+		ApplyRetryOnRedFallback(plan, 5)
+
+		// Should use config value as fallback
+		if plan.QualityControl.RetryOnRed != 5 {
+			t.Errorf("Expected config fallback value 5, got %d", plan.QualityControl.RetryOnRed)
+		}
+	})
+
+	t.Run("plan without retry_on_red, no config - use default", func(t *testing.T) {
+		plan := &models.Plan{
+			QualityControl: models.QualityControlConfig{
+				Enabled:     true,
+				ReviewAgent: "quality-control",
+				RetryOnRed:  0, // Not set
+			},
+		}
+
+		// Config doesn't have min_failures_before_adapt (0)
+		ApplyRetryOnRedFallback(plan, 0)
+
+		// Should use default value of 2
+		if plan.QualityControl.RetryOnRed != 2 {
+			t.Errorf("Expected default value 2, got %d", plan.QualityControl.RetryOnRed)
+		}
+	})
+}

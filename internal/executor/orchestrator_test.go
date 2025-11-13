@@ -51,6 +51,10 @@ func (m *mockLogger) LogTaskResult(result models.TaskResult) error {
 	return nil
 }
 
+func (m *mockLogger) LogProgress(results []models.TaskResult) {
+	// no-op for mock
+}
+
 func (m *mockLogger) LogSummary(result models.ExecutionResult) {
 	m.summaryCalls = append(m.summaryCalls, result)
 }

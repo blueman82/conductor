@@ -143,6 +143,7 @@ type DefaultTaskExecutor struct {
 	SessionID       string                   // Session ID for learning tracking
 	RunNumber       int                      // Run number for learning tracking
 	metrics         *learning.PatternMetrics // Pattern detection metrics (optional)
+	AutoAdaptAgent  bool                     // Enable automatic agent adaptation
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -216,12 +217,18 @@ func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Tas
 		return nil
 	}
 
-	// Adapt agent if recommended and suggestion available
-	if analysis.ShouldTryDifferentAgent && analysis.SuggestedAgent != "" {
+	// Adapt agent if auto-adaptation is enabled and recommended
+	if te.AutoAdaptAgent && analysis.ShouldTryDifferentAgent && analysis.SuggestedAgent != "" {
 		// Only switch if different from current agent
 		if task.Agent != analysis.SuggestedAgent {
+			// Store original agent for logging
+			originalAgent := task.Agent
+			if originalAgent == "" {
+				originalAgent = "default"
+			}
+
 			// Log agent switch for observability
-			// In production: log.Info("Switching agent: %s → %s", task.Agent, analysis.SuggestedAgent)
+			// In production: log.Info("Switching agent: %s → %s based on failure patterns", originalAgent, analysis.SuggestedAgent)
 			task.Agent = analysis.SuggestedAgent
 		}
 	}

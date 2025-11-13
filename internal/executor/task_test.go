@@ -2716,3 +2716,410 @@ func TestPostTaskHook_MissingMetadata(t *testing.T) {
 		t.Errorf("expected empty or nil FailurePatterns for missing metadata, got %v", exec.FailurePatterns)
 	}
 }
+
+// TestAutoAdaptAgent_Enabled verifies agent switching when auto_adapt_agent is enabled.
+func TestAutoAdaptAgent_Enabled(t *testing.T) {
+	// Mock learning store with failure analysis recommending agent switch
+	mockStore := &MockLearningStore{
+		AnalysisResult: &learning.FailureAnalysis{
+			TotalAttempts:           3,
+			FailedAttempts:          2,
+			TriedAgents:             []string{"default"},
+			CommonPatterns:          []string{"compilation_error"},
+			SuggestedAgent:          "go-expert",
+			SuggestedApproach:       "Try using go-expert for better Go compilation",
+			ShouldTryDifferentAgent: true,
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"fixed with go-expert"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Enable auto-adapt agent
+	executor.AutoAdaptAgent = true
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-123"
+	executor.RunNumber = 1
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "default",
+		Prompt: "Build Go project",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was switched to suggested agent
+	if result.Task.Agent != "go-expert" {
+		t.Errorf("expected agent 'go-expert', got %q", result.Task.Agent)
+	}
+
+	// Verify the invoker received the task with switched agent
+	if len(invoker.calls) != 1 {
+		t.Fatalf("expected 1 invocation, got %d", len(invoker.calls))
+	}
+	if invoker.calls[0].Agent != "go-expert" {
+		t.Errorf("expected invocation with agent 'go-expert', got %q", invoker.calls[0].Agent)
+	}
+}
+
+// TestAutoAdaptAgent_Disabled verifies agent does NOT switch when auto_adapt_agent is disabled.
+func TestAutoAdaptAgent_Disabled(t *testing.T) {
+	// Mock learning store with failure analysis recommending agent switch
+	mockStore := &MockLearningStore{
+		AnalysisResult: &learning.FailureAnalysis{
+			TotalAttempts:           3,
+			FailedAttempts:          2,
+			TriedAgents:             []string{"default"},
+			CommonPatterns:          []string{"compilation_error"},
+			SuggestedAgent:          "go-expert",
+			SuggestedApproach:       "Try using go-expert for better Go compilation",
+			ShouldTryDifferentAgent: true,
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"completed with default"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Disable auto-adapt agent (this is the default)
+	executor.AutoAdaptAgent = false
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-123"
+	executor.RunNumber = 1
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "default",
+		Prompt: "Build Go project",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was NOT switched (should remain "default")
+	if result.Task.Agent != "default" {
+		t.Errorf("expected agent 'default', got %q", result.Task.Agent)
+	}
+
+	// Verify the invoker received the task with original agent
+	if len(invoker.calls) != 1 {
+		t.Fatalf("expected 1 invocation, got %d", len(invoker.calls))
+	}
+	if invoker.calls[0].Agent != "default" {
+		t.Errorf("expected invocation with agent 'default', got %q", invoker.calls[0].Agent)
+	}
+}
+
+// TestAutoAdaptAgent_NoSuggestedAgent verifies no switch when SuggestedAgent is empty.
+func TestAutoAdaptAgent_NoSuggestedAgent(t *testing.T) {
+	// Mock learning store with failure analysis but no suggested agent
+	mockStore := &MockLearningStore{
+		AnalysisResult: &learning.FailureAnalysis{
+			TotalAttempts:           3,
+			FailedAttempts:          2,
+			TriedAgents:             []string{"default"},
+			CommonPatterns:          []string{"compilation_error"},
+			SuggestedAgent:          "", // Empty - no suggestion available
+			SuggestedApproach:       "No alternative agent available",
+			ShouldTryDifferentAgent: false,
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Enable auto-adapt agent
+	executor.AutoAdaptAgent = true
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-123"
+	executor.RunNumber = 1
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "default",
+		Prompt: "Build Go project",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was NOT switched (SuggestedAgent is empty)
+	if result.Task.Agent != "default" {
+		t.Errorf("expected agent 'default', got %q", result.Task.Agent)
+	}
+}
+
+// TestAutoAdaptAgent_ShouldNotTryDifferent verifies no switch when ShouldTryDifferentAgent is false.
+func TestAutoAdaptAgent_ShouldNotTryDifferent(t *testing.T) {
+	// Mock learning store with suggested agent but ShouldTryDifferentAgent=false
+	mockStore := &MockLearningStore{
+		AnalysisResult: &learning.FailureAnalysis{
+			TotalAttempts:           1,
+			FailedAttempts:          1,
+			TriedAgents:             []string{"default"},
+			CommonPatterns:          []string{"compilation_error"},
+			SuggestedAgent:          "go-expert",
+			SuggestedApproach:       "Not enough failures to switch",
+			ShouldTryDifferentAgent: false, // Don't switch yet
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Enable auto-adapt agent
+	executor.AutoAdaptAgent = true
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-123"
+	executor.RunNumber = 1
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "default",
+		Prompt: "Build Go project",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was NOT switched (ShouldTryDifferentAgent is false)
+	if result.Task.Agent != "default" {
+		t.Errorf("expected agent 'default', got %q", result.Task.Agent)
+	}
+}
+
+// TestAutoAdaptAgent_SameAgent verifies no switch when suggested agent equals current agent.
+func TestAutoAdaptAgent_SameAgent(t *testing.T) {
+	// Mock learning store suggesting the same agent we're already using
+	mockStore := &MockLearningStore{
+		AnalysisResult: &learning.FailureAnalysis{
+			TotalAttempts:           2,
+			FailedAttempts:          2,
+			TriedAgents:             []string{"go-expert"},
+			CommonPatterns:          []string{"compilation_error"},
+			SuggestedAgent:          "go-expert", // Same as current
+			SuggestedApproach:       "Continue with go-expert",
+			ShouldTryDifferentAgent: true,
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Enable auto-adapt agent
+	executor.AutoAdaptAgent = true
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-123"
+	executor.RunNumber = 1
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "go-expert", // Already using suggested agent
+		Prompt: "Build Go project",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent remains the same
+	if result.Task.Agent != "go-expert" {
+		t.Errorf("expected agent 'go-expert', got %q", result.Task.Agent)
+	}
+}
+
+// TestAutoAdaptAgent_NoLearningStore verifies graceful handling when learning store is nil.
+func TestAutoAdaptAgent_NoLearningStore(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"completed"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Enable auto-adapt agent but no learning store
+	executor.AutoAdaptAgent = true
+	executor.LearningStore = nil
+	executor.PlanFile = "test-plan.md"
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "default",
+		Prompt: "Build Go project",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent remains unchanged (no store to query)
+	if result.Task.Agent != "default" {
+		t.Errorf("expected agent 'default', got %q", result.Task.Agent)
+	}
+}
+
+// TestAutoAdaptAgent_EmptyAgentToSuggested verifies switching from empty agent to suggested.
+func TestAutoAdaptAgent_EmptyAgentToSuggested(t *testing.T) {
+	// Mock learning store recommending an agent when task has no agent
+	mockStore := &MockLearningStore{
+		AnalysisResult: &learning.FailureAnalysis{
+			TotalAttempts:           2,
+			FailedAttempts:          2,
+			TriedAgents:             []string{},
+			CommonPatterns:          []string{"syntax_error"},
+			SuggestedAgent:          "syntax-expert",
+			SuggestedApproach:       "Use syntax-expert for syntax issues",
+			ShouldTryDifferentAgent: true,
+		},
+	}
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"fixed syntax"}`,
+		ExitCode: 0,
+	})
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Enable auto-adapt agent
+	executor.AutoAdaptAgent = true
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-123"
+	executor.RunNumber = 1
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "", // No agent set initially
+		Prompt: "Fix syntax errors",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was switched to suggested agent
+	if result.Task.Agent != "syntax-expert" {
+		t.Errorf("expected agent 'syntax-expert', got %q", result.Task.Agent)
+	}
+}

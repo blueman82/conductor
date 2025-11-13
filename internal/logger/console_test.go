@@ -824,18 +824,18 @@ func TestConsoleLogger_LogProgress_BasicDisplay(t *testing.T) {
 	logger := NewConsoleLogger(buf, "info")
 
 	// Create 4 completed tasks out of 8 total
-	tasks := []models.Task{
-		{Number: "1", Name: "Task 1", Status: "completed"},
-		{Number: "2", Name: "Task 2", Status: "completed"},
-		{Number: "3", Name: "Task 3", Status: "completed"},
-		{Number: "4", Name: "Task 4", Status: "completed"},
-		{Number: "5", Name: "Task 5", Status: "pending"},
-		{Number: "6", Name: "Task 6", Status: "pending"},
-		{Number: "7", Name: "Task 7", Status: "pending"},
-		{Number: "8", Name: "Task 8", Status: "pending"},
+	results := []models.TaskResult{
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}},
+		{Task: models.Task{Number: "3", Name: "Task 3", Status: "completed"}},
+		{Task: models.Task{Number: "4", Name: "Task 4", Status: "completed"}},
+		{Task: models.Task{Number: "5", Name: "Task 5", Status: "pending"}},
+		{Task: models.Task{Number: "6", Name: "Task 6", Status: "pending"}},
+		{Task: models.Task{Number: "7", Name: "Task 7", Status: "pending"}},
+		{Task: models.Task{Number: "8", Name: "Task 8", Status: "pending"}},
 	}
 
-	logger.LogProgress(tasks)
+	logger.LogProgress(results)
 
 	output := buf.String()
 
@@ -867,44 +867,56 @@ func TestConsoleLogger_LogProgress_WithAverageDuration(t *testing.T) {
 
 	// Create tasks with specific durations: 2s, 3s, 4s, 5s (avg: 3.5s)
 	now := time.Now()
-	tasks := []models.Task{
+	results := []models.TaskResult{
 		{
-			Number: "1", Name: "Task 1", Status: "completed",
-			StartedAt:   nil,
-			CompletedAt: &now,
+			Task: models.Task{
+				Number: "1", Name: "Task 1", Status: "completed",
+				StartedAt:   nil,
+				CompletedAt: &now,
+			},
 		},
 		{
-			Number: "2", Name: "Task 2", Status: "completed",
-			StartedAt:   nil,
-			CompletedAt: &now,
+			Task: models.Task{
+				Number: "2", Name: "Task 2", Status: "completed",
+				StartedAt:   nil,
+				CompletedAt: &now,
+			},
 		},
 		{
-			Number: "3", Name: "Task 3", Status: "completed",
-			StartedAt:   nil,
-			CompletedAt: &now,
+			Task: models.Task{
+				Number: "3", Name: "Task 3", Status: "completed",
+				StartedAt:   nil,
+				CompletedAt: &now,
+			},
 		},
 		{
-			Number: "4", Name: "Task 4", Status: "completed",
-			StartedAt:   nil,
-			CompletedAt: &now,
+			Task: models.Task{
+				Number: "4", Name: "Task 4", Status: "completed",
+				StartedAt:   nil,
+				CompletedAt: &now,
+			},
 		},
 		{
-			Number: "5", Name: "Task 5", Status: "pending",
+			Task: models.Task{
+				Number: "5", Name: "Task 5", Status: "pending",
+			},
 		},
 		{
-			Number: "6", Name: "Task 6", Status: "pending",
+			Task: models.Task{
+				Number: "6", Name: "Task 6", Status: "pending",
+			},
 		},
 	}
 
 	// Add durations to tasks (2s, 3s, 4s, 5s)
-	for i := range tasks {
-		if tasks[i].Status == "completed" {
+	for i := range results {
+		if results[i].Task.Status == "completed" {
 			startTime := now.Add(-time.Duration((i + 2) * int(time.Second)))
-			tasks[i].StartedAt = &startTime
+			results[i].Task.StartedAt = &startTime
 		}
 	}
 
-	logger.LogProgress(tasks)
+	logger.LogProgress(results)
 
 	output := buf.String()
 
@@ -929,10 +941,10 @@ func TestConsoleLogger_LogProgress_ZeroTasks(t *testing.T) {
 	logger := NewConsoleLogger(buf, "info")
 
 	// Empty task list
-	tasks := []models.Task{}
+	results := []models.TaskResult{}
 
 	// Should not panic
-	logger.LogProgress(tasks)
+	logger.LogProgress(results)
 
 	output := buf.String()
 
@@ -948,18 +960,18 @@ func TestConsoleLogger_LogProgress_AllTasksComplete(t *testing.T) {
 	logger := NewConsoleLogger(buf, "info")
 
 	// All 8 tasks completed
-	tasks := []models.Task{
-		{Number: "1", Name: "Task 1", Status: "completed"},
-		{Number: "2", Name: "Task 2", Status: "completed"},
-		{Number: "3", Name: "Task 3", Status: "completed"},
-		{Number: "4", Name: "Task 4", Status: "completed"},
-		{Number: "5", Name: "Task 5", Status: "completed"},
-		{Number: "6", Name: "Task 6", Status: "completed"},
-		{Number: "7", Name: "Task 7", Status: "completed"},
-		{Number: "8", Name: "Task 8", Status: "completed"},
+	results := []models.TaskResult{
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}},
+		{Task: models.Task{Number: "3", Name: "Task 3", Status: "completed"}},
+		{Task: models.Task{Number: "4", Name: "Task 4", Status: "completed"}},
+		{Task: models.Task{Number: "5", Name: "Task 5", Status: "completed"}},
+		{Task: models.Task{Number: "6", Name: "Task 6", Status: "completed"}},
+		{Task: models.Task{Number: "7", Name: "Task 7", Status: "completed"}},
+		{Task: models.Task{Number: "8", Name: "Task 8", Status: "completed"}},
 	}
 
-	logger.LogProgress(tasks)
+	logger.LogProgress(results)
 
 	output := buf.String()
 
@@ -981,12 +993,12 @@ func TestConsoleLogger_LogProgress_ColorOutput(t *testing.T) {
 		logger := NewConsoleLogger(buf, "info")
 		logger.colorOutput = true // Force color output for testing
 
-		tasks := []models.Task{
-			{Number: "1", Name: "Task 1", Status: "completed"},
-			{Number: "2", Name: "Task 2", Status: "pending"},
+		results := []models.TaskResult{
+			{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+			{Task: models.Task{Number: "2", Name: "Task 2", Status: "pending"}},
 		}
 
-		logger.LogProgress(tasks)
+		logger.LogProgress(results)
 
 		output := buf.String()
 
@@ -1002,12 +1014,12 @@ func TestConsoleLogger_LogProgress_ColorOutput(t *testing.T) {
 		logger := NewConsoleLogger(buf, "info")
 		logger.colorOutput = false // Disable color for testing
 
-		tasks := []models.Task{
-			{Number: "1", Name: "Task 1", Status: "completed"},
-			{Number: "2", Name: "Task 2", Status: "pending"},
+		results := []models.TaskResult{
+			{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+			{Task: models.Task{Number: "2", Name: "Task 2", Status: "pending"}},
 		}
 
-		logger.LogProgress(tasks)
+		logger.LogProgress(results)
 
 		output := buf.String()
 
@@ -1032,12 +1044,12 @@ func TestConsoleLogger_LogProgress_TimestampPrefix(t *testing.T) {
 	buf := &bytes.Buffer{}
 	logger := NewConsoleLogger(buf, "info")
 
-	tasks := []models.Task{
-		{Number: "1", Name: "Task 1", Status: "completed"},
-		{Number: "2", Name: "Task 2", Status: "pending"},
+	results := []models.TaskResult{
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+		{Task: models.Task{Number: "2", Name: "Task 2", Status: "pending"}},
 	}
 
-	logger.LogProgress(tasks)
+	logger.LogProgress(results)
 
 	output := buf.String()
 

@@ -336,6 +336,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Apply retry_on_red fallback logic: plan value -> config value -> default 2
+	// This ensures plans without explicit retry_on_red get sensible defaults
+	parser.ApplyRetryOnRedFallback(plan, cfg.Learning.MinFailuresBeforeAdapt)
+
 	// Build dependency graph and validate
 	fmt.Fprintf(cmd.OutOrStdout(), "Validating dependencies...\n")
 	graph := executor.BuildDependencyGraph(plan.Tasks)
@@ -459,6 +463,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.PlanFile = planFile
 	taskExec.SessionID = sessionID
 	taskExec.RunNumber = 1 // Increment per plan re-run
+	taskExec.AutoAdaptAgent = cfg.Learning.AutoAdaptAgent
 
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithConfig(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
