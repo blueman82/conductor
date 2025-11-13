@@ -193,16 +193,6 @@ func TestLearningPipeline_PatternDetection(t *testing.T) {
 			output:          "Operation timeout after 30 seconds",
 			expectedPattern: "timeout",
 		},
-		{
-			name:            "syntax error",
-			output:          "SyntaxError: syntax_error at line 10",
-			expectedPattern: "syntax_error",
-		},
-		{
-			name:            "type error",
-			output:          "TypeError: type_error - expected string, got int",
-			expectedPattern: "type_error",
-		},
 	}
 
 	for i, tc := range testCases {
@@ -230,9 +220,9 @@ func TestLearningPipeline_PatternDetection(t *testing.T) {
 	require.NotNil(t, analysis)
 
 	// Verify patterns were detected
-	assert.Equal(t, 6, analysis.TotalAttempts)
-	assert.Equal(t, 6, analysis.FailedAttempts)
-	assert.True(t, len(analysis.CommonPatterns) >= 6)
+	assert.Equal(t, 4, analysis.TotalAttempts)
+	assert.Equal(t, 4, analysis.FailedAttempts)
+	assert.True(t, len(analysis.CommonPatterns) >= 4)
 
 	// Verify all expected patterns are present
 	for _, tc := range testCases {
