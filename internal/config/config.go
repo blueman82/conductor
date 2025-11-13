@@ -127,6 +127,46 @@ func DefaultConfig() *Config {
 	}
 }
 
+// applyConsoleEnvOverrides applies environment variable overrides to console configuration
+// Environment variables take precedence over config file values
+// Recognized variables:
+//   - CONDUCTOR_CONSOLE_COLOR (enable_color)
+//   - CONDUCTOR_CONSOLE_PROGRESS_BAR (enable_progress_bar)
+//   - CONDUCTOR_CONSOLE_TASK_DETAILS (enable_task_details)
+//   - CONDUCTOR_CONSOLE_QC_FEEDBACK (enable_qc_feedback)
+//   - CONDUCTOR_CONSOLE_COMPACT (compact_mode)
+//   - CONDUCTOR_CONSOLE_AGENT_NAMES (show_agent_names)
+//   - CONDUCTOR_CONSOLE_FILE_COUNTS (show_file_counts)
+//   - CONDUCTOR_CONSOLE_DURATIONS (show_durations)
+//
+// Only "true" (lowercase) or "1" are recognized as true; all other values are false
+func applyConsoleEnvOverrides(cfg *ConsoleConfig) {
+	if val := os.Getenv("CONDUCTOR_CONSOLE_COLOR"); val != "" {
+		cfg.EnableColor = val == "true" || val == "1"
+	}
+	if val := os.Getenv("CONDUCTOR_CONSOLE_PROGRESS_BAR"); val != "" {
+		cfg.EnableProgressBar = val == "true" || val == "1"
+	}
+	if val := os.Getenv("CONDUCTOR_CONSOLE_TASK_DETAILS"); val != "" {
+		cfg.EnableTaskDetails = val == "true" || val == "1"
+	}
+	if val := os.Getenv("CONDUCTOR_CONSOLE_QC_FEEDBACK"); val != "" {
+		cfg.EnableQCFeedback = val == "true" || val == "1"
+	}
+	if val := os.Getenv("CONDUCTOR_CONSOLE_COMPACT"); val != "" {
+		cfg.CompactMode = val == "true" || val == "1"
+	}
+	if val := os.Getenv("CONDUCTOR_CONSOLE_AGENT_NAMES"); val != "" {
+		cfg.ShowAgentNames = val == "true" || val == "1"
+	}
+	if val := os.Getenv("CONDUCTOR_CONSOLE_FILE_COUNTS"); val != "" {
+		cfg.ShowFileCounts = val == "true" || val == "1"
+	}
+	if val := os.Getenv("CONDUCTOR_CONSOLE_DURATIONS"); val != "" {
+		cfg.ShowDurations = val == "true" || val == "1"
+	}
+}
+
 // LoadConfig loads configuration from the specified file path
 // If the file doesn't exist, returns default configuration without error
 // If the file exists but is malformed, returns an error
@@ -136,7 +176,8 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Check if file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// File doesn't exist, return defaults (not an error)
+		// File doesn't exist, return defaults with env overrides applied
+		applyConsoleEnvOverrides(&cfg.Console)
 		return cfg, nil
 	}
 
@@ -263,6 +304,9 @@ func LoadConfig(path string) (*Config, error) {
 			}
 		}
 	}
+
+	// Apply environment variable overrides (highest priority)
+	applyConsoleEnvOverrides(&cfg.Console)
 
 	return cfg, nil
 }
