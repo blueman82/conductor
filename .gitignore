@@ -37,9 +37,10 @@ Thumbs.db
 *.log
 logs/
 
-# Conductor home directory (but track example config)
+# Conductor home directory (but track config files)
 .conductor/
-!.conductor/config.yaml.example
+!.conductor/config.yaml         # Track actual configuration
+!.conductor/config.yaml.example # Track example template
 
 # Test learning databases
 internal/cmd/.conductor/

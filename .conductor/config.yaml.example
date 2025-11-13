@@ -47,6 +47,21 @@ skip_completed: false
 # When true, retries tasks that previously failed (default: false)
 retry_failed: false
 
+# Quality control configuration
+# Controls how tasks are reviewed and retried after execution
+quality_control:
+  # Enable or disable quality control reviews (default: true)
+  enabled: true
+
+  # Agent to use for quality control reviews (default: conductor-qc)
+  # This agent reviews task outputs and returns GREEN/RED/YELLOW verdicts
+  review_agent: conductor-qc
+
+  # Number of retries on RED verdicts (default: from plan or 2)
+  # Plans can override this with conductor.quality_control.retry_on_red
+  # If not specified in plan, falls back to config value, then default 2
+  retry_on_red: 2
+
 # ===== ADVANCED CONFIGURATION =====
 # The settings below are optional and have sensible defaults.
 # Uncomment and modify only if you need to change them.
@@ -114,3 +129,20 @@ learning:
 # learning:
 #   auto_adapt_agent: true
 #   min_failures_before_adapt: 3
+
+# Quality Control Examples
+
+# Example: Enable stricter quality control with more retries
+# quality_control:
+#   enabled: true
+#   retry_on_red: 3
+
+# Example: Use custom QC agent
+# quality_control:
+#   review_agent: custom-qc-agent
+#   retry_on_red: 2
+
+# Note: Plans can override the retry_on_red value in their frontmatter:
+# conductor:
+#   quality_control:
+#     retry_on_red: 3  # This overrides config.yaml setting
