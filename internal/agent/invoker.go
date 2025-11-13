@@ -161,12 +161,49 @@ func (inv *Invoker) InvokeWithTimeout(task models.Task, timeout time.Duration) (
 }
 
 // ParseClaudeOutput parses the JSON output from claude CLI
+// Handles both "content" and "result" fields for flexible agent response formats
 // If the output is not valid JSON, it returns the raw output as content
 func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
-	var co ClaudeOutput
-	if err := json.Unmarshal([]byte(output), &co); err != nil {
+	// First try to parse as JSON
+	var jsonMap map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &jsonMap); err != nil {
 		// If not JSON, return raw output as content
 		return &ClaudeOutput{Content: output}, nil
 	}
-	return &co, nil
+
+	// Build result with both content and error fields
+	result := &ClaudeOutput{}
+
+	// Check for "result" field (used by some agents like conductor-qc)
+	// This takes precedence as it's a custom field used by our agents
+	if resultField, ok := jsonMap["result"]; ok {
+		if resultStr, ok := resultField.(string); ok {
+			result.Content = resultStr
+			return result, nil
+		}
+	}
+
+	// Check for "content" field (standard claude CLI JSON format)
+	if content, ok := jsonMap["content"]; ok {
+		if contentStr, ok := content.(string); ok {
+			result.Content = contentStr
+		}
+	}
+
+	// Check for "error" field (only if content is empty)
+	if result.Content == "" {
+		if errField, ok := jsonMap["error"]; ok {
+			if errStr, ok := errField.(string); ok {
+				result.Error = errStr
+			}
+		}
+	}
+
+	// If we have content or error, return it
+	if result.Content != "" || result.Error != "" {
+		return result, nil
+	}
+
+	// If no recognized fields, return the JSON as-is as content
+	return &ClaudeOutput{Content: output}, nil
 }
