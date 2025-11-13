@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/spf13/cobra"
 )
@@ -49,8 +50,11 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("plan file not found: %s", absPath)
 	}
 
-	// Determine database path
-	dbPath := getLearningDBPath(absPath)
+	// Use centralized conductor home database location
+	dbPath, err := config.GetLearningDBPath()
+	if err != nil {
+		return fmt.Errorf("failed to get learning database path: %w", err)
+	}
 
 	// Check if database exists
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {

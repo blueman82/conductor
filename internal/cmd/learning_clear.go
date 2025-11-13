@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/spf13/cobra"
 )
@@ -53,6 +54,7 @@ func runClear(cmd *cobra.Command, args []string, clearAll bool, dbPathOverride s
 
 	var planFile string
 	var dbPath string
+	var err error
 
 	if clearAll {
 		// Confirm clearing all data
@@ -62,31 +64,28 @@ func runClear(cmd *cobra.Command, args []string, clearAll bool, dbPathOverride s
 			return nil
 		}
 
-		// Use override path if provided (for testing), otherwise use default
+		// Use override path if provided (for testing), otherwise use centralized location
 		if dbPathOverride != "" {
 			dbPath = dbPathOverride
 		} else {
-			// For --all, we need to determine the database path
-			// Use current directory as reference
-			cwd, err := os.Getwd()
+			// Use centralized conductor home database location
+			dbPath, err = config.GetLearningDBPath()
 			if err != nil {
-				return fmt.Errorf("get working directory: %w", err)
+				return fmt.Errorf("failed to get learning database path: %w", err)
 			}
-			dbPath = getLearningDBPath(cwd)
 		}
 	} else {
 		planFile = args[0]
 
-		// Use override path if provided (for testing), otherwise use default
+		// Use override path if provided (for testing), otherwise use centralized location
 		if dbPathOverride != "" {
 			dbPath = dbPathOverride
 		} else {
-			// Resolve plan file path and get database path
-			absPath, err := os.Getwd()
+			// Use centralized conductor home database location
+			dbPath, err = config.GetLearningDBPath()
 			if err != nil {
-				return fmt.Errorf("get working directory: %w", err)
+				return fmt.Errorf("failed to get learning database path: %w", err)
 			}
-			dbPath = getLearningDBPath(absPath)
 		}
 
 		// Confirm clearing specific plan data

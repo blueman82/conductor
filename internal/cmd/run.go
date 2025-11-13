@@ -220,7 +220,12 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Initialize learning store if enabled
 	var learningStore *learning.Store
 	if cfg.Learning.Enabled {
-		store, err := learning.NewStore(cfg.Learning.DBPath)
+		// Use centralized conductor home database location
+		dbPath, err := config.GetLearningDBPath()
+		if err != nil {
+			return fmt.Errorf("failed to get learning database path: %w", err)
+		}
+		store, err := learning.NewStore(dbPath)
 		if err != nil {
 			return fmt.Errorf("failed to initialize learning store: %w", err)
 		}

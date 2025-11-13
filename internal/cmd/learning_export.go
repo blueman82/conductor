@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/spf13/cobra"
 )
@@ -52,10 +53,23 @@ Supported formats:
 	return cmd
 }
 
-func runExport(planFile, format, output, dbPath string) error {
+func runExport(planFile, format, output, dbPathOverride string) error {
 	// Validate format
 	if format != "json" && format != "csv" {
 		return fmt.Errorf("invalid format '%s': format must be 'json' or 'csv'", format)
+	}
+
+	// Determine database path: use override if provided (for testing), otherwise use centralized location
+	var dbPath string
+	if dbPathOverride != "" {
+		dbPath = dbPathOverride
+	} else {
+		// Use centralized conductor home database location
+		var err error
+		dbPath, err = config.GetLearningDBPath()
+		if err != nil {
+			return fmt.Errorf("failed to get learning database path: %w", err)
+		}
 	}
 
 	// Initialize store

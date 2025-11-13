@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/spf13/cobra"
 )
@@ -47,8 +48,11 @@ func runStats(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("plan file not found: %s", absPath)
 	}
 
-	// Determine database path
-	dbPath := getLearningDBPath(absPath)
+	// Use centralized conductor home database location
+	dbPath, err := config.GetLearningDBPath()
+	if err != nil {
+		return fmt.Errorf("failed to get learning database path: %w", err)
+	}
 
 	// Check if database exists
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
@@ -354,12 +358,4 @@ func printStatistics(w io.Writer, stats *Statistics, planFile string) {
 	}
 
 	fmt.Fprintf(w, "\n")
-}
-
-// getLearningDBPath returns the path to the learning database for a plan file
-func getLearningDBPath(planFile string) string {
-	// Database is stored in .conductor/learning/ relative to plan file
-	planDir := filepath.Dir(planFile)
-	dbDir := filepath.Join(planDir, ".conductor", "learning")
-	return filepath.Join(dbDir, "executions.db")
 }
