@@ -500,3 +500,250 @@ func TestExecutionResult_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TestExecutionResult_MetricConsistency verifies that NewExecutionResult and CalculateMetrics
+// produce identical metric calculations from the same input data.
+// This test ensures DRY refactoring doesn't introduce behavioral differences.
+func TestExecutionResult_MetricConsistency(t *testing.T) {
+	tests := []struct {
+		name    string
+		results []TaskResult
+	}{
+		{
+			name: "mixed statuses and agents",
+			results: []TaskResult{
+				{
+					Status:   StatusGreen,
+					Duration: 2 * time.Second,
+					Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"file1.go", "file2.go"}},
+				},
+				{
+					Status:   StatusGreen,
+					Duration: 3 * time.Second,
+					Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "golang-pro", Files: []string{"file2.go", "file3.go"}},
+				},
+				{
+					Status:   StatusYellow,
+					Duration: 4 * time.Second,
+					Task:     Task{Number: "3", Name: "T3", Prompt: "test", Agent: "devops", Files: []string{"file4.yaml"}},
+				},
+				{
+					Status:   StatusRed,
+					Duration: 1 * time.Second,
+					Task:     Task{Number: "4", Name: "T4", Prompt: "test", Agent: "golang-pro", Files: []string{"file5.go"}},
+				},
+			},
+		},
+		{
+			name: "empty agents",
+			results: []TaskResult{
+				{Status: StatusGreen, Duration: 1 * time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test", Agent: "", Files: []string{"file1.go"}}},
+				{Status: StatusGreen, Duration: 2 * time.Second, Task: Task{Number: "2", Name: "T2", Prompt: "test", Agent: "", Files: []string{"file2.go"}}},
+			},
+		},
+		{
+			name: "all same status",
+			results: []TaskResult{
+				{Status: StatusGreen, Duration: 1 * time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test", Agent: "agent1"}},
+				{Status: StatusGreen, Duration: 2 * time.Second, Task: Task{Number: "2", Name: "T2", Prompt: "test", Agent: "agent1"}},
+				{Status: StatusGreen, Duration: 3 * time.Second, Task: Task{Number: "3", Name: "T3", Prompt: "test", Agent: "agent1"}},
+			},
+		},
+		{
+			name: "no files",
+			results: []TaskResult{
+				{Status: StatusGreen, Duration: 1 * time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test", Agent: "agent1", Files: []string{}}},
+				{Status: StatusYellow, Duration: 2 * time.Second, Task: Task{Number: "2", Name: "T2", Prompt: "test", Agent: "agent2", Files: nil}},
+			},
+		},
+		{
+			name:    "empty results",
+			results: []TaskResult{},
+		},
+		{
+			name: "zero durations",
+			results: []TaskResult{
+				{Status: StatusGreen, Duration: 0, Task: Task{Number: "1", Name: "T1", Prompt: "test", Agent: "agent1"}},
+				{Status: StatusYellow, Duration: 0, Task: Task{Number: "2", Name: "T2", Prompt: "test", Agent: "agent2"}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create result using NewExecutionResult
+			resultFromNew := NewExecutionResult(tt.results, true, 10*time.Second)
+
+			// Create result using CalculateMetrics
+			resultFromCalc := &ExecutionResult{
+				TotalTasks:  len(tt.results),
+				Duration:    10 * time.Second,
+				FailedTasks: []TaskResult{},
+			}
+			resultFromCalc.CalculateMetrics(tt.results)
+
+			// Verify StatusBreakdown is identical
+			if len(resultFromNew.StatusBreakdown) != len(resultFromCalc.StatusBreakdown) {
+				t.Errorf("StatusBreakdown length mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+					len(resultFromNew.StatusBreakdown), len(resultFromCalc.StatusBreakdown))
+			}
+			for status, count := range resultFromNew.StatusBreakdown {
+				if resultFromCalc.StatusBreakdown[status] != count {
+					t.Errorf("StatusBreakdown[%s] mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+						status, count, resultFromCalc.StatusBreakdown[status])
+				}
+			}
+
+			// Verify AgentUsage is identical (this will currently fail due to empty agent handling difference)
+			if len(resultFromNew.AgentUsage) != len(resultFromCalc.AgentUsage) {
+				t.Errorf("AgentUsage length mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+					len(resultFromNew.AgentUsage), len(resultFromCalc.AgentUsage))
+			}
+			for agent, count := range resultFromNew.AgentUsage {
+				if resultFromCalc.AgentUsage[agent] != count {
+					t.Errorf("AgentUsage[%s] mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+						agent, count, resultFromCalc.AgentUsage[agent])
+				}
+			}
+			// Check reverse (CalculateMetrics has agents that NewExecutionResult doesn't)
+			for agent, count := range resultFromCalc.AgentUsage {
+				if resultFromNew.AgentUsage[agent] != count {
+					t.Errorf("AgentUsage[%s] in CalculateMetrics but not in NewExecutionResult: CalculateMetrics=%d",
+						agent, count)
+				}
+			}
+
+			// Verify TotalFiles is identical
+			if resultFromNew.TotalFiles != resultFromCalc.TotalFiles {
+				t.Errorf("TotalFiles mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+					resultFromNew.TotalFiles, resultFromCalc.TotalFiles)
+			}
+
+			// Verify AvgTaskDuration is identical
+			if resultFromNew.AvgTaskDuration != resultFromCalc.AvgTaskDuration {
+				t.Errorf("AvgTaskDuration mismatch: NewExecutionResult=%v, CalculateMetrics=%v",
+					resultFromNew.AvgTaskDuration, resultFromCalc.AvgTaskDuration)
+			}
+
+			// Verify Completed/Failed counts are identical
+			if resultFromNew.Completed != resultFromCalc.Completed {
+				t.Errorf("Completed mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+					resultFromNew.Completed, resultFromCalc.Completed)
+			}
+			if resultFromNew.Failed != resultFromCalc.Failed {
+				t.Errorf("Failed mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+					resultFromNew.Failed, resultFromCalc.Failed)
+			}
+		})
+	}
+}
+
+// TestExecutionResult_HelperFunction tests the private helper function behavior
+// by verifying it through the public API after refactoring.
+func TestExecutionResult_HelperFunction(t *testing.T) {
+	tests := []struct {
+		name                string
+		results             []TaskResult
+		expectedCompleted   int
+		expectedFailed      int
+		expectedGreen       int
+		expectedYellow      int
+		expectedRed         int
+		expectedFiles       int
+		expectedAvgDuration time.Duration
+		expectedAgents      map[string]int
+	}{
+		{
+			name: "comprehensive test case",
+			results: []TaskResult{
+				{
+					Status:   StatusGreen,
+					Duration: 2 * time.Second,
+					Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"a.go", "b.go"}},
+				},
+				{
+					Status:   StatusGreen,
+					Duration: 4 * time.Second,
+					Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "golang-pro", Files: []string{"b.go", "c.go"}},
+				},
+				{
+					Status:   StatusYellow,
+					Duration: 6 * time.Second,
+					Task:     Task{Number: "3", Name: "T3", Prompt: "test", Agent: "devops", Files: []string{"d.yaml"}},
+				},
+				{
+					Status:   StatusRed,
+					Duration: 8 * time.Second,
+					Task:     Task{Number: "4", Name: "T4", Prompt: "test", Agent: "golang-pro", Files: []string{"e.go"}},
+				},
+			},
+			expectedCompleted:   3, // GREEN + YELLOW
+			expectedFailed:      1, // RED
+			expectedGreen:       2,
+			expectedYellow:      1,
+			expectedRed:         1,
+			expectedFiles:       5, // a.go, b.go, c.go, d.yaml, e.go
+			expectedAvgDuration: 5 * time.Second, // (2+4+6+8)/4 = 20/4 = 5
+			expectedAgents: map[string]int{
+				"golang-pro": 3,
+				"devops":     1,
+			},
+		},
+		{
+			name: "empty agent handling",
+			results: []TaskResult{
+				{Status: StatusGreen, Duration: 1 * time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test", Agent: "", Files: []string{"file1.go"}}},
+				{Status: StatusGreen, Duration: 2 * time.Second, Task: Task{Number: "2", Name: "T2", Prompt: "test", Agent: "golang-pro", Files: []string{"file2.go"}}},
+			},
+			expectedCompleted:   2,
+			expectedFailed:      0,
+			expectedGreen:       2,
+			expectedYellow:      0,
+			expectedRed:         0,
+			expectedFiles:       2,
+			expectedAvgDuration: 1500 * time.Millisecond, // (1+2)/2 = 1.5s
+			expectedAgents: map[string]int{
+				"":           1,
+				"golang-pro": 1,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NewExecutionResult(tt.results, true, 10*time.Second)
+
+			if result.Completed != tt.expectedCompleted {
+				t.Errorf("Completed = %d, want %d", result.Completed, tt.expectedCompleted)
+			}
+			if result.Failed != tt.expectedFailed {
+				t.Errorf("Failed = %d, want %d", result.Failed, tt.expectedFailed)
+			}
+			if result.StatusBreakdown[StatusGreen] != tt.expectedGreen {
+				t.Errorf("StatusBreakdown[GREEN] = %d, want %d", result.StatusBreakdown[StatusGreen], tt.expectedGreen)
+			}
+			if result.StatusBreakdown[StatusYellow] != tt.expectedYellow {
+				t.Errorf("StatusBreakdown[YELLOW] = %d, want %d", result.StatusBreakdown[StatusYellow], tt.expectedYellow)
+			}
+			if result.StatusBreakdown[StatusRed] != tt.expectedRed {
+				t.Errorf("StatusBreakdown[RED] = %d, want %d", result.StatusBreakdown[StatusRed], tt.expectedRed)
+			}
+			if result.TotalFiles != tt.expectedFiles {
+				t.Errorf("TotalFiles = %d, want %d", result.TotalFiles, tt.expectedFiles)
+			}
+			if result.AvgTaskDuration != tt.expectedAvgDuration {
+				t.Errorf("AvgTaskDuration = %v, want %v", result.AvgTaskDuration, tt.expectedAvgDuration)
+			}
+
+			// Verify agent usage
+			if len(result.AgentUsage) != len(tt.expectedAgents) {
+				t.Errorf("AgentUsage length = %d, want %d", len(result.AgentUsage), len(tt.expectedAgents))
+			}
+			for agent, expectedCount := range tt.expectedAgents {
+				if result.AgentUsage[agent] != expectedCount {
+					t.Errorf("AgentUsage[%s] = %d, want %d", agent, result.AgentUsage[agent], expectedCount)
+				}
+			}
+		})
+	}
+}
