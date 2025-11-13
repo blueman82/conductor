@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/updater"
 )
@@ -135,12 +136,13 @@ type DefaultTaskExecutor struct {
 	clock           func() time.Time
 	qcEnabled       bool
 	retryLimit      int
-	SourceFile      string          // Track which file this task comes from
-	FileLockManager FileLockManager // Per-file locking strategy
-	learningStore   LearningStore   // Adaptive learning store (optional)
-	planFile        string          // Plan file path for learning queries
-	sessionID       string          // Session ID for learning tracking
-	runNumber       int             // Run number for learning tracking
+	SourceFile      string                  // Track which file this task comes from
+	FileLockManager FileLockManager         // Per-file locking strategy
+	learningStore   LearningStore           // Adaptive learning store (optional)
+	planFile        string                  // Plan file path for learning queries
+	sessionID       string                  // Session ID for learning tracking
+	runNumber       int                     // Run number for learning tracking
+	metrics         *learning.PatternMetrics // Pattern detection metrics (optional)
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -319,6 +321,14 @@ func extractFailurePatterns(verdict, feedback, output string) []string {
 func (te *DefaultTaskExecutor) qcReviewHook(ctx context.Context, task *models.Task, verdict, feedback, output string) {
 	// Extract failure patterns from QC output
 	patterns := extractFailurePatterns(verdict, feedback, output)
+
+	// Record metrics if metrics collector available
+	if te.metrics != nil {
+		te.metrics.RecordExecution()
+		for _, pattern := range patterns {
+			te.metrics.RecordPatternDetection(pattern, []string{})
+		}
+	}
 
 	// Initialize metadata map if needed
 	if task.Metadata == nil {
