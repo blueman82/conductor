@@ -36,16 +36,13 @@ Thumbs.db
 # Logs
 *.log
 logs/
-.conductor/logs/
 
-# Conductor learning database (project-local)
-.conductor/learning/
+# Conductor home directory (but track example config)
+.conductor/
+!.conductor/config.yaml.example
 
 # Test learning databases
-internal/cmd/.conductor/learning/
-
-# Local configuration (use config.yaml.example as template)
-.conductor/config.yaml
+internal/cmd/.conductor/
 
 # Temporary files
 tmp/
