@@ -269,34 +269,42 @@ func extractFailurePatterns(verdict, feedback, output string) []string {
 	patterns := []string{}
 	patternKeywords := map[string][]string{
 		"compilation_error": {
-			"compilation error", "compilation fail", "syntax error", // Original (more specific)
-			"build fail", "build error", "parse error", // NEW
-			"code won't compile", "unable to build", // NEW
-			"compilation failed", // NEW - needed for test cases
+			"compilation error", "compilation fail",
+			"build fail", "build error", "parse error",
+			"code won't compile", "unable to build",
+			"compilation failed",
 		},
 		"test_failure": {
-			"test fail", "tests fail", "test failure", // Original
-			"assertion fail", "verification fail", // NEW
-			"check fail", "validation fail", // NEW
+			"test fail", "tests fail", "test failure",
+			"assertion fail", "verification fail",
+			"check fail", "validation fail",
 		},
 		"dependency_missing": {
-			"dependency", "package not found", "module not found", // Original
-			"unable to locate", "missing package", // NEW
-			"import error", "cannot find module", // NEW
+			"dependency", "package not found", "module not found",
+			"unable to locate", "missing package",
+			"import error", "cannot find module",
 		},
 		"permission_error": {
-			"permission", "access denied", "forbidden", // Original
-			"unauthorized", // NEW
+			"permission", "access denied", "forbidden",
+			"unauthorized",
 		},
 		"timeout": {
-			"timeout", "deadline", "timed out", // Original
-			"request timeout", "execution timeout", // NEW
-			"deadline exceeded", // NEW
+			"timeout", "deadline", "timed out",
+			"request timeout", "execution timeout",
+			"deadline exceeded",
 		},
 		"runtime_error": {
-			"runtime error", "panic", "segfault", "nil pointer", // Original
-			"null reference", "stack overflow", // NEW
-			"segmentation fault", // NEW
+			"runtime error", "panic", "segfault", "nil pointer",
+			"null reference", "stack overflow",
+			"segmentation fault",
+		},
+		"syntax_error": {
+			"syntax error", "syntax_error",
+			"syntax fail",
+		},
+		"type_error": {
+			"type error", "type_error",
+			"type mismatch", "type fail",
 		},
 	}
 

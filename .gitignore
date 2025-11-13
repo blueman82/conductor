@@ -68,3 +68,33 @@ docs/mcp-headless-invocation.md
 
 # Plan READMEs (local planning documentation)
 docs/plans/**/README.md
+
+# Ignore docs/ by default (new files won't be tracked automatically)
+docs/
+
+# Keep tracked documentation files (must explicitly add new files)
+!docs/learning.md
+!docs/phase-2a-guide.md
+!docs/plan-format.md
+!docs/troubleshooting.md
+!docs/usage.md
+!docs/worktree-best-practices.md
+
+# Keep examples directory and tracked files
+!docs/examples/
+!docs/examples/resume-completed-markdown.md
+!docs/examples/resume-completed-yaml.yaml
+!docs/examples/skip-completed-examples.md
+!docs/examples/split-plan-README.md
+!docs/examples/split-plan-backend-1-setup.md
+!docs/examples/split-plan-backend-2-features.md
+!docs/examples/split-plan-backend-3-testing.md
+
+# Keep plans directory and tracked files
+!docs/plans/
+!docs/plans/adaptive-learning-system/
+!docs/plans/adaptive-learning-system/plan-01-foundation.md
+!docs/plans/adaptive-learning-system/plan-01-foundation.yaml
+!docs/plans/adaptive-learning-system/plan-02-configuration-testing.md
+!docs/plans/adaptive-learning-system/plan-02-configuration-testing.yaml
+!docs/plans/claude_code_agents_invocation.md
