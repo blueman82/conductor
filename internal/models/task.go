@@ -16,6 +16,7 @@ type Task struct {
 	Prompt        string                 // Full task description/prompt
 	WorktreeGroup string                 // Worktree group this task belongs to (optional)
 	Status        string                 // Task status: pending, in_progress, completed, skipped
+	StartedAt     *time.Time             // Timestamp when task execution started (nil if not started)
 	CompletedAt   *time.Time             // Timestamp when task was completed (nil if not completed)
 	SourceFile    string                 // Source plan file this task originates from (for multi-file plans)
 	Metadata      map[string]interface{} // Additional metadata for hooks and extensions

@@ -378,6 +378,83 @@ func timestamp() string {
 	return time.Now().Format("15:04:05")
 }
 
+// LogProgress logs real-time progress of task execution with percentage, counts, and average duration.
+// Format: "[HH:MM:SS] Progress: [████░░░░░░] 50% (4/8 tasks) - Avg: 3.2s/task"
+// Handles edge cases: zero tasks, all completed, no duration data.
+func (cl *ConsoleLogger) LogProgress(tasks []models.Task) {
+	if cl.writer == nil {
+		return
+	}
+
+	// Progress logging is at INFO level
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	// Count completed tasks
+	completed := 0
+	totalDuration := time.Duration(0)
+
+	for _, task := range tasks {
+		if task.Status == "completed" {
+			completed++
+
+			// Calculate duration if we have both StartedAt and CompletedAt
+			if task.StartedAt != nil && task.CompletedAt != nil {
+				totalDuration += task.CompletedAt.Sub(*task.StartedAt)
+			}
+		}
+	}
+
+	total := len(tasks)
+
+	// Calculate percentage
+	var percentage int
+	if total == 0 {
+		percentage = 0
+	} else {
+		percentage = (completed * 100) / total
+		if percentage > 100 {
+			percentage = 100
+		}
+	}
+
+	// Create progress bar using ProgressBar component
+	pb := NewProgressBar(total, 10, cl.colorOutput)
+	pb.Update(completed)
+	pbRender := pb.Render()
+
+	// Calculate average duration per task
+	var avgDurationStr string
+	if completed > 0 {
+		avgDuration := totalDuration / time.Duration(completed)
+		avgDurationStr = fmt.Sprintf(" - Avg: %s/task", formatDuration(avgDuration))
+	}
+
+	// Build progress message
+	progressMsg := fmt.Sprintf("Progress: %s (%d/%d tasks)%s", pbRender, completed, total, avgDurationStr)
+
+	var output string
+	if cl.colorOutput {
+		// Apply cyan color for in-progress, green for complete
+		if percentage < 100 {
+			progressMsg = color.New(color.FgCyan).Sprint(progressMsg)
+		} else if percentage == 100 && total > 0 {
+			progressMsg = color.New(color.FgGreen).Sprint(progressMsg)
+		}
+		output = fmt.Sprintf("[%s] %s\n", ts, progressMsg)
+	} else {
+		output = fmt.Sprintf("[%s] %s\n", ts, progressMsg)
+	}
+
+	cl.writer.Write([]byte(output))
+}
+
 // formatDuration converts a time.Duration to a human-readable string.
 // Examples: "5s", "1m30s", "2h15m"
 func formatDuration(d time.Duration) string {

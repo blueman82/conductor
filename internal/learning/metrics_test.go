@@ -81,11 +81,11 @@ func TestMetrics_RecordExecution(t *testing.T) {
 
 func TestGetDetectionRate(t *testing.T) {
 	tests := []struct {
-		name           string
-		executions     int
-		detections     int
-		expectedRate   float64
-		setupFunc      func(*PatternMetrics)
+		name         string
+		executions   int
+		detections   int
+		expectedRate float64
+		setupFunc    func(*PatternMetrics)
 	}{
 		{
 			name:         "no executions",

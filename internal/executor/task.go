@@ -136,12 +136,12 @@ type DefaultTaskExecutor struct {
 	clock           func() time.Time
 	qcEnabled       bool
 	retryLimit      int
-	SourceFile      string                  // Track which file this task comes from
-	FileLockManager FileLockManager         // Per-file locking strategy
-	learningStore   LearningStore           // Adaptive learning store (optional)
-	planFile        string                  // Plan file path for learning queries
-	sessionID       string                  // Session ID for learning tracking
-	runNumber       int                     // Run number for learning tracking
+	SourceFile      string                   // Track which file this task comes from
+	FileLockManager FileLockManager          // Per-file locking strategy
+	learningStore   LearningStore            // Adaptive learning store (optional)
+	planFile        string                   // Plan file path for learning queries
+	sessionID       string                   // Session ID for learning tracking
+	runNumber       int                      // Run number for learning tracking
 	metrics         *learning.PatternMetrics // Pattern detection metrics (optional)
 }
 

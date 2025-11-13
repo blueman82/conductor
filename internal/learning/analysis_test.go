@@ -751,12 +751,12 @@ func TestAnalyzeFailures_HistoricalPatternRecovery(t *testing.T) {
 		executions := []struct {
 			output string
 		}{
-			{output: "Something went wrong"},                  // No specific keyword
-			{output: "Build error in compilation phase"},      // Has keyword
-			{output: "Generic error message"},                 // No specific keyword
-			{output: "Unable to build the project"},           // Has keyword
-			{output: "An unexpected error occurred"},          // No specific keyword
-			{output: "Parse error in source file"},            // Has keyword
+			{output: "Something went wrong"},             // No specific keyword
+			{output: "Build error in compilation phase"}, // Has keyword
+			{output: "Generic error message"},            // No specific keyword
+			{output: "Unable to build the project"},      // Has keyword
+			{output: "An unexpected error occurred"},     // No specific keyword
+			{output: "Parse error in source file"},       // Has keyword
 		}
 
 		for i, exec := range executions {

@@ -23,15 +23,15 @@ type TaskResult struct {
 
 // ExecutionResult represents the aggregate result of executing a plan
 type ExecutionResult struct {
-	TotalTasks      int                `json:"total_tasks" yaml:"total_tasks"`           // Total number of tasks
-	Completed       int                `json:"completed" yaml:"completed"`               // Number of completed tasks
-	Failed          int                `json:"failed" yaml:"failed"`                     // Number of failed tasks
-	Duration        time.Duration      `json:"duration" yaml:"duration"`                 // Total execution time
-	FailedTasks     []TaskResult       `json:"failed_tasks" yaml:"failed_tasks"`         // Details of failed tasks
-	StatusBreakdown map[string]int     `json:"status_breakdown" yaml:"status_breakdown"` // Count by QC status (GREEN/YELLOW/RED)
-	AgentUsage      map[string]int     `json:"agent_usage" yaml:"agent_usage"`           // Count by agent name
-	TotalFiles      int                `json:"total_files" yaml:"total_files"`           // Count of unique files modified
-	AvgTaskDuration time.Duration      `json:"avg_task_duration" yaml:"avg_task_duration"` // Average duration per task
+	TotalTasks      int            `json:"total_tasks" yaml:"total_tasks"`             // Total number of tasks
+	Completed       int            `json:"completed" yaml:"completed"`                 // Number of completed tasks
+	Failed          int            `json:"failed" yaml:"failed"`                       // Number of failed tasks
+	Duration        time.Duration  `json:"duration" yaml:"duration"`                   // Total execution time
+	FailedTasks     []TaskResult   `json:"failed_tasks" yaml:"failed_tasks"`           // Details of failed tasks
+	StatusBreakdown map[string]int `json:"status_breakdown" yaml:"status_breakdown"`   // Count by QC status (GREEN/YELLOW/RED)
+	AgentUsage      map[string]int `json:"agent_usage" yaml:"agent_usage"`             // Count by agent name
+	TotalFiles      int            `json:"total_files" yaml:"total_files"`             // Count of unique files modified
+	AvgTaskDuration time.Duration  `json:"avg_task_duration" yaml:"avg_task_duration"` // Average duration per task
 }
 
 // NewExecutionResult creates a new ExecutionResult with calculated metrics

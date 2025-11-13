@@ -55,8 +55,8 @@ func TestExecutionResult_StatusBreakdown(t *testing.T) {
 			expectRed:    2,
 		},
 		{
-			name: "empty results",
-			results: []TaskResult{},
+			name:         "empty results",
+			results:      []TaskResult{},
 			expectGreen:  0,
 			expectYellow: 0,
 			expectRed:    0,
@@ -93,9 +93,9 @@ func TestExecutionResult_StatusBreakdown(t *testing.T) {
 
 func TestExecutionResult_AgentUsage(t *testing.T) {
 	tests := []struct {
-		name           string
-		results        []TaskResult
-		expectAgents   map[string]int
+		name         string
+		results      []TaskResult
+		expectAgents map[string]int
 	}{
 		{
 			name: "multiple agents with different usage",
@@ -135,13 +135,13 @@ func TestExecutionResult_AgentUsage(t *testing.T) {
 				{Task: Task{Number: "3", Name: "T3", Prompt: "test", Agent: "golang-pro"}},
 			},
 			expectAgents: map[string]int{
-				"": 2,
+				"":           2,
 				"golang-pro": 1,
 			},
 		},
 		{
-			name: "empty results",
-			results: []TaskResult{},
+			name:         "empty results",
+			results:      []TaskResult{},
 			expectAgents: map[string]int{},
 		},
 	}
@@ -205,8 +205,8 @@ func TestExecutionResult_TotalFiles(t *testing.T) {
 			expectTotal: 0,
 		},
 		{
-			name: "no results",
-			results: []TaskResult{},
+			name:        "no results",
+			results:     []TaskResult{},
 			expectTotal: 0,
 		},
 	}
@@ -231,19 +231,19 @@ func TestExecutionResult_AvgTaskDuration(t *testing.T) {
 		{
 			name: "multiple tasks with varying durations",
 			results: []TaskResult{
-				{Status: StatusGreen, Duration: 2*time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test"}},
-				{Status: StatusGreen, Duration: 4*time.Second, Task: Task{Number: "2", Name: "T2", Prompt: "test"}},
-				{Status: StatusGreen, Duration: 6*time.Second, Task: Task{Number: "3", Name: "T3", Prompt: "test"}},
-				{Status: StatusGreen, Duration: 8*time.Second, Task: Task{Number: "4", Name: "T4", Prompt: "test"}},
+				{Status: StatusGreen, Duration: 2 * time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test"}},
+				{Status: StatusGreen, Duration: 4 * time.Second, Task: Task{Number: "2", Name: "T2", Prompt: "test"}},
+				{Status: StatusGreen, Duration: 6 * time.Second, Task: Task{Number: "3", Name: "T3", Prompt: "test"}},
+				{Status: StatusGreen, Duration: 8 * time.Second, Task: Task{Number: "4", Name: "T4", Prompt: "test"}},
 			},
-			expectAvgDur: 5*time.Second, // (2+4+6+8) / 4 = 20 / 4 = 5
+			expectAvgDur: 5 * time.Second, // (2+4+6+8) / 4 = 20 / 4 = 5
 		},
 		{
 			name: "single task",
 			results: []TaskResult{
-				{Status: StatusGreen, Duration: 10*time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test"}},
+				{Status: StatusGreen, Duration: 10 * time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test"}},
 			},
-			expectAvgDur: 10*time.Second,
+			expectAvgDur: 10 * time.Second,
 		},
 		{
 			name: "zero durations",
@@ -254,8 +254,8 @@ func TestExecutionResult_AvgTaskDuration(t *testing.T) {
 			expectAvgDur: 0,
 		},
 		{
-			name: "empty results",
-			results: []TaskResult{},
+			name:         "empty results",
+			results:      []TaskResult{},
 			expectAvgDur: 0,
 		},
 	}
@@ -282,17 +282,17 @@ func TestExecutionResult_CalculateMetrics(t *testing.T) {
 			results: []TaskResult{
 				{
 					Status:   StatusGreen,
-					Duration: 3*time.Second,
+					Duration: 3 * time.Second,
 					Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"main.go", "config.go"}},
 				},
 				{
 					Status:   StatusGreen,
-					Duration: 5*time.Second,
+					Duration: 5 * time.Second,
 					Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "golang-pro", Files: []string{"main.go", "utils.go"}},
 				},
 				{
 					Status:   StatusYellow,
-					Duration: 2*time.Second,
+					Duration: 2 * time.Second,
 					Task:     Task{Number: "3", Name: "T3", Prompt: "test", Agent: "devops", Files: []string{"docker.yaml"}},
 				},
 			},
@@ -334,12 +334,12 @@ func TestExecutionResult_JSONSerialization(t *testing.T) {
 		results := []TaskResult{
 			{
 				Status:   StatusGreen,
-				Duration: 3*time.Second,
+				Duration: 3 * time.Second,
 				Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"file1.go"}},
 			},
 			{
 				Status:   StatusYellow,
-				Duration: 2*time.Second,
+				Duration: 2 * time.Second,
 				Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "devops", Files: []string{"file2.yaml"}},
 			},
 		}
@@ -380,12 +380,12 @@ func TestExecutionResult_YAMLSerialization(t *testing.T) {
 		results := []TaskResult{
 			{
 				Status:   StatusGreen,
-				Duration: 3*time.Second,
+				Duration: 3 * time.Second,
 				Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"file1.go"}},
 			},
 			{
 				Status:   StatusYellow,
-				Duration: 2*time.Second,
+				Duration: 2 * time.Second,
 				Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "devops", Files: []string{"file2.yaml"}},
 			},
 		}
@@ -433,12 +433,12 @@ func TestExecutionResult_CalculateMetricsMethod(t *testing.T) {
 		results := []TaskResult{
 			{
 				Status:   StatusGreen,
-				Duration: 2*time.Second,
+				Duration: 2 * time.Second,
 				Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"file1.go"}},
 			},
 			{
 				Status:   StatusGreen,
-				Duration: 4*time.Second,
+				Duration: 4 * time.Second,
 				Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "devops", Files: []string{"file2.yaml"}},
 			},
 		}
@@ -479,13 +479,13 @@ func TestExecutionResult_EdgeCases(t *testing.T) {
 		{
 			name: "tasks with nil files",
 			results: []TaskResult{
-				{Status: StatusGreen, Duration: 1*time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test", Files: nil}},
+				{Status: StatusGreen, Duration: 1 * time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test", Files: nil}},
 			},
 		},
 		{
 			name: "tasks with empty files",
 			results: []TaskResult{
-				{Status: StatusGreen, Duration: 1*time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test", Files: []string{}}},
+				{Status: StatusGreen, Duration: 1 * time.Second, Task: Task{Number: "1", Name: "T1", Prompt: "test", Files: []string{}}},
 			},
 		},
 	}

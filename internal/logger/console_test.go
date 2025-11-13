@@ -606,3 +606,304 @@ type Logger interface {
 	LogWaveComplete(wave models.Wave, duration time.Duration)
 	LogSummary(result models.ExecutionResult)
 }
+
+// TestConsoleLogger_LogProgress_BasicDisplay verifies progress bar display with basic task counts.
+func TestConsoleLogger_LogProgress_BasicDisplay(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	// Create 4 completed tasks out of 8 total
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", Status: "completed"},
+		{Number: "2", Name: "Task 2", Status: "completed"},
+		{Number: "3", Name: "Task 3", Status: "completed"},
+		{Number: "4", Name: "Task 4", Status: "completed"},
+		{Number: "5", Name: "Task 5", Status: "pending"},
+		{Number: "6", Name: "Task 6", Status: "pending"},
+		{Number: "7", Name: "Task 7", Status: "pending"},
+		{Number: "8", Name: "Task 8", Status: "pending"},
+	}
+
+	logger.LogProgress(tasks)
+
+	output := buf.String()
+
+	// Verify output contains Progress label
+	if !strings.Contains(output, "Progress:") {
+		t.Error("expected 'Progress:' in output")
+	}
+
+	// Verify output contains percentage (50%)
+	if !strings.Contains(output, "50%") {
+		t.Errorf("expected '50%%' in output, got %q", output)
+	}
+
+	// Verify output contains task counts (4/8)
+	if !strings.Contains(output, "(4/8 tasks)") {
+		t.Errorf("expected '(4/8 tasks)' in output, got %q", output)
+	}
+
+	// Verify timestamp prefix
+	if !strings.HasPrefix(output, "[") {
+		t.Error("expected output to start with timestamp [")
+	}
+}
+
+// TestConsoleLogger_LogProgress_WithAverageDuration verifies average duration calculation and display.
+func TestConsoleLogger_LogProgress_WithAverageDuration(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	// Create tasks with specific durations: 2s, 3s, 4s, 5s (avg: 3.5s)
+	now := time.Now()
+	tasks := []models.Task{
+		{
+			Number: "1", Name: "Task 1", Status: "completed",
+			StartedAt:   nil,
+			CompletedAt: &now,
+		},
+		{
+			Number: "2", Name: "Task 2", Status: "completed",
+			StartedAt:   nil,
+			CompletedAt: &now,
+		},
+		{
+			Number: "3", Name: "Task 3", Status: "completed",
+			StartedAt:   nil,
+			CompletedAt: &now,
+		},
+		{
+			Number: "4", Name: "Task 4", Status: "completed",
+			StartedAt:   nil,
+			CompletedAt: &now,
+		},
+		{
+			Number: "5", Name: "Task 5", Status: "pending",
+		},
+		{
+			Number: "6", Name: "Task 6", Status: "pending",
+		},
+	}
+
+	// Add durations to tasks (2s, 3s, 4s, 5s)
+	for i := range tasks {
+		if tasks[i].Status == "completed" {
+			startTime := now.Add(-time.Duration((i + 2) * int(time.Second)))
+			tasks[i].StartedAt = &startTime
+		}
+	}
+
+	logger.LogProgress(tasks)
+
+	output := buf.String()
+
+	// Verify output contains average duration
+	if !strings.Contains(output, "Avg:") {
+		t.Errorf("expected 'Avg:' in output, got %q", output)
+	}
+
+	// Verify percentage and counts (4/6 = 66%)
+	if !strings.Contains(output, "66%") {
+		t.Errorf("expected '66%%' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "(4/6 tasks)") {
+		t.Errorf("expected '(4/6 tasks)' in output, got %q", output)
+	}
+}
+
+// TestConsoleLogger_LogProgress_ZeroTasks verifies handling of zero tasks.
+func TestConsoleLogger_LogProgress_ZeroTasks(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	// Empty task list
+	tasks := []models.Task{}
+
+	// Should not panic
+	logger.LogProgress(tasks)
+
+	output := buf.String()
+
+	// Verify it handled gracefully - should show 0/0 or similar
+	if !strings.Contains(output, "0") {
+		t.Errorf("expected '0' in output for zero tasks, got %q", output)
+	}
+}
+
+// TestConsoleLogger_LogProgress_AllTasksComplete verifies display with all tasks complete.
+func TestConsoleLogger_LogProgress_AllTasksComplete(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	// All 8 tasks completed
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", Status: "completed"},
+		{Number: "2", Name: "Task 2", Status: "completed"},
+		{Number: "3", Name: "Task 3", Status: "completed"},
+		{Number: "4", Name: "Task 4", Status: "completed"},
+		{Number: "5", Name: "Task 5", Status: "completed"},
+		{Number: "6", Name: "Task 6", Status: "completed"},
+		{Number: "7", Name: "Task 7", Status: "completed"},
+		{Number: "8", Name: "Task 8", Status: "completed"},
+	}
+
+	logger.LogProgress(tasks)
+
+	output := buf.String()
+
+	// Verify 100% completion
+	if !strings.Contains(output, "100%") {
+		t.Errorf("expected '100%%' in output, got %q", output)
+	}
+
+	// Verify all tasks count (8/8)
+	if !strings.Contains(output, "(8/8 tasks)") {
+		t.Errorf("expected '(8/8 tasks)' in output, got %q", output)
+	}
+}
+
+// TestConsoleLogger_LogProgress_ColorOutput verifies color output when enabled/disabled.
+func TestConsoleLogger_LogProgress_ColorOutput(t *testing.T) {
+	t.Run("with color enabled", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "info")
+		logger.colorOutput = true // Force color output for testing
+
+		tasks := []models.Task{
+			{Number: "1", Name: "Task 1", Status: "completed"},
+			{Number: "2", Name: "Task 2", Status: "pending"},
+		}
+
+		logger.LogProgress(tasks)
+
+		output := buf.String()
+
+		// When color is enabled, output should contain ANSI codes
+		// Cyan color code is \033[36m or \x1b[36m
+		if !strings.Contains(output, "50%") {
+			t.Errorf("expected progress output, got %q", output)
+		}
+	})
+
+	t.Run("with color disabled", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "info")
+		logger.colorOutput = false // Disable color for testing
+
+		tasks := []models.Task{
+			{Number: "1", Name: "Task 1", Status: "completed"},
+			{Number: "2", Name: "Task 2", Status: "pending"},
+		}
+
+		logger.LogProgress(tasks)
+
+		output := buf.String()
+
+		// Plain text should contain percentage and counts
+		if !strings.Contains(output, "50%") {
+			t.Errorf("expected '50%%' in output, got %q", output)
+		}
+
+		if !strings.Contains(output, "(1/2 tasks)") {
+			t.Errorf("expected '(1/2 tasks)' in output, got %q", output)
+		}
+
+		// Should not contain raw ANSI escape codes
+		if strings.Contains(output, "\033[") || strings.Contains(output, "\x1b[") {
+			t.Error("expected no ANSI codes in plain text output")
+		}
+	})
+}
+
+// TestConsoleLogger_LogProgress_TimestampPrefix verifies timestamp formatting.
+func TestConsoleLogger_LogProgress_TimestampPrefix(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", Status: "completed"},
+		{Number: "2", Name: "Task 2", Status: "pending"},
+	}
+
+	logger.LogProgress(tasks)
+
+	output := buf.String()
+
+	// Verify timestamp prefix [HH:MM:SS]
+	if !strings.HasPrefix(output, "[") {
+		t.Error("expected output to start with timestamp [")
+	}
+
+	// Extract timestamp portion and verify format
+	endBracket := strings.Index(output, "]")
+	if endBracket == -1 {
+		t.Error("expected ] in output")
+	}
+
+	timestamp := output[1:endBracket]
+	parts := strings.Split(timestamp, ":")
+	if len(parts) != 3 {
+		t.Errorf("expected timestamp HH:MM:SS format, got %q", timestamp)
+	}
+}
+
+// TestConsoleLogger_LogProgress_ProgressBarIntegration verifies progress bar rendering.
+func TestConsoleLogger_LogProgress_ProgressBarIntegration(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	// Test with 50% completion
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", Status: "completed"},
+		{Number: "2", Name: "Task 2", Status: "completed"},
+		{Number: "3", Name: "Task 3", Status: "pending"},
+		{Number: "4", Name: "Task 4", Status: "pending"},
+	}
+
+	logger.LogProgress(tasks)
+
+	output := buf.String()
+
+	// Verify percentage calculation
+	if !strings.Contains(output, "50%") {
+		t.Errorf("expected '50%%' in output, got %q", output)
+	}
+
+	// Verify counts
+	if !strings.Contains(output, "(2/4 tasks)") {
+		t.Errorf("expected '(2/4 tasks)' in output, got %q", output)
+	}
+
+	// Verify Progress prefix
+	if !strings.Contains(output, "Progress:") {
+		t.Errorf("expected 'Progress:' in output, got %q", output)
+	}
+}
+
+// TestConsoleLogger_LogProgress_EdgeCaseNilStartedAt verifies handling of tasks without StartedAt.
+func TestConsoleLogger_LogProgress_EdgeCaseNilStartedAt(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	// Tasks without StartedAt (no duration data)
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", Status: "completed", StartedAt: nil},
+		{Number: "2", Name: "Task 2", Status: "pending"},
+	}
+
+	// Should not panic with nil StartedAt
+	logger.LogProgress(tasks)
+
+	output := buf.String()
+
+	// Verify output is still generated
+	if !strings.Contains(output, "50%") {
+		t.Errorf("expected '50%%' in output, got %q", output)
+	}
+
+	// Should show progress without average duration
+	if !strings.Contains(output, "(1/2 tasks)") {
+		t.Errorf("expected '(1/2 tasks)' in output, got %q", output)
+	}
+}
