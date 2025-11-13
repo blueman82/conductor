@@ -34,7 +34,7 @@ func (l *consoleLogger) LogWaveStart(wave models.Wave) {
 }
 
 // LogWaveComplete logs the completion of a wave
-func (l *consoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+func (l *consoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
 	timestamp := time.Now().Format("15:04:05")
 	fmt.Fprintf(l.writer, "[%s] Completed %s in %s\n", timestamp, wave.Name, duration.Round(time.Second))
 }
@@ -511,9 +511,9 @@ func (ml *multiLogger) LogWaveStart(wave models.Wave) {
 }
 
 // LogWaveComplete forwards to all loggers
-func (ml *multiLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+func (ml *multiLogger) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
 	for _, logger := range ml.loggers {
-		logger.LogWaveComplete(wave, duration)
+		logger.LogWaveComplete(wave, duration, results)
 	}
 }
 

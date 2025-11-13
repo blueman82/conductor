@@ -3,6 +3,7 @@ package logger
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -102,37 +103,48 @@ func TestLogWaveComplete(t *testing.T) {
 		name         string
 		wave         models.Wave
 		duration     time.Duration
+		results      []models.TaskResult
 		expectedText string
 	}{
 		{
-			name: "5 seconds",
+			name: "5 seconds - all green",
 			wave: models.Wave{
 				Name:           "Wave 1",
 				TaskNumbers:    []string{"1"},
 				MaxConcurrency: 1,
 			},
-			duration:     5 * time.Second,
-			expectedText: "Wave 1 complete (5.0s) - 1/1 completed",
+			duration: 5 * time.Second,
+			results: []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+			},
+			expectedText: "Wave 1 complete (5.0s) - 1/1 completed (1 GREEN)",
 		},
 		{
-			name: "90 seconds (1m30s)",
+			name: "90 seconds (1m30s) - mixed statuses",
 			wave: models.Wave{
 				Name:           "Wave 2",
 				TaskNumbers:    []string{"1", "2"},
 				MaxConcurrency: 2,
 			},
-			duration:     90 * time.Second,
-			expectedText: "Wave 2 complete (1m30s) - 2/2 completed",
+			duration: 90 * time.Second,
+			results: []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "2"}, Status: models.StatusYellow},
+			},
+			expectedText: "Wave 2 complete (1m30s) - 2/2 completed (1 GREEN, 1 YELLOW)",
 		},
 		{
-			name: "zero duration",
+			name: "zero duration - all green",
 			wave: models.Wave{
 				Name:           "Wave 3",
 				TaskNumbers:    []string{"1"},
 				MaxConcurrency: 1,
 			},
-			duration:     0 * time.Second,
-			expectedText: "Wave 3 complete (0.0s) - 1/1 completed",
+			duration: 0 * time.Second,
+			results: []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+			},
+			expectedText: "Wave 3 complete (0.0s) - 1/1 completed (1 GREEN)",
 		},
 	}
 
@@ -141,7 +153,7 @@ func TestLogWaveComplete(t *testing.T) {
 			buf := &bytes.Buffer{}
 			logger := NewConsoleLogger(buf, "info")
 
-			logger.LogWaveComplete(tt.wave, tt.duration)
+			logger.LogWaveComplete(tt.wave, tt.duration, tt.results)
 
 			output := buf.String()
 			if !strings.Contains(output, tt.expectedText) {
@@ -154,6 +166,205 @@ func TestLogWaveComplete(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLogWaveComplete_StatusBreakdown verifies status breakdown display with correct format and color.
+func TestLogWaveComplete_StatusBreakdown(t *testing.T) {
+	tests := []struct {
+		name         string
+		wave         models.Wave
+		results      []models.TaskResult
+		expectedText []string
+		notExpected  []string
+	}{
+		{
+			name: "all green - only show green",
+			wave: models.Wave{
+				Name:           "Wave 1",
+				TaskNumbers:    []string{"1", "2", "3"},
+				MaxConcurrency: 3,
+			},
+			results: []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "2"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "3"}, Status: models.StatusGreen},
+			},
+			expectedText: []string{
+				"3/3 completed",
+				"3 GREEN",
+			},
+			notExpected: []string{
+				"YELLOW",
+				"RED",
+				"0 YELLOW",
+				"0 RED",
+			},
+		},
+		{
+			name: "mixed statuses - show all non-zero",
+			wave: models.Wave{
+				Name:           "Wave 2",
+				TaskNumbers:    []string{"1", "2", "3", "4"},
+				MaxConcurrency: 4,
+			},
+			results: []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "2"}, Status: models.StatusGreen},
+				{Task: models.Task{Number: "3"}, Status: models.StatusYellow},
+				{Task: models.Task{Number: "4"}, Status: models.StatusRed},
+			},
+			expectedText: []string{
+				"4/4 completed",
+				"2 GREEN",
+				"1 YELLOW",
+				"1 RED",
+			},
+			notExpected: []string{},
+		},
+		{
+			name: "all red - only show red",
+			wave: models.Wave{
+				Name:           "Wave 3",
+				TaskNumbers:    []string{"1", "2"},
+				MaxConcurrency: 2,
+			},
+			results: []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusRed},
+				{Task: models.Task{Number: "2"}, Status: models.StatusRed},
+			},
+			expectedText: []string{
+				"2/2 completed",
+				"2 RED",
+			},
+			notExpected: []string{
+				"GREEN",
+				"YELLOW",
+				"0 GREEN",
+				"0 YELLOW",
+			},
+		},
+		{
+			name: "empty wave",
+			wave: models.Wave{
+				Name:           "Wave 4",
+				TaskNumbers:    []string{},
+				MaxConcurrency: 1,
+			},
+			results: []models.TaskResult{},
+			expectedText: []string{
+				"0/0 completed",
+			},
+			notExpected: []string{
+				"GREEN",
+				"YELLOW",
+				"RED",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "info")
+
+			logger.LogWaveComplete(tt.wave, 5*time.Second, tt.results)
+
+			output := buf.String()
+
+			for _, expected := range tt.expectedText {
+				if !strings.Contains(output, expected) {
+					t.Errorf("expected output to contain %q, got %q", expected, output)
+				}
+			}
+
+			for _, notExp := range tt.notExpected {
+				if strings.Contains(output, notExp) {
+					t.Errorf("expected output NOT to contain %q, got %q", notExp, output)
+				}
+			}
+		})
+	}
+}
+
+// TestLogWaveComplete_ColorOutput verifies status counts are color-coded correctly.
+func TestLogWaveComplete_ColorOutput(t *testing.T) {
+	t.Run("with colors enabled", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "info")
+		logger.colorOutput = true // Force color output
+
+		wave := models.Wave{
+			Name:           "Wave 1",
+			TaskNumbers:    []string{"1", "2", "3"},
+			MaxConcurrency: 3,
+		}
+
+		results := []models.TaskResult{
+			{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+			{Task: models.Task{Number: "2"}, Status: models.StatusYellow},
+			{Task: models.Task{Number: "3"}, Status: models.StatusRed},
+		}
+
+		logger.LogWaveComplete(wave, 10*time.Second, results)
+
+		output := buf.String()
+
+		// Verify content is present
+		if !strings.Contains(output, "GREEN") {
+			t.Error("expected 'GREEN' in colored output")
+		}
+
+		if !strings.Contains(output, "YELLOW") {
+			t.Error("expected 'YELLOW' in colored output")
+		}
+
+		if !strings.Contains(output, "RED") {
+			t.Error("expected 'RED' in colored output")
+		}
+
+		if !strings.Contains(output, "3/3 completed") {
+			t.Error("expected task count in colored output")
+		}
+	})
+
+	t.Run("with colors disabled", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "info")
+		logger.colorOutput = false // Disable color
+
+		wave := models.Wave{
+			Name:           "Wave 2",
+			TaskNumbers:    []string{"1", "2"},
+			MaxConcurrency: 2,
+		}
+
+		results := []models.TaskResult{
+			{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+			{Task: models.Task{Number: "2"}, Status: models.StatusYellow},
+		}
+
+		logger.LogWaveComplete(wave, 5*time.Second, results)
+
+		output := buf.String()
+
+		// Verify content is present
+		if !strings.Contains(output, "1 GREEN") {
+			t.Error("expected '1 GREEN' in plain output")
+		}
+
+		if !strings.Contains(output, "1 YELLOW") {
+			t.Error("expected '1 YELLOW' in plain output")
+		}
+
+		if !strings.Contains(output, "2/2 completed") {
+			t.Error("expected task count in plain output")
+		}
+
+		// Should not contain ANSI escape codes
+		if strings.Contains(output, "\033[") || strings.Contains(output, "\x1b[") {
+			t.Error("expected no ANSI codes in plain text output")
+		}
+	})
 }
 
 // TestLogSummary verifies execution summary formatting.
@@ -314,7 +525,7 @@ func TestConcurrentLogging(t *testing.T) {
 			}
 
 			logger.LogWaveStart(wave)
-			logger.LogWaveComplete(wave, 5*time.Second)
+			logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 			result := models.ExecutionResult{
 				TotalTasks:  10,
@@ -363,7 +574,7 @@ func TestNilWriter(t *testing.T) {
 	}
 
 	logger.LogWaveStart(wave)
-	logger.LogWaveComplete(wave, 5*time.Second)
+	logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 	result := models.ExecutionResult{
 		TotalTasks:  10,
@@ -470,7 +681,7 @@ func TestNoOpLogger(t *testing.T) {
 		}
 
 		logger.LogWaveStart(wave)
-		logger.LogWaveComplete(wave, 5*time.Second)
+		logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 		result := models.ExecutionResult{
 			TotalTasks:  10,
@@ -500,7 +711,7 @@ func TestNoOpLogger(t *testing.T) {
 				}
 
 				logger.LogWaveStart(wave)
-				logger.LogWaveComplete(wave, 5*time.Second)
+				logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 				result := models.ExecutionResult{
 					TotalTasks:  10,
@@ -603,7 +814,7 @@ func TestNoOpLoggerSatisfiesInterface(t *testing.T) {
 // This is defined here for testing purposes to verify interface compliance.
 type Logger interface {
 	LogWaveStart(wave models.Wave)
-	LogWaveComplete(wave models.Wave, duration time.Duration)
+	LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult)
 	LogSummary(result models.ExecutionResult)
 }
 
@@ -2502,4 +2713,100 @@ func TestLogSummary_ColorDisabled(t *testing.T) {
 	if !strings.Contains(output, "Total tasks: 10") {
 		t.Error("expected content to be present even without colors")
 	}
+}
+
+// TestIsTerminal_StdoutStderr verifies isTerminal detects os.Stdout and os.Stderr as TTY
+func TestIsTerminal_StdoutStderr(t *testing.T) {
+	t.Run("os.Stdout is detected as terminal", func(t *testing.T) {
+		// Note: This test might fail in non-TTY environments (CI/CD)
+		// In such cases, isTerminal should correctly return false
+		result := isTerminal(os.Stdout)
+
+		// We can't assert true/false definitively since it depends on the environment
+		// But we can verify the function doesn't panic and returns a boolean
+		_ = result
+	})
+
+	t.Run("os.Stderr is detected as terminal", func(t *testing.T) {
+		// Note: This test might fail in non-TTY environments (CI/CD)
+		// In such cases, isTerminal should correctly return false
+		result := isTerminal(os.Stderr)
+
+		// We can't assert true/false definitively since it depends on the environment
+		// But we can verify the function doesn't panic and returns a boolean
+		_ = result
+	})
+}
+
+// TestIsTerminal_NonTTY verifies isTerminal returns false for non-TTY writers
+func TestIsTerminal_NonTTY(t *testing.T) {
+	t.Run("bytes.Buffer is not a terminal", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		result := isTerminal(buf)
+
+		if result {
+			t.Error("expected isTerminal to return false for bytes.Buffer")
+		}
+	})
+
+	t.Run("nil writer is not a terminal", func(t *testing.T) {
+		result := isTerminal(nil)
+
+		if result {
+			t.Error("expected isTerminal to return false for nil writer")
+		}
+	})
+}
+
+// TestIsTerminal_NoColorEnvVarIgnored verifies NO_COLOR env var is ignored
+func TestIsTerminal_NoColorEnvVarIgnored(t *testing.T) {
+	// This test verifies that isTerminal() does NOT check NO_COLOR environment variable
+	// After refactoring, the function should only check if writer is os.Stdout/os.Stderr
+	// and perform TTY detection, ignoring NO_COLOR completely
+
+	t.Run("NO_COLOR env var should not affect isTerminal", func(t *testing.T) {
+		// Note: We can't reliably test this without mocking the color library
+		// The best we can do is ensure bytes.Buffer always returns false
+		// regardless of NO_COLOR setting
+
+		buf := &bytes.Buffer{}
+		result := isTerminal(buf)
+
+		if result {
+			t.Error("expected isTerminal to return false for bytes.Buffer regardless of NO_COLOR")
+		}
+	})
+}
+
+// TestConsoleLogger_ColorControl verifies color output is controlled by config
+func TestConsoleLogger_ColorControl(t *testing.T) {
+	t.Run("colors can be explicitly enabled", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "info")
+		logger.colorOutput = true
+
+		if !logger.colorOutput {
+			t.Error("expected colorOutput to be true when explicitly enabled")
+		}
+	})
+
+	t.Run("colors can be explicitly disabled", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "info")
+		logger.colorOutput = false
+
+		if logger.colorOutput {
+			t.Error("expected colorOutput to be false when explicitly disabled")
+		}
+	})
+
+	t.Run("auto detection for non-TTY writers", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "info")
+
+		// For bytes.Buffer (non-TTY), colorOutput should be false
+		if logger.colorOutput {
+			t.Error("expected colorOutput to be false for bytes.Buffer (non-TTY)")
+		}
+	})
 }

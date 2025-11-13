@@ -28,7 +28,7 @@ func TestConsoleLoggerIntegration(t *testing.T) {
 		MaxConcurrency: 1,
 	}
 	logger.LogWaveStart(wave)
-	logger.LogWaveComplete(wave, 5*time.Second)
+	logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 	result := models.ExecutionResult{
 		TotalTasks:  1,
@@ -91,7 +91,7 @@ func TestFileLoggerIntegration(t *testing.T) {
 		MaxConcurrency: 1,
 	}
 	logger.LogWaveStart(wave)
-	logger.LogWaveComplete(wave, 5*time.Second)
+	logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 	result := models.ExecutionResult{
 		TotalTasks:  1,

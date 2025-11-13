@@ -201,7 +201,7 @@ func TestFileLogWaveComplete(t *testing.T) {
 	}
 
 	duration := 5 * time.Second
-	logger.LogWaveComplete(wave, duration)
+	logger.LogWaveComplete(wave, duration, []models.TaskResult{})
 
 	// Read log file content
 	content := readRunLog(t, tmpDir)
@@ -406,7 +406,7 @@ func TestConcurrentLogWrites(t *testing.T) {
 				MaxConcurrency: 1,
 			}
 			logger.LogWaveStart(wave)
-			logger.LogWaveComplete(wave, time.Second)
+			logger.LogWaveComplete(wave, time.Second, []models.TaskResult{})
 			done <- true
 		}(i)
 	}
@@ -439,7 +439,7 @@ func TestFileLoggerImplementsInterface(t *testing.T) {
 	// Compile-time interface verification
 	var _ interface {
 		LogWaveStart(models.Wave)
-		LogWaveComplete(models.Wave, time.Duration)
+		LogWaveComplete(models.Wave, time.Duration, []models.TaskResult)
 		LogSummary(models.ExecutionResult)
 	} = logger
 
@@ -448,7 +448,7 @@ func TestFileLoggerImplementsInterface(t *testing.T) {
 	result := models.ExecutionResult{TotalTasks: 1, Completed: 1, Failed: 0, Duration: 1 * time.Second}
 
 	logger.LogWaveStart(wave)
-	logger.LogWaveComplete(wave, 1*time.Second)
+	logger.LogWaveComplete(wave, 1*time.Second, []models.TaskResult{})
 	logger.LogSummary(result)
 }
 

@@ -32,7 +32,7 @@ import (
 // Implementations can log to console, file, or other destinations.
 type Logger interface {
 	LogWaveStart(wave models.Wave)
-	LogWaveComplete(wave models.Wave, duration time.Duration)
+	LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult)
 	LogTaskResult(result models.TaskResult) error
 	LogSummary(result models.ExecutionResult)
 }

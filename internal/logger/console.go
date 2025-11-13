@@ -15,6 +15,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/harrison/conductor/internal/models"
+	"github.com/mattn/go-isatty"
 )
 
 // Log level constants for filtering
@@ -62,16 +63,21 @@ func NewConsoleLogger(writer io.Writer, logLevel string) *ConsoleLogger {
 
 // isTerminal checks if the writer is a terminal that supports colors.
 // Returns true for os.Stdout and os.Stderr when they are TTYs.
+// Does not check NO_COLOR environment variable - color control should be
+// handled via config.yaml settings.
 func isTerminal(w io.Writer) bool {
 	if w == nil {
 		return false
 	}
 
-	// Check if writer is os.Stdout or os.Stderr
-	if w == os.Stdout || w == os.Stderr {
-		// Use color library's built-in TTY detection
-		// This will return false if NO_COLOR env var is set
-		return !color.NoColor
+	// Check if writer is os.Stdout and is a TTY
+	if w == os.Stdout {
+		return isatty.IsTerminal(os.Stdout.Fd())
+	}
+
+	// Check if writer is os.Stderr and is a TTY
+	if w == os.Stderr {
+		return isatty.IsTerminal(os.Stderr.Fd())
 	}
 
 	return false
@@ -252,7 +258,7 @@ func (cl *ConsoleLogger) LogWaveStart(wave models.Wave) {
 // LogWaveComplete logs the completion of a wave execution at INFO level.
 // Format: "[HH:MM:SS] <name> complete (<duration>) - X/X completed (X GREEN, X YELLOW, X RED)"
 // Shows detailed status breakdown for each wave including task counts and QC status distribution.
-func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
 	if cl.writer == nil {
 		return
 	}
@@ -271,11 +277,49 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 	// Calculate task count
 	taskCount := len(wave.TaskNumbers)
 
+	// Count status breakdown from results
+	statusCounts := make(map[string]int)
+	for _, result := range results {
+		if result.Status != "" {
+			statusCounts[result.Status]++
+		}
+	}
+
 	// Build the completion message with task count
 	var statusBreakdown string
 	if taskCount > 0 {
-		// Show task count ratio (currently all tasks are considered completed in a wave)
-		statusBreakdown = fmt.Sprintf(" - %d/%d completed", taskCount, taskCount)
+		// Build status breakdown string (only show non-zero statuses)
+		var statusParts []string
+
+		// Check each status in order: GREEN, YELLOW, RED
+		for _, status := range []string{models.StatusGreen, models.StatusYellow, models.StatusRed} {
+			count := statusCounts[status]
+			if count > 0 {
+				var statusText string
+				if cl.colorOutput {
+					// Color-code each status
+					switch status {
+					case models.StatusGreen:
+						statusText = color.New(color.FgGreen).Sprintf("%d %s", count, status)
+					case models.StatusYellow:
+						statusText = color.New(color.FgYellow).Sprintf("%d %s", count, status)
+					case models.StatusRed:
+						statusText = color.New(color.FgRed).Sprintf("%d %s", count, status)
+					}
+				} else {
+					statusText = fmt.Sprintf("%d %s", count, status)
+				}
+				statusParts = append(statusParts, statusText)
+			}
+		}
+
+		// Format: "X/X completed (X GREEN, X YELLOW, X RED)"
+		if len(statusParts) > 0 {
+			statusBreakdown = fmt.Sprintf(" - %d/%d completed (%s)", taskCount, taskCount, strings.Join(statusParts, ", "))
+		} else {
+			// No status data, just show task count
+			statusBreakdown = fmt.Sprintf(" - %d/%d completed", taskCount, taskCount)
+		}
 	} else {
 		// Show 0/0 for empty waves
 		statusBreakdown = " - 0/0 completed"
@@ -937,7 +981,7 @@ func (n *NoOpLogger) LogWaveStart(wave models.Wave) {
 }
 
 // LogWaveComplete is a no-op implementation.
-func (n *NoOpLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+func (n *NoOpLogger) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
 }
 
 // LogTaskResult is a no-op implementation.

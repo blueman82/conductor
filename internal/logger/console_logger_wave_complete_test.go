@@ -24,7 +24,9 @@ func TestConsoleLogger_LogWaveComplete_BasicDisplay(t *testing.T) {
 
 	duration := 12500 * time.Millisecond // 12.5s
 
-	logger.LogWaveComplete(wave, duration)
+	results := []models.TaskResult{}
+
+	logger.LogWaveComplete(wave, duration, results)
 
 	output := buf.String()
 
@@ -67,7 +69,7 @@ func TestConsoleLogger_LogWaveComplete_AllGreen(t *testing.T) {
 
 	duration := 8300 * time.Millisecond // 8.3s
 
-	logger.LogWaveComplete(wave, duration)
+	logger.LogWaveComplete(wave, duration, []models.TaskResult{})
 
 	output := buf.String()
 
@@ -111,7 +113,7 @@ func TestConsoleLogger_LogWaveComplete_MixedStatuses(t *testing.T) {
 
 	duration := 10 * time.Second
 
-	logger.LogWaveComplete(wave, duration)
+	logger.LogWaveComplete(wave, duration, []models.TaskResult{})
 
 	output := buf.String()
 
@@ -182,7 +184,7 @@ func TestConsoleLogger_LogWaveComplete_DurationCalculation(t *testing.T) {
 				MaxConcurrency: 1,
 			}
 
-			logger.LogWaveComplete(wave, tt.duration)
+			logger.LogWaveComplete(wave, tt.duration, []models.TaskResult{})
 
 			output := buf.String()
 
@@ -206,7 +208,7 @@ func TestConsoleLogger_LogWaveComplete_ColorOutput(t *testing.T) {
 			MaxConcurrency: 2,
 		}
 
-		logger.LogWaveComplete(wave, 5*time.Second)
+		logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 		output := buf.String()
 
@@ -232,7 +234,7 @@ func TestConsoleLogger_LogWaveComplete_ColorOutput(t *testing.T) {
 			MaxConcurrency: 1,
 		}
 
-		logger.LogWaveComplete(wave, 8*time.Second)
+		logger.LogWaveComplete(wave, 8*time.Second, []models.TaskResult{})
 
 		output := buf.String()
 
@@ -263,7 +265,7 @@ func TestConsoleLogger_LogWaveComplete_EmptyWave(t *testing.T) {
 	duration := 1 * time.Second
 
 	// Should not panic
-	logger.LogWaveComplete(wave, duration)
+	logger.LogWaveComplete(wave, duration, []models.TaskResult{})
 
 	output := buf.String()
 
@@ -297,7 +299,7 @@ func TestConsoleLogger_LogWaveComplete_PartialCompletion(t *testing.T) {
 
 	duration := 15 * time.Second
 
-	logger.LogWaveComplete(wave, duration)
+	logger.LogWaveComplete(wave, duration, []models.TaskResult{})
 
 	output := buf.String()
 
@@ -327,7 +329,7 @@ func TestConsoleLogger_LogWaveComplete_StatusCountOnly(t *testing.T) {
 		MaxConcurrency: 3,
 	}
 
-	logger.LogWaveComplete(wave, 5*time.Second)
+	logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 	output := buf.String()
 
@@ -357,7 +359,7 @@ func TestConsoleLogger_LogWaveComplete_LongDuration(t *testing.T) {
 	// Test with 1 hour 30 minutes
 	duration := 1*time.Hour + 30*time.Minute
 
-	logger.LogWaveComplete(wave, duration)
+	logger.LogWaveComplete(wave, duration, []models.TaskResult{})
 
 	output := buf.String()
 
@@ -407,7 +409,7 @@ func TestConsoleLogger_LogWaveComplete_MultipleWaves(t *testing.T) {
 	}
 
 	for _, wt := range waves {
-		logger.LogWaveComplete(wt.wave, wt.duration)
+		logger.LogWaveComplete(wt.wave, wt.duration, []models.TaskResult{})
 	}
 
 	output := buf.String()
@@ -447,7 +449,7 @@ func TestConsoleLogger_LogWaveComplete_ZeroDuration(t *testing.T) {
 		MaxConcurrency: 1,
 	}
 
-	logger.LogWaveComplete(wave, 0*time.Second)
+	logger.LogWaveComplete(wave, 0*time.Second, []models.TaskResult{})
 
 	output := buf.String()
 
@@ -496,7 +498,7 @@ func TestConsoleLogger_LogWaveComplete_MillisecondPrecision(t *testing.T) {
 				MaxConcurrency: 1,
 			}
 
-			logger.LogWaveComplete(wave, tt.duration)
+			logger.LogWaveComplete(wave, tt.duration, []models.TaskResult{})
 
 			output := buf.String()
 

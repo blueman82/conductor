@@ -260,7 +260,7 @@ launchComplete:
 	// Log wave completion only if at least one task was actually launched
 	waveDuration := time.Since(waveStartTime)
 	if atomic.LoadInt32(&tasksLaunched) > 0 && w.logger != nil {
-		w.logger.LogWaveComplete(wave, waveDuration)
+		w.logger.LogWaveComplete(wave, waveDuration, waveResults)
 	}
 
 	return waveResults, execErr

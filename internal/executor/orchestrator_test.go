@@ -28,6 +28,7 @@ type mockLogger struct {
 	waveCompleteCalls []struct {
 		wave     models.Wave
 		duration time.Duration
+		results  []models.TaskResult
 	}
 	summaryCalls []models.ExecutionResult
 }
@@ -36,11 +37,12 @@ func (m *mockLogger) LogWaveStart(wave models.Wave) {
 	m.waveStartCalls = append(m.waveStartCalls, wave)
 }
 
-func (m *mockLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+func (m *mockLogger) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
 	m.waveCompleteCalls = append(m.waveCompleteCalls, struct {
 		wave     models.Wave
 		duration time.Duration
-	}{wave: wave, duration: duration})
+		results  []models.TaskResult
+	}{wave: wave, duration: duration, results: results})
 }
 
 func (m *mockLogger) LogTaskResult(result models.TaskResult) error {
