@@ -138,7 +138,7 @@ func TestColorInWaveMessages(t *testing.T) {
 	}
 
 	logger.LogWaveStart(wave)
-	logger.LogWaveComplete(wave, 5*time.Second)
+	logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 	output := buf.String()
 
@@ -216,7 +216,7 @@ func TestPlainTextInWaveMessages(t *testing.T) {
 	}
 
 	logger.LogWaveStart(wave)
-	logger.LogWaveComplete(wave, 5*time.Second)
+	logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 	output := buf.String()
 

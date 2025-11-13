@@ -175,7 +175,7 @@ func (fl *FileLogger) LogWaveStart(wave models.Wave) {
 
 // LogWaveComplete logs the completion of a wave execution at INFO level.
 // It displays the wave name and duration.
-func (fl *FileLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+func (fl *FileLogger) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
 	// Wave logging is at INFO level
 	if !fl.shouldLog("info") {
 		return

@@ -20,9 +20,9 @@ type PatternMetrics struct {
 // PatternStats tracks metrics for a single pattern type
 type PatternStats struct {
 	PatternType    string
-	DetectionCount int64     // Times this pattern was detected
-	ExecutionCount int64     // Times this pattern appeared in output
-	DetectionRate  float64   // DetectionCount / ExecutionCount
+	DetectionCount int64   // Times this pattern was detected
+	ExecutionCount int64   // Times this pattern appeared in output
+	DetectionRate  float64 // DetectionCount / ExecutionCount
 	LastDetected   time.Time
 	Keywords       []string // Keywords that triggered detection
 }

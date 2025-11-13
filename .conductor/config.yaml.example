@@ -25,6 +25,16 @@ log_level: info
 # Logs will be written to this directory (default: .conductor/logs)
 log_dir: .conductor/logs
 
+# Console output configuration
+console:
+  # Color output control
+  # - auto: Auto-detect based on TTY (isatty check) - default
+  # - true: Force colors on
+  # - false: Force colors off
+  # Note: The NO_COLOR environment variable is NOT checked.
+  # Color control is exclusively via this config setting.
+  colors_enabled: auto
+
 # Dry run mode
 # When true, validates and shows what would run without executing (default: false)
 dry_run: false
@@ -68,8 +78,9 @@ learning:
   # Enable or disable the learning system (default: true)
   enabled: true
 
-  # Database path for learning data (default: .conductor/learning)
-  db_path: .conductor/learning
+  # Database path for learning data (default: .conductor/learning/executions.db)
+  # This should be a file path, not a directory
+  db_path: .conductor/learning/executions.db
 
   # Auto-adapt agent selection based on learned patterns (default: false)
   # When enabled, conductor will automatically suggest or switch agents based on past successes
@@ -95,9 +106,9 @@ learning:
 # learning:
 #   enabled: false
 
-# Example: Custom learning database path
+# Example: Custom learning database path (must be a file path, not directory)
 # learning:
-#   db_path: /var/lib/conductor/learning.db
+#   db_path: /var/lib/conductor/learning/executions.db
 
 # Example: Enable automatic agent adaptation
 # learning:

@@ -149,7 +149,7 @@ func TestExistingMethodsRespectLogLevel(t *testing.T) {
 			}
 
 			logger.LogWaveStart(wave)
-			logger.LogWaveComplete(wave, 5*time.Second)
+			logger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{})
 
 			result := models.ExecutionResult{
 				TotalTasks:  1,

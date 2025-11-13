@@ -812,3 +812,321 @@ func TestPlanMergeStructure(t *testing.T) {
 		})
 	}
 }
+
+// TestTaskExecutionMetadata verifies that execution metadata fields are accessible and properly stored
+func TestTaskExecutionMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		task     Task
+		validate func(t *testing.T, task *Task)
+	}{
+		{
+			name: "task with all execution metadata",
+			task: Task{
+				Number:             "1",
+				Name:               "Test Task",
+				Prompt:             "Do something",
+				ExecutionStartTime: time.Now(),
+				ExecutedBy:         "test-agent",
+				FilesModified:      3,
+				FilesCreated:       2,
+				FilesDeleted:       1,
+			},
+			validate: func(t *testing.T, task *Task) {
+				if task.ExecutedBy != "test-agent" {
+					t.Errorf("ExecutedBy = %v, want test-agent", task.ExecutedBy)
+				}
+				if task.FilesModified != 3 {
+					t.Errorf("FilesModified = %v, want 3", task.FilesModified)
+				}
+				if task.FilesCreated != 2 {
+					t.Errorf("FilesCreated = %v, want 2", task.FilesCreated)
+				}
+				if task.FilesDeleted != 1 {
+					t.Errorf("FilesDeleted = %v, want 1", task.FilesDeleted)
+				}
+				if task.ExecutionStartTime.IsZero() {
+					t.Error("ExecutionStartTime should not be zero")
+				}
+			},
+		},
+		{
+			name: "task without execution metadata",
+			task: Task{
+				Number: "2",
+				Name:   "Another Task",
+				Prompt: "Do something else",
+			},
+			validate: func(t *testing.T, task *Task) {
+				if task.ExecutedBy != "" {
+					t.Errorf("ExecutedBy should be empty, got %v", task.ExecutedBy)
+				}
+				if task.FilesModified != 0 {
+					t.Errorf("FilesModified should be 0, got %v", task.FilesModified)
+				}
+				if task.FilesCreated != 0 {
+					t.Errorf("FilesCreated should be 0, got %v", task.FilesCreated)
+				}
+				if task.FilesDeleted != 0 {
+					t.Errorf("FilesDeleted should be 0, got %v", task.FilesDeleted)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.validate(t, &tt.task)
+		})
+	}
+}
+
+// TestTaskCalculateDuration verifies duration calculation from start and end times
+func TestTaskCalculateDuration(t *testing.T) {
+	tests := []struct {
+		name             string
+		task             Task
+		expectedDur      time.Duration
+		shouldBeZero     bool
+		shouldBeNegative bool
+	}{
+		{
+			name: "normal duration calculation",
+			task: Task{
+				Number:             "1",
+				Name:               "Test Task",
+				Prompt:             "Do something",
+				ExecutionStartTime: time.Unix(0, 0),
+				ExecutionEndTime:   time.Unix(10, 0),
+			},
+			expectedDur: 10 * time.Second,
+		},
+		{
+			name: "zero duration - same start and end time",
+			task: Task{
+				Number:             "2",
+				Name:               "Instant Task",
+				Prompt:             "Do something fast",
+				ExecutionStartTime: time.Unix(100, 0),
+				ExecutionEndTime:   time.Unix(100, 0),
+			},
+			shouldBeZero: true,
+		},
+		{
+			name: "negative duration - end before start",
+			task: Task{
+				Number:             "3",
+				Name:               "Invalid Task",
+				Prompt:             "Time travel",
+				ExecutionStartTime: time.Unix(100, 0),
+				ExecutionEndTime:   time.Unix(50, 0),
+			},
+			shouldBeNegative: true,
+		},
+		{
+			name: "missing start time",
+			task: Task{
+				Number:           "4",
+				Name:             "No Start",
+				Prompt:           "Missing start",
+				ExecutionEndTime: time.Unix(100, 0),
+			},
+			shouldBeZero: true,
+		},
+		{
+			name: "missing end time",
+			task: Task{
+				Number:             "5",
+				Name:               "No End",
+				Prompt:             "Missing end",
+				ExecutionStartTime: time.Unix(0, 0),
+			},
+			shouldBeZero: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			duration := tt.task.CalculateDuration()
+
+			if tt.shouldBeZero && duration != 0 {
+				t.Errorf("expected zero duration, got %v", duration)
+			}
+			if tt.shouldBeNegative && duration >= 0 {
+				t.Errorf("expected negative duration, got %v", duration)
+			}
+			if !tt.shouldBeZero && !tt.shouldBeNegative && duration != tt.expectedDur {
+				t.Errorf("duration = %v, want %v", duration, tt.expectedDur)
+			}
+		})
+	}
+}
+
+// TestTaskExecutionMetadataDefaults verifies new task has zero values for metadata
+func TestTaskExecutionMetadataDefaults(t *testing.T) {
+	task := Task{
+		Number: "1",
+		Name:   "New Task",
+		Prompt: "Do something",
+	}
+
+	if !task.ExecutionStartTime.IsZero() {
+		t.Errorf("ExecutionStartTime should be zero, got %v", task.ExecutionStartTime)
+	}
+	if !task.ExecutionEndTime.IsZero() {
+		t.Errorf("ExecutionEndTime should be zero, got %v", task.ExecutionEndTime)
+	}
+	if task.ExecutionDuration != 0 {
+		t.Errorf("ExecutionDuration should be 0, got %v", task.ExecutionDuration)
+	}
+	if task.ExecutedBy != "" {
+		t.Errorf("ExecutedBy should be empty, got %v", task.ExecutedBy)
+	}
+	if task.FilesModified != 0 {
+		t.Errorf("FilesModified should be 0, got %v", task.FilesModified)
+	}
+	if task.FilesCreated != 0 {
+		t.Errorf("FilesCreated should be 0, got %v", task.FilesCreated)
+	}
+	if task.FilesDeleted != 0 {
+		t.Errorf("FilesDeleted should be 0, got %v", task.FilesDeleted)
+	}
+}
+
+// TestTaskFileOperationCounts verifies file operation tracking and counting
+func TestTaskFileOperationCounts(t *testing.T) {
+	tests := []struct {
+		name             string
+		operations       []string
+		expectedModified int
+		expectedCreated  int
+		expectedDeleted  int
+		expectedTotal    int
+	}{
+		{
+			name:             "no operations",
+			operations:       []string{},
+			expectedModified: 0,
+			expectedCreated:  0,
+			expectedDeleted:  0,
+			expectedTotal:    0,
+		},
+		{
+			name:             "single modified",
+			operations:       []string{"modified"},
+			expectedModified: 1,
+			expectedCreated:  0,
+			expectedDeleted:  0,
+			expectedTotal:    1,
+		},
+		{
+			name:             "single created",
+			operations:       []string{"created"},
+			expectedModified: 0,
+			expectedCreated:  1,
+			expectedDeleted:  0,
+			expectedTotal:    1,
+		},
+		{
+			name:             "single deleted",
+			operations:       []string{"deleted"},
+			expectedModified: 0,
+			expectedCreated:  0,
+			expectedDeleted:  1,
+			expectedTotal:    1,
+		},
+		{
+			name:             "multiple operations",
+			operations:       []string{"modified", "modified", "created", "deleted", "modified"},
+			expectedModified: 3,
+			expectedCreated:  1,
+			expectedDeleted:  1,
+			expectedTotal:    5,
+		},
+		{
+			name:             "unknown operation type",
+			operations:       []string{"unknown", "modified"},
+			expectedModified: 1,
+			expectedCreated:  0,
+			expectedDeleted:  0,
+			expectedTotal:    1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := Task{
+				Number: "1",
+				Name:   "Test Task",
+				Prompt: "Do something",
+			}
+
+			for _, op := range tt.operations {
+				task.RecordFileOperation(op)
+			}
+
+			if task.FilesModified != tt.expectedModified {
+				t.Errorf("FilesModified = %d, want %d", task.FilesModified, tt.expectedModified)
+			}
+			if task.FilesCreated != tt.expectedCreated {
+				t.Errorf("FilesCreated = %d, want %d", task.FilesCreated, tt.expectedCreated)
+			}
+			if task.FilesDeleted != tt.expectedDeleted {
+				t.Errorf("FilesDeleted = %d, want %d", task.FilesDeleted, tt.expectedDeleted)
+			}
+			if task.TotalFileOperations() != tt.expectedTotal {
+				t.Errorf("TotalFileOperations = %d, want %d", task.TotalFileOperations(), tt.expectedTotal)
+			}
+		})
+	}
+}
+
+// TestTaskGetFormattedDuration verifies human-readable duration formatting
+func TestTaskGetFormattedDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{
+			name:     "zero duration",
+			duration: 0,
+			expected: "0s",
+		},
+		{
+			name:     "seconds",
+			duration: 45 * time.Second,
+			expected: "45s",
+		},
+		{
+			name:     "minutes and seconds",
+			duration: 2*time.Minute + 30*time.Second,
+			expected: "2m30s",
+		},
+		{
+			name:     "hours",
+			duration: 1*time.Hour + 15*time.Minute,
+			expected: "1h15m0s",
+		},
+		{
+			name:     "milliseconds",
+			duration: 500 * time.Millisecond,
+			expected: "500ms",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := Task{
+				Number:            "1",
+				Name:              "Test Task",
+				Prompt:            "Do something",
+				ExecutionDuration: tt.duration,
+			}
+			result := task.GetFormattedDuration()
+			if result != tt.expected {
+				t.Errorf("GetFormattedDuration = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}

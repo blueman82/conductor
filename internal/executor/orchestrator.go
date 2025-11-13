@@ -32,7 +32,7 @@ import (
 // Implementations can log to console, file, or other destinations.
 type Logger interface {
 	LogWaveStart(wave models.Wave)
-	LogWaveComplete(wave models.Wave, duration time.Duration)
+	LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult)
 	LogTaskResult(result models.TaskResult) error
 	LogSummary(result models.ExecutionResult)
 }
@@ -219,23 +219,12 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (
 
 // aggregateResults processes task results and creates an ExecutionResult summary.
 func (o *Orchestrator) aggregateResults(plan *models.Plan, results []models.TaskResult, duration time.Duration) *models.ExecutionResult {
-	executionResult := &models.ExecutionResult{
-		TotalTasks:  len(plan.Tasks),
-		Completed:   0,
-		Failed:      0,
-		Duration:    duration,
-		FailedTasks: []models.TaskResult{},
-	}
+	// Use NewExecutionResult to leverage consolidated metric calculation
+	executionResult := models.NewExecutionResult(results, true, duration)
 
-	// Count completed and failed tasks (handles empty results slice gracefully)
-	for _, result := range results {
-		if isCompleted(result) {
-			executionResult.Completed++
-		} else if isFailed(result) {
-			executionResult.Failed++
-			executionResult.FailedTasks = append(executionResult.FailedTasks, result)
-		}
-	}
+	// Override TotalTasks to reflect plan size (not just executed tasks)
+	// This is important when some tasks are skipped or execution is interrupted
+	executionResult.TotalTasks = len(plan.Tasks)
 
 	return executionResult
 }

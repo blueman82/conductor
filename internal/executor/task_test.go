@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -1116,16 +1117,16 @@ func TestUpdateCorrectFile(t *testing.T) {
 // MockLearningStore implements a mock learning store for testing pre-task and post-task hooks
 type MockLearningStore struct {
 	mu                   sync.Mutex
-	AnalysisResult       *FailureAnalysis
+	AnalysisResult       *learning.FailureAnalysis
 	AnalysisError        error
 	CallCount            int
 	LastPlanFile         string
 	LastTaskNumber       string
-	RecordedExecutions   []*TaskExecution
+	RecordedExecutions   []*learning.TaskExecution
 	RecordExecutionError error
 }
 
-func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*FailureAnalysis, error) {
+func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*learning.FailureAnalysis, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.CallCount++
@@ -1138,7 +1139,7 @@ func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskN
 
 	// Return default empty analysis if none configured
 	if m.AnalysisResult == nil {
-		return &FailureAnalysis{
+		return &learning.FailureAnalysis{
 			TriedAgents:    make([]string, 0),
 			CommonPatterns: make([]string, 0),
 		}, nil
@@ -1147,7 +1148,7 @@ func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskN
 	return m.AnalysisResult, nil
 }
 
-func (m *MockLearningStore) RecordExecution(ctx context.Context, exec *TaskExecution) error {
+func (m *MockLearningStore) RecordExecution(ctx context.Context, exec *learning.TaskExecution) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1159,16 +1160,16 @@ func (m *MockLearningStore) RecordExecution(ctx context.Context, exec *TaskExecu
 	return nil
 }
 
-func (m *MockLearningStore) GetRecordedExecutions() []*TaskExecution {
+func (m *MockLearningStore) GetRecordedExecutions() []*learning.TaskExecution {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]*TaskExecution{}, m.RecordedExecutions...)
+	return append([]*learning.TaskExecution{}, m.RecordedExecutions...)
 }
 
 // TestPreTaskHook_NoHistory verifies that hook is no-op when no failure history exists
 func TestPreTaskHook_NoHistory(t *testing.T) {
 	mockStore := &MockLearningStore{
-		AnalysisResult: &FailureAnalysis{
+		AnalysisResult: &learning.FailureAnalysis{
 			TotalAttempts:  0,
 			FailedAttempts: 0,
 			TriedAgents:    []string{},
@@ -1191,8 +1192,8 @@ func TestPreTaskHook_NoHistory(t *testing.T) {
 	}
 
 	// Set learning store and related fields
-	executor.learningStore = mockStore
-	executor.planFile = "plan.md"
+	executor.LearningStore = mockStore
+	executor.PlanFile = "plan.md"
 
 	task := models.Task{
 		Number: "1",
@@ -1224,7 +1225,7 @@ func TestPreTaskHook_NoHistory(t *testing.T) {
 // TestPreTaskHook_AdaptsAgent verifies that agent is changed when 2+ failures detected
 func TestPreTaskHook_AdaptsAgent(t *testing.T) {
 	mockStore := &MockLearningStore{
-		AnalysisResult: &FailureAnalysis{
+		AnalysisResult: &learning.FailureAnalysis{
 			TotalAttempts:           3,
 			FailedAttempts:          2,
 			TriedAgents:             []string{"backend-developer"},
@@ -1249,8 +1250,8 @@ func TestPreTaskHook_AdaptsAgent(t *testing.T) {
 	}
 
 	// Set learning store and related fields
-	executor.learningStore = mockStore
-	executor.planFile = "plan.md"
+	executor.LearningStore = mockStore
+	executor.PlanFile = "plan.md"
 
 	task := models.Task{
 		Number: "1",
@@ -1290,7 +1291,7 @@ func TestPreTaskHook_AdaptsAgent(t *testing.T) {
 // TestPreTaskHook_EnhancesPrompt verifies that prompt is enhanced with learning context
 func TestPreTaskHook_EnhancesPrompt(t *testing.T) {
 	mockStore := &MockLearningStore{
-		AnalysisResult: &FailureAnalysis{
+		AnalysisResult: &learning.FailureAnalysis{
 			TotalAttempts:     2,
 			FailedAttempts:    1,
 			TriedAgents:       []string{"backend-developer"},
@@ -1314,8 +1315,8 @@ func TestPreTaskHook_EnhancesPrompt(t *testing.T) {
 	}
 
 	// Set learning store and related fields
-	executor.learningStore = mockStore
-	executor.planFile = "plan.md"
+	executor.LearningStore = mockStore
+	executor.PlanFile = "plan.md"
 
 	originalPrompt := "Write a function"
 	task := models.Task{
@@ -1416,8 +1417,8 @@ func TestPreTaskHook_LearningStoreError(t *testing.T) {
 	}
 
 	// Set learning store that will return error
-	executor.learningStore = mockStore
-	executor.planFile = "plan.md"
+	executor.LearningStore = mockStore
+	executor.PlanFile = "plan.md"
 
 	task := models.Task{
 		Number: "1",
@@ -1450,7 +1451,7 @@ func TestPreTaskHook_LearningStoreError(t *testing.T) {
 // TestPreTaskHook_NoSuggestedAgent verifies handling when no alternative agent available
 func TestPreTaskHook_NoSuggestedAgent(t *testing.T) {
 	mockStore := &MockLearningStore{
-		AnalysisResult: &FailureAnalysis{
+		AnalysisResult: &learning.FailureAnalysis{
 			TotalAttempts:           3,
 			FailedAttempts:          2,
 			TriedAgents:             []string{"backend-developer"},
@@ -1474,8 +1475,8 @@ func TestPreTaskHook_NoSuggestedAgent(t *testing.T) {
 	}
 
 	// Set learning store
-	executor.learningStore = mockStore
-	executor.planFile = "plan.md"
+	executor.LearningStore = mockStore
+	executor.PlanFile = "plan.md"
 
 	task := models.Task{
 		Number: "1",
@@ -1502,7 +1503,7 @@ func TestPreTaskHook_NoSuggestedAgent(t *testing.T) {
 // TestPreTaskHook_AgentAlreadyOptimal verifies no change when suggested agent is current
 func TestPreTaskHook_AgentAlreadyOptimal(t *testing.T) {
 	mockStore := &MockLearningStore{
-		AnalysisResult: &FailureAnalysis{
+		AnalysisResult: &learning.FailureAnalysis{
 			TotalAttempts:           3,
 			FailedAttempts:          2,
 			TriedAgents:             []string{"backend-developer"},
@@ -1526,8 +1527,8 @@ func TestPreTaskHook_AgentAlreadyOptimal(t *testing.T) {
 	}
 
 	// Set learning store
-	executor.learningStore = mockStore
-	executor.planFile = "plan.md"
+	executor.LearningStore = mockStore
+	executor.PlanFile = "plan.md"
 
 	task := models.Task{
 		Number: "1",
@@ -2485,10 +2486,10 @@ func TestPostTaskHook_RecordsExecution(t *testing.T) {
 	}
 
 	// Configure learning
-	executor.learningStore = mockStore
-	executor.planFile = "test-plan.md"
-	executor.sessionID = "session-123"
-	executor.runNumber = 5
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-123"
+	executor.RunNumber = 5
 
 	task := models.Task{
 		Number: "Task 1",
@@ -2566,10 +2567,10 @@ func TestPostTaskHook_IncludesPatterns(t *testing.T) {
 	}
 
 	// Configure learning
-	executor.learningStore = mockStore
-	executor.planFile = "test-plan.md"
-	executor.sessionID = "session-456"
-	executor.runNumber = 3
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-456"
+	executor.RunNumber = 3
 
 	task := models.Task{
 		Number:   "Task 2",
@@ -2635,10 +2636,10 @@ func TestPostTaskHook_HandlesStoreError(t *testing.T) {
 	}
 
 	// Configure learning with failing store
-	executor.learningStore = mockStore
-	executor.planFile = "test-plan.md"
-	executor.sessionID = "session-789"
-	executor.runNumber = 1
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-789"
+	executor.RunNumber = 1
 
 	task := models.Task{
 		Number: "Task 3",
@@ -2682,10 +2683,10 @@ func TestPostTaskHook_MissingMetadata(t *testing.T) {
 	}
 
 	// Configure learning
-	executor.learningStore = mockStore
-	executor.planFile = "test-plan.md"
-	executor.sessionID = "session-999"
-	executor.runNumber = 2
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+	executor.SessionID = "session-999"
+	executor.RunNumber = 2
 
 	// Task without metadata
 	task := models.Task{

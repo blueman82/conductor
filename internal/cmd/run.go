@@ -9,10 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/display"
 	"github.com/harrison/conductor/internal/executor"
+	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/logger"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/parser"
@@ -32,7 +34,7 @@ func (l *consoleLogger) LogWaveStart(wave models.Wave) {
 }
 
 // LogWaveComplete logs the completion of a wave
-func (l *consoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+func (l *consoleLogger) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
 	timestamp := time.Now().Format("15:04:05")
 	fmt.Fprintf(l.writer, "[%s] Completed %s in %s\n", timestamp, wave.Name, duration.Round(time.Second))
 }
@@ -112,6 +114,11 @@ Examples:
 	cmd.Flags().Bool("no-retry-failed", false, "Do not retry failed tasks (overrides config)")
 
 	return cmd
+}
+
+// generateSessionID generates a unique session ID for tracking task executions
+func generateSessionID() string {
+	return uuid.NewString()
 }
 
 // runCommand implements the run command logic
@@ -198,6 +205,17 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Validate merged configuration
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Initialize learning store if enabled
+	var learningStore *learning.Store
+	if cfg.Learning.Enabled {
+		store, err := learning.NewStore(cfg.Learning.DBPath)
+		if err != nil {
+			return fmt.Errorf("failed to initialize learning store: %w", err)
+		}
+		learningStore = store
+		defer store.Close()
 	}
 
 	// Use merged config values
@@ -420,11 +438,27 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create task executor: %w", err)
 	}
 
+	// Wire learning system to task executor
+	sessionID := generateSessionID()
+	taskExec.LearningStore = learningStore
+	taskExec.PlanFile = planFile
+	taskExec.SessionID = sessionID
+	taskExec.RunNumber = 1 // Increment per plan re-run
+
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithConfig(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
 
-	// Create orchestrator with wave executor and logger
-	orch := executor.NewOrchestratorWithConfig(waveExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
+	// Create orchestrator with learning integration
+	orch := executor.NewOrchestratorFromConfig(executor.OrchestratorConfig{
+		WaveExecutor:  waveExec,
+		Logger:        multiLog,
+		LearningStore: learningStore,
+		SessionID:     sessionID,
+		RunNumber:     taskExec.RunNumber,
+		PlanFile:      planFile,
+		SkipCompleted: cfg.SkipCompleted,
+		RetryFailed:   cfg.RetryFailed,
+	})
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -477,9 +511,9 @@ func (ml *multiLogger) LogWaveStart(wave models.Wave) {
 }
 
 // LogWaveComplete forwards to all loggers
-func (ml *multiLogger) LogWaveComplete(wave models.Wave, duration time.Duration) {
+func (ml *multiLogger) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
 	for _, logger := range ml.loggers {
-		logger.LogWaveComplete(wave, duration)
+		logger.LogWaveComplete(wave, duration, results)
 	}
 }
 
