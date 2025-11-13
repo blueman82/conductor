@@ -1077,14 +1077,14 @@ func TestConsoleLogger_LogProgress_ProgressBarIntegration(t *testing.T) {
 	logger := NewConsoleLogger(buf, "info")
 
 	// Test with 50% completion
-	tasks := []models.Task{
-		{Number: "1", Name: "Task 1", Status: "completed"},
-		{Number: "2", Name: "Task 2", Status: "completed"},
-		{Number: "3", Name: "Task 3", Status: "pending"},
-		{Number: "4", Name: "Task 4", Status: "pending"},
+	results := []models.TaskResult{
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}},
+		{Task: models.Task{Number: "3", Name: "Task 3", Status: "pending"}},
+		{Task: models.Task{Number: "4", Name: "Task 4", Status: "pending"}},
 	}
 
-	logger.LogProgress(tasks)
+	logger.LogProgress(results)
 
 	output := buf.String()
 
@@ -1110,13 +1110,13 @@ func TestConsoleLogger_LogProgress_EdgeCaseNilStartedAt(t *testing.T) {
 	logger := NewConsoleLogger(buf, "info")
 
 	// Tasks without StartedAt (no duration data)
-	tasks := []models.Task{
-		{Number: "1", Name: "Task 1", Status: "completed", StartedAt: nil},
-		{Number: "2", Name: "Task 2", Status: "pending"},
+	results := []models.TaskResult{
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed", StartedAt: nil}},
+		{Task: models.Task{Number: "2", Name: "Task 2", Status: "pending"}},
 	}
 
 	// Should not panic with nil StartedAt
-	logger.LogProgress(tasks)
+	logger.LogProgress(results)
 
 	output := buf.String()
 

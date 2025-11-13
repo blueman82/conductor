@@ -849,7 +849,7 @@ func (cl *ConsoleLogger) LogProgress(results []models.TaskResult) {
 	totalDuration := time.Duration(0)
 
 	for _, result := range results {
-		if result.Status != "" {
+		if result.Task.Status == "completed" {
 			completed++
 			// Use the Duration field from TaskResult
 			totalDuration += result.Duration
