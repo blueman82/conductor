@@ -9,6 +9,33 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ConsoleConfig controls terminal output formatting and features
+type ConsoleConfig struct {
+	// EnableColor enables colored output
+	EnableColor bool `yaml:"enable_color"`
+
+	// EnableProgressBar enables progress bar display
+	EnableProgressBar bool `yaml:"enable_progress_bar"`
+
+	// EnableTaskDetails enables detailed task information
+	EnableTaskDetails bool `yaml:"enable_task_details"`
+
+	// EnableQCFeedback enables quality control feedback display
+	EnableQCFeedback bool `yaml:"enable_qc_feedback"`
+
+	// CompactMode enables compact output format
+	CompactMode bool `yaml:"compact_mode"`
+
+	// ShowAgentNames shows agent names in output
+	ShowAgentNames bool `yaml:"show_agent_names"`
+
+	// ShowFileCounts shows file counts in output
+	ShowFileCounts bool `yaml:"show_file_counts"`
+
+	// ShowDurations shows task durations in output
+	ShowDurations bool `yaml:"show_durations"`
+}
+
 // LearningConfig represents learning system configuration
 type LearningConfig struct {
 	// Enabled enables the learning system
@@ -56,8 +83,25 @@ type Config struct {
 	// RetryFailed retries tasks that failed
 	RetryFailed bool `yaml:"retry_failed"`
 
+	// Console contains console output configuration
+	Console ConsoleConfig `yaml:"console"`
+
 	// Learning contains learning system configuration
 	Learning LearningConfig `yaml:"learning"`
+}
+
+// DefaultConsoleConfig returns ConsoleConfig with sensible default values
+func DefaultConsoleConfig() ConsoleConfig {
+	return ConsoleConfig{
+		EnableColor:       true,
+		EnableProgressBar: true,
+		EnableTaskDetails: true,
+		EnableQCFeedback:  true,
+		CompactMode:       false,
+		ShowAgentNames:    true,
+		ShowFileCounts:    true,
+		ShowDurations:     true,
+	}
 }
 
 // DefaultConfig returns a Config with sensible default values
@@ -70,6 +114,7 @@ func DefaultConfig() *Config {
 		DryRun:         false,
 		SkipCompleted:  false,
 		RetryFailed:    false,
+		Console:        DefaultConsoleConfig(),
 		Learning: LearningConfig{
 			Enabled:                true,
 			DBPath:                 ".conductor/learning",
@@ -111,6 +156,7 @@ func LoadConfig(path string) (*Config, error) {
 		DryRun         bool           `yaml:"dry_run"`
 		SkipCompleted  bool           `yaml:"skip_completed"`
 		RetryFailed    bool           `yaml:"retry_failed"`
+		Console        ConsoleConfig  `yaml:"console"`
 		Learning       LearningConfig `yaml:"learning"`
 	}
 
@@ -149,10 +195,42 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.RetryFailed = yamlCfg.RetryFailed
 	}
 
-	// Merge Learning config - need to check if the section was provided at all
-	// We create a temporary unmarshal to detect if learning section exists
+	// Merge Console and Learning configs - need to check if sections were provided at all
+	// We create a temporary unmarshal to detect if console/learning sections exist
 	var rawMap map[string]interface{}
 	if err := yaml.Unmarshal(data, &rawMap); err == nil {
+		// Merge Console config if section exists
+		if consoleSection, exists := rawMap["console"]; exists && consoleSection != nil {
+			console := yamlCfg.Console
+			consoleMap, _ := consoleSection.(map[string]interface{})
+
+			if _, exists := consoleMap["enable_color"]; exists {
+				cfg.Console.EnableColor = console.EnableColor
+			}
+			if _, exists := consoleMap["enable_progress_bar"]; exists {
+				cfg.Console.EnableProgressBar = console.EnableProgressBar
+			}
+			if _, exists := consoleMap["enable_task_details"]; exists {
+				cfg.Console.EnableTaskDetails = console.EnableTaskDetails
+			}
+			if _, exists := consoleMap["enable_qc_feedback"]; exists {
+				cfg.Console.EnableQCFeedback = console.EnableQCFeedback
+			}
+			if _, exists := consoleMap["compact_mode"]; exists {
+				cfg.Console.CompactMode = console.CompactMode
+			}
+			if _, exists := consoleMap["show_agent_names"]; exists {
+				cfg.Console.ShowAgentNames = console.ShowAgentNames
+			}
+			if _, exists := consoleMap["show_file_counts"]; exists {
+				cfg.Console.ShowFileCounts = console.ShowFileCounts
+			}
+			if _, exists := consoleMap["show_durations"]; exists {
+				cfg.Console.ShowDurations = console.ShowDurations
+			}
+		}
+
+		// Merge Learning config
 		if learningSection, exists := rawMap["learning"]; exists && learningSection != nil {
 			// Learning section exists in YAML, merge it
 			learning := yamlCfg.Learning
@@ -244,6 +322,9 @@ func (c *Config) Validate() error {
 	if c.Timeout < 0 {
 		return fmt.Errorf("timeout must be >= 0, got %v", c.Timeout)
 	}
+
+	// Console configuration is all boolean flags with sensible defaults,
+	// no additional validation needed
 
 	// Validate learning configuration
 	if c.Learning.Enabled {

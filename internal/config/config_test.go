@@ -934,3 +934,282 @@ func TestConfig_LearningValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestConsoleConfigDefaults verifies default values for ConsoleConfig
+func TestConsoleConfigDefaults(t *testing.T) {
+	console := DefaultConsoleConfig()
+
+	tests := []struct {
+		name     string
+		got      bool
+		expected bool
+	}{
+		{"EnableColor", console.EnableColor, true},
+		{"EnableProgressBar", console.EnableProgressBar, true},
+		{"EnableTaskDetails", console.EnableTaskDetails, true},
+		{"EnableQCFeedback", console.EnableQCFeedback, true},
+		{"CompactMode", console.CompactMode, false},
+		{"ShowAgentNames", console.ShowAgentNames, true},
+		{"ShowFileCounts", console.ShowFileCounts, true},
+		{"ShowDurations", console.ShowDurations, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("ConsoleConfig.%s = %v, want %v", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestConsoleConfigFromYAML tests parsing console section from YAML
+func TestConsoleConfigFromYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `console:
+  enable_color: false
+  enable_progress_bar: true
+  enable_task_details: false
+  enable_qc_feedback: true
+  compact_mode: true
+  show_agent_names: false
+  show_file_counts: true
+  show_durations: false
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		got      bool
+		expected bool
+	}{
+		{"EnableColor", cfg.Console.EnableColor, false},
+		{"EnableProgressBar", cfg.Console.EnableProgressBar, true},
+		{"EnableTaskDetails", cfg.Console.EnableTaskDetails, false},
+		{"EnableQCFeedback", cfg.Console.EnableQCFeedback, true},
+		{"CompactMode", cfg.Console.CompactMode, true},
+		{"ShowAgentNames", cfg.Console.ShowAgentNames, false},
+		{"ShowFileCounts", cfg.Console.ShowFileCounts, true},
+		{"ShowDurations", cfg.Console.ShowDurations, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("Config.Console.%s = %v, want %v", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestConsoleConfigMissingSection tests that missing console section uses defaults
+func TestConsoleConfigMissingSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `max_concurrency: 5
+timeout: 30m
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Console should have default values
+	if !cfg.Console.EnableColor {
+		t.Errorf("Console.EnableColor = %v, want true (default)", cfg.Console.EnableColor)
+	}
+	if !cfg.Console.EnableProgressBar {
+		t.Errorf("Console.EnableProgressBar = %v, want true (default)", cfg.Console.EnableProgressBar)
+	}
+	if !cfg.Console.EnableTaskDetails {
+		t.Errorf("Console.EnableTaskDetails = %v, want true (default)", cfg.Console.EnableTaskDetails)
+	}
+	if !cfg.Console.EnableQCFeedback {
+		t.Errorf("Console.EnableQCFeedback = %v, want true (default)", cfg.Console.EnableQCFeedback)
+	}
+	if cfg.Console.CompactMode {
+		t.Errorf("Console.CompactMode = %v, want false (default)", cfg.Console.CompactMode)
+	}
+	if !cfg.Console.ShowAgentNames {
+		t.Errorf("Console.ShowAgentNames = %v, want true (default)", cfg.Console.ShowAgentNames)
+	}
+	if !cfg.Console.ShowFileCounts {
+		t.Errorf("Console.ShowFileCounts = %v, want true (default)", cfg.Console.ShowFileCounts)
+	}
+	if !cfg.Console.ShowDurations {
+		t.Errorf("Console.ShowDurations = %v, want true (default)", cfg.Console.ShowDurations)
+	}
+}
+
+// TestConsoleConfigPartialYAML tests that partial console config merges with defaults
+func TestConsoleConfigPartialYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `console:
+  enable_color: false
+  compact_mode: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Set values should be from YAML
+	if cfg.Console.EnableColor {
+		t.Errorf("Console.EnableColor = %v, want false", cfg.Console.EnableColor)
+	}
+	if !cfg.Console.CompactMode {
+		t.Errorf("Console.CompactMode = %v, want true", cfg.Console.CompactMode)
+	}
+
+	// Unset values should be from defaults
+	if !cfg.Console.EnableProgressBar {
+		t.Errorf("Console.EnableProgressBar = %v, want true (default)", cfg.Console.EnableProgressBar)
+	}
+	if !cfg.Console.ShowAgentNames {
+		t.Errorf("Console.ShowAgentNames = %v, want true (default)", cfg.Console.ShowAgentNames)
+	}
+}
+
+// TestConsoleConfigWithOtherSettings tests console config with other config settings
+func TestConsoleConfigWithOtherSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `max_concurrency: 8
+timeout: 2h
+log_level: debug
+console:
+  enable_color: true
+  compact_mode: false
+  show_agent_names: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Verify other settings loaded correctly
+	if cfg.MaxConcurrency != 8 {
+		t.Errorf("MaxConcurrency = %d, want 8", cfg.MaxConcurrency)
+	}
+	if cfg.LogLevel != "debug" {
+		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "debug")
+	}
+
+	// Verify console settings loaded correctly
+	if !cfg.Console.EnableColor {
+		t.Errorf("Console.EnableColor = %v, want true", cfg.Console.EnableColor)
+	}
+	if cfg.Console.CompactMode {
+		t.Errorf("Console.CompactMode = %v, want false", cfg.Console.CompactMode)
+	}
+	if !cfg.Console.ShowAgentNames {
+		t.Errorf("Console.ShowAgentNames = %v, want true", cfg.Console.ShowAgentNames)
+	}
+}
+
+// TestConsoleConfigEnvironmentOverride tests environment variable overrides
+func TestConsoleConfigEnvironmentOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `console:
+  enable_color: true
+  compact_mode: false
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Simulate environment variable override
+	// (This test documents the expected behavior; actual env override
+	// would be implemented at CLI level via MergeWithFlags equivalent)
+	originalColor := cfg.Console.EnableColor
+	if !originalColor {
+		t.Errorf("Console.EnableColor should be true from YAML, got %v", originalColor)
+	}
+}
+
+// TestDefaultConfigIncludesConsole verifies DefaultConfig includes console settings
+func TestDefaultConfigIncludesConsole(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.Console.EnableColor != true {
+		t.Errorf("Default Console.EnableColor = %v, want true", cfg.Console.EnableColor)
+	}
+	if cfg.Console.EnableProgressBar != true {
+		t.Errorf("Default Console.EnableProgressBar = %v, want true", cfg.Console.EnableProgressBar)
+	}
+	if cfg.Console.EnableTaskDetails != true {
+		t.Errorf("Default Console.EnableTaskDetails = %v, want true", cfg.Console.EnableTaskDetails)
+	}
+	if cfg.Console.EnableQCFeedback != true {
+		t.Errorf("Default Console.EnableQCFeedback = %v, want true", cfg.Console.EnableQCFeedback)
+	}
+	if cfg.Console.CompactMode != false {
+		t.Errorf("Default Console.CompactMode = %v, want false", cfg.Console.CompactMode)
+	}
+	if cfg.Console.ShowAgentNames != true {
+		t.Errorf("Default Console.ShowAgentNames = %v, want true", cfg.Console.ShowAgentNames)
+	}
+	if cfg.Console.ShowFileCounts != true {
+		t.Errorf("Default Console.ShowFileCounts = %v, want true", cfg.Console.ShowFileCounts)
+	}
+	if cfg.Console.ShowDurations != true {
+		t.Errorf("Default Console.ShowDurations = %v, want true", cfg.Console.ShowDurations)
+	}
+}
+
+// TestEmptyConsoleSection tests loading config with empty console section
+func TestEmptyConsoleSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `console:
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Should use defaults for all fields
+	if !cfg.Console.EnableColor {
+		t.Errorf("Console.EnableColor = %v, want true (default)", cfg.Console.EnableColor)
+	}
+	if !cfg.Console.EnableProgressBar {
+		t.Errorf("Console.EnableProgressBar = %v, want true (default)", cfg.Console.EnableProgressBar)
+	}
+}
