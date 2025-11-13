@@ -2623,10 +2623,10 @@ func TestLogSummary_AverageDuration(t *testing.T) {
 	logger := NewConsoleLogger(buf, "info")
 
 	result := models.ExecutionResult{
-		TotalTasks: 4,
-		Completed:  4,
-		Failed:     0,
-		Duration:   12 * time.Second,
+		TotalTasks:      4,
+		Completed:       4,
+		Failed:          0,
+		Duration:        12 * time.Second,
 		AvgTaskDuration: 3 * time.Second, // 12s / 4 = 3s
 		StatusBreakdown: map[string]int{
 			models.StatusGreen: 4,

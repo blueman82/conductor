@@ -884,10 +884,10 @@ func TestTaskExecutionMetadata(t *testing.T) {
 // TestTaskCalculateDuration verifies duration calculation from start and end times
 func TestTaskCalculateDuration(t *testing.T) {
 	tests := []struct {
-		name           string
-		task           Task
-		expectedDur    time.Duration
-		shouldBeZero   bool
+		name             string
+		task             Task
+		expectedDur      time.Duration
+		shouldBeZero     bool
 		shouldBeNegative bool
 	}{
 		{
@@ -996,8 +996,8 @@ func TestTaskExecutionMetadataDefaults(t *testing.T) {
 // TestTaskFileOperationCounts verifies file operation tracking and counting
 func TestTaskFileOperationCounts(t *testing.T) {
 	tests := []struct {
-		name           string
-		operations     []string
+		name             string
+		operations       []string
 		expectedModified int
 		expectedCreated  int
 		expectedDeleted  int
@@ -1118,10 +1118,10 @@ func TestTaskGetFormattedDuration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			task := Task{
-				Number:             "1",
-				Name:               "Test Task",
-				Prompt:             "Do something",
-				ExecutionDuration:  tt.duration,
+				Number:            "1",
+				Name:              "Test Task",
+				Prompt:            "Do something",
+				ExecutionDuration: tt.duration,
 			}
 			result := task.GetFormattedDuration()
 			if result != tt.expected {

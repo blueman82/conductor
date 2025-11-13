@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/display"
@@ -18,7 +19,6 @@ import (
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/parser"
 	"github.com/spf13/cobra"
-	"github.com/google/uuid"
 )
 
 // consoleLogger implements executor.Logger interface for console output

@@ -682,7 +682,7 @@ func TestExecutionResult_HelperFunction(t *testing.T) {
 			expectedGreen:       2,
 			expectedYellow:      1,
 			expectedRed:         1,
-			expectedFiles:       5, // a.go, b.go, c.go, d.yaml, e.go
+			expectedFiles:       5,               // a.go, b.go, c.go, d.yaml, e.go
 			expectedAvgDuration: 5 * time.Second, // (2+4+6+8)/4 = 20/4 = 5
 			expectedAgents: map[string]int{
 				"golang-pro": 3,

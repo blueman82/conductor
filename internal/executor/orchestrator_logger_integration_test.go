@@ -538,7 +538,11 @@ func TestOrchestratorEndToEndFlow(t *testing.T) {
 
 // mockLoggerWithTaskTracking captures task logging calls
 type mockLoggerWithTaskTracking struct {
-	taskStartCalls    []struct{ task models.Task; current int; total int }
+	taskStartCalls []struct {
+		task    models.Task
+		current int
+		total   int
+	}
 	taskProgressCalls [][]models.Task
 	taskResultCalls   []models.TaskResult
 	summaryCalls      []models.ExecutionResult
@@ -546,7 +550,8 @@ type mockLoggerWithTaskTracking struct {
 }
 
 func (m *mockLoggerWithTaskTracking) LogWaveStart(wave models.Wave) {}
-func (m *mockLoggerWithTaskTracking) LogWaveComplete(wave models.Wave, duration time.Duration) {}
+func (m *mockLoggerWithTaskTracking) LogWaveComplete(wave models.Wave, duration time.Duration, results []models.TaskResult) {
+}
 
 func (m *mockLoggerWithTaskTracking) LogTaskStart(task models.Task, current int, total int) {
 	m.mu.Lock()

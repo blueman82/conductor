@@ -420,10 +420,11 @@ func (cl *ConsoleLogger) logTaskResultDefault(result models.TaskResult) error {
 // logTaskResultVerbose logs a task result in multi-line verbose format.
 // Format:
 // [HH:MM:SS] ✓/⚠/✗ Task N (name): STATUS
-//   Duration: X.XsX
-//   Agent: agent-name
-//   Files: list of files (with operation types)
-//   Feedback: QC review feedback
+//
+//	Duration: X.XsX
+//	Agent: agent-name
+//	Files: list of files (with operation types)
+//	Feedback: QC review feedback
 func (cl *ConsoleLogger) logTaskResultVerbose(result models.TaskResult) error {
 	ts := timestamp()
 
