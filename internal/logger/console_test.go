@@ -1250,3 +1250,561 @@ func TestConsoleLoggerLogTaskStartConcurrency(t *testing.T) {
 		}
 	}
 }
+
+// TestConsoleLoggerLogTaskResultSuccess verifies successful task (GREEN) output.
+func TestConsoleLoggerLogTaskResultSuccess(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "1",
+			Name:          "Setup Database",
+			Agent:         "backend-dev",
+			Files:         []string{"db.go", "schema.sql", "migration.go"},
+			FilesModified: 2,
+			FilesCreated:  1,
+		},
+		Status:   models.StatusGreen,
+		Duration: 5*time.Second + 300*time.Millisecond,
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify timestamp prefix
+	if !strings.HasPrefix(output, "[") {
+		t.Error("expected output to start with timestamp [")
+	}
+
+	// Verify status is GREEN
+	if !strings.Contains(output, "GREEN") {
+		t.Errorf("expected 'GREEN' status in output, got %q", output)
+	}
+
+	// Verify task info
+	if !strings.Contains(output, "Task 1") {
+		t.Errorf("expected 'Task 1' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Setup Database") {
+		t.Errorf("expected 'Setup Database' in output, got %q", output)
+	}
+
+	// Verify duration
+	if !strings.Contains(output, "5.3s") {
+		t.Errorf("expected duration '5.3s' in output, got %q", output)
+	}
+
+	// Verify agent
+	if !strings.Contains(output, "backend-dev") {
+		t.Errorf("expected agent 'backend-dev' in output, got %q", output)
+	}
+
+	// Verify file count
+	if !strings.Contains(output, "3 files") {
+		t.Errorf("expected '3 files' in output, got %q", output)
+	}
+}
+
+// TestConsoleLoggerLogTaskResultFailed verifies failed task (RED) output.
+func TestConsoleLoggerLogTaskResultFailed(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "2",
+			Name:          "Run Tests",
+			Agent:         "test-runner",
+			Files:         []string{"test.go"},
+			FilesModified: 0,
+			FilesCreated:  0,
+		},
+		Status:   models.StatusRed,
+		Duration: 2 * time.Second,
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify status is RED
+	if !strings.Contains(output, "RED") {
+		t.Errorf("expected 'RED' status in output, got %q", output)
+	}
+
+	// Verify task info
+	if !strings.Contains(output, "Task 2") {
+		t.Errorf("expected 'Task 2' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Run Tests") {
+		t.Errorf("expected 'Run Tests' in output, got %q", output)
+	}
+
+	// Verify duration
+	if !strings.Contains(output, "2.0s") {
+		t.Errorf("expected duration '2.0s' in output, got %q", output)
+	}
+}
+
+// TestConsoleLoggerLogTaskResultWarning verifies warning task (YELLOW) output.
+func TestConsoleLoggerLogTaskResultWarning(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "3",
+			Name:          "Lint Check",
+			Agent:         "linter",
+			Files:         []string{"main.go", "utils.go"},
+			FilesModified: 1,
+			FilesCreated:  0,
+		},
+		Status:   models.StatusYellow,
+		Duration: 1 * time.Second,
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify status is YELLOW
+	if !strings.Contains(output, "YELLOW") {
+		t.Errorf("expected 'YELLOW' status in output, got %q", output)
+	}
+
+	// Verify task info
+	if !strings.Contains(output, "Task 3") {
+		t.Errorf("expected 'Task 3' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Lint Check") {
+		t.Errorf("expected 'Lint Check' in output, got %q", output)
+	}
+}
+
+// TestConsoleLoggerLogTaskResultColors verifies color output is applied correctly.
+func TestConsoleLoggerLogTaskResultColors(t *testing.T) {
+	t.Run("with colors enabled", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "debug")
+		logger.colorOutput = true // Force color output
+
+		result := models.TaskResult{
+			Task: models.Task{
+				Number:        "1",
+				Name:          "Test Task",
+				Agent:         "test-agent",
+				FilesModified: 1,
+			},
+			Status:   models.StatusGreen,
+			Duration: 3 * time.Second,
+		}
+
+		logger.LogTaskResult(result)
+
+		output := buf.String()
+
+		// Verify content is present (color codes will be in there too)
+		if !strings.Contains(output, "GREEN") {
+			t.Errorf("expected 'GREEN' in colored output, got %q", output)
+		}
+
+		if !strings.Contains(output, "Test Task") {
+			t.Errorf("expected task name in colored output, got %q", output)
+		}
+	})
+
+	t.Run("with colors disabled", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		logger := NewConsoleLogger(buf, "debug")
+		logger.colorOutput = false // Disable color
+
+		result := models.TaskResult{
+			Task: models.Task{
+				Number:        "2",
+				Name:          "Another Task",
+				Agent:         "another-agent",
+				FilesModified: 2,
+			},
+			Status:   models.StatusRed,
+			Duration: 10 * time.Second,
+		}
+
+		logger.LogTaskResult(result)
+
+		output := buf.String()
+
+		// Verify content is present without ANSI codes
+		if !strings.Contains(output, "RED") {
+			t.Errorf("expected 'RED' in plain output, got %q", output)
+		}
+
+		if !strings.Contains(output, "Another Task") {
+			t.Errorf("expected task name in plain output, got %q", output)
+		}
+
+		// Should not contain ANSI escape codes
+		if strings.Contains(output, "\033[") || strings.Contains(output, "\x1b[") {
+			t.Error("expected no ANSI codes in plain text output")
+		}
+	})
+}
+
+// TestConsoleLoggerLogTaskResultNoFiles verifies task with no file operations.
+func TestConsoleLoggerLogTaskResultNoFiles(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "4",
+			Name:          "Validate Configuration",
+			Agent:         "validator",
+			Files:         []string{},
+			FilesModified: 0,
+			FilesCreated:  0,
+			FilesDeleted:  0,
+		},
+		Status:   models.StatusGreen,
+		Duration: 500 * time.Millisecond,
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify task info is present
+	if !strings.Contains(output, "Task 4") {
+		t.Errorf("expected 'Task 4' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Validate Configuration") {
+		t.Errorf("expected 'Validate Configuration' in output, got %q", output)
+	}
+
+	// Verify status
+	if !strings.Contains(output, "GREEN") {
+		t.Errorf("expected 'GREEN' in output, got %q", output)
+	}
+
+	// When no files are modified/created/deleted, should handle gracefully
+	// (no "0 files" or similar should appear)
+}
+
+// TestConsoleLoggerLogTaskResultNoAgent verifies task without agent specified.
+func TestConsoleLoggerLogTaskResultNoAgent(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number:        "5",
+			Name:          "Manual Review",
+			Agent:         "", // No agent
+			Files:         []string{"review.txt"},
+			FilesModified: 1,
+		},
+		Status:   models.StatusYellow,
+		Duration: 15 * time.Second,
+	}
+
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify task info
+	if !strings.Contains(output, "Task 5") {
+		t.Errorf("expected 'Task 5' in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Manual Review") {
+		t.Errorf("expected 'Manual Review' in output, got %q", output)
+	}
+
+	// Verify status
+	if !strings.Contains(output, "YELLOW") {
+		t.Errorf("expected 'YELLOW' in output, got %q", output)
+	}
+
+	// Should gracefully handle missing agent (no empty parentheses)
+	if strings.Contains(output, "(agent: )") {
+		t.Error("expected no empty agent info when agent is empty")
+	}
+}
+
+// TestConsoleLoggerLogTaskResultDurationFormats verifies various duration formats.
+func TestConsoleLoggerLogTaskResultDurationFormats(t *testing.T) {
+	tests := []struct {
+		name           string
+		duration       time.Duration
+		expectedOutput string
+	}{
+		{
+			name:           "zero duration",
+			duration:       0 * time.Second,
+			expectedOutput: "0.0s",
+		},
+		{
+			name:           "sub-second",
+			duration:       500 * time.Millisecond,
+			expectedOutput: "0.5s",
+		},
+		{
+			name:           "one second",
+			duration:       1 * time.Second,
+			expectedOutput: "1.0s",
+		},
+		{
+			name:           "a few seconds",
+			duration:       5*time.Second + 300*time.Millisecond,
+			expectedOutput: "5.3s",
+		},
+		{
+			name:           "one minute",
+			duration:       1 * time.Minute,
+			expectedOutput: "1m",
+		},
+		{
+			name:           "minute and seconds",
+			duration:       1*time.Minute + 30*time.Second,
+			expectedOutput: "1m30s",
+		},
+		{
+			name:           "multiple minutes",
+			duration:       2*time.Minute + 45*time.Second,
+			expectedOutput: "2m45s",
+		},
+		{
+			name:           "one hour",
+			duration:       1 * time.Hour,
+			expectedOutput: "1h",
+		},
+		{
+			name:           "hour and minutes",
+			duration:       1*time.Hour + 30*time.Minute,
+			expectedOutput: "1h30m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "debug")
+
+			result := models.TaskResult{
+				Task: models.Task{
+					Number:        "1",
+					Name:          "Test Task",
+					Agent:         "test-agent",
+					FilesModified: 1,
+				},
+				Status:   models.StatusGreen,
+				Duration: tt.duration,
+			}
+
+			logger.LogTaskResult(result)
+
+			output := buf.String()
+
+			if !strings.Contains(output, tt.expectedOutput) {
+				t.Errorf("expected duration %q in output, got %q", tt.expectedOutput, output)
+			}
+		})
+	}
+}
+
+// TestConsoleLoggerLogTaskResultNilWriter verifies nil writer is handled gracefully.
+func TestConsoleLoggerLogTaskResultNilWriter(t *testing.T) {
+	logger := NewConsoleLogger(nil, "debug")
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number: "1",
+			Name:   "Test",
+			Agent:  "test",
+		},
+		Status:   models.StatusGreen,
+		Duration: 1 * time.Second,
+	}
+
+	// Should not panic with nil writer
+	err := logger.LogTaskResult(result)
+
+	if err != nil {
+		t.Errorf("expected no error with nil writer, got %v", err)
+	}
+}
+
+// TestConsoleLoggerLogTaskResultBelowLogLevel verifies filtering by log level.
+func TestConsoleLoggerLogTaskResultBelowLogLevel(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info") // Set to info, task result is at debug level
+
+	result := models.TaskResult{
+		Task: models.Task{
+			Number: "1",
+			Name:   "Test",
+			Agent:  "test",
+		},
+		Status:   models.StatusGreen,
+		Duration: 1 * time.Second,
+	}
+
+	logger.LogTaskResult(result)
+
+	output := buf.String()
+
+	// Should not output anything since debug < info
+	if len(output) > 0 {
+		t.Errorf("expected no output when log level filters debug, got %q", output)
+	}
+}
+
+// TestConsoleLoggerLogTaskResultMultipleFiles verifies file count formatting.
+func TestConsoleLoggerLogTaskResultMultipleFiles(t *testing.T) {
+	tests := []struct {
+		name               string
+		filesModified      int
+		filesCreated       int
+		filesDeleted       int
+		expectedTotalFiles string
+	}{
+		{
+			name:               "single modified file",
+			filesModified:      1,
+			filesCreated:       0,
+			filesDeleted:       0,
+			expectedTotalFiles: "1",
+		},
+		{
+			name:               "multiple operations",
+			filesModified:      2,
+			filesCreated:       1,
+			filesDeleted:       0,
+			expectedTotalFiles: "3",
+		},
+		{
+			name:               "all operations",
+			filesModified:      3,
+			filesCreated:       2,
+			filesDeleted:       1,
+			expectedTotalFiles: "6",
+		},
+		{
+			name:               "large file count",
+			filesModified:      10,
+			filesCreated:       5,
+			filesDeleted:       3,
+			expectedTotalFiles: "18",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "debug")
+
+			result := models.TaskResult{
+				Task: models.Task{
+					Number:        "1",
+					Name:          "File Task",
+					Agent:         "file-agent",
+					FilesModified: tt.filesModified,
+					FilesCreated:  tt.filesCreated,
+					FilesDeleted:  tt.filesDeleted,
+				},
+				Status:   models.StatusGreen,
+				Duration: 2 * time.Second,
+			}
+
+			logger.LogTaskResult(result)
+
+			output := buf.String()
+
+			// Verify total file count is in output
+			if !strings.Contains(output, tt.expectedTotalFiles+" file") {
+				t.Errorf("expected %q file count in output, got %q", tt.expectedTotalFiles, output)
+			}
+		})
+	}
+}
+
+// TestConsoleLoggerLogTaskResultConcurrency verifies thread-safe concurrent logging.
+func TestConsoleLoggerLogTaskResultConcurrency(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+
+	var successCount int32 = 0
+	numGoroutines := 20
+
+	wg := sync.WaitGroup{}
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(index int) {
+			defer wg.Done()
+
+			result := models.TaskResult{
+				Task: models.Task{
+					Number:        fmt.Sprintf("%d", index),
+					Name:          fmt.Sprintf("Task %d", index),
+					Agent:         fmt.Sprintf("agent-%d", index),
+					FilesModified: index,
+				},
+				Status:   models.StatusGreen,
+				Duration: time.Duration(index) * time.Second,
+			}
+
+			err := logger.LogTaskResult(result)
+			if err == nil {
+				atomic.AddInt32(&successCount, 1)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all operations completed
+	if successCount != int32(numGoroutines) {
+		t.Errorf("expected %d successful operations, got %d", numGoroutines, successCount)
+	}
+
+	// Verify output was written
+	output := buf.String()
+	if len(output) == 0 {
+		t.Error("expected non-empty output from concurrent logging")
+	}
+
+	// Verify no data corruption (spot check some agents)
+	if !strings.Contains(output, "agent-0") {
+		t.Error("expected agent-0 in output")
+	}
+	if !strings.Contains(output, fmt.Sprintf("agent-%d", numGoroutines-1)) {
+		t.Error("expected last agent in output")
+	}
+}
