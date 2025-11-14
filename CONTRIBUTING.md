@@ -4,7 +4,9 @@ Thank you for your interest in contributing to Conductor! This guide provides al
 
 ## Code of Conduct
 
-Be respectful, inclusive, and constructive in all interactions.
+We are committed to providing a welcoming and inclusive environment for all contributors. Please review and adhere to our [Code of Conduct](CODE_OF_CONDUCT.md) which is based on the Contributor Covenant.
+
+**TL;DR**: Be respectful, inclusive, and constructive. Harassment, discrimination, and abuse will not be tolerated.
 
 ## Getting Started
 
