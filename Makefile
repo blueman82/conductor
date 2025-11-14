@@ -70,16 +70,19 @@ endef
 build-patch:
 	$(call increment_version,parts[2] = str(int(parts[2]) + 1))
 	@$(MAKE) build
+	@if ! echo $$PATH | grep -q $$HOME/bin; then echo "⚠️  Please run: source ~/.zshrc"; fi
 
 # Increment minor version and build
 build-minor:
 	$(call increment_version,parts[1] = str(int(parts[1]) + 1); parts[2] = '0')
 	@$(MAKE) build
+	@if ! echo $$PATH | grep -q $$HOME/bin; then echo "⚠️  Please run: source ~/.zshrc"; fi
 
 # Increment major version and build
 build-major:
 	$(call increment_version,parts[0] = str(int(parts[0]) + 1); parts[1] = '0'; parts[2] = '0')
 	@$(MAKE) build
+	@if ! echo $$PATH | grep -q $$HOME/bin; then echo "⚠️  Please run: source ~/.zshrc"; fi
 
 # Run all tests
 test:
