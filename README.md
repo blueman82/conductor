@@ -38,42 +38,70 @@ Conductor automates complex multi-step implementations by:
 
 ### Prerequisites
 
-- **Go 1.21+** installed
 - **Claude Code CLI** in your PATH (`claude` command available)
 - Claude Code authenticated and configured
+- **Go 1.21+** (optional, only needed for building from source)
 
 ### Installation
+
+#### Option 1: Quick Install (Recommended)
+
+Download pre-built binary from the latest release:
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-darwin-arm64 -o conductor
+chmod +x conductor
+sudo mv conductor /usr/local/bin/
+
+# macOS (Intel)
+curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-darwin-amd64 -o conductor
+chmod +x conductor
+sudo mv conductor /usr/local/bin/
+
+# Linux (x86_64)
+curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-linux-amd64 -o conductor
+chmod +x conductor
+sudo mv conductor /usr/local/bin/
+
+# Verify installation
+conductor --version
+# v2.0.5
+```
+
+#### Option 2: Build from Source
+
+Clone and build locally (requires Go 1.21+):
 
 ```bash
 # Clone the repository
 git clone https://github.com/blueman82/conductor.git
 cd conductor
-```
 
-#### Using Make (Recommended)
-
-```bash
-# Install to $GOPATH/bin
+# Install to $GOPATH/bin using Make (Recommended)
 make install
 
-# Verify installation
-conductor --version
-```
-
-#### Manual Build
-
-```bash
-# Build the binary
+# Or manual build
 go build ./cmd/conductor
 
 # Verify installation
-./conductor --version
-
-# Optional: Install the plugin for plan generation
-# In a Claude Code session, run: /plugin
-# Then select "Browse Plugins" to install conductor-tools
-# Or for development/testing: claude --plugin-dir ./plugin
+conductor --version
+# v2.0.5
 ```
+
+#### Option 3: Install Plugin for Plan Generation
+
+In Claude Code, run:
+
+```bash
+/plugin
+```
+
+Then select "Browse Plugins" to install **conductor-tools** for:
+- `/doc` - Generate Markdown plans
+- `/doc-yaml` - Generate YAML plans
+- `/cook-man` - Interactive plan design
+- `/cook-auto` - Autonomous plan generation (optional MCP)
 
 ### Your First Execution
 
@@ -485,7 +513,11 @@ go vet ./...
 
 ### Version Management
 
-Conductor uses semantic versioning with automatic version bumping:
+Conductor uses semantic versioning with automatic version bumping.
+
+**Recommended**: Download pre-built binaries from [GitHub Releases](https://github.com/blueman82/conductor/releases) to ensure version consistency without needing to build locally.
+
+**For developers** building from source:
 
 ```bash
 # View current version
@@ -504,7 +536,7 @@ make build-minor
 make build-major
 ```
 
-The VERSION file serves as the single source of truth and is automatically injected into the binary at build time.
+The VERSION file serves as the single source of truth and is automatically injected into the binary at build time. When using pre-built releases, versions always match - no build step needed.
 
 ## Multi-File Plans
 
