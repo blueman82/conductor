@@ -1,4 +1,4 @@
-.PHONY: help build build-patch build-minor build-major test test-coverage test-verbose test-race fmt lint clean run validate learning-stats learning-export learning-clear install
+.PHONY: help build build-patch build-minor build-major test test-coverage test-verbose test-race fmt lint clean run validate learning-stats learning-export learning-clear
 
 # Variables
 BINARY_NAME = conductor
@@ -46,16 +46,6 @@ build:
 	@REPO_ROOT=$$(pwd) && \
 	$(GO) build $(GOFLAGS) -ldflags "-X github.com/harrison/conductor/internal/cmd.Version=$(CURRENT_VERSION) -X github.com/harrison/conductor/internal/cmd.ConductorRepoRoot=$${REPO_ROOT}" -o $(BINARY_NAME) ./cmd/conductor
 	@echo "Binary built: ./$(BINARY_NAME)"
-
-# Install binary to ~/bin (user directory)
-install: build
-	@echo "Installing conductor to ~/bin..."
-	mkdir -p ~/bin
-	cp $(BINARY_NAME) ~/bin/$(BINARY_NAME)
-	chmod +x ~/bin/$(BINARY_NAME)
-	@echo "Installed: ~/bin/$(BINARY_NAME)"
-	@echo "Make sure ~/bin is in your PATH"
-	@echo "Verify with: ~/bin/conductor --version"
 
 # Helper function to increment version
 define increment_version

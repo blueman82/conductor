@@ -106,6 +106,23 @@ make build-major
 
 The `VERSION` file is the single source of truth, automatically injected at build time.
 
+### System-Wide Installation
+
+For system-wide access to the `conductor` command:
+
+```bash
+# Install binary to $GOPATH/bin (usually in PATH if Go is configured correctly)
+go install ./cmd/conductor
+
+# Verify installation
+conductor --version
+
+# Now you can use 'conductor' from anywhere
+conductor run plan.md
+```
+
+**Note:** You only need to do this once. After installation, the binary is available system-wide until you update it.
+
 ---
 
 ## Plan Format
@@ -2568,20 +2585,6 @@ make build
 ./conductor run plan.md
 ```
 
-**Optional System-Wide Installation:**
-```bash
-# Install to ~/bin/ for system-wide access
-make install
-
-# Now you can use 'conductor' from anywhere
-conductor --version
-```
-
-**Most users should:**
-- Run `make build` to create `./conductor` locally
-- Use the binary directly with `./conductor <command>`
-- Optionally run `make install` once if you want `conductor` in your PATH
-
 **Auto-increment and build:**
 ```bash
 make build-patch   # 1.0.0 → 1.0.1
@@ -2598,6 +2601,20 @@ go build -o conductor ./cmd/conductor
 ```bash
 ./conductor --version
 ```
+
+**System-Wide Installation:**
+
+For development, use `go run ./cmd/conductor` for quick testing. If you need the binary available system-wide:
+
+```bash
+# Install to $GOPATH/bin (usually in PATH if Go is configured correctly)
+go install ./cmd/conductor
+
+# Verify installation
+conductor --version
+```
+
+**Note:** Only do this once. After installation, the binary is available system-wide. For development work, continue using `go run ./cmd/conductor` or the locally built `./conductor` binary.
 
 ### Running Tests
 
