@@ -87,6 +87,8 @@ docs/original_poc_partial.md
 docs/TEST_REPORT.md
 docs/TEST_SUMMARY.txt
 docs/verify_tests.md
+docs/subagent-deployment-strategy.md
+docs/concept_ai_corp_conductor_hybrid.md
 
 # Internal development documentation (local reference only)
 PATTERN_EXTRACTION_REFERENCE.md
