@@ -81,15 +81,32 @@ Once you understand what the user wants, stop asking questions and present the d
 - **Testing Strategy** (how we'll validate it works)
 - **Success Metrics** (how we'll measure success)
 
-## Phase 4: Generate Implementation Plan
+## Phase 4: Generate Implementation Plans
 
-After the user approves all sections of the design, **AUTOMATICALLY** invoke the `/doc` command to generate a comprehensive implementation plan:
+After the user approves all sections of the design, offer to generate implementation plans in sequence:
 
-1. **Summarize the feature** from the validated design into a concise description
-2. **Call `/doc [feature description]`** using the SlashCommand tool
-3. **Let the doc command run** - it will analyze the codebase and generate the detailed plan
+**Step 1: Markdown Plan Generation**
+1. Ask the user: "Generate Markdown implementation plan (doc.md)?"
+   - Use `AskUserQuestion` with options:
+     - "Yes, generate Markdown plan" → Proceed to step 2
+     - "No, skip Markdown plan" → Skip to Step 2 anyway
+2. If yes:
+   - Summarize the feature from the validated design into a concise description
+   - Call `/doc [feature description]` using the SlashCommand tool
+   - Wait for completion before proceeding
+3. After doc command completes (or if user skipped), proceed to Step 2
 
-This creates a complete workflow: Question → Design → Validate → Plan → Implement
+**Step 2: YAML Plan Generation**
+1. Ask the user: "Generate YAML implementation plan (doc-yaml.md)?"
+   - Use `AskUserQuestion` with options:
+     - "Yes, generate YAML plan" → Proceed to step 2
+     - "No, skip YAML plan" → End session
+2. If yes:
+   - Call `/doc-yaml [feature description]` using the SlashCommand tool
+   - Let it complete
+3. Session complete
+
+This creates a complete workflow: Question → Design → Validate → Generate Markdown Plan → Generate YAML Plan
 
 ## Execution Guidelines
 
