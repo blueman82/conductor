@@ -166,36 +166,73 @@ conductor run plan.md --skip-completed --retry-failed
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--dry-run` | bool | false | Simulate execution without running tasks |
-| `--max-concurrency` | int | 3 | Maximum parallel tasks per wave |
-| `--timeout` | duration | 30m | Timeout for entire execution |
-| `--verbose` | bool | false | Enable detailed logging |
-| `--log-dir` | string | .conductor/logs | Directory for execution logs |
+| `--config` | string | `.conductor/config.yaml` | Path to config file (loaded from conductor repo root) |
+| `--dry-run` | bool | false | Validate plan without executing tasks |
+| `--max-concurrency` | int | -1 | Max concurrent tasks per wave (-1 = use config, 0 = unlimited) |
+| `--timeout` | duration | 10h | Maximum execution time (e.g., 30m, 2h, 1h30m) |
+| `--verbose` | bool | false | Show detailed execution information |
+| `--log-dir` | string | `.conductor/logs` | Directory for execution logs |
 | `--skip-completed` | bool | false | Skip tasks marked as completed in plan |
+| `--no-skip-completed` | bool | false | Do not skip completed tasks (overrides config) |
 | `--retry-failed` | bool | false | Retry tasks marked as failed in plan |
+| `--no-retry-failed` | bool | false | Do not retry failed tasks (overrides config) |
 
 **`conductor validate` flags:**
 
 No flags required. Simply pass the plan file path.
 
-## Configuration
-
-Conductor supports optional configuration via `.conductor/config.yaml`:
+**`conductor learning` commands:**
 
 ```bash
-# Copy example config
+# View statistics and insights for a plan
+conductor learning stats <plan-file>
+
+# Show detailed history for a specific task
+conductor learning show <plan-file> <task-name>
+
+# Export learning data to JSON for analysis
+conductor learning export <output-file>
+
+# Clear learning history (with confirmation)
+conductor learning clear
+```
+
+## Configuration
+
+### Config File Location
+
+Configuration file is automatically loaded from the **conductor repository root**:
+```
+{conductor-repo-root}/.conductor/config.yaml
+```
+
+This ensures consistent configuration regardless of your current working directory.
+
+### Setup
+
+```bash
+# Copy example config to your conductor repository
 cp .conductor/config.yaml.example .conductor/config.yaml
 
 # Edit configuration
 vim .conductor/config.yaml
 ```
 
-**Example configuration:**
+### Configuration Priority
+
+Settings are applied in this order (highest to lowest priority):
+1. **CLI Flags** (e.g., `--max-concurrency 5`)
+2. **Config File** (`.conductor/config.yaml`)
+3. **Built-in Defaults**
+
+CLI flags always override config file settings.
+
+### Example Configuration
 
 ```yaml
 # Execution settings
-max_concurrency: 3        # Parallel tasks per wave
-timeout: 30m              # Total execution timeout
+max_concurrency: 3        # Parallel tasks per wave (0 = unlimited)
+timeout: 10h              # Total execution timeout
 dry_run: false            # Simulate without executing
 
 # Resume & retry settings
@@ -205,9 +242,29 @@ retry_failed: false       # Retry tasks marked as failed
 # Logging settings
 log_dir: .conductor/logs  # Log directory
 log_level: info           # Log level (debug/info/warn/error)
+
+# Adaptive Learning (v2.0+)
+learning:
+  enabled: true           # Enable learning system (default: true)
+  auto_adapt_agent: false # Auto-switch agents on failures (default: false)
+  enhance_prompts: true   # Add learned context to prompts (default: true)
+  min_failures_before_adapt: 2  # Failure threshold before adapting
+  keep_executions_days: 90      # Retention period for learning data
 ```
 
 For detailed configuration options, see [Usage Guide](docs/usage.md).
+
+### Build-Time Configuration
+
+When you build conductor with `make build`, two values are automatically injected into the binary:
+
+1. **Version** - From the VERSION file (e.g., 2.0.1)
+2. **Repository Root** - Path to conductor repository
+
+This ensures:
+- ✅ Database always created in conductor repo (`.conductor/learning/executions.db`)
+- ✅ Config always loaded from conductor repo (`.conductor/config.yaml`)
+- ✅ Works correctly from any directory
 
 ## Adaptive Learning System (v2.0+)
 
