@@ -1,0 +1,601 @@
+# Enhanced Console Output System - Part 2: Integration & Progress Display
+# Part 2 of 3: Tasks 8-10
+#
+# This part focuses on integrating progress display components and enhancing
+# the console logger with real-time progress tracking and wave completion status.
+#
+# Prerequisites:
+# - Part 1 (plan-01-foundation.yaml) must be completed
+# - Tasks 1-7 establish config models, progress bar, and logger foundation
+# - ProgressBar component (Task 4) is required for Task 8
+# - ConsoleLogger start/result methods (Task 6) are required for Task 9
+
+conductor:
+  default_agent: "golang-pro"
+  max_concurrency: 3
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+    retry_on_red: 2
+  worktree_groups:
+    - group_id: "chain-8"
+      description: "Progress display integration with console logger"
+      execution_model: "sequential"
+      isolation: "sequential"
+      rationale: "Depends on Task 4 (ProgressBar) and Task 6 (ConsoleLogger base)"
+    - group_id: "chain-9"
+      description: "Wave completion status enhancement"
+      execution_model: "sequential"
+      isolation: "sequential"
+      rationale: "Depends on Task 6 (ConsoleLogger base)"
+    - group_id: "chain-10"
+      description: "Execution result model enhancement"
+      execution_model: "sequential"
+      isolation: "sequential"
+      rationale: "Depends on Task 3 (models foundation)"
+plan:
+  metadata:
+    feature_name: "Enhanced Console Output System - Part 2: Integration"
+    part: 2
+    total_parts: 3
+    estimated_total_time: "6h 15m"
+    target_coverage: "90%+"
+    dependencies:
+      - "plan-01-foundation.yaml (Tasks 1-7)"
+  tasks:
+    - task_number: 8
+      name: "Console Logger Progress Method"
+      files:
+        - "internal/cmd/console_logger.go"
+        - "internal/cmd/console_logger_test.go"
+      depends_on: []
+      estimated_time: "2h30m"
+      agent: "golang-pro"
+      worktree_group: "chain-8"
+      description: |
+        Add the LogProgress() method to ConsoleLogger to display real-time ASCII progress bar
+        during task execution. This method integrates the ProgressBar component from Task 4
+        with the ConsoleLogger from Task 6 to show completion percentage, task counts,
+        and average task duration.
+
+        Key functionality:
+        - Display ASCII progress bar: [█████░░░░░] 50%
+        - Show task counts: (4/8 tasks completed)
+        - Calculate and display average task duration: Avg: 3.2s/task
+        - Update progress after each task completion
+        - Support color output when enabled
+        - Handle edge cases (zero tasks, all completed)
+
+        ## Test First (TDD)
+
+        Create comprehensive tests in internal/cmd/console_logger_test.go before implementation.
+
+        Test cases to implement:
+
+        1. TestConsoleLogger_LogProgress_BasicDisplay
+           - Test progress display with 4/8 tasks complete
+           - Verify format: "Progress: [█████░░░░░] 50% (4/8 tasks)"
+           - Check that ProgressBar.Render() is called with correct percentage
+           - Verify output contains percentage and counts
+
+        2. TestConsoleLogger_LogProgress_WithAverageDuration
+           - Create tasks with durations: 2s, 3s, 4s, 5s (avg: 3.5s)
+           - Verify format includes "Avg: 3.5s/task"
+           - Test duration formatting (seconds, minutes, hours)
+           - Edge case: Only 1 completed task (should show that task's duration)
+
+        3. TestConsoleLogger_LogProgress_ZeroTasks
+           - Test with 0 total tasks
+           - Should handle gracefully (no division by zero)
+           - Verify no panic or error
+
+        4. TestConsoleLogger_LogProgress_AllTasksComplete
+           - Test with 8/8 tasks complete (100%)
+           - Verify full progress bar: [██████████] 100%
+           - Check completion message
+
+        5. TestConsoleLogger_LogProgress_ColorOutput
+           - Test with color enabled (useColor: true)
+           - Verify ANSI color codes in output
+           - Test with color disabled (should have no color codes)
+
+        6. TestConsoleLogger_LogProgress_ProgressBarIntegration
+           - Mock ProgressBar.Render() to verify correct parameters
+           - Check percentage calculation: completed/total * 100
+           - Verify bar width passed to ProgressBar
+
+        7. TestConsoleLogger_LogProgress_TimestampPrefix
+           - Verify timestamp is included in output
+           - Format: "[HH:MM:SS] Progress: ..."
+           - Test timestamp formatting consistency
+
+        Run tests and verify they FAIL (RED):
+        ```
+        go test ./internal/cmd -run TestConsoleLogger_LogProgress -v
+        ```
+
+        ## Implementation
+
+        Implement LogProgress() method in internal/cmd/console_logger.go.
+
+        Add the following functionality:
+        - LogProgress method that displays real-time progress with ASCII progress bar
+        - Count completed tasks and calculate percentage
+        - Integrate ProgressBar component (from Task 4)
+        - Calculate average task duration from StartedAt/CompletedAt timestamps
+        - Format duration for display (seconds, minutes, hours)
+        - Apply color coding when useColor is enabled
+        - Write output with timestamp prefix
+
+        Helper functions needed:
+        - formatDuration: Format time.Duration for human-readable display
+        - colorize: Wrap text in ANSI color codes (cyan, green, yellow, red)
+
+        Add StartedAt field to Task struct in internal/models/task.go if not already present.
+        Update task executor to set StartedAt and CompletedAt timestamps during execution.
+
+        Expected format: "Progress: [█████░░░░░] 50% (4/8 tasks) - Avg: 3.2s/task"
+
+        Run tests and verify they PASS (GREEN):
+        ```
+        go test ./internal/cmd -run TestConsoleLogger_LogProgress -v
+        go test ./internal/cmd -cover
+        ```
+
+        ## Verification
+
+        Verify the implementation meets all requirements.
+
+        1. Run all tests for console logger
+           ```
+           go test ./internal/cmd -run TestConsoleLogger_LogProgress -v
+           ```
+           Expected: All 7 test cases pass (basic display, average duration, zero tasks, all complete, color output, progress bar integration, timestamp)
+
+        2. Verify test coverage for LogProgress method
+           ```
+           go test ./internal/cmd -cover -coverprofile=coverage.out
+           go tool cover -func=coverage.out | grep LogProgress
+           ```
+           Expected: 90%+ coverage for LogProgress and helper functions
+
+        3. Test edge cases manually - Create test program with progress updates
+           Expected: Output shows "Progress: [█████░░░░░] 50% (2/4 tasks) - Avg: 2.5s/task"
+
+        4. Verify color output - Test with color enabled and disabled
+           Expected: Color version has ANSI codes, non-color version is plain text
+
+        5. Integration test with orchestrator - Run small test plan with conductor
+           Expected: Progress bar appears in console output during execution
+
+        6. Verify progress bar integration
+           - Percentage calculation is accurate
+           - Bar width is configurable
+           - ASCII characters render correctly (█ for filled, ░ for empty)
+
+        7. Check timestamp formatting
+           Expected: All output has "[HH:MM:SS]" prefix
+
+        8. Performance test with 100+ tasks
+           Expected: No performance degradation, output generated quickly
+
+        9. Verify duration formatting for different ranges
+           - Under 1 minute: "3.5s"
+           - 1-60 minutes: "2m15s"
+           - Over 1 hour: "1h30m"
+           Expected: All formats display correctly
+
+        ## Commit
+
+        After verification passes, commit in TDD order (tests first, then implementation).
+
+        Stage test file first:
+        ```
+        git add internal/cmd/console_logger_test.go
+        git commit -m "test: add LogProgress method tests for console logger
+
+        - Add 7 comprehensive test cases for progress display
+        - Test basic display with percentage and task counts
+        - Test average duration calculation and formatting
+        - Test edge cases (zero tasks, all complete)
+        - Test color output enabled/disabled
+        - Test progress bar integration
+        - Test timestamp prefix formatting
+        - Achieve 90%+ coverage for progress display
+
+        Part of Enhanced Console Output System (Task 8)"
+        ```
+
+        Stage implementation:
+        ```
+        git add internal/cmd/console_logger.go
+        git add internal/models/task.go
+        git add internal/executor/task.go
+        git commit -m "feat: add LogProgress method to ConsoleLogger
+
+        - Implement real-time progress display with ASCII progress bar
+        - Show completion percentage and task counts
+        - Calculate and display average task duration
+        - Support color output when enabled
+        - Handle edge cases (zero tasks, all completed)
+        - Integrate ProgressBar component from Task 4
+        - Add formatDuration helper for readable time display
+        - Add colorize helper for ANSI color support
+        - Add StartedAt field to Task model for duration tracking
+        - Update task executor to track start/completion times
+
+        Format: Progress: [█████░░░░░] 50% (4/8 tasks) - Avg: 3.2s/task
+
+        Part of Enhanced Console Output System (Task 8)"
+        ```
+      status: "completed"
+      completed_date: "2025-11-13"
+    - task_number: 9
+      name: "Console Logger Wave Completion Enhancement"
+      files:
+        - "internal/cmd/console_logger.go"
+        - "internal/cmd/console_logger_test.go"
+      depends_on:
+        - 8
+      estimated_time: "2h15m"
+      agent: "golang-pro"
+      worktree_group: "chain-9"
+      description: |
+        Enhance the LogWaveComplete() method in ConsoleLogger to show detailed status
+        breakdown for each wave. Display total completion time, task counts, and
+        GREEN/YELLOW/RED status distribution per wave.
+
+        Key functionality:
+        - Show wave completion time: "Wave 1 complete (12.5s)"
+        - Display task completion ratio: "4/4 tasks completed"
+        - Break down status: "3 GREEN, 1 YELLOW, 0 RED"
+        - Support color-coded status display
+        - Handle edge cases (all same status, no tasks)
+        - Calculate wave duration from task start/end times
+
+        ## Test First (TDD)
+
+        Create comprehensive tests in internal/cmd/console_logger_test.go before implementation.
+
+        Test cases to implement:
+
+        1. TestConsoleLogger_LogWaveComplete_BasicDisplay
+           - Test wave with 4 tasks (3 GREEN, 1 YELLOW, 0 RED)
+           - Verify format: "Wave 1 complete (12.5s) - 4/4 completed (3 GREEN, 1 YELLOW, 0 RED)"
+           - Check wave number and duration in output
+           - Verify task counts are correct
+
+        2. TestConsoleLogger_LogWaveComplete_AllGreen
+           - Test wave with all GREEN tasks
+           - Verify format: "Wave 2 complete (8.3s) - 5/5 completed (5 GREEN)"
+           - Should not show "0 YELLOW, 0 RED"
+           - Check that only non-zero statuses are displayed
+
+        3. TestConsoleLogger_LogWaveComplete_MixedStatuses
+           - Test wave with 2 GREEN, 2 YELLOW, 1 RED (5 total)
+           - Verify all three status counts appear
+           - Check color coding for each status type
+
+        4. TestConsoleLogger_LogWaveComplete_DurationCalculation
+           - Create wave with tasks having start/end times
+           - Earliest start: 10s ago, latest end: now
+           - Verify duration shows "10.0s"
+           - Test with sub-second precision
+
+        5. TestConsoleLogger_LogWaveComplete_ColorOutput
+           - Test with color enabled (useColor: true)
+           - Verify GREEN is colored green, YELLOW yellow, RED red
+           - Test with color disabled (no ANSI codes)
+
+        6. TestConsoleLogger_LogWaveComplete_EmptyWave
+           - Test with wave containing zero tasks
+           - Should handle gracefully
+           - Verify no panic or error
+
+        7. TestConsoleLogger_LogWaveComplete_PartialCompletion
+           - Test wave with 3/5 tasks completed
+           - 2 tasks still pending or failed
+           - Verify ratio shows "3/5 completed"
+
+        Run tests and verify they FAIL (RED):
+        ```
+        go test ./internal/cmd -run TestConsoleLogger_LogWaveComplete -v
+        ```
+
+        ## Implementation
+
+        Enhance LogWaveComplete() method in internal/cmd/console_logger.go.
+
+        Add the following functionality:
+        - Count completed vs total tasks in wave
+        - Count GREEN/YELLOW/RED status distribution from QCStatus field
+        - Format wave duration with 1 decimal precision
+        - Build status breakdown string showing only non-zero counts
+        - Apply color coding to status labels when useColor enabled
+        - Build complete message: "Wave N complete (Xs) - X/X completed (X GREEN, X YELLOW, X RED)"
+        - Write output with timestamp prefix
+
+        Add QCStatus field to Task model in internal/models/task.go if not already present.
+        This field should store the quality control result: GREEN/YELLOW/RED.
+
+        Update QC executor in internal/executor/qc.go to set task.QCStatus after review.
+
+        Expected format: "Wave 1 complete (12.5s) - 4/4 completed (3 GREEN, 1 YELLOW)"
+
+        Run tests and verify they PASS (GREEN):
+        ```
+        go test ./internal/cmd -run TestConsoleLogger_LogWaveComplete -v
+        go test ./internal/cmd -cover
+        ```
+
+        ## Verification
+
+        Verify the implementation meets all requirements.
+
+        1. Run all wave completion tests
+           ```
+           go test ./internal/cmd -run TestConsoleLogger_LogWaveComplete -v
+           ```
+           Expected: All 7 test cases pass (basic display, all green, mixed statuses, duration calculation, color output, empty wave, partial completion)
+
+        2. Verify test coverage
+           ```
+           go test ./internal/cmd -cover -coverprofile=coverage.out
+           go tool cover -func=coverage.out | grep LogWaveComplete
+           ```
+           Expected: 90%+ coverage for LogWaveComplete method
+
+        3. Test status counting accuracy - Create manual test with known status distribution
+           Expected: "3/4 completed (2 GREEN, 1 YELLOW, 1 RED)"
+
+        4. Verify color output - Test color-coded status display with/without color
+           Expected: Correct ANSI color codes applied to each status when enabled
+
+        5. Integration test with real execution - Run small plan with conductor
+           Expected: Wave completion shows format like "Wave 1 complete (15.3s) - 3/3 completed (2 GREEN, 1 YELLOW)"
+
+        6. Edge case: Empty wave - Test wave with no tasks
+           Expected: No panic, graceful handling
+
+        7. Edge case: All same status - Test waves with uniform status
+           Expected: Only non-zero statuses displayed (e.g., "5 GREEN" not "5 GREEN, 0 YELLOW, 0 RED")
+
+        8. Duration formatting - Test different duration ranges
+           Expected: Consistent formatting with 1 decimal place (0.5s, 12.5s, 125.3s)
+
+        9. Verify QC integration - Check QCStatus field is properly set by QC executor
+           Expected: QCStatus field is set to GREEN/YELLOW/RED after review
+
+        ## Commit
+
+        After verification passes, commit in TDD order (tests first, then implementation).
+
+        Stage test file first:
+        ```
+        git add internal/cmd/console_logger_test.go
+        git commit -m "test: add wave completion enhancement tests
+
+        - Add 7 comprehensive test cases for wave completion display
+        - Test status breakdown (GREEN/YELLOW/RED counts)
+        - Test duration calculation and formatting
+        - Test color output for status display
+        - Test edge cases (empty wave, partial completion)
+        - Test all-same-status scenarios
+        - Achieve 90%+ coverage for wave completion
+
+        Part of Enhanced Console Output System (Task 9)"
+        ```
+
+        Stage implementation:
+        ```
+        git add internal/cmd/console_logger.go
+        git add internal/models/task.go
+        git add internal/executor/qc.go
+        git commit -m "feat: enhance wave completion display with status breakdown
+
+        - Show detailed status breakdown in wave completion
+        - Count and display GREEN/YELLOW/RED task statuses
+        - Format: Wave N complete (Xs) - X/X completed (X GREEN, X YELLOW, X RED)
+        - Add color-coded status display
+        - Show only non-zero status counts
+        - Handle edge cases (empty wave, all same status)
+        - Add QCStatus field to Task model
+        - Update QC executor to set QCStatus after review
+        - Improve duration formatting with decimal precision
+
+        Examples:
+        - Wave 1 complete (12.5s) - 4/4 completed (3 GREEN, 1 YELLOW)
+        - Wave 2 complete (8.3s) - 5/5 completed (5 GREEN)
+        - Wave 3 complete (15.0s) - 3/5 completed (2 GREEN, 1 RED)
+
+        Part of Enhanced Console Output System (Task 9)"
+        ```
+      status: "completed"
+      completed_date: "2025-11-13"
+    - task_number: 10
+      name: "Execution Result Model Enhancement"
+      files:
+        - "internal/models/result.go"
+        - "internal/models/result_test.go"
+      depends_on: []
+      estimated_time: "1h30m"
+      agent: "golang-pro"
+      worktree_group: "chain-10"
+      description: |
+        Enhance the ExecutionResult struct in internal/models/result.go with new fields
+        for detailed execution analytics. Add status breakdown, agent usage tracking,
+        file modification counts, and average task duration calculation.
+
+        Key functionality:
+        - StatusBreakdown: Map of status → count (GREEN: 8, YELLOW: 2, RED: 0)
+        - AgentUsage: Map of agent name → count (golang-pro: 5, devops: 3)
+        - TotalFiles: Count of unique files modified across all tasks
+        - AvgTaskDuration: Average duration per completed task
+        - Helper methods for calculating metrics
+        - JSON/YAML serialization support
+
+        ## Test First (TDD)
+
+        Create comprehensive tests in internal/models/result_test.go before implementation.
+
+        Test cases to implement:
+
+        1. TestExecutionResult_StatusBreakdown
+           - Create result with mixed task statuses
+           - Verify StatusBreakdown map has correct counts
+           - Test: 8 GREEN, 2 YELLOW, 0 RED
+           - Verify zero values are not omitted
+
+        2. TestExecutionResult_AgentUsage
+           - Create result with tasks using different agents
+           - Verify AgentUsage map has correct counts
+           - Test: golang-pro: 5, devops: 3, quality-control: 2
+           - Handle tasks with no agent specified
+
+        3. TestExecutionResult_TotalFiles
+           - Create tasks modifying multiple files
+           - Verify TotalFiles counts unique files
+           - Test deduplication (same file in multiple tasks)
+           - Handle empty file lists
+
+        4. TestExecutionResult_AvgTaskDuration
+           - Create tasks with durations: 2s, 4s, 6s, 8s
+           - Verify AvgTaskDuration = 5s (20s / 4 tasks)
+           - Test with zero completed tasks (should be 0)
+           - Test with only one task
+
+        5. TestExecutionResult_CalculateMetrics
+           - Create method that populates all fields from task list
+           - Test with realistic task data
+           - Verify all metrics calculated correctly
+
+        6. TestExecutionResult_JSONSerialization
+           - Test JSON marshaling of ExecutionResult
+           - Verify all fields are included
+           - Test JSON unmarshaling
+
+        7. TestExecutionResult_YAMLSerialization
+           - Test YAML marshaling of ExecutionResult
+           - Verify field names match YAML tags
+           - Test YAML unmarshaling
+
+        Run tests and verify they FAIL (RED):
+        ```
+        go test ./internal/models -run TestExecutionResult -v
+        ```
+
+        ## Implementation
+
+        Enhance ExecutionResult struct in internal/models/result.go.
+
+        Add new fields for enhanced analytics:
+        - StatusBreakdown: map[string]int for QC status counts (GREEN/YELLOW/RED)
+        - AgentUsage: map[string]int for agent usage tracking
+        - TotalFiles: int for count of unique files modified
+        - AvgTaskDuration: time.Duration for average task completion time
+
+        Implement CalculateMetrics method:
+        - Initialize StatusBreakdown and AgentUsage maps
+        - Count QC status distribution from tasks (ensure zero values included)
+        - Count agent usage per task
+        - Track unique files using a set/map for deduplication
+        - Calculate total duration and average from completed tasks only
+        - Handle edge cases: empty tasks, no completed tasks, missing fields
+
+        Implement NewExecutionResult constructor:
+        - Accept task list, success flag, and total duration
+        - Count completed/failed/skipped tasks
+        - Call CalculateMetrics to populate analytics fields
+        - Set start/end times based on duration
+
+        Add proper JSON and YAML struct tags for all fields.
+
+        Run tests and verify they PASS (GREEN):
+        ```
+        go test ./internal/models -run TestExecutionResult -v
+        go test ./internal/models -cover
+        ```
+
+        ## Verification
+
+        Verify the implementation meets all requirements.
+
+        1. Run all ExecutionResult tests
+           ```
+           go test ./internal/models -run TestExecutionResult -v
+           ```
+           Expected: All 7 test cases pass (status breakdown, agent usage, total files, avg duration, calculate metrics, JSON/YAML serialization)
+
+        2. Verify test coverage
+           ```
+           go test ./internal/models -cover -coverprofile=coverage.out
+           go tool cover -func=coverage.out | grep result.go
+           ```
+           Expected: 90%+ coverage for result.go
+
+        3. Test status breakdown accuracy - Create test with known distribution
+           Expected: StatusBreakdown = {GREEN: 2, YELLOW: 1, RED: 1}
+
+        4. Test agent usage tracking - Verify agent counts are correct
+           Expected: AgentUsage = {golang-pro: 2, devops: 1}
+
+        5. Test file deduplication - Verify unique file counting
+           Expected: TotalFiles = 3 (file2.go counted once when appearing in multiple tasks)
+
+        6. Test average duration calculation - Verify duration averaging
+           Expected: AvgTaskDuration = 3s for tasks with 2s and 4s durations
+
+        7. Test JSON serialization - Verify round-trip JSON marshaling
+           Expected: All fields preserved after marshal/unmarshal
+
+        8. Test YAML serialization - Verify round-trip YAML marshaling
+           Expected: All fields preserved with correct YAML tags
+
+        9. Edge case: Empty task list - Test with zero tasks
+           Expected: No panic, all metrics are zero/empty
+
+        ## Commit
+
+        After verification passes, commit in TDD order (tests first, then implementation).
+
+        Stage test file first:
+        ```
+        git add internal/models/result_test.go
+        git commit -m "test: add ExecutionResult enhancement tests
+
+        - Add 7 comprehensive test cases for result metrics
+        - Test status breakdown calculation (GREEN/YELLOW/RED)
+        - Test agent usage tracking
+        - Test unique file counting with deduplication
+        - Test average task duration calculation
+        - Test CalculateMetrics method
+        - Test JSON and YAML serialization
+        - Achieve 90%+ coverage for result model
+
+        Part of Enhanced Console Output System (Task 10)"
+        ```
+
+        Stage implementation:
+        ```
+        git add internal/models/result.go
+        git commit -m "feat: enhance ExecutionResult with detailed metrics
+
+        - Add StatusBreakdown map for QC status counts (GREEN/YELLOW/RED)
+        - Add AgentUsage map for agent usage tracking
+        - Add TotalFiles count for unique files modified
+        - Add AvgTaskDuration for average task completion time
+        - Implement CalculateMetrics method to populate analytics
+        - Add NewExecutionResult constructor with metric calculation
+        - Support JSON and YAML serialization for all fields
+        - Handle edge cases (empty tasks, zero durations)
+
+        New fields enable rich execution analytics:
+        - Status distribution: {GREEN: 8, YELLOW: 2, RED: 0}
+        - Agent usage: {golang-pro: 5, devops: 3}
+        - File impact: 15 unique files modified
+        - Performance: Average 5s per task
+
+        Part of Enhanced Console Output System (Task 10)"
+        ```
+      status: "completed"
+      completed_date: "2025-11-13"

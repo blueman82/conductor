@@ -20,6 +20,10 @@ func TestCLI_StatsCommand(t *testing.T) {
 	// Setup test database with realistic data
 	tmpDir := t.TempDir()
 	planFile := "integration-plan.md"
+
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
 	dbPath := setupTestDatabase(t, tmpDir, planFile)
 
 	// Seed test data
@@ -84,6 +88,10 @@ func TestCLI_ShowCommand(t *testing.T) {
 	// Setup test database
 	tmpDir := t.TempDir()
 	planFile := "show-plan.md"
+
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
 	dbPath := setupTestDatabase(t, tmpDir, planFile)
 
 	// Seed test data
@@ -179,6 +187,10 @@ func TestCLI_ClearCommand(t *testing.T) {
 	// Setup test database
 	tmpDir := t.TempDir()
 	planFile := "clear-plan.md"
+
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
 	dbPath := setupTestDatabase(t, tmpDir, planFile)
 
 	// Seed test data
@@ -295,6 +307,10 @@ func TestCLI_ExportCommand_JSON(t *testing.T) {
 	// Setup test database
 	tmpDir := t.TempDir()
 	planFile := "export-plan.md"
+
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
 	dbPath := setupTestDatabase(t, tmpDir, planFile)
 
 	// Seed test data
@@ -377,6 +393,10 @@ func TestCLI_ExportCommand_CSV(t *testing.T) {
 	// Setup test database
 	tmpDir := t.TempDir()
 	planFile := "export-csv-plan.md"
+
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
 	dbPath := setupTestDatabase(t, tmpDir, planFile)
 
 	// Seed test data
@@ -472,6 +492,10 @@ func TestCLI_ExportCommand_Stdout(t *testing.T) {
 	// Setup test database
 	tmpDir := t.TempDir()
 	planFile := "stdout-plan.md"
+
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
 	dbPath := setupTestDatabase(t, tmpDir, planFile)
 
 	// Seed test data
@@ -600,6 +624,10 @@ func TestCLI_ErrorHandling(t *testing.T) {
 func TestCLI_EmptyDatabase(t *testing.T) {
 	tmpDir := t.TempDir()
 	planFile := "empty-plan.md"
+
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
 	_ = setupTestDatabase(t, tmpDir, planFile)
 
 	// Create plan file
@@ -654,8 +682,8 @@ func TestCLI_EmptyDatabase(t *testing.T) {
 func setupTestDatabase(t *testing.T, tmpDir, planFile string) string {
 	t.Helper()
 
-	// Database should be in .conductor/learning/ relative to plan file
-	dbDir := filepath.Join(tmpDir, ".conductor", "learning")
+	// Database should be in learning/ relative to CONDUCTOR_HOME
+	dbDir := filepath.Join(tmpDir, "learning")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		t.Fatalf("Failed to create db directory: %v", err)
 	}

@@ -17,8 +17,11 @@ func TestShowCommand_ValidTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	planFile := "test-plan.md"
 
-	// Database should be in .conductor/learning/ relative to plan file
-	dbDir := filepath.Join(tmpDir, ".conductor", "learning")
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
+	// Database should be in learning/ relative to CONDUCTOR_HOME
+	dbDir := filepath.Join(tmpDir, "learning")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		t.Fatalf("Failed to create db directory: %v", err)
 	}
@@ -123,7 +126,10 @@ func TestShowCommand_NoHistory(t *testing.T) {
 	tmpDir := t.TempDir()
 	planFile := "empty-plan.md"
 
-	dbDir := filepath.Join(tmpDir, ".conductor", "learning")
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
+	dbDir := filepath.Join(tmpDir, "learning")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		t.Fatalf("Failed to create db directory: %v", err)
 	}
@@ -171,7 +177,10 @@ func TestShowCommand_FormattedOutput(t *testing.T) {
 	tmpDir := t.TempDir()
 	planFile := "formatted-plan.md"
 
-	dbDir := filepath.Join(tmpDir, ".conductor", "learning")
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
+	dbDir := filepath.Join(tmpDir, "learning")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		t.Fatalf("Failed to create db directory: %v", err)
 	}
@@ -275,7 +284,10 @@ func TestShowCommand_TaskWithSpaces(t *testing.T) {
 	tmpDir := t.TempDir()
 	planFile := "space-plan.md"
 
-	dbDir := filepath.Join(tmpDir, ".conductor", "learning")
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
+	dbDir := filepath.Join(tmpDir, "learning")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		t.Fatalf("Failed to create db directory: %v", err)
 	}
@@ -335,6 +347,9 @@ func TestShowCommand_NoDatabase(t *testing.T) {
 	// Create temp directory without database
 	tmpDir := t.TempDir()
 	planPath := filepath.Join(tmpDir, "no-db-plan.md")
+
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
 
 	// Create plan file but no database
 	if err := os.WriteFile(planPath, []byte("# No DB Plan"), 0644); err != nil {
@@ -432,7 +447,10 @@ func TestShowCommand_ChronologicalOrder(t *testing.T) {
 	tmpDir := t.TempDir()
 	planFile := "chrono-plan.md"
 
-	dbDir := filepath.Join(tmpDir, ".conductor", "learning")
+	// Set CONDUCTOR_HOME for this test so GetLearningDBPath() works
+	t.Setenv("CONDUCTOR_HOME", tmpDir)
+
+	dbDir := filepath.Join(tmpDir, "learning")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		t.Fatalf("Failed to create db directory: %v", err)
 	}

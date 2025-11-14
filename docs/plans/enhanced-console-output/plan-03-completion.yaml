@@ -1,0 +1,217 @@
+# Enhanced Console Output System - Part 3: Completion & Summary
+# This is the third and final file of a 3-part implementation plan
+# Part 1 (plan-01-foundation.yaml): Tasks 1-7 - Core enhancements
+# Part 2 (plan-02-integration.yaml): Tasks 8-10 - Integration & updates
+# Part 3 (plan-03-completion.yaml): Tasks 11-12 - Completion
+
+plan:
+  metadata:
+    plan_name: "Enhanced Console Output System - Part 3"
+    part: 3
+    total_parts: 3
+    tasks_in_part: [11, 12]
+    total_tasks: 12
+    description: "Final tasks for enhanced execution summary and orchestrator integration"
+    author: "Claude Code"
+    created: "2025-01-13"
+    conductor_version: "1.1.0"
+  context: |
+    This is part 3 of 3 for the Enhanced Console Output System implementation plan.
+
+    **Previous Parts:**
+    - Part 1 (Tasks 1-7): Core logger enhancements with color support, progress bars,
+      task status display, wave summaries, quality control feedback, file change tracking,
+      and duration formatting
+    - Part 2 (Tasks 8-10): Integration tasks including console logger updates, plan updater
+      error handling improvements, and wave executor integration
+
+    **This Part (Tasks 11-12):**
+    - Task 11: Enhanced execution summary with status breakdown, agent usage, file counts
+    - Task 12: Final orchestrator integration tying all components together
+
+    **Key Context:**
+    - ConsoleLogger is in internal/executor/console.go
+    - Orchestrator is in internal/executor/orchestrator.go
+    - All previous tasks have added methods and infrastructure
+    - This completes the enhanced console output implementation
+  worktree_groups:
+    chain-11:
+      description: "Enhanced execution summary with comprehensive statistics"
+      isolation: "weak"
+      execution: "sequential"
+      tasks: ["Task 11"]
+    chain-12:
+      description: "Final orchestrator integration completing the system"
+      isolation: "weak"
+      execution: "sequential"
+      tasks: ["Task 12"]
+  tasks:
+    - task_number: 11
+      name: "Enhanced Execution Summary"
+      agent: golang-pro
+      estimated_time: 2h 30m
+      depends_on: ["6", "9", "10"]
+      worktree_group: chain-11
+      files:
+        - internal/executor/console.go
+        - internal/executor/console_test.go
+      description: |
+        Enhance the LogSummary() method in ConsoleLogger to provide comprehensive
+        execution statistics including status breakdown, agent usage analysis,
+        file modification counts, and detailed failed task information.
+
+        This task builds on:
+        - Task 6: Duration formatting utilities
+        - Task 9: Plan updater error handling (provides detailed error info)
+        - Task 10: Wave executor integration (collects execution metrics)
+
+        The enhanced summary will be the final output users see after execution,
+        providing actionable insights into what happened during the run.
+      test_first:
+        test_structure: |
+          Write comprehensive tests for the enhanced LogSummary() method:
+          - TestLogSummary_StatusBreakdown: Verify status breakdown shows correct counts
+          - TestLogSummary_AgentUsage: Verify agent usage statistics
+          - TestLogSummary_FileModifications: Verify file modification tracking
+          - TestLogSummary_FailedTaskDetails: Verify failed task details formatting
+          - TestLogSummary_AverageDuration: Verify average duration calculation
+          - TestLogSummary_EmptySummary: Verify empty summary handling
+          - TestLogSummary_ColorDisabled: Verify no-color mode
+        test_specifics: |
+          Run: go test ./internal/executor -run TestLogSummary -v
+
+          Success criteria:
+          - All 7 test cases pass
+          - No race conditions detected
+          - Code coverage > 85% for summary logic
+          - Edge cases handled gracefully
+      implementation:
+        approach: |
+          1. Define ExecutionSummary struct to hold aggregated statistics
+          2. Implement status breakdown calculation and display
+          3. Implement agent usage aggregation and sorting
+          4. Implement file modification deduplication and counting
+          5. Implement failed task details formatting
+          6. Implement average duration calculation
+          7. Update LogSummary() method to use new formatting
+          8. Add helper methods for summary statistics
+          9. Ensure color formatting respects logger.color flag
+          10. Handle edge cases (empty summaries, no agent, etc.)
+      verification:
+        manual_testing:
+          - Run tests: go test ./internal/executor -run TestLogSummary -v
+          - Check coverage: go test ./internal/executor -cover
+          - Test with color: go run ./cmd/conductor run testdata/sample-plan.yaml
+          - Test no-color: NO_COLOR=1 go run ./cmd/conductor run testdata/sample-plan.yaml
+        success_criteria:
+          - All 7 test cases pass
+          - Status breakdown accurate
+          - Agent usage sorted correctly
+          - Files deduplicated
+          - Empty summaries handled
+          - Code coverage > 85%
+      commit:
+        message: |
+          feat: enhance execution summary with comprehensive statistics
+
+          Enhance LogSummary() method to provide detailed execution statistics:
+          - Status breakdown with counts and percentages
+          - Agent usage analysis sorted by task count
+          - File modification tracking with deduplication
+          - Failed task details with QC feedback
+          - Average duration for completed tasks
+
+          Add ExecutionSummary struct and helper methods. Implement 7 test cases.
+
+          Task 11 of 12 for Enhanced Console Output System.
+      status: "completed"
+      completed_date: "2025-11-13"
+    - task_number: 12
+      name: "Orchestrator Integration"
+      agent: golang-pro
+      estimated_time: 2h 0m
+      depends_on: ["5", "6", "8", "11"]
+      worktree_group: chain-12
+      files:
+        - internal/executor/orchestrator.go
+        - internal/executor/orchestrator_test.go
+      description: |
+        Integrate all new logger methods into the orchestrator to complete the
+        enhanced console output system. This includes calling LogTaskStart() before
+        task execution, LogProgress() after each task, and generating the enhanced
+        summary at the end.
+
+        This task ties together:
+        - Task 5: Progress tracking utilities
+        - Task 6: Duration formatting
+        - Task 8: Console logger updates
+        - Task 11: Enhanced execution summary
+
+        After this task, the orchestrator will provide a complete, user-friendly
+        console output experience throughout the execution lifecycle.
+      test_first:
+        test_structure: |
+          Write comprehensive tests for orchestrator integration:
+          - TestOrchestrator_LogsTaskStart: Verify LogTaskStart() called before execution
+          - TestOrchestrator_LogsProgress: Verify LogProgress() called after completion
+          - TestOrchestrator_GeneratesEnhancedSummary: Verify summary generated
+          - TestOrchestrator_ProgressTracking: Verify progress tracking accuracy
+          - TestOrchestrator_ErrorStateLogging: Verify error logging
+          - TestOrchestrator_WaveExecutorIntegration: Verify wave executor integration
+          - TestOrchestrator_EndToEndFlow: Verify complete execution flow
+        test_specifics: |
+          Run: go test ./internal/executor -run TestOrchestrator -v
+
+          Success criteria:
+          - All 7+ test cases pass
+          - No race conditions detected
+          - Code coverage > 80% for orchestrator
+          - Integration flow verified end-to-end
+      implementation:
+        approach: |
+          1. Add progress tracking state to orchestrator (completed counter, mutex)
+          2. Update Execute() to call LogTaskStart() before task execution
+          3. Call LogProgress() after each task with updated counts
+          4. Implement checkExecutionErrors() helper
+          5. Update wave executor integration for logging
+          6. Add error state logging
+          7. Build ExecutionSummary at end using BuildExecutionSummary()
+          8. Call LogSummary() with aggregated statistics
+          9. Add comprehensive integration tests
+          10. Test error scenarios and concurrent execution
+      verification:
+        manual_testing:
+          - Run orchestrator tests: go test ./internal/executor -run TestOrchestrator -v
+          - Check coverage: go test ./internal/executor -cover
+          - Run integration test: go test ./internal/executor -run TestOrchestrator_Integration -v
+          - Test with real plan: go run ./cmd/conductor run testdata/integration-plan.yaml
+          - Test failures: go test ./internal/executor -run TestOrchestrator_WithFailures -v
+          - Check races: go test -race ./internal/executor -run TestOrchestrator
+        success_criteria:
+          - All 9 test cases pass
+          - LogTaskStart/LogProgress called correctly
+          - Enhanced summary generated
+          - Progress counts accurate
+          - Error states logged
+          - Wave executor integration works
+          - End-to-end flow verified
+          - Thread-safe logging
+          - Code coverage > 80%
+      commit:
+        message: |
+          feat: integrate enhanced console logging into orchestrator
+
+          Complete integration of enhanced console output system:
+          - Call LogTaskStart() before each task execution
+          - Call LogProgress() after completion with accurate counts
+          - Generate ExecutionSummary with full statistics at end
+          - Add progress tracking state to orchestrator
+          - Implement error state logging
+          - Add thread-safe concurrent logging support
+
+          Implement 9 comprehensive test cases covering unit and integration scenarios.
+
+          Task 12 of 12 for Enhanced Console Output System.
+          This completes the enhanced console output implementation.
+      status: "completed"
+      completed_date: "2025-11-13"

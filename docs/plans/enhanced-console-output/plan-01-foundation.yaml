@@ -1,0 +1,1140 @@
+# Enhanced Console Output System - Foundation (Part 1 of 3)
+#
+# This plan implements the foundation for rich terminal output in Conductor.
+# Part 1 covers: Configuration models, console config, models foundation, and progress bar component.
+#
+# Feature Overview:
+# - Progress tracking with task counters, ASCII progress bars, and percentages
+# - Detailed task information (duration, agent, file counts)
+# - Inline QC feedback for all statuses (GREEN/YELLOW/RED)
+# - Enhanced wave completion with status breakdowns
+# - Comprehensive execution summary (agent usage, file counts, average duration)
+# - Configurable via console section in config.yaml
+# - Color scheme: cyan (progress), bright green (status), magenta (agents)
+#
+# Target: 86.4% test coverage following strict TDD practices
+
+conductor:
+  worktree_groups:
+    - group_id: "chain-1"
+      description: "Configuration and Models Foundation (sequential dependencies)"
+      execution_model: "sequential"
+      isolation: "weak"
+      rationale: "Tasks 1-3 form a dependency chain: config model → config loader → enhanced task model"
+    - group_id: "independent-4"
+      description: "Progress Bar Component (no dependencies)"
+      execution_model: "parallel"
+      isolation: "weak"
+      rationale: "Task 4 is independent and can be developed in parallel with chain-1"
+    - group_id: "chain-5"
+      description: "Console Logger Task Start Method (depends on Task 3, 4)"
+      execution_model: "sequential"
+      isolation: "weak"
+      rationale: "Task 5 requires enhanced Task model (Task 3) and progress bar component (Task 4)"
+    - group_id: "chain-6"
+      description: "Console Logger Task Result (Default Mode) (depends on Task 3, 4, 5)"
+      execution_model: "sequential"
+      isolation: "weak"
+      rationale: "Task 6 builds on Task 5 and requires Task model metadata and progress tracking"
+    - group_id: "chain-7"
+      description: "Console Logger Task Result (Verbose Mode) (depends on Task 6)"
+      execution_model: "sequential"
+      isolation: "weak"
+      rationale: "Task 7 extends Task 6 with verbose multi-line output capabilities"
+plan:
+  metadata:
+    version: "1.0"
+    feature: "Enhanced Console Output System - Foundation"
+    part: 1
+    total_parts: 3
+    estimated_total_time: "8h 30m"
+    estimated_part_time: "3h 0m"
+    dependencies:
+      - "internal/logger/console.go (existing console logger)"
+      - "internal/config/config.go (existing config system)"
+      - "internal/models/models.go (existing task models)"
+      - "github.com/fatih/color (ANSI color library)"
+    coverage_target: "86.4%"
+    go_version: "1.25.4"
+  context:
+    project: "Conductor - Autonomous multi-agent orchestration CLI"
+    architecture: "Go CLI application using cobra framework"
+    testing_approach: "Test-Driven Development (TDD) - Write test first, then implementation"
+    commit_strategy: "Commit test file first, then implementation file separately"
+    existing_components:
+      - "internal/logger/console.go - Current console logger with basic output"
+      - "internal/config/config.go - Configuration loading from .conductor/config.yaml"
+      - "internal/models/models.go - Core Task, Wave, Plan data structures"
+      - "internal/executor/wave.go - Wave execution logic"
+      - "internal/executor/task.go - Task execution with QC reviews"
+    color_scheme:
+      progress: "cyan"
+      status: "bright_green"
+      agent: "magenta"
+      error: "red"
+      warning: "yellow"
+      info: "white"
+  prerequisites:
+    - "Go 1.25.4 installed and available in PATH"
+    - "github.com/fatih/color dependency already present in go.mod"
+    - "github.com/spf13/cobra dependency already present in go.mod"
+    - "Existing test infrastructure in place (go test ./... works)"
+    - "Current working directory is project root (/Users/harrison/Github/conductor)"
+    - "All existing tests passing (go test ./...)"
+    - "Code formatted (go fmt ./...)"
+    - "No uncommitted changes in git working directory"
+  tasks:
+    - task_number: "1"
+      name: "Add Console Configuration Model"
+      description: "Extend internal/config/config.go to support console output configuration with color, progress bars, and verbosity settings"
+      files:
+        - "internal/config/config_test.go"
+        - "internal/config/config.go"
+      depends_on: []
+      estimated_time: "45m"
+      agent: "test-automator"
+      worktree_group: "chain-1"
+      status: "completed"
+      test_first:
+        test_file: "internal/config/config_test.go"
+        test_structure: |
+          Write comprehensive tests for the new ConsoleConfig struct.
+
+          Test cases to implement:
+          1. TestConsoleConfigDefaults - Verify default values
+          2. TestConsoleConfigFromYAML - Parse console section from YAML
+          3. TestConsoleConfigValidation - Validate configuration
+          4. TestConsoleConfigMerge - Merge console config with existing Config struct
+          5. TestConsoleConfigEnvironmentOverride - Test environment variable overrides
+        test_specifics: |
+          TestConsoleConfigDefaults should verify:
+          - EnableColor: true
+          - EnableProgressBar: true
+          - EnableTaskDetails: true
+          - EnableQCFeedback: true
+          - CompactMode: false
+          - ShowAgentNames: true
+          - ShowFileCounts: true
+          - ShowDurations: true
+
+          TestConsoleConfigFromYAML should parse:
+          ```yaml
+          console:
+            enable_color: false
+            enable_progress_bar: true
+            compact_mode: true
+            show_agent_names: false
+          ```
+
+          Use table-driven tests where appropriate. Follow existing test patterns in config_test.go.
+          Aim for 90%+ coverage on new console config code.
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Default values are set correctly"
+          - "YAML parsing works correctly"
+          - "Configuration validation succeeds"
+          - "Merge with existing Config works"
+          - "Environment variable overrides work"
+        edge_cases:
+          - "Missing console section in config file"
+          - "Partial console configuration"
+          - "Invalid YAML structure"
+        example_skeleton: ""
+      implementation:
+        approach: |
+          Extend internal/config/config.go with console configuration support.
+        code_structure: |
+          // ConsoleConfig controls terminal output formatting and features
+          type ConsoleConfig struct {
+              EnableColor        bool `yaml:"enable_color" mapstructure:"enable_color"`
+              EnableProgressBar  bool `yaml:"enable_progress_bar" mapstructure:"enable_progress_bar"`
+              EnableTaskDetails  bool `yaml:"enable_task_details" mapstructure:"enable_task_details"`
+              EnableQCFeedback   bool `yaml:"enable_qc_feedback" mapstructure:"enable_qc_feedback"`
+              CompactMode        bool `yaml:"compact_mode" mapstructure:"compact_mode"`
+              ShowAgentNames     bool `yaml:"show_agent_names" mapstructure:"show_agent_names"`
+              ShowFileCounts     bool `yaml:"show_file_counts" mapstructure:"show_file_counts"`
+              ShowDurations      bool `yaml:"show_durations" mapstructure:"show_durations"`
+          }
+
+          type Config struct {
+              // ... existing fields ...
+              Console ConsoleConfig `yaml:"console" mapstructure:"console"`
+          }
+
+          func DefaultConsoleConfig() ConsoleConfig {
+              return ConsoleConfig{
+                  EnableColor:        true,
+                  EnableProgressBar:  true,
+                  EnableTaskDetails:  true,
+                  EnableQCFeedback:   true,
+                  CompactMode:        false,
+                  ShowAgentNames:     true,
+                  ShowFileCounts:     true,
+                  ShowDurations:      true,
+              }
+          }
+        key_points:
+          - point: "Add ConsoleConfig struct"
+            details: "Define all console-related configuration fields"
+            reference: ""
+          - point: "Update Config struct"
+            details: "Add Console field to existing Config struct"
+            reference: ""
+          - point: "Implement DefaultConsoleConfig"
+            details: "Provide sensible defaults for all console settings"
+            reference: ""
+          - point: "Update LoadConfig"
+            details: "Merge console defaults with loaded config"
+            reference: ""
+        integration:
+          imports:
+            - "gopkg.in/yaml.v3"
+          services_to_inject: []
+          config_values:
+            - "console.enable_color"
+            - "console.enable_progress_bar"
+            - "console.compact_mode"
+          error_handling:
+            - "Handle missing console section gracefully"
+            - "Validate boolean field values"
+        integration_points: []
+      verification:
+        manual_testing:
+          - step: "Run tests"
+            command: "go test ./internal/config -v"
+            expected: "All tests pass"
+          - step: "Check coverage"
+            command: "go test ./internal/config -cover"
+            expected: "90%+ coverage for new console config code"
+          - step: "Validate YAML parsing"
+            command: "echo 'console:\n  enable_color: false\n  compact_mode: true' > /tmp/test-config.yaml"
+            expected: "Config loads correctly in integration test"
+        automated_tests:
+          command: |
+            go test ./internal/config -v
+            go test ./...
+            go fmt ./internal/config
+            go vet ./internal/config
+          expected_output: "All tests pass, code is formatted and vetted"
+        success_criteria:
+          - "All TestConsoleConfig* tests pass"
+          - "Coverage is 90%+ for new console config code"
+          - "Full test suite passes"
+          - "Code is formatted and vetted"
+        expected_output: ""
+      commit:
+        type: "test + feat"
+        message: "Add console configuration model tests and implementation"
+        body: |
+          Two-commit approach (TDD):
+
+          Commit 1 - Tests:
+          test: add console configuration model tests
+
+          Add comprehensive tests for ConsoleConfig struct including:
+          - Default values validation
+          - YAML parsing and unmarshaling
+          - Configuration validation logic
+          - Merge with existing Config struct
+          - Environment variable overrides
+
+          Part of Enhanced Console Output System (Task 1/12)
+
+          Commit 2 - Implementation:
+          feat: add console configuration model
+
+          Extend internal/config/config.go with ConsoleConfig struct to support
+          configurable terminal output features:
+          - Color, progress bars, task details, QC feedback toggles
+          - Compact mode and verbosity controls
+          - Agent names, file counts, duration display options
+
+          Configuration via .conductor/config.yaml console section with sensible
+          defaults and environment variable override support.
+
+          Part of Enhanced Console Output System (Task 1/12)
+          Test coverage: 90%+
+        files:
+          - "internal/config/config_test.go"
+          - "internal/config/config.go"
+      completed_date: "2025-11-13"
+    - task_number: "2"
+      name: "Update Config Loader with Console Support"
+      description: "Modify LoadConfig() and DefaultConfig() to properly initialize and merge console configuration settings"
+      files:
+        - "internal/config/config_test.go"
+        - "internal/config/config.go"
+      depends_on: ["1"]
+      estimated_time: "30m"
+      agent: "golang-pro"
+      worktree_group: "chain-1"
+      status: "completed"
+      test_first:
+        test_file: "internal/config/config_test.go"
+        test_structure: |
+          Extend tests to verify console config integration.
+
+          Test cases to add:
+          1. TestLoadConfigWithConsoleSection - Load full config with console section
+          2. TestDefaultConfigIncludesConsole - Verify DefaultConfig() includes console defaults
+          3. TestLoadConfigConsoleOverride - Test CLI flag override behavior
+          4. TestLoadConfigMissingConsoleSection - Config file without console section
+          5. TestLoadConfigPartialConsoleSection - Partial console config
+        test_specifics: |
+          TestLoadConfigWithConsoleSection should parse:
+          ```yaml
+          max_concurrency: 4
+          timeout: 300
+          console:
+            enable_color: true
+            enable_progress_bar: true
+            compact_mode: false
+          ```
+          Verify both top-level and console fields are populated.
+
+          Use existing test helpers and patterns. Ensure tests are deterministic.
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Console config is loaded from YAML"
+          - "DefaultConfig includes console defaults"
+          - "CLI flags override config file values"
+          - "Missing console section uses defaults"
+          - "Partial console config merges with defaults"
+        edge_cases:
+          - "Empty config file"
+          - "Config file with only console section"
+          - "Invalid console field types"
+        example_skeleton: ""
+      implementation:
+        approach: |
+          Update internal/config/config.go to integrate console configuration.
+        code_structure: |
+          func DefaultConfig() Config {
+              return Config{
+                  MaxConcurrency: 3,
+                  Timeout:        300,
+                  DryRun:         false,
+                  SkipCompleted:  false,
+                  RetryFailed:    false,
+                  LogDir:         ".conductor/logs",
+                  LogLevel:       "info",
+                  Console:        DefaultConsoleConfig(), // Add this
+              }
+          }
+
+          func LoadConfig(configPath string) (Config, error) {
+              config := DefaultConfig()
+              // ... existing file loading logic ...
+              // Merge console config if present
+              // Apply environment overrides
+              applyConsoleEnvOverrides(&config.Console)
+              return config, nil
+          }
+
+          func applyConsoleEnvOverrides(cfg *ConsoleConfig) {
+              if val := os.Getenv("CONDUCTOR_CONSOLE_COLOR"); val != "" {
+                  cfg.EnableColor = val == "true" || val == "1"
+              }
+              // ... similar for other environment variables ...
+          }
+        key_points:
+          - point: "Modify DefaultConfig"
+            details: "Initialize Console field with DefaultConsoleConfig()"
+            reference: ""
+          - point: "Update LoadConfig"
+            details: "Merge console config from file with defaults"
+            reference: ""
+          - point: "Implement applyConsoleEnvOverrides"
+            details: "Support environment variable overrides for console settings"
+            reference: ""
+        integration:
+          imports:
+            - "os"
+            - "gopkg.in/yaml.v3"
+          services_to_inject: []
+          config_values:
+            - "CONDUCTOR_CONSOLE_COLOR environment variable"
+          error_handling:
+            - "Handle missing console section gracefully"
+            - "Ensure backward compatibility with existing configs"
+        integration_points: []
+      verification:
+        manual_testing:
+          - step: "Run tests"
+            command: "go test ./internal/config -v -run TestLoadConfig"
+            expected: "All console-related load tests pass"
+          - step: "Test with real config file"
+            command: "mkdir -p .conductor && cat > .conductor/config.yaml << EOF\nmax_concurrency: 4\nconsole:\n  enable_color: false\n  compact_mode: true\nEOF"
+            expected: "Config loads correctly"
+          - step: "Test environment override"
+            command: "CONDUCTOR_CONSOLE_COLOR=false go test ./internal/config -v -run TestLoadConfig"
+            expected: "Environment override works"
+        automated_tests:
+          command: |
+            go test ./internal/config -v -run TestLoadConfig
+            go test ./internal/config -cover
+            go test ./...
+            go fmt ./internal/config
+          expected_output: "All tests pass, coverage meets target"
+        success_criteria:
+          - "All console-related load tests pass"
+          - "Coverage is 90%+"
+          - "Full test suite passes"
+          - "Code is formatted"
+        expected_output: ""
+      commit:
+        type: "test + feat"
+        message: "Integrate console config into config loader"
+        body: |
+          Two-commit approach (TDD):
+
+          Commit 1 - Tests:
+          test: add console config loader integration tests
+
+          Add tests verifying console configuration loading and merging:
+          - Full config with console section parsing
+          - Default config initialization
+          - CLI flag override behavior
+          - Missing/partial console section handling
+          - Environment variable overrides
+
+          Part of Enhanced Console Output System (Task 2/12)
+
+          Commit 2 - Implementation:
+          feat: integrate console config into config loader
+
+          Update LoadConfig() and DefaultConfig() to properly initialize and
+          merge console configuration settings:
+          - Initialize console defaults in DefaultConfig()
+          - Merge console section from YAML with defaults
+          - Apply environment variable overrides
+          - Maintain backward compatibility with configs lacking console section
+
+          Part of Enhanced Console Output System (Task 2/12)
+          Test coverage: 90%+
+        files:
+          - "internal/config/config_test.go"
+          - "internal/config/config.go"
+      completed_date: "2025-11-13"
+    - task_number: "3"
+      name: "Extend Task Model with Execution Metadata"
+      description: "Add execution tracking fields to internal/models/models.go Task struct for duration, agent name, and file operation counts"
+      files:
+        - "internal/models/models_test.go"
+        - "internal/models/models.go"
+      depends_on: ["2"]
+      estimated_time: "45m"
+      agent: "test-automator"
+      worktree_group: "chain-1"
+      status: "completed"
+      test_first:
+        test_file: "internal/models/models_test.go"
+        test_structure: |
+          Write tests for enhanced Task execution metadata.
+
+          Test cases to implement:
+          1. TestTaskExecutionMetadata - Verify new fields
+          2. TestTaskCalculateDuration - Test duration calculation
+          3. TestTaskExecutionMetadataDefaults - New task has zero values
+          4. TestTaskExecutionMetadataJSON - Verify JSON marshaling
+          5. TestTaskFileOperationCounts - Test file count tracking
+        test_specifics: |
+          TestTaskExecutionMetadata should verify fields are populated and accessible.
+          TestTaskCalculateDuration should test duration calculation from start/end times.
+          TestTaskExecutionMetadataDefaults should verify new task has zero values.
+          TestTaskExecutionMetadataJSON should verify new fields present in JSON.
+          TestTaskFileOperationCounts should test RecordFileOperation method.
+
+          Use table-driven tests for edge cases. Target 90%+ coverage.
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Execution metadata fields are accessible"
+          - "Duration calculation is correct"
+          - "Defaults are zero values"
+          - "JSON marshaling includes new fields"
+          - "File operation tracking works"
+        edge_cases:
+          - "Zero duration (same start and end time)"
+          - "Negative duration (end before start)"
+          - "Missing timestamps"
+        example_skeleton: ""
+      implementation:
+        approach: |
+          Extend internal/models/models.go Task struct with execution metadata.
+        code_structure: |
+          type Task struct {
+              // ... existing fields (Number, Name, Files, DependsOn, etc.) ...
+
+              // Execution metadata for enhanced console output
+              ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`
+              ExecutionEndTime   time.Time     `json:"execution_end_time,omitempty" yaml:"execution_end_time,omitempty"`
+              ExecutionDuration  time.Duration `json:"execution_duration,omitempty" yaml:"execution_duration,omitempty"`
+              ExecutedBy         string        `json:"executed_by,omitempty" yaml:"executed_by,omitempty"` // Agent name
+              FilesModified      int           `json:"files_modified,omitempty" yaml:"files_modified,omitempty"`
+              FilesCreated       int           `json:"files_created,omitempty" yaml:"files_created,omitempty"`
+              FilesDeleted       int           `json:"files_deleted,omitempty" yaml:"files_deleted,omitempty"`
+          }
+
+          // Helper methods
+          func (t *Task) CalculateDuration() time.Duration
+          func (t *Task) RecordFileOperation(operation string)
+          func (t *Task) TotalFileOperations() int
+          func (t *Task) GetFormattedDuration() string
+        key_points:
+          - point: "Add execution metadata fields"
+            details: "ExecutionStartTime, ExecutionEndTime, ExecutionDuration, ExecutedBy, file counters"
+            reference: ""
+          - point: "Implement helper methods"
+            details: "CalculateDuration, RecordFileOperation, TotalFileOperations, GetFormattedDuration"
+            reference: ""
+          - point: "Maintain backward compatibility"
+            details: "Existing Task creation without metadata still works"
+            reference: ""
+        integration:
+          imports:
+            - "time"
+            - "encoding/json"
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle zero timestamps gracefully"
+            - "Prevent negative durations"
+        integration_points: []
+      verification:
+        manual_testing:
+          - step: "Run tests"
+            command: "go test ./internal/models -v"
+            expected: "All TestTaskExecution* tests pass"
+          - step: "Check coverage"
+            command: "go test ./internal/models -cover"
+            expected: "90%+ coverage for new metadata code"
+          - step: "Test JSON serialization"
+            command: "go test ./internal/models -v -run TestTaskExecutionMetadataJSON"
+            expected: "Task with metadata serializes correctly"
+        automated_tests:
+          command: |
+            go test ./internal/models -v
+            go test ./...
+            go fmt ./internal/models
+            go vet ./internal/models
+          expected_output: "All tests pass, code is formatted and vetted"
+        success_criteria:
+          - "All TestTaskExecution* tests pass"
+          - "Coverage is 90%+ for new metadata code"
+          - "Backward compatibility verified"
+          - "Full test suite passes"
+        expected_output: ""
+      commit:
+        type: "test + feat"
+        message: "Add execution metadata to Task model"
+        body: |
+          Two-commit approach (TDD):
+
+          Commit 1 - Tests:
+          test: add task execution metadata tests
+
+          Add comprehensive tests for Task execution tracking fields:
+          - Execution start/end time and duration calculation
+          - Agent name tracking (ExecutedBy field)
+          - File operation counters (modified/created/deleted)
+          - JSON marshaling with metadata
+          - Helper methods for duration formatting and file counts
+
+          Part of Enhanced Console Output System (Task 3/12)
+
+          Commit 2 - Implementation:
+          feat: add execution metadata to Task model
+
+          Extend Task struct with execution tracking fields for enhanced console output:
+          - ExecutionStartTime, ExecutionEndTime, ExecutionDuration
+          - ExecutedBy (agent name)
+          - FilesModified, FilesCreated, FilesDeleted counters
+
+          Add helper methods:
+          - CalculateDuration() - compute duration from timestamps
+          - RecordFileOperation() - increment file operation counters
+          - TotalFileOperations() - sum all file operations
+          - GetFormattedDuration() - human-readable duration string
+
+          Maintains backward compatibility with existing Task creation.
+
+          Part of Enhanced Console Output System (Task 3/12)
+          Test coverage: 90%+
+        files:
+          - "internal/models/models_test.go"
+          - "internal/models/models.go"
+      completed_date: "2025-11-13"
+    - task_number: "4"
+      name: "Create Progress Bar Component"
+      description: "Implement reusable ASCII progress bar component in internal/logger/progressbar.go with percentage, task counters, and ANSI color support"
+      files:
+        - "internal/logger/progressbar_test.go"
+        - "internal/logger/progressbar.go"
+      depends_on: []
+      estimated_time: "1h 0m"
+      agent: "golang-pro"
+      worktree_group: "independent-4"
+      status: "completed"
+      test_first:
+        test_file: "internal/logger/progressbar_test.go"
+        test_structure: |
+          Create comprehensive tests for progress bar component.
+
+          Test cases to implement:
+          1. TestProgressBarRender - Test ASCII bar rendering
+          2. TestProgressBarWidth - Test different bar widths
+          3. TestProgressBarColors - Test color rendering
+          4. TestProgressBarUpdate - Test progress updates
+          5. TestProgressBarEdgeCases - Test boundary conditions
+          6. TestProgressBarFormat - Test custom format strings
+          7. TestProgressBarConcurrency - Test thread safety
+        test_specifics: |
+          TestProgressBarRender should verify correct number of '=' characters and spacing.
+          TestProgressBarWidth should test different bar widths with table-driven tests.
+          TestProgressBarColors should verify ANSI color codes present/absent.
+          TestProgressBarUpdate should test Update() and Increment() methods.
+          TestProgressBarEdgeCases should test zero total, overflow, negative values.
+          TestProgressBarFormat should test custom prefix support.
+          TestProgressBarConcurrency should test thread-safe concurrent updates.
+
+          Use table-driven tests. Target 90%+ coverage.
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Progress bar renders correctly"
+          - "Different widths work correctly"
+          - "Colors are applied correctly"
+          - "Updates work correctly"
+          - "Edge cases are handled"
+          - "Custom formats work"
+          - "Concurrent updates are thread-safe"
+        edge_cases:
+          - "Zero total"
+          - "Current > Total"
+          - "Negative values"
+        example_skeleton: ""
+      implementation:
+        approach: |
+          Create internal/logger/progressbar.go with reusable progress bar component.
+        code_structure: |
+          Implement ProgressBar struct with full implementation including:
+          - NewProgressBar() constructor
+          - Render() method for generating progress bar strings
+          - Update(), Increment(), Current(), Total(), Percentage() methods
+          - SetPrefix() for custom prefix text
+          - Thread-safe operations with sync.RWMutex
+          - Color support using github.com/fatih/color
+          - Edge case handling (division by zero, overflow protection)
+        key_points:
+          - point: "Implement ProgressBar struct"
+            details: "With current, total, width, enableColor fields"
+            reference: ""
+          - point: "Implement Render method"
+            details: "Generate ASCII progress bar string with percentage"
+            reference: ""
+          - point: "Thread safety"
+            details: "Use sync.RWMutex for concurrent access"
+            reference: ""
+          - point: "Color support"
+            details: "Use github.com/fatih/color for ANSI colors"
+            reference: ""
+        integration:
+          imports:
+            - "sync"
+            - "github.com/fatih/color"
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle division by zero for empty progress bars"
+            - "Cap percentage at 100% for overflow cases"
+            - "Floor percentage at 0% for negative values"
+        integration_points: []
+      verification:
+        manual_testing:
+          - step: "Run tests"
+            command: "go test ./internal/logger -v -run TestProgressBar"
+            expected: "All progress bar tests pass"
+          - step: "Check coverage"
+            command: "go test ./internal/logger -cover -run TestProgressBar"
+            expected: "90%+ coverage for progress bar code"
+          - step: "Test concurrency"
+            command: "go test -race ./internal/logger -run TestProgressBarConcurrency"
+            expected: "No race conditions detected"
+        automated_tests:
+          command: |
+            go test ./internal/logger -v -run TestProgressBar
+            go test ./internal/logger -cover -run TestProgressBar
+            go test -race ./internal/logger -run TestProgressBarConcurrency
+            go test ./...
+            go fmt ./internal/logger
+            go vet ./internal/logger
+          expected_output: "All tests pass, no race conditions, code is formatted"
+        success_criteria:
+          - "All progress bar tests pass"
+          - "Coverage is 90%+"
+          - "No race conditions"
+          - "Full test suite passes"
+        expected_output: ""
+      commit:
+        type: "test + feat"
+        message: "Add reusable progress bar component"
+        body: |
+          Two-commit approach (TDD):
+
+          Commit 1 - Tests:
+          test: add progress bar component tests
+
+          Add comprehensive tests for ASCII progress bar component:
+          - Bar rendering with different progress values
+          - Width and format customization
+          - Color vs plain output modes
+          - Progress updates and increments
+          - Edge cases (zero total, overflow, negative values)
+          - Custom prefix support
+          - Thread-safe concurrent updates
+
+          Part of Enhanced Console Output System (Task 4/12)
+
+          Commit 2 - Implementation:
+          feat: add reusable progress bar component
+
+          Implement ProgressBar in internal/logger/progressbar.go with:
+          - ASCII bar rendering: [====================] 10/10 (100%)
+          - Configurable width and color support (cyan/green)
+          - Thread-safe operations with sync.RWMutex
+          - Progress tracking: Update(), Increment(), Current(), Percentage()
+          - Custom prefix support
+          - Edge case handling (division by zero, overflow protection)
+
+          Provides foundation for enhanced task progress visualization.
+
+          Part of Enhanced Console Output System (Task 4/12)
+          Test coverage: 90%+
+        files:
+          - "internal/logger/progressbar_test.go"
+          - "internal/logger/progressbar.go"
+      completed_date: "2025-11-13"
+    - task_number: "5"
+      name: "Add Console Logger Task Start Method"
+      description: "Implement LogTaskStart() method in internal/logger/console.go to display 'IN PROGRESS' indicator with task info, progress counter, and agent name"
+      files:
+        - "internal/logger/console_test.go"
+        - "internal/logger/console.go"
+      depends_on: ["3", "4"]
+      estimated_time: "45m"
+      agent: "golang-pro"
+      worktree_group: "chain-5"
+      status: "completed"
+      test_first:
+        test_file: "internal/logger/console_test.go"
+        test_structure: |
+          Write tests for LogTaskStart() method.
+
+          Test cases to implement:
+          1. TestConsoleLoggerLogTaskStart - Verify basic task start output
+          2. TestConsoleLoggerLogTaskStartNoAgent - Task without agent specified
+          3. TestConsoleLoggerLogTaskStartWithColors - Verify color output
+          4. TestConsoleLoggerLogTaskStartNoColors - Verify plain text output
+          5. TestConsoleLoggerLogTaskStartTimestamp - Verify timestamp format
+          6. TestConsoleLoggerLogTaskStartEdgeCases - Test boundary conditions
+          7. TestConsoleLoggerLogTaskStartConcurrency - Thread safety
+        test_specifics: |
+          Use table-driven tests for variations. Target 90%+ coverage.
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Task start output is correct"
+          - "Tasks without agent display correctly"
+          - "Color output works"
+          - "Plain text output works"
+          - "Timestamp format is correct"
+          - "Edge cases are handled"
+          - "Concurrent logging is thread-safe"
+        edge_cases:
+          - "Long task names"
+          - "Special characters in names"
+          - "Empty agent name"
+        example_skeleton: ""
+      implementation:
+        approach: |
+          Extend internal/logger/console.go with LogTaskStart() method.
+        code_structure: |
+          Implement LogTaskStart() with:
+          - Timestamp formatting [HH:MM:SS]
+          - Progress counter [N/M]
+          - Status indicator with emoji ⏳
+          - Task identifier "Task N (name)"
+          - Agent info "(agent: agent-name)" if specified
+          - Color scheme: cyan (progress), white (status), magenta (agent)
+          - Thread-safe output with mutex lock
+        key_points:
+          - point: "Implement LogTaskStart method"
+            details: "Display task start with timestamp, progress, status, name, agent"
+            reference: ""
+          - point: "Add enableColor field"
+            details: "Update ConsoleLogger struct if needed"
+            reference: ""
+          - point: "Thread safety"
+            details: "Use mutex lock for output"
+            reference: ""
+        integration:
+          imports:
+            - "time"
+            - "github.com/fatih/color"
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle missing agent gracefully"
+            - "Format long names appropriately"
+        integration_points: []
+      verification:
+        manual_testing:
+          - step: "Run tests"
+            command: "go test ./internal/logger -v -run TestConsoleLoggerLogTaskStart"
+            expected: "All task start tests pass"
+          - step: "Check coverage"
+            command: "go test ./internal/logger -cover -run TestConsoleLoggerLogTaskStart"
+            expected: "90%+ coverage for LogTaskStart code"
+          - step: "Test with race detector"
+            command: "go test -race ./internal/logger -run TestConsoleLoggerLogTaskStartConcurrency"
+            expected: "No race conditions"
+        automated_tests:
+          command: |
+            go test ./internal/logger -v -run TestConsoleLoggerLogTaskStart
+            go test -race ./internal/logger -run TestConsoleLoggerLogTaskStartConcurrency
+            go test ./...
+            go fmt ./internal/logger
+            go vet ./internal/logger
+          expected_output: "All tests pass, no race conditions"
+        success_criteria:
+          - "All task start tests pass"
+          - "Coverage is 90%+"
+          - "No race conditions"
+          - "Full test suite passes"
+        expected_output: ""
+      commit:
+        type: "test + feat"
+        message: "Add console logger task start method"
+        body: |
+          Two-commit approach (TDD):
+
+          Commit 1 - Tests:
+          test: add console logger task start method tests
+
+          Add comprehensive tests for LogTaskStart() method:
+          - Basic task start output with progress counter and agent
+          - Task without agent specified
+          - Color vs plain text output modes
+          - Timestamp format validation
+          - Edge cases (long names, special characters)
+          - Thread-safe concurrent logging
+
+          Part of Enhanced Console Output System (Task 5/12)
+
+          Commit 2 - Implementation:
+          feat: add console logger task start method
+
+          Implement LogTaskStart() in internal/logger/console.go to display
+          task execution start with:
+          - Timestamp: [HH:MM:SS]
+          - Progress counter: [N/M]
+          - Status indicator: ⏳ IN PROGRESS
+          - Task identifier: Task N (name)
+          - Agent info: (agent: agent-name) if specified
+
+          Color scheme: cyan (progress), white (status), magenta (agent)
+          Thread-safe with mutex protection.
+
+          Part of Enhanced Console Output System (Task 5/12)
+          Test coverage: 90%+
+        files:
+          - "internal/logger/console_test.go"
+          - "internal/logger/console.go"
+      completed_date: "2025-11-13"
+    - task_number: "6"
+      name: "Enhance Console Logger Task Result (Default Mode)"
+      description: "Extend LogTaskResult() method in internal/logger/console.go to show single-line task completion with progress counter, duration, agent, and file count"
+      files:
+        - "internal/logger/console_test.go"
+        - "internal/logger/console.go"
+      depends_on: ["3", "4", "5"]
+      estimated_time: "1h 0m"
+      agent: "golang-pro"
+      worktree_group: "chain-6"
+      status: "completed"
+      test_first:
+        test_file: "internal/logger/console_test.go"
+        test_structure: |
+          Write tests for enhanced LogTaskResult() default mode.
+
+          Test cases to implement:
+          1. TestConsoleLoggerLogTaskResultSuccess - Successful task (GREEN)
+          2. TestConsoleLoggerLogTaskResultFailed - Failed task (RED)
+          3. TestConsoleLoggerLogTaskResultWarning - Warning (YELLOW)
+          4. TestConsoleLoggerLogTaskResultColors - Color output
+          5. TestConsoleLoggerLogTaskResultNoFiles - Task with no file operations
+          6. TestConsoleLoggerLogTaskResultNoAgent - Task without agent
+          7. TestConsoleLoggerLogTaskResultDurationFormats - Various durations
+        test_specifics: |
+          Use table-driven tests for status variations. Target 90%+ coverage.
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Successful task output is correct (GREEN)"
+          - "Failed task output is correct (RED)"
+          - "Warning task output is correct (YELLOW)"
+          - "Color output works"
+          - "Tasks without files display correctly"
+          - "Tasks without agent display correctly"
+          - "Duration formatting is correct"
+        edge_cases:
+          - "Zero duration"
+          - "Very long duration"
+          - "No file operations"
+        example_skeleton: ""
+      implementation:
+        approach: |
+          Enhance internal/logger/console.go LogTaskResult() method for default mode.
+        code_structure: |
+          Implement comprehensive LogTaskResult() with:
+          - Status-specific icons (✓ GREEN, ⚠ YELLOW, ✗ RED)
+          - Progress counter formatting
+          - Human-readable duration formatting
+          - Agent name display (conditional)
+          - File operation counts (conditional)
+          - Color scheme per status
+          - Helper functions for duration and pluralization
+        key_points:
+          - point: "Implement enhanced LogTaskResult"
+            details: "Single-line format with all task completion details"
+            reference: ""
+          - point: "Status-specific icons and colors"
+            details: "✓ GREEN, ⚠ YELLOW, ✗ RED with appropriate colors"
+            reference: ""
+          - point: "Conditional display"
+            details: "Gracefully handle missing fields (no agent, no files)"
+            reference: ""
+        integration:
+          imports:
+            - "time"
+            - "github.com/fatih/color"
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Handle missing duration gracefully"
+            - "Handle zero file operations"
+            - "Handle missing agent"
+        integration_points: []
+      verification:
+        manual_testing:
+          - step: "Run tests"
+            command: "go test ./internal/logger -v -run TestConsoleLoggerLogTaskResult"
+            expected: "All task result tests pass"
+          - step: "Check coverage"
+            command: "go test ./internal/logger -cover -run TestConsoleLoggerLogTaskResult"
+            expected: "90%+ coverage for LogTaskResult code"
+          - step: "Test different QC flags"
+            command: "# Test GREEN/YELLOW/RED outputs"
+            expected: "All status variations work correctly"
+        automated_tests:
+          command: |
+            go test ./internal/logger -v -run TestConsoleLoggerLogTaskResult
+            go test ./...
+            go fmt ./internal/logger
+            go vet ./internal/logger
+          expected_output: "All tests pass"
+        success_criteria:
+          - "All task result tests pass"
+          - "Coverage is 90%+"
+          - "All status variations work"
+          - "Full test suite passes"
+        expected_output: ""
+      commit:
+        type: "test + feat"
+        message: "Enhance console logger task result (default mode)"
+        body: |
+          Two-commit approach (TDD):
+
+          Commit 1 - Tests:
+          test: add enhanced task result logging tests (default mode)
+
+          Add comprehensive tests for LogTaskResult() default mode:
+          - Successful task completion (GREEN) with all details
+          - Failed task (RED) with error handling
+          - Warning task (YELLOW) with warning indicators
+          - Color vs plain text output modes
+          - Tasks without files or agent
+          - Duration formatting variations (ms, s, m, h)
+          - Progress counter and status icons
+
+          Part of Enhanced Console Output System (Task 6/12)
+
+          Commit 2 - Implementation:
+          feat: enhance console logger task result (default mode)
+
+          Extend LogTaskResult() in internal/logger/console.go with:
+          - Single-line format: [HH:MM:SS] [N/M] ✓ Task N (name): STATUS (2.3s, agent: X, 3 files)
+          - Progress counter [N/M] tracking
+          - Status icons: ✓ (success), ⚠ (warning), ✗ (error)
+          - Duration in human-readable format (1.5s, 2m30s, 1h5m)
+          - Agent name display (if specified)
+          - File operation count (modified + created + deleted)
+          - Color support: green (success), yellow (warning), red (error), cyan (progress)
+
+          Gracefully handles missing fields (no agent, no files, etc.).
+          Provides comprehensive task completion details in compact format.
+
+          Part of Enhanced Console Output System (Task 6/12)
+          Test coverage: 90%+
+        files:
+          - "internal/logger/console_test.go"
+          - "internal/logger/console.go"
+      completed_date: "2025-11-13"
+    - task_number: "7"
+      name: "Add Console Logger Task Result Verbose Mode"
+      description: "Extend LogTaskResult() in internal/logger/console.go to support verbose mode with multi-line output showing duration, agent, full file list, and QC feedback"
+      files:
+        - "internal/logger/console_test.go"
+        - "internal/logger/console.go"
+      depends_on: ["6"]
+      estimated_time: "1h 0m"
+      agent: "golang-pro"
+      worktree_group: "chain-7"
+      status: "completed"
+      test_first:
+        test_file: "internal/logger/console_test.go"
+        test_structure: |
+          Write tests for LogTaskResult() verbose mode.
+
+          Test cases to implement:
+          1. TestConsoleLoggerLogTaskResultVerbose - Basic verbose output
+          2. TestConsoleLoggerLogTaskResultVerboseNoFiles - Verbose without file list
+          3. TestConsoleLoggerLogTaskResultVerboseNoQCFeedback - No QC feedback
+          4. TestConsoleLoggerLogTaskResultVerboseWithColors - Colored verbose output
+          5. TestConsoleLoggerLogTaskResultVerboseToggle - Toggle verbose on/off
+          6. TestConsoleLoggerLogTaskResultVerboseLongQCFeedback - Wrap long feedback
+          7. TestConsoleLoggerVerboseModeProperty - Test SetVerbose and IsVerbose
+        test_specifics: |
+          Use table-driven tests for different verbosity scenarios. Target 90%+ coverage.
+        mocks: []
+        fixtures: []
+        assertions:
+          - "Verbose output displays multi-line format"
+          - "Tasks without files omit file section"
+          - "Tasks without QC feedback omit feedback section"
+          - "Color output works in verbose mode"
+          - "Toggle between default and verbose works"
+          - "Long QC feedback is handled"
+          - "SetVerbose and IsVerbose work"
+        edge_cases:
+          - "No files"
+          - "No QC feedback"
+          - "Very long QC feedback"
+        example_skeleton: ""
+      implementation:
+        approach: |
+          Extend internal/logger/console.go with verbose mode support in LogTaskResult().
+        code_structure: |
+          Add verbose field and methods to ConsoleLogger:
+          - SetVerbose() and IsVerbose() methods
+          - Refactor LogTaskResult() to check verbose mode
+          - Implement logTaskResultDefault() for single-line output
+          - Implement logTaskResultVerbose() for multi-line detailed output
+
+          Verbose output format:
+          - Header line with status
+          - Indented Duration, Agent, Files list, QC Feedback
+          - Conditional display (omit empty sections)
+          - Color support in verbose mode
+        key_points:
+          - point: "Add verbose field"
+            details: "Add verbose bool field to ConsoleLogger struct"
+            reference: ""
+          - point: "Implement SetVerbose and IsVerbose"
+            details: "Methods to control and check verbose mode"
+            reference: ""
+          - point: "Refactor LogTaskResult"
+            details: "Split into logTaskResultDefault and logTaskResultVerbose"
+            reference: ""
+          - point: "Multi-line verbose format"
+            details: "Header with indented details, conditional sections"
+            reference: ""
+        integration:
+          imports:
+            - "strings"
+            - "github.com/fatih/color"
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Gracefully omit empty sections"
+            - "Handle long QC feedback"
+        integration_points: []
+      verification:
+        manual_testing:
+          - step: "Run tests"
+            command: "go test ./internal/logger -v -run TestConsoleLoggerLogTaskResultVerbose"
+            expected: "All verbose mode tests pass"
+          - step: "Check coverage"
+            command: "go test ./internal/logger -cover -run TestConsoleLoggerLogTaskResultVerbose"
+            expected: "90%+ coverage for verbose mode code"
+          - step: "Test verbose toggle"
+            command: "# Verify SetVerbose and IsVerbose work"
+            expected: "Verbose mode can be toggled"
+        automated_tests:
+          command: |
+            go test ./internal/logger -v -run TestConsoleLoggerLogTaskResultVerbose
+            go test ./...
+            go fmt ./internal/logger
+          expected_output: "All tests pass"
+        success_criteria:
+          - "All verbose mode tests pass"
+          - "Coverage is 90%+"
+          - "Verbose toggle works"
+          - "Full test suite passes"
+        expected_output: ""
+      commit:
+        type: "test + feat"
+        message: "Add console logger verbose mode"
+        body: |
+          Two-commit approach (TDD):
+
+          Commit 1 - Tests:
+          test: add console logger verbose mode tests
+
+          Add comprehensive tests for LogTaskResult() verbose mode:
+          - Multi-line output with duration, agent, files, QC feedback
+          - Tasks without files or QC feedback
+          - Colored verbose output
+          - Toggle between default and verbose modes
+          - Long QC feedback handling
+          - SetVerbose() and IsVerbose() methods
+
+          Part of Enhanced Console Output System (Task 7/12)
+
+          Commit 2 - Implementation:
+          feat: add console logger verbose mode
+
+          Extend LogTaskResult() in internal/logger/console.go with verbose mode:
+          - Multi-line format with indented details
+          - Header line: [HH:MM:SS] [N/M] ✓ Task N (name): STATUS
+          - Indented sections:
+            - Duration: human-readable duration
+            - Agent: agent name (magenta color)
+            - Files: full list with operation types (modified/created/deleted)
+            - QC Feedback: full QC review text
+          - Add SetVerbose() and IsVerbose() methods
+          - Gracefully omits empty sections (no files, no feedback)
+          - Refactor into logTaskResultDefault() and logTaskResultVerbose()
+
+          Provides detailed task completion information for debugging and
+          comprehensive review workflows.
+
+          Part of Enhanced Console Output System (Task 7/12)
+          Test coverage: 90%+
+        files:
+          - "internal/logger/console_test.go"
+          - "internal/logger/console.go"
+      completed_date: "2025-11-13"
