@@ -59,15 +59,14 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
 git clone https://github.com/harrison/conductor.git
 cd conductor
 
-# Build binary
-go build ./cmd/conductor
+# Build binary using Make (Recommended)
+make build
 
-# Verify installation
+# Verify the build
 ./conductor --version
-
-# Optional: Install to PATH
-go install ./cmd/conductor
 ```
+
+All users should use `make build` to create the local binary at `./conductor`. Use `./conductor` directly from the repository directory for all operations.
 
 ### VERSION File Management
 
@@ -88,40 +87,23 @@ echo "2.0.1" > VERSION
 
 ### Build with Auto-Increment Versioning
 
-Conductor supports auto-increment build targets that update the `VERSION` file:
+Conductor supports auto-increment build targets that update the `VERSION` file and build the binary:
 
 ```bash
 # Build with current version (requires VERSION file to exist)
 make build
 
-# Auto-increment patch version (1.1.0 → 1.1.1)
+# Auto-increment patch version (1.1.0 → 1.1.1) and build
 make build-patch
 
-# Auto-increment minor version (1.1.0 → 1.2.0)
+# Auto-increment minor version (1.1.0 → 1.2.0) and build
 make build-minor
 
-# Auto-increment major version (1.1.0 → 2.0.0)
+# Auto-increment major version (1.1.0 → 2.0.0) and build
 make build-major
 ```
 
-The `VERSION` file is the single source of truth, automatically injected at build time.
-
-### System-Wide Installation
-
-For system-wide access to the `conductor` command:
-
-```bash
-# Install binary to $GOPATH/bin (usually in PATH if Go is configured correctly)
-go install ./cmd/conductor
-
-# Verify installation
-conductor --version
-
-# Now you can use 'conductor' from anywhere
-conductor run plan.md
-```
-
-**Note:** You only need to do this once. After installation, the binary is available system-wide until you update it.
+Each `build-*` command automatically increments the VERSION file and builds the binary. The `VERSION` file is the single source of truth, automatically injected at build time.
 
 ---
 
@@ -2575,7 +2557,7 @@ This section covers development practices, project structure, and testing guidel
 
 ### Building
 
-**Recommended for Development:**
+**Using Make (Recommended):**
 ```bash
 # Build binary locally (creates ./conductor in current directory)
 make build
@@ -2586,10 +2568,11 @@ make build
 ```
 
 **Auto-increment and build:**
+These commands automatically increment the VERSION file and build the binary:
 ```bash
-make build-patch   # 1.0.0 → 1.0.1
-make build-minor   # 1.0.0 → 1.1.0
-make build-major   # 1.0.0 → 2.0.0
+make build-patch   # 1.0.0 → 1.0.1 and build
+make build-minor   # 1.0.0 → 1.1.0 and build
+make build-major   # 1.0.0 → 2.0.0 and build
 ```
 
 **Manual build (without Makefile):**
@@ -2601,20 +2584,6 @@ go build -o conductor ./cmd/conductor
 ```bash
 ./conductor --version
 ```
-
-**System-Wide Installation:**
-
-For development, use `go run ./cmd/conductor` for quick testing. If you need the binary available system-wide:
-
-```bash
-# Install to $GOPATH/bin (usually in PATH if Go is configured correctly)
-go install ./cmd/conductor
-
-# Verify installation
-conductor --version
-```
-
-**Note:** Only do this once. After installation, the binary is available system-wide. For development work, continue using `go run ./cmd/conductor` or the locally built `./conductor` binary.
 
 ### Running Tests
 
