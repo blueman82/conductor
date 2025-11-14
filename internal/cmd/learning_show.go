@@ -17,6 +17,8 @@ import (
 
 // NewShowCommand creates the 'conductor learning show' command
 func NewShowCommand() *cobra.Command {
+	var dbPath string
+
 	cmd := &cobra.Command{
 		Use:   "show <plan-file> <task-number>",
 		Short: "Show detailed history for a task",
@@ -27,14 +29,18 @@ func NewShowCommand() *cobra.Command {
   - Timestamps and durations
   - Output and error messages`,
 		Args: cobra.ExactArgs(2),
-		RunE: runShow,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runShow(cmd, args, dbPath)
+		},
 	}
+
+	cmd.Flags().StringVar(&dbPath, "db-path", "", "Path to learning database (for testing)")
 
 	return cmd
 }
 
 // runShow executes the show command
-func runShow(cmd *cobra.Command, args []string) error {
+func runShow(cmd *cobra.Command, args []string, dbPathOverride string) error {
 	planFile := args[0]
 	taskNumber := args[1]
 	output := cmd.OutOrStdout()
@@ -50,10 +56,17 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("plan file not found: %s", absPath)
 	}
 
-	// Use centralized conductor home database location
-	dbPath, err := config.GetLearningDBPath()
-	if err != nil {
-		return fmt.Errorf("failed to get learning database path: %w", err)
+	// Determine database path: use override if provided (for testing), otherwise use centralized location
+	var dbPath string
+	if dbPathOverride != "" {
+		dbPath = dbPathOverride
+	} else {
+		// Use centralized conductor home database location
+		var err error
+		dbPath, err = config.GetLearningDBPath()
+		if err != nil {
+			return fmt.Errorf("failed to get learning database path: %w", err)
+		}
 	}
 
 	// Check if database exists

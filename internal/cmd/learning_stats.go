@@ -16,6 +16,8 @@ import (
 
 // NewStatsCommand creates the 'conductor learning stats' command
 func NewStatsCommand() *cobra.Command {
+	var dbPath string
+
 	cmd := &cobra.Command{
 		Use:   "stats <plan-file>",
 		Short: "Show learning statistics for a plan",
@@ -26,14 +28,18 @@ func NewStatsCommand() *cobra.Command {
   - Common failure patterns
   - Average execution durations`,
 		Args: cobra.ExactArgs(1),
-		RunE: runStats,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStats(cmd, args, dbPath)
+		},
 	}
+
+	cmd.Flags().StringVar(&dbPath, "db-path", "", "Path to learning database (for testing)")
 
 	return cmd
 }
 
 // runStats executes the stats command
-func runStats(cmd *cobra.Command, args []string) error {
+func runStats(cmd *cobra.Command, args []string, dbPathOverride string) error {
 	planFile := args[0]
 	output := cmd.OutOrStdout()
 
@@ -48,10 +54,17 @@ func runStats(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("plan file not found: %s", absPath)
 	}
 
-	// Use centralized conductor home database location
-	dbPath, err := config.GetLearningDBPath()
-	if err != nil {
-		return fmt.Errorf("failed to get learning database path: %w", err)
+	// Determine database path: use override if provided (for testing), otherwise use centralized location
+	var dbPath string
+	if dbPathOverride != "" {
+		dbPath = dbPathOverride
+	} else {
+		// Use centralized conductor home database location
+		var err error
+		dbPath, err = config.GetLearningDBPath()
+		if err != nil {
+			return fmt.Errorf("failed to get learning database path: %w", err)
+		}
 	}
 
 	// Check if database exists

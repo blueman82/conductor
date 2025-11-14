@@ -85,6 +85,11 @@ func runExport(planFile, format, output, dbPathOverride string) error {
 		return fmt.Errorf("failed to retrieve executions: %w", err)
 	}
 
+	// Initialize empty slice if nil to ensure JSON output is [] not null
+	if executions == nil {
+		executions = make([]*learning.TaskExecution, 0)
+	}
+
 	// Determine output destination
 	var writer io.Writer
 	if output == "" {
