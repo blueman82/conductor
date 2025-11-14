@@ -39,24 +39,57 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
 
 ### Prerequisites
 
-1. **Go 1.21 or higher**
-   ```bash
-   go version  # Should be 1.21+
-   ```
-
-2. **Claude Code CLI**
+1. **Claude Code CLI** (Required)
    ```bash
    claude --version  # Must be in PATH
    claude auth status  # Must be authenticated
    ```
 
-3. **Git** (optional, for cloning repository)
+2. **Go 1.21 or higher** (Optional, only needed for building from source)
+   ```bash
+   go version  # Should be 1.21+ (for source builds only)
+   ```
 
-### Build from Source
+3. **Git** (Optional, for cloning repository)
+
+### Install Pre-Built Binary (Recommended)
+
+Download a pre-built binary from [GitHub Releases](https://github.com/blueman82/conductor/releases):
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-darwin-arm64 -o conductor
+chmod +x conductor
+sudo mv conductor /usr/local/bin/
+
+# macOS (Intel)
+curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-darwin-amd64 -o conductor
+chmod +x conductor
+sudo mv conductor /usr/local/bin/
+
+# Linux
+curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-linux-amd64 -o conductor
+chmod +x conductor
+sudo mv conductor /usr/local/bin/
+
+# Verify installation
+conductor --version
+# v2.0.5
+```
+
+**Benefits of using pre-built binaries:**
+- ✅ No build step required
+- ✅ Version always matches the release
+- ✅ Fast installation (30 seconds vs 1-2 minutes to build)
+- ✅ Works immediately, no PATH updates needed
+
+### Build from Source (for Developers)
+
+Clone the repository and build locally:
 
 ```bash
 # Clone repository
-git clone https://github.com/harrison/conductor.git
+git clone https://github.com/blueman82/conductor.git
 cd conductor
 
 # Build binary using Make (Recommended)
