@@ -37,7 +37,7 @@ git checkout -b fix/your-bug-name
 
 ### 3. Set Up Development Environment
 
-See [SETUP.md](SETUP.md) for complete development setup instructions.
+See [Development Setup](docs/setup.md) for complete development setup instructions.
 
 ## Development Workflow
 
@@ -385,7 +385,7 @@ The VERSION file is the single source of truth.
 
 ## Questions or Need Help?
 
-- Check [SETUP.md](SETUP.md) for development setup
+- Check [Development Setup](docs/setup.md) for development setup
 - See [CLAUDE.md](CLAUDE.md) for architecture details
 - Review [docs/](docs/) for complete documentation
 - Open an issue for questions or clarification

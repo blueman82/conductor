@@ -77,7 +77,7 @@ go build ./cmd/conductor
 
 ### Your First Execution
 
-1. **Create a plan file** (see [Plan Format Guide](docs/plan-format.md))
+1. **Create a plan file** (see [Plan Format Guide](docs/conductor.md#plan-format))
 
 ```markdown
 # My First Plan
@@ -252,7 +252,7 @@ learning:
   keep_executions_days: 90      # Retention period for learning data
 ```
 
-For detailed configuration options, see [Usage Guide](docs/usage.md).
+For detailed configuration options, see [Usage Guide](docs/conductor.md#usage--commands).
 
 ### Build-Time Configuration
 
@@ -332,7 +332,7 @@ learning:
 
 Learning data is stored locally in `.conductor/learning/` (excluded from git).
 
-**See [Learning System Guide](docs/learning.md) for complete documentation.**
+**See [Learning System Guide](docs/conductor.md#adaptive-learning-system) for complete documentation.**
 
 ## Plan Format
 
@@ -367,7 +367,7 @@ plan:
       description: Task description and requirements.
 ```
 
-For complete format specifications, see [Plan Format Guide](docs/plan-format.md).
+For complete format specifications, see [Plan Format Guide](docs/conductor.md#plan-format).
 
 ## Conductor Plugin (Included)
 
@@ -402,11 +402,8 @@ See [plugin/docs](plugin/docs) for complete plugin documentation.
 
 ## Documentation
 
-- **[Learning System Guide](docs/learning.md)** - Adaptive learning documentation (v2.0+)
-- **[Usage Guide](docs/usage.md)** - Detailed CLI reference and examples
-- **[Plan Format Guide](docs/plan-format.md)** - Plan format specifications
-- **[Phase 2A Guide](docs/phase-2a-guide.md)** - Multi-file plans and plan splitting
-- **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
+- **[Complete Reference Guide](docs/conductor.md)** - Comprehensive guide covering usage, plan formats, multi-file plans, learning system, and troubleshooting
+- **[Development Setup](docs/setup.md)** - Local development environment setup
 - **[Split Plan Examples](docs/examples/split-plan-README.md)** - Example split plans
 - **[Plugin Docs](plugin/docs)** - Plan generation & design tools
 
@@ -529,7 +526,7 @@ conductor validate *.md
 - ✅ File-to-task mapping for resume operations
 - ✅ 100% backward compatible with single-file plans
 
-See [Phase 2A Guide](docs/phase-2a-guide.md) for detailed documentation and examples.
+See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-splitting) for detailed documentation and examples.
 
 ## Project Status
 
@@ -586,7 +583,7 @@ Contributions are welcome! Please:
 
 - **Documentation**: [docs/](docs/)
 - **Issues**: [GitHub Issues](https://github.com/blueman82/conductor/issues)
-- **Troubleshooting**: [Troubleshooting Guide](docs/troubleshooting.md)
+- **Troubleshooting**: [Troubleshooting Guide](docs/conductor.md#troubleshooting--faq)
 
 ## Acknowledgments
 
