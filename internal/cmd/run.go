@@ -145,8 +145,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to load config from %s: %w", configPath, err)
 		}
 	} else {
-		// Load from default .conductor/config.yaml
-		cfg, err = config.LoadConfigFromDir(".")
+		// Load from default .conductor/config.yaml in conductor repo root
+		// Use build-time injected repo root to ensure config loads from conductor repo,
+		// not from the current working directory where conductor is invoked from
+		cfg, err = config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}

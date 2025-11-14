@@ -170,7 +170,11 @@ timeout: 1h
 		t.Fatalf("failed to write test config: %v", err)
 	}
 
-	cfg, err := LoadConfigFromDir(tmpDir)
+	// Set build-time root to use tmpDir
+	SetBuildTimeRepoRoot(tmpDir)
+	defer SetBuildTimeRepoRoot("") // Reset after test
+
+	cfg, err := LoadConfigFromDir(".")
 	if err != nil {
 		t.Fatalf("LoadConfigFromDir() error = %v", err)
 	}
@@ -187,7 +191,11 @@ timeout: 1h
 func TestLoadConfigFromDirNotExists(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	cfg, err := LoadConfigFromDir(tmpDir)
+	// Set build-time root to tmpDir (no .conductor directory)
+	SetBuildTimeRepoRoot(tmpDir)
+	defer SetBuildTimeRepoRoot("")
+
+	cfg, err := LoadConfigFromDir(".")
 	if err != nil {
 		t.Fatalf("LoadConfigFromDir() should not error on missing config, got: %v", err)
 	}
@@ -1414,5 +1422,145 @@ max_concurrency: 5
 	// Non-console config values should not be affected
 	if cfg.MaxConcurrency != 5 {
 		t.Errorf("MaxConcurrency = %d, want 5 (unaffected)", cfg.MaxConcurrency)
+	}
+}
+
+// TestLoadConfigFromRootWithBuildTime tests loading config from build-time injected root
+func TestLoadConfigFromRootWithBuildTime(t *testing.T) {
+	// Create temp conductor repo root with config
+	buildRoot := t.TempDir()
+	configDir := filepath.Join(buildRoot, ".conductor")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.yaml")
+	configContent := `max_concurrency: 7
+timeout: 45m
+log_level: debug
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	// Load config from build-time root
+	cfg, err := LoadConfigFromRootWithBuildTime(buildRoot)
+	if err != nil {
+		t.Fatalf("LoadConfigFromRootWithBuildTime() error = %v", err)
+	}
+
+	// Verify values loaded from conductor repo root
+	if cfg.MaxConcurrency != 7 {
+		t.Errorf("MaxConcurrency = %d, want 7", cfg.MaxConcurrency)
+	}
+	if cfg.Timeout != 45*time.Minute {
+		t.Errorf("Timeout = %v, want 45m", cfg.Timeout)
+	}
+	if cfg.LogLevel != "debug" {
+		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "debug")
+	}
+}
+
+// TestLoadConfigFromRootWithBuildTimeNoConfig tests defaults when no config exists
+func TestLoadConfigFromRootWithBuildTimeNoConfig(t *testing.T) {
+	// Empty temp directory (no config file)
+	buildRoot := t.TempDir()
+
+	cfg, err := LoadConfigFromRootWithBuildTime(buildRoot)
+	if err != nil {
+		t.Fatalf("LoadConfigFromRootWithBuildTime() error = %v", err)
+	}
+
+	// Should return defaults
+	if cfg.MaxConcurrency != 0 {
+		t.Errorf("MaxConcurrency = %d, want 0 (default)", cfg.MaxConcurrency)
+	}
+	if cfg.LogLevel != "info" {
+		t.Errorf("LogLevel = %q, want %q (default)", cfg.LogLevel, "info")
+	}
+}
+
+// TestLoadConfigFromRootWithBuildTimeEmptyRoot tests error when root is empty
+func TestLoadConfigFromRootWithBuildTimeEmptyRoot(t *testing.T) {
+	_, err := LoadConfigFromRootWithBuildTime("")
+	if err == nil {
+		t.Error("LoadConfigFromRootWithBuildTime(\"\") expected error, got nil")
+	}
+}
+
+// TestLoadConfigFromDirUsesInjectedRoot tests LoadConfigFromDir uses injected root
+func TestLoadConfigFromDirUsesInjectedRoot(t *testing.T) {
+	// Create config in build-time root
+	buildRoot := t.TempDir()
+	configDir := filepath.Join(buildRoot, ".conductor")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.yaml")
+	configContent := `max_concurrency: 9
+log_level: trace
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	// Set build-time root
+	SetBuildTimeRepoRoot(buildRoot)
+	defer SetBuildTimeRepoRoot("") // Reset after test
+
+	// Load config - should use injected root, not "."
+	cfg, err := LoadConfigFromDir(".")
+	if err != nil {
+		t.Fatalf("LoadConfigFromDir() error = %v", err)
+	}
+
+	// Should load from build-time root
+	if cfg.MaxConcurrency != 9 {
+		t.Errorf("MaxConcurrency = %d, want 9 (from build-time root)", cfg.MaxConcurrency)
+	}
+	if cfg.LogLevel != "trace" {
+		t.Errorf("LogLevel = %q, want %q (from build-time root)", cfg.LogLevel, "trace")
+	}
+}
+
+// TestLoadConfigExplicitPathOverridesRoot tests explicit path takes precedence
+func TestLoadConfigExplicitPathOverridesRoot(t *testing.T) {
+	// Create config in build-time root
+	buildRoot := t.TempDir()
+	buildConfigDir := filepath.Join(buildRoot, ".conductor")
+	if err := os.MkdirAll(buildConfigDir, 0755); err != nil {
+		t.Fatalf("failed to create build config dir: %v", err)
+	}
+
+	buildConfigPath := filepath.Join(buildConfigDir, "config.yaml")
+	buildConfigContent := `max_concurrency: 5
+`
+	if err := os.WriteFile(buildConfigPath, []byte(buildConfigContent), 0644); err != nil {
+		t.Fatalf("failed to write build config: %v", err)
+	}
+
+	// Create explicit config file (different location)
+	explicitConfigDir := t.TempDir()
+	explicitConfigPath := filepath.Join(explicitConfigDir, "custom.yaml")
+	explicitConfigContent := `max_concurrency: 10
+`
+	if err := os.WriteFile(explicitConfigPath, []byte(explicitConfigContent), 0644); err != nil {
+		t.Fatalf("failed to write explicit config: %v", err)
+	}
+
+	// Set build-time root
+	SetBuildTimeRepoRoot(buildRoot)
+	defer SetBuildTimeRepoRoot("")
+
+	// Load from explicit path - should NOT use build-time root
+	cfg, err := LoadConfig(explicitConfigPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Should load from explicit path, not build-time root
+	if cfg.MaxConcurrency != 10 {
+		t.Errorf("MaxConcurrency = %d, want 10 (from explicit path)", cfg.MaxConcurrency)
 	}
 }

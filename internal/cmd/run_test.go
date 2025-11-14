@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
+	"github.com/harrison/conductor/internal/config"
 )
 
 // Helper function to create a test plan file
@@ -30,9 +30,22 @@ func createTestPlanFile(t *testing.T, content string) string {
 func executeRunCommand(t *testing.T, args []string) (string, error) {
 	t.Helper()
 
+	// Set build-time repo root for tests
+	// This simulates the ldflags injection that happens at build time
+	testRoot := t.TempDir()
+
+	// Set both the cmd package's ConductorRepoRoot (used by GetConductorRepoRoot())
+	// and the config's buildTimeRepoRoot (used by config functions)
+	oldConductorRepoRoot := ConductorRepoRoot
+	ConductorRepoRoot = testRoot
+	defer func() { ConductorRepoRoot = oldConductorRepoRoot }()
+
+	config.SetBuildTimeRepoRoot(testRoot)
+	defer config.SetBuildTimeRepoRoot("")
+
 	// Set CONDUCTOR_HOME for tests to ensure database location is configured
 	// This simulates the build-time injection that happens in production
-	conductorHome := filepath.Join(t.TempDir(), ".conductor")
+	conductorHome := filepath.Join(testRoot, ".conductor")
 	oldHome := os.Getenv("CONDUCTOR_HOME")
 	defer func() {
 		if oldHome == "" {
@@ -43,10 +56,9 @@ func executeRunCommand(t *testing.T, args []string) (string, error) {
 	}()
 	t.Setenv("CONDUCTOR_HOME", conductorHome)
 
-	// Create a new root command and run command
-	rootCmd := &cobra.Command{Use: "conductor"}
-	runCmd := NewRunCommand()
-	rootCmd.AddCommand(runCmd)
+	// Create a new root command using NewRootCommand to properly initialize config
+	// with build-time repo root (for config loading and database location)
+	rootCmd := NewRootCommand()
 
 	// Capture output
 	buf := new(bytes.Buffer)
