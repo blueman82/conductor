@@ -30,8 +30,8 @@ dry_run: false
 		t.Fatalf("failed to write config: %v", err)
 	}
 
-	// Load config from directory
-	cfg, err := LoadConfigFromDir(tmpDir)
+	// Load config from directory using testable version
+	cfg, err := LoadConfigFromRootWithBuildTime(tmpDir)
 	if err != nil {
 		t.Fatalf("LoadConfigFromDir() error = %v", err)
 	}
@@ -103,8 +103,8 @@ func TestConfigWithExampleFile(t *testing.T) {
 func TestConfigDefaultsWhenNoFileExists(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Load config from empty directory
-	cfg, err := LoadConfigFromDir(tmpDir)
+	// Load config from empty directory using testable version
+	cfg, err := LoadConfigFromRootWithBuildTime(tmpDir)
 	if err != nil {
 		t.Fatalf("LoadConfigFromDir() error = %v", err)
 	}
