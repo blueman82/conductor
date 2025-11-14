@@ -97,21 +97,27 @@ func ParseReviewResponse(output string) (flag string, feedback string) {
 
 	// Only extract feedback if a valid flag was found
 	if flag != "" {
-		// Extract feedback using multiline regex to capture all feedback after flag
-		feedbackRegex := regexp.MustCompile(`(?s)Feedback:\s*(.*)`)
-		feedbackMatches := feedbackRegex.FindStringSubmatch(output)
-		if len(feedbackMatches) > 1 {
-			feedback = strings.TrimSpace(feedbackMatches[1])
-		} else {
-			// Fallback: use first non-empty line after flag
-			lines := strings.Split(output, "\n")
-			for _, line := range lines {
+		// Split by lines and find everything after the flag line
+		lines := strings.Split(output, "\n")
+		feedbackLines := []string{}
+		foundFlag := false
+
+		for _, line := range lines {
+			if strings.Contains(line, "Quality Control") {
+				foundFlag = true
+				continue
+			}
+			if foundFlag {
 				trimmed := strings.TrimSpace(line)
-				if trimmed != "" && !strings.Contains(trimmed, "Quality Control") && !strings.Contains(trimmed, "Feedback") {
-					feedback = trimmed
-					break
+				if trimmed != "" {
+					feedbackLines = append(feedbackLines, trimmed)
 				}
 			}
+		}
+
+		// Join all feedback lines preserving the multiline format
+		if len(feedbackLines) > 0 {
+			feedback = strings.Join(feedbackLines, "\n")
 		}
 	}
 
