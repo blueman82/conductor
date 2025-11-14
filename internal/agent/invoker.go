@@ -208,6 +208,12 @@ func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
 		}
 	}
 
+	// If both content and error are empty strings, return empty result
+	// This handles the case where JSON is valid but both fields are ""
+	if result.Content == "" && result.Error == "" {
+		return result, nil
+	}
+
 	// If we have content or error, return it
 	if result.Content != "" || result.Error != "" {
 		return result, nil

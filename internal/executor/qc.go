@@ -32,7 +32,7 @@ type ReviewResult struct {
 func NewQualityController(invoker InvokerInterface) *QualityController {
 	return &QualityController{
 		Invoker:     invoker,
-		ReviewAgent: "conductor-qc",
+		ReviewAgent: "quality-control",
 		MaxRetries:  2,
 	}
 }

@@ -533,8 +533,12 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 				output = parsedOutput.Content
 			} else if parsedOutput.Error != "" {
 				output = parsedOutput.Error
+			} else if parsedOutput.Content == "" && parsedOutput.Error == "" {
+				// Both fields are empty strings - this means JSON was parsed successfully
+				// but both fields were empty. Use empty string instead of raw JSON.
+				output = ""
 			}
-			// If parsed output is empty, fall back to original output for QC review
+			// If parsed output is nil or JSON parsing failed, fall back to original output for QC review
 			// This ensures QC always has something to review
 		}
 

@@ -147,8 +147,8 @@ log_level: info
 		t.Fatalf("failed to write config: %v", err)
 	}
 
-	// Load config
-	cfg, err := LoadConfigFromDir(tmpDir)
+	// Load config using testable version with explicit root
+	cfg, err := LoadConfigFromRootWithBuildTime(tmpDir)
 	if err != nil {
 		t.Fatalf("LoadConfigFromDir() error = %v", err)
 	}
