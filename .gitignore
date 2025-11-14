@@ -80,3 +80,7 @@ docs/original_poc_partial.md
 docs/TEST_REPORT.md
 docs/TEST_SUMMARY.txt
 docs/verify_tests.md
+
+# Internal development documentation (local reference only)
+PATTERN_EXTRACTION_REFERENCE.md
+IMPLEMENTATION_SUMMARY.md
