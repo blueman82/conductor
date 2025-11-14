@@ -43,9 +43,12 @@ help:
 # Build with current version
 build:
 	@echo "Building conductor v$(CURRENT_VERSION)..."
+	@mkdir -p ~/bin
 	@REPO_ROOT=$$(pwd) && \
-	$(GO) build $(GOFLAGS) -ldflags "-X github.com/harrison/conductor/internal/cmd.Version=$(CURRENT_VERSION) -X github.com/harrison/conductor/internal/cmd.ConductorRepoRoot=$${REPO_ROOT}" -o $(BINARY_NAME) ./cmd/conductor
-	@echo "Binary built: ./$(BINARY_NAME)"
+	$(GO) build $(GOFLAGS) -ldflags "-X github.com/harrison/conductor/internal/cmd.Version=$(CURRENT_VERSION) -X github.com/harrison/conductor/internal/cmd.ConductorRepoRoot=$${REPO_ROOT}" -o ~/bin/$(BINARY_NAME) ./cmd/conductor
+	@if [ -f ./$(BINARY_NAME) ]; then rm ./$(BINARY_NAME); fi
+	@echo "Binary built: ~/bin/$(BINARY_NAME)"
+	@echo "Available as: conductor (if ~/bin in PATH)"
 
 # Helper function to increment version
 define increment_version

@@ -60,13 +60,34 @@ git clone https://github.com/harrison/conductor.git
 cd conductor
 
 # Build binary using Make (Recommended)
+# This creates ~/bin/conductor for system-wide access
 make build
 
-# Verify the build
-./conductor --version
+# Verify the build (use from anywhere if ~/bin in PATH)
+conductor --version
 ```
 
-All users should use `make build` to create the local binary at `./conductor`. Use `./conductor` directly from the repository directory for all operations.
+The `make build` command compiles the binary and installs it to `~/bin/conductor`, making it available system-wide. Once installed, you can use the `conductor` command from anywhere on your system.
+
+**PATH Setup:**
+
+If the `conductor` command is not found, ensure `~/bin` is in your PATH:
+
+```bash
+# Check if ~/bin is in PATH
+echo $PATH | grep ~/bin
+
+# If not found, add ~/bin to PATH:
+export PATH="$HOME/bin:$PATH"
+
+# Make it permanent by adding to shell config:
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc   # For bash
+# OR
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc    # For zsh
+
+# Reload shell config
+source ~/.bashrc   # or source ~/.zshrc
+```
 
 ### VERSION File Management
 
@@ -91,8 +112,11 @@ Conductor uses semantic versioning stored in a `VERSION` file at the project roo
 
 **Example Usage:**
 ```bash
-# Build with current version (2.0.1)
+# Build with current version (2.0.1) to ~/bin/conductor
 make build
+
+# Use from anywhere (if ~/bin in PATH)
+conductor --version
 
 # Bump patch version to 2.0.2 and build
 make build-patch
@@ -2558,12 +2582,12 @@ This section covers development practices, project structure, and testing guidel
 
 **Using Make (Recommended):**
 ```bash
-# Build binary locally (creates ./conductor in current directory)
+# Build binary to ~/bin/conductor (system-wide installation)
 make build
 
-# Use the locally built binary
-./conductor --version
-./conductor run plan.md
+# Use from anywhere (if ~/bin in PATH)
+conductor --version
+conductor run plan.md
 ```
 
 **Auto-increment and build:**
@@ -2576,12 +2600,17 @@ make build-major   # 1.0.0 → 2.0.0 and build
 
 **Manual build (without Makefile):**
 ```bash
+# Build to local directory
 go build -o conductor ./cmd/conductor
+
+# Or build and install to ~/bin
+mkdir -p ~/bin
+go build -o ~/bin/conductor ./cmd/conductor
 ```
 
 **Verify the build:**
 ```bash
-./conductor --version
+conductor --version
 ```
 
 ### Running Tests
@@ -2643,12 +2672,12 @@ make run
 
 With a plan file:
 ```bash
-./conductor run path/to/plan.md --verbose
+conductor run path/to/plan.md --verbose
 ```
 
 Validate a plan:
 ```bash
-./conductor validate path/to/plan.md
+conductor validate path/to/plan.md
 ```
 
 ### Project Structure
@@ -2738,9 +2767,9 @@ The learning system stores execution history in `.conductor/learning/`:
 
 #### View Learning Data
 ```bash
-./conductor learning stats      # Statistics
-./conductor learning export     # Export to JSON
-./conductor learning clear      # Clear history (with confirmation)
+conductor learning stats      # Statistics
+conductor learning export     # Export to JSON
+conductor learning clear      # Clear history (with confirmation)
 ```
 
 #### Understanding Learning Flow
