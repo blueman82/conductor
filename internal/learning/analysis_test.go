@@ -39,7 +39,7 @@ func TestAnalyzeFailures_NoHistory(t *testing.T) {
 		defer store.Close()
 
 		ctx := context.Background()
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		require.NoError(t, err)
 		require.NotNil(t, analysis)
 
@@ -57,7 +57,7 @@ func TestAnalyzeFailures_OneFailure(t *testing.T) {
 		defer store.Close()
 
 		ctx := context.Background()
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		require.NoError(t, err)
 		require.NotNil(t, analysis)
 
@@ -74,7 +74,7 @@ func TestAnalyzeFailures_TwoFailures(t *testing.T) {
 		defer store.Close()
 
 		ctx := context.Background()
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		require.NoError(t, err)
 		require.NotNil(t, analysis)
 
@@ -102,7 +102,7 @@ func TestAnalyzeFailures_MixedResults(t *testing.T) {
 			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		require.NoError(t, err)
 
 		assert.Equal(t, 3, analysis.TotalAttempts)
@@ -170,7 +170,7 @@ func TestAnalyzeFailures_CommonPatterns(t *testing.T) {
 				require.NoError(t, store.RecordExecution(ctx, exec))
 			}
 
-			analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+			analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 			require.NoError(t, err)
 
 			assert.Contains(t, analysis.CommonPatterns, tt.expectedPattern)
@@ -387,7 +387,7 @@ func TestAnalyzeFailures_AllAgentsTried(t *testing.T) {
 			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		require.NoError(t, err)
 
 		assert.Equal(t, 4, len(analysis.TriedAgents))
@@ -654,7 +654,7 @@ func TestAnalyzeFailures_HistoricalPatternRecovery(t *testing.T) {
 		}
 
 		// Analyze should detect compilation_error pattern from all 3 outputs
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		require.NoError(t, err)
 
 		assert.Equal(t, 3, analysis.TotalAttempts)
@@ -707,7 +707,7 @@ func TestAnalyzeFailures_HistoricalPatternRecovery(t *testing.T) {
 		}
 
 		// Analyze should detect all pattern types
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 2")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 2", 2)
 		require.NoError(t, err)
 
 		assert.Equal(t, 6, analysis.TotalAttempts)
@@ -776,7 +776,7 @@ func TestAnalyzeFailures_HistoricalPatternRecovery(t *testing.T) {
 		}
 
 		// Analyze should still detect compilation_error from the outputs that have keywords
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 3")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 3", 2)
 		require.NoError(t, err)
 
 		assert.Equal(t, 6, analysis.TotalAttempts)
@@ -825,7 +825,7 @@ func TestAnalyzeFailures_InsufficientData(t *testing.T) {
 			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		require.NoError(t, err)
 
 		// Should still provide a suggestion, even if not statistically significant
@@ -860,7 +860,7 @@ func TestAnalyzeFailures_ConflictingPatterns(t *testing.T) {
 			require.NoError(t, store.RecordExecution(ctx, exec))
 		}
 
-		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		require.NoError(t, err)
 
 		// Should identify multiple patterns
@@ -877,8 +877,127 @@ func TestAnalyzeFailures_ContextCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		_, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1")
+		_, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", 2)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "context")
 	})
+}
+
+// TestAnalyzeFailures_ConfigurableThreshold verifies that the minFailures threshold can be configured
+func TestAnalyzeFailures_ConfigurableThreshold(t *testing.T) {
+	tests := []struct {
+		name                  string
+		failureCount          int
+		minFailures           int
+		expectAgentSuggestion bool
+	}{
+		{
+			name:                  "threshold 1 - adapts after 1 failure",
+			failureCount:          1,
+			minFailures:           1,
+			expectAgentSuggestion: true,
+		},
+		{
+			name:                  "threshold 1 - no adaptation with 0 failures",
+			failureCount:          0,
+			minFailures:           1,
+			expectAgentSuggestion: false,
+		},
+		{
+			name:                  "threshold 2 - adapts after 2 failures",
+			failureCount:          2,
+			minFailures:           2,
+			expectAgentSuggestion: true,
+		},
+		{
+			name:                  "threshold 2 - no adaptation with 1 failure",
+			failureCount:          1,
+			minFailures:           2,
+			expectAgentSuggestion: false,
+		},
+		{
+			name:                  "threshold 3 - adapts after 3 failures",
+			failureCount:          3,
+			minFailures:           3,
+			expectAgentSuggestion: true,
+		},
+		{
+			name:                  "threshold 3 - no adaptation with 2 failures",
+			failureCount:          2,
+			minFailures:           3,
+			expectAgentSuggestion: false,
+		},
+		{
+			name:                  "threshold 5 - adapts after 5 failures",
+			failureCount:          5,
+			minFailures:           5,
+			expectAgentSuggestion: true,
+		},
+		{
+			name:                  "threshold 5 - no adaptation with 4 failures",
+			failureCount:          4,
+			minFailures:           5,
+			expectAgentSuggestion: false,
+		},
+		{
+			name:                  "threshold 5 - adapts with 6 failures",
+			failureCount:          6,
+			minFailures:           5,
+			expectAgentSuggestion: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			store := setupTestStore(t)
+			defer store.Close()
+
+			// Create alternative agent for suggestions
+			for i := 0; i < 10; i++ {
+				require.NoError(t, store.RecordExecution(ctx, &TaskExecution{
+					PlanFile:   "other-plan.md",
+					TaskNumber: "Other Task",
+					TaskName:   "Other Task",
+					Agent:      "backend-pro",
+					Prompt:     "test",
+					Success:    true,
+					Output:     "success",
+				}))
+			}
+
+			// Record the specified number of failures
+			for i := 0; i < tt.failureCount; i++ {
+				require.NoError(t, store.RecordExecution(ctx, &TaskExecution{
+					PlanFile:     "plan.md",
+					TaskNumber:   "Task 1",
+					TaskName:     "Test Task",
+					Agent:        "golang-pro",
+					Prompt:       "test",
+					Success:      false,
+					Output:       "compilation_error",
+					DurationSecs: 30,
+				}))
+			}
+
+			// Analyze with the specified threshold
+			analysis, err := store.AnalyzeFailures(ctx, "plan.md", "Task 1", tt.minFailures)
+			require.NoError(t, err)
+			require.NotNil(t, analysis)
+
+			// Verify failure count
+			assert.Equal(t, tt.failureCount, analysis.FailedAttempts)
+
+			// Verify agent suggestion based on threshold
+			if tt.expectAgentSuggestion {
+				assert.True(t, analysis.ShouldTryDifferentAgent, "Should suggest different agent when failures >= threshold")
+				assert.NotEmpty(t, analysis.SuggestedAgent, "Should provide suggested agent")
+				assert.NotEmpty(t, analysis.SuggestedApproach, "Should provide suggested approach")
+			} else {
+				assert.False(t, analysis.ShouldTryDifferentAgent, "Should not suggest different agent when failures < threshold")
+				assert.Empty(t, analysis.SuggestedAgent, "Should not provide suggested agent")
+				assert.Empty(t, analysis.SuggestedApproach, "Should not provide suggested approach")
+			}
+		})
+	}
 }

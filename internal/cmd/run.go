@@ -477,6 +477,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.SessionID = sessionID
 	taskExec.RunNumber = 1 // Increment per plan re-run
 	taskExec.AutoAdaptAgent = cfg.Learning.AutoAdaptAgent
+	taskExec.MinFailuresBeforeAdapt = cfg.Learning.MinFailuresBeforeAdapt
 
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithConfig(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)

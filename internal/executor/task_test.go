@@ -1126,7 +1126,7 @@ type MockLearningStore struct {
 	RecordExecutionError error
 }
 
-func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*learning.FailureAnalysis, error) {
+func (m *MockLearningStore) AnalyzeFailures(ctx context.Context, planFile, taskNumber string, minFailures int) (*learning.FailureAnalysis, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.CallCount++

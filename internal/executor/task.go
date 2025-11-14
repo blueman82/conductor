@@ -32,7 +32,7 @@ type Reviewer interface {
 
 // LearningStore defines the interface for adaptive learning storage.
 type LearningStore interface {
-	AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*learning.FailureAnalysis, error)
+	AnalyzeFailures(ctx context.Context, planFile, taskNumber string, minFailures int) (*learning.FailureAnalysis, error)
 	RecordExecution(ctx context.Context, exec *learning.TaskExecution) error
 }
 
@@ -129,21 +129,22 @@ type TaskExecutorConfig struct {
 
 // DefaultTaskExecutor executes individual tasks, applying QC review and plan updates.
 type DefaultTaskExecutor struct {
-	invoker         InvokerInterface
-	reviewer        Reviewer
-	planUpdater     PlanUpdater
-	cfg             TaskExecutorConfig
-	clock           func() time.Time
-	qcEnabled       bool
-	retryLimit      int
-	SourceFile      string                   // Track which file this task comes from
-	FileLockManager FileLockManager          // Per-file locking strategy
-	LearningStore   LearningStore            // Adaptive learning store (optional)
-	PlanFile        string                   // Plan file path for learning queries
-	SessionID       string                   // Session ID for learning tracking
-	RunNumber       int                      // Run number for learning tracking
-	metrics         *learning.PatternMetrics // Pattern detection metrics (optional)
-	AutoAdaptAgent  bool                     // Enable automatic agent adaptation
+	invoker                InvokerInterface
+	reviewer               Reviewer
+	planUpdater            PlanUpdater
+	cfg                    TaskExecutorConfig
+	clock                  func() time.Time
+	qcEnabled              bool
+	retryLimit             int
+	SourceFile             string                   // Track which file this task comes from
+	FileLockManager        FileLockManager          // Per-file locking strategy
+	LearningStore          LearningStore            // Adaptive learning store (optional)
+	PlanFile               string                   // Plan file path for learning queries
+	SessionID              string                   // Session ID for learning tracking
+	RunNumber              int                      // Run number for learning tracking
+	metrics                *learning.PatternMetrics // Pattern detection metrics (optional)
+	AutoAdaptAgent         bool                     // Enable automatic agent adaptation
+	MinFailuresBeforeAdapt int                      // Minimum failures before adapting agent
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -162,12 +163,13 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 	}
 
 	te := &DefaultTaskExecutor{
-		invoker:         invoker,
-		reviewer:        reviewer,
-		planUpdater:     planUpdater,
-		cfg:             cfg,
-		clock:           time.Now,
-		FileLockManager: NewFileLockManager(),
+		invoker:                invoker,
+		reviewer:               reviewer,
+		planUpdater:            planUpdater,
+		cfg:                    cfg,
+		clock:                  time.Now,
+		FileLockManager:        NewFileLockManager(),
+		MinFailuresBeforeAdapt: 2, // Default threshold
 	}
 
 	if cfg.QualityControl.Enabled {
@@ -203,8 +205,8 @@ func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Tas
 		return nil
 	}
 
-	// Query learning store for failure analysis
-	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number)
+	// Query learning store for failure analysis with configurable threshold
+	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number, te.MinFailuresBeforeAdapt)
 	if err != nil {
 		// Log warning but don't break execution (graceful degradation)
 		// In production, this would use a proper logger

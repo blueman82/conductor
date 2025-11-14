@@ -142,7 +142,7 @@ func TestLearningPipeline_FailureAdaptation(t *testing.T) {
 	}
 
 	// Analyze failures
-	analysis, err := store.AnalyzeFailures(context.Background(), planFile, taskNumber)
+	analysis, err := store.AnalyzeFailures(context.Background(), planFile, taskNumber, 2)
 	require.NoError(t, err)
 	require.NotNil(t, analysis)
 
@@ -225,7 +225,7 @@ func TestLearningPipeline_PatternDetection(t *testing.T) {
 	}
 
 	// Analyze failures to extract patterns
-	analysis, err := store.AnalyzeFailures(context.Background(), planFile, taskNumber)
+	analysis, err := store.AnalyzeFailures(context.Background(), planFile, taskNumber, 2)
 	require.NoError(t, err)
 	require.NotNil(t, analysis)
 
@@ -647,7 +647,7 @@ func TestCrossRun_AgentAdaptation(t *testing.T) {
 	defer db2.Close()
 
 	// Analyze failures
-	analysis, err := db2.AnalyzeFailures(context.Background(), planFile, taskNumber)
+	analysis, err := db2.AnalyzeFailures(context.Background(), planFile, taskNumber, 2)
 	require.NoError(t, err)
 	require.NotNil(t, analysis)
 
@@ -987,7 +987,7 @@ func TestCrossRun_MultipleFailuresAndRecovery(t *testing.T) {
 	assert.Equal(t, 4, history[0].RunNumber)
 
 	// Verify failure analysis
-	analysis, err := db.AnalyzeFailures(context.Background(), planFile, taskNumber)
+	analysis, err := db.AnalyzeFailures(context.Background(), planFile, taskNumber, 2)
 	require.NoError(t, err)
 
 	assert.Equal(t, 4, analysis.TotalAttempts)

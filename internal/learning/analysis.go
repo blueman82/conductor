@@ -18,7 +18,7 @@ type FailureAnalysis struct {
 }
 
 // AnalyzeFailures examines execution history to identify patterns and suggest alternative agents
-func (s *Store) AnalyzeFailures(ctx context.Context, planFile, taskNumber string) (*FailureAnalysis, error) {
+func (s *Store) AnalyzeFailures(ctx context.Context, planFile, taskNumber string, minFailures int) (*FailureAnalysis, error) {
 	// Check context cancellation
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("context cancelled: %w", err)
@@ -65,8 +65,8 @@ func (s *Store) AnalyzeFailures(ctx context.Context, planFile, taskNumber string
 	// Extract common failure patterns
 	analysis.CommonPatterns = extractFailurePatterns(failedOutputs)
 
-	// Determine if we should try a different agent (threshold: 2+ failures)
-	if analysis.FailedAttempts >= 2 {
+	// Determine if we should try a different agent (configurable threshold)
+	if analysis.FailedAttempts >= minFailures {
 		analysis.ShouldTryDifferentAgent = true
 
 		// Find best alternative agent
