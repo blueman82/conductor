@@ -47,8 +47,14 @@ build:
 	@REPO_ROOT=$$(pwd) && \
 	$(GO) build $(GOFLAGS) -ldflags "-X github.com/harrison/conductor/internal/cmd.Version=$(CURRENT_VERSION) -X github.com/harrison/conductor/internal/cmd.ConductorRepoRoot=$${REPO_ROOT}" -o ~/bin/$(BINARY_NAME) ./cmd/conductor
 	@if [ -f ./$(BINARY_NAME) ]; then rm ./$(BINARY_NAME); fi
-	@echo "Binary built: ~/bin/$(BINARY_NAME)"
-	@echo "Available as: conductor (if ~/bin in PATH)"
+	@if ! echo $$PATH | grep -q $$HOME/bin; then \
+		echo "export PATH=\"\$$HOME/bin:\$$PATH\"" >> ~/.zshrc; \
+		echo "export PATH=\"\$$HOME/bin:\$$PATH\"" >> ~/.bashrc; \
+		echo "⚠️  Added ~/bin to PATH in ~/.zshrc and ~/.bashrc"; \
+		echo "Please run: source ~/.zshrc"; \
+	fi
+	@echo "✅ Binary built: ~/bin/conductor"
+	@echo "✅ Use: conductor --version"
 
 # Helper function to increment version
 define increment_version
