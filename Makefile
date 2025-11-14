@@ -43,7 +43,8 @@ help:
 # Build with current version
 build:
 	@echo "Building conductor v$(CURRENT_VERSION)..."
-	$(GO) build $(GOFLAGS) -ldflags "-X main.Version=$(CURRENT_VERSION)" -o $(BINARY_NAME) ./cmd/conductor
+	@REPO_ROOT=$$(pwd) && \
+	$(GO) build $(GOFLAGS) -ldflags "-X github.com/harrison/conductor/internal/cmd.Version=$(CURRENT_VERSION) -X github.com/harrison/conductor/internal/cmd.ConductorRepoRoot=$${REPO_ROOT}" -o $(BINARY_NAME) ./cmd/conductor
 	@echo "Binary built: ./$(BINARY_NAME)"
 
 # Install binary to ~/bin (user directory)
