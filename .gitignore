@@ -43,10 +43,8 @@ logs/
 !.conductor/config.yaml         # Track actual configuration
 !.conductor/config.yaml.example # Track example template
 
-# Claude Code directory (but track commands for all users)
+# Claude Code directory (completely ignored - plugin provides commands via plugin/conductor-tools/)
 .claude/
-!.claude/commands/              # Track plan generation slash commands (/doc, /doc-yaml, /cook-man)
-!.claude/commands/**            # Track all command files
 
 # Test learning databases
 internal/cmd/.conductor/
