@@ -1568,11 +1568,11 @@ func TestLoadConfigExplicitPathOverridesRoot(t *testing.T) {
 // TestQualityControlParsing tests parsing quality_control section from YAML config
 func TestQualityControlParsing(t *testing.T) {
 	tests := []struct {
-		name           string
-		configContent  string
-		expectEnabled  bool
-		expectAgent    string
-		expectRetry    int
+		name          string
+		configContent string
+		expectEnabled bool
+		expectAgent   string
+		expectRetry   int
 	}{
 		{
 			name: "quality_control section present with all fields",

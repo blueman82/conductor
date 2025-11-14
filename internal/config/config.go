@@ -210,16 +210,16 @@ func LoadConfig(path string) (*Config, error) {
 	// Parse YAML
 	// Use a temporary struct to handle duration parsing
 	type yamlConfig struct {
-		MaxConcurrency int                      `yaml:"max_concurrency"`
-		Timeout        string                   `yaml:"timeout"`
-		LogLevel       string                   `yaml:"log_level"`
-		LogDir         string                   `yaml:"log_dir"`
-		DryRun         bool                     `yaml:"dry_run"`
-		SkipCompleted  bool                     `yaml:"skip_completed"`
-		RetryFailed    bool                     `yaml:"retry_failed"`
-		Console        ConsoleConfig            `yaml:"console"`
-		Learning       LearningConfig           `yaml:"learning"`
-		QualityControl QualityControlConfig     `yaml:"quality_control"`
+		MaxConcurrency int                  `yaml:"max_concurrency"`
+		Timeout        string               `yaml:"timeout"`
+		LogLevel       string               `yaml:"log_level"`
+		LogDir         string               `yaml:"log_dir"`
+		DryRun         bool                 `yaml:"dry_run"`
+		SkipCompleted  bool                 `yaml:"skip_completed"`
+		RetryFailed    bool                 `yaml:"retry_failed"`
+		Console        ConsoleConfig        `yaml:"console"`
+		Learning       LearningConfig       `yaml:"learning"`
+		QualityControl QualityControlConfig `yaml:"quality_control"`
 	}
 
 	var yamlCfg yamlConfig
