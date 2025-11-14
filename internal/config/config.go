@@ -314,8 +314,9 @@ func LoadConfig(path string) (*Config, error) {
 // LoadConfigFromRootWithBuildTime loads configuration from conductor repo root
 // This is the testable version that accepts the build-time injected root
 // Priority order:
-//   1. Config at {root}/.conductor/config.yaml
-//   2. Default configuration
+//  1. Config at {root}/.conductor/config.yaml
+//  2. Default configuration
+//
 // Returns error if root is empty
 func LoadConfigFromRootWithBuildTime(buildTimeRoot string) (*Config, error) {
 	if buildTimeRoot == "" {

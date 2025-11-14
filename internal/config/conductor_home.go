@@ -18,8 +18,9 @@ func SetBuildTimeRepoRoot(root string) {
 
 // GetConductorHome returns the conductor home directory
 // Priority order:
-//   1. CONDUCTOR_HOME environment variable (if set)
-//   2. Conductor repository root (injected at build time)
+//  1. CONDUCTOR_HOME environment variable (if set)
+//  2. Conductor repository root (injected at build time)
+//
 // If neither is available, returns an error (NO fallback to cwd)
 // The directory is created if it doesn't exist
 func GetConductorHome() (string, error) {
@@ -28,8 +29,9 @@ func GetConductorHome() (string, error) {
 
 // GetConductorHomeWithRoot is the testable version that accepts the build-time root
 // Priority order:
-//   1. CONDUCTOR_HOME environment variable (if set)
-//   2. Build-time injected conductor repository root
+//  1. CONDUCTOR_HOME environment variable (if set)
+//  2. Build-time injected conductor repository root
+//
 // Returns error if neither is available
 func GetConductorHomeWithRoot(buildTimeRoot string) (string, error) {
 	// Try env var first
