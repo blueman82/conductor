@@ -79,8 +79,8 @@ docs/mcp-headless-invocation.md
 # Claude agent invocation documentation (local research)
 docs/claude_code_agents_invocation.md
 
-# Plan READMEs (local planning documentation)
-docs/plans/**/README.md
+# Plan directory (local internal planning - not for distribution)
+docs/plans/
 
 # Never track these in docs/
 docs/original_poc_partial.md
