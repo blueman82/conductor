@@ -5,6 +5,39 @@ All notable changes to Conductor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2025-11-14
+
+### Fixed
+
+- Database location detection now uses build-time injection (ldflags) for reliability
+- Config.yaml loading now respects conductor repo root, not current working directory
+- Progress bars now display correctly with proper task counting
+- Fixed test infrastructure to support build-time injection testing
+- Fixed Makefile LDFLAGS to properly inject version and conductor repo root
+
+### Changed
+
+- Database always stored in conductor repo `.conductor/learning/executions.db`
+- Config always loaded from conductor repo `.conductor/config.yaml`
+- Both database and config work correctly when running from any directory
+- Makefile now properly injects both Version and ConductorRepoRoot via ldflags
+
+### Documentation
+
+- Updated CLAUDE.md with correct SQLite database schema
+- Added comprehensive "Configuration Loading Priority" section to docs/usage.md
+- Enhanced docs/learning.md with Database Location and Progress Tracking sections
+- Added "Build-Time Configuration" section to README.md
+- Added "Configuration Injection" subsection to AGENTS.md
+- Updated config.yaml.example with comprehensive header comments
+
+### Technical Details
+
+- ConductorRepoRoot injected at compile time via ldflags
+- Config priority: CLI flag > repo config > defaults
+- Database location: CONDUCTOR_HOME env var > build-time root > error
+- Both features use same reliable build-time injection pattern
+
 ## [2.0.0] - 2025-01-12
 
 ### Added
