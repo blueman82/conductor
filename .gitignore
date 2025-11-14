@@ -73,6 +73,9 @@ docs/plans/subagent-deployment-strategy.md
 # MCP integration documentation (local research)
 docs/mcp-headless-invocation.md
 
+# Claude agent invocation documentation (local research)
+docs/claude_code_agents_invocation.md
+
 # Plan READMEs (local planning documentation)
 docs/plans/**/README.md
 
