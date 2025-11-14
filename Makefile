@@ -51,7 +51,13 @@ build:
 		echo "export PATH=\"\$$HOME/bin:\$$PATH\"" >> ~/.zshrc; \
 		echo "export PATH=\"\$$HOME/bin:\$$PATH\"" >> ~/.bashrc; \
 		echo "⚠️  Added ~/bin to PATH in ~/.zshrc and ~/.bashrc"; \
-		echo "Please run: source ~/.zshrc"; \
+		if [ -n "$$ZSH_VERSION" ]; then \
+			source ~/.zshrc; \
+			echo "✅ PATH updated and sourced in current shell"; \
+		elif [ -n "$$BASH_VERSION" ]; then \
+			source ~/.bashrc; \
+			echo "✅ PATH updated and sourced in current shell"; \
+		fi; \
 	fi
 	@echo "✅ Binary built: ~/bin/conductor"
 	@echo "✅ Use: conductor --version"
