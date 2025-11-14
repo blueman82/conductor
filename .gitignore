@@ -21,6 +21,7 @@ go.work
 /bin/
 /dist/
 /conductor
+VERSION
 
 # IDE directories
 .vscode/
