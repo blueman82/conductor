@@ -1564,3 +1564,98 @@ func TestLoadConfigExplicitPathOverridesRoot(t *testing.T) {
 		t.Errorf("MaxConcurrency = %d, want 10 (from explicit path)", cfg.MaxConcurrency)
 	}
 }
+
+// TestQualityControlParsing tests parsing quality_control section from YAML config
+func TestQualityControlParsing(t *testing.T) {
+	tests := []struct {
+		name           string
+		configContent  string
+		expectEnabled  bool
+		expectAgent    string
+		expectRetry    int
+	}{
+		{
+			name: "quality_control section present with all fields",
+			configContent: `quality_control:
+  enabled: true
+  review_agent: custom-qa-agent
+  retry_on_red: 3
+`,
+			expectEnabled: true,
+			expectAgent:   "custom-qa-agent",
+			expectRetry:   3,
+		},
+		{
+			name: "quality_control section with enabled false",
+			configContent: `quality_control:
+  enabled: false
+  review_agent: quality-control
+  retry_on_red: 2
+`,
+			expectEnabled: false,
+			expectAgent:   "quality-control",
+			expectRetry:   2,
+		},
+		{
+			name: "quality_control section partial fields",
+			configContent: `quality_control:
+  enabled: true
+`,
+			expectEnabled: true,
+			expectAgent:   "quality-control", // should use default
+			expectRetry:   2,                 // should use default
+		},
+		{
+			name:          "quality_control section absent",
+			configContent: `max_concurrency: 5`,
+			expectEnabled: false,             // should use default
+			expectAgent:   "quality-control", // should use default
+			expectRetry:   2,                 // should use default
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			if err := os.WriteFile(configPath, []byte(tt.configContent), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			if cfg.QualityControl.Enabled != tt.expectEnabled {
+				t.Errorf("QualityControl.Enabled = %v, want %v", cfg.QualityControl.Enabled, tt.expectEnabled)
+			}
+			if cfg.QualityControl.ReviewAgent != tt.expectAgent {
+				t.Errorf("QualityControl.ReviewAgent = %q, want %q", cfg.QualityControl.ReviewAgent, tt.expectAgent)
+			}
+			if cfg.QualityControl.RetryOnRed != tt.expectRetry {
+				t.Errorf("QualityControl.RetryOnRed = %d, want %d", cfg.QualityControl.RetryOnRed, tt.expectRetry)
+			}
+		})
+	}
+}
+
+// TestQualityControlDefaults tests DefaultConfig() returns correct QC defaults
+func TestQualityControlDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Quality control should be disabled by default
+	if cfg.QualityControl.Enabled {
+		t.Errorf("QualityControl.Enabled = %v, want false", cfg.QualityControl.Enabled)
+	}
+
+	// But should have default agent and retry values
+	if cfg.QualityControl.ReviewAgent != "quality-control" {
+		t.Errorf("QualityControl.ReviewAgent = %q, want %q", cfg.QualityControl.ReviewAgent, "quality-control")
+	}
+
+	if cfg.QualityControl.RetryOnRed != 2 {
+		t.Errorf("QualityControl.RetryOnRed = %d, want 2", cfg.QualityControl.RetryOnRed)
+	}
+}

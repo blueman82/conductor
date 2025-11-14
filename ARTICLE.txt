@@ -1,0 +1,123 @@
+Conductor: Implementation and Orchestration with Claude Code Agents
+
+Hey everyone, I wanted to share something I've been working on for a while: Conductor, a CLI tool (built in Go) that orchestrates multiple Claude Code agents to execute complex implementation plans automatically.
+
+HERE'S THE PROBLEM IT SOLVES:
+
+You're most likely already familiar with using Claude and agents to help build features. I've noticed a few common problems: hitting the context window too early, Claude going wild with implementations, and coordinating multiple Claude Code sessions can get messy fast (switching back and forth between implementation and QA/QC sessions). If you're planning something like a 30-task backend refactor, you'd usually have to do the following:
+
+- Breaking down the plan into logical task order
+- Running each task through Claude Code
+- Reviewing output quality and deciding if it passed
+- Retrying failed tasks
+- Keeping track of what's done and what failed
+- Learning from patterns (this always fails on this type of task)
+
+This takes hours. It's tedious and repetitive.
+
+HOW CONDUCTOR SOLVES IT:
+
+Conductor takes your implementation plan and turns it into an executable workflow. You define tasks with their dependencies, and Conductor figures out which tasks can run in parallel, orchestrates multiple Claude Code agents simultaneously, reviews the output automatically, retries failures intelligently, and learns from execution history to improve future runs.
+
+Think of it like a CI/CD pipeline but for code generation. The tool parses your plan, builds a dependency graph, calculates optimal "waves" of parallel execution using topological sorting, spawns Claude agents to handle chunks of work simultaneously, and applies quality control at every step.
+
+Real example: I ran a 30-task backend implementation plan. Conductor completed it in 47 minutes with automatic QC reviews and failure handling. Doing that manually would have taken 4+ hours of babysitting and decision-making.
+
+GETTING STARTED: FROM IDEA TO EXECUTION
+
+Here's where Conductor gets really practical. You don't have to write your plans manually. Conductor comes with a Claude Code plugin called "conductor-tools" that generates production-ready plans directly from your feature descriptions.
+
+The workflow is simple:
+
+STEP 1: Generate your plan using one of three commands in Claude Code:
+
+For the best results, start with the interactive design session:
+
+  /cook-man "Multi-tenant SaaS workspace isolation and permission system"
+
+This launches an interactive Q&A session that validates and refines your requirements before automatically generating the plan. Great for complex features that need stakeholder buy-in before Conductor starts executing. The command automatically invokes /doc at the end to create your plan.
+
+If you want to skip the design session and generate a plan directly:
+
+  /doc "Add user authentication with JWT tokens and refresh rotation"
+
+This creates a detailed Markdown implementation plan with tasks, dependencies, estimated time, and agent assignments. Perfect for team discussions and quick iterations.
+
+Or if you prefer machine-readable format for automation:
+
+  /doc-yaml "Add user authentication with JWT tokens and refresh rotation"
+
+This generates the same plan in structured YAML format, ready for tooling integration.
+
+All three commands automatically analyze your codebase, suggest appropriate agents for each task, identify dependencies between tasks, and generate properly-formatted plans ready to execute.
+
+STEP 2: Execute the plan:
+
+  conductor run my-plan.md --max-concurrency 3
+
+Conductor orchestrates the execution, handling parallelization, QC reviews, retries, and learning.
+
+STEP 3: Monitor and iterate:
+
+Watch the progress in real-time, check the logs, and learn from execution history:
+
+  conductor learning stats
+
+The entire flow from idea to executed code takes minutes, not hours. You describe what you want, get a plan, execute it, and let Conductor handle all the orchestration complexity.
+
+ADVANTAGES:
+
+1. Massive time savings. For complex plans (20+ tasks), you're cutting execution time by 60-80% once you factor in parallelization and automated reviews.
+
+2. Consistency and reproducibility. Plans run the same way every time. You can audit exactly what happened, when it happened, and why something failed.
+
+3. Dependency management handled automatically. Define task relationships once, Conductor figures out the optimal execution order. No manual scheduling headaches.
+
+4. Quality control built in. Every task output gets reviewed by an AI agent before being accepted. Failures auto-retry up to N times. Bad outputs don't cascade downstream.
+
+5. Resumable execution. Stopped mid-plan? Conductor remembers which tasks completed and skips them. Resume from where you left off.
+
+6. Adaptive learning. The system tracks what works and what fails for each task type. Over multiple runs, it learns patterns and injects relevant context into future task executions (e.g., "here's what failed last time for tasks like this").
+
+7. Plan generation integrated into Claude Code. No need to write plans manually. The /cook-man interactive session (with /doc and /doc-yaml as quick alternatives) generate production-ready plans from feature descriptions. This dramatically reduces the learning curve for new users.
+
+8. Works with existing tools. No new SDKs or frameworks to learn. It orchestrates Claude Code CLI, which most developers already use.
+
+CAVEATS:
+
+1. Limited to Claude Code. Conductor is designed to work specifically with Claude Code and Claude Codes Custom SubAgents. If you don't have any custom SubAgents, Conductor will still work but instead use a `general-purpose` agent.
+I'm looking at how to expand this to integrate with Droid CLI and locally run models.
+
+2. AI quality dependency. Conductor can't make bad AI output good. If Claude struggles with your task, Conductor will retry but you're still limited by model capabilities. Complex domain-specific work might not work well.
+
+3. Plan writing has a learning curve (though it's gentler than before). While the plugin auto-generates plans from descriptions, writing excellent plans with proper dependencies still takes practice. For truly optimal execution, understanding task boundaries and dependencies helps. However, the auto-generation handles 80% of the work for most features—you just refine as needed.
+
+4. Conductor runs locally and coordinates local Claude CLI invocations.
+
+WHO SHOULD USE THIS:
+
+- Developers doing AI-assisted development with Claude Code
+- Teams building complex features with 20+ implementation tasks
+- People who value reproducible, auditable execution flows
+- Developers who want to optimize how they work with AI agents
+- Anyone wanting to reduce manual coordination overhead in multi-agent workflows
+
+MY TAKE:
+
+What makes Conductor practical is the complete workflow: you can go from "I want to build X" to "X is built and reviewed" in a single session. The plan generation commands eliminate the friction of having to manually write task breakdowns. You get the benefits of structured planning without the busy work.
+
+It's not a magic wand. It won't replace understanding your domain or making architectural decisions. But it removes the tedious coordination work and lets you focus on strategy and architecture rather than juggling multiple Claude Code sessions.
+
+THE COMPLETE TOOLKIT:
+
+For developers in the Claude ecosystem, the combination is powerful:
+
+- Claude Code for individual task execution and refinement
+- Conductor-tools plugin for plan generation (/cook-man for design-first, /doc for quick generation, /doc-yaml for automation)
+- Conductor CLI for orchestration and scale
+
+Start small: generate a plan for a 5-task feature, run it, see it work. Then scale up to bigger plans.
+
+Curious what people think. Is this something that would be useful for your workflow? What problems are you hitting when coordinating multiple AI agent tasks? Happy to answer questions about how it works or if it might fit your use case.
+
+Code is open source on GitHub if anyone wants to try it out or contribute. Feedback is welcome.

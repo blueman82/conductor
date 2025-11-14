@@ -338,6 +338,17 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Merge config QC settings into plan if plan doesn't explicitly set QC
+	// Configuration priority: plan frontmatter (explicit) > config file > defaults
+	// This ensures plans without QC frontmatter get sensible defaults from config
+	if !plan.QualityControl.Enabled && cfg.QualityControl.Enabled {
+		plan.QualityControl = models.QualityControlConfig{
+			Enabled:     cfg.QualityControl.Enabled,
+			ReviewAgent: cfg.QualityControl.ReviewAgent,
+			RetryOnRed:  cfg.QualityControl.RetryOnRed,
+		}
+	}
+
 	// Apply retry_on_red fallback logic: plan value -> config value -> default 2
 	// This ensures plans without explicit retry_on_red get sensible defaults
 	parser.ApplyRetryOnRedFallback(plan, cfg.Learning.MinFailuresBeforeAdapt)

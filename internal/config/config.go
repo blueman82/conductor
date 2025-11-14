@@ -60,6 +60,18 @@ type LearningConfig struct {
 	MaxExecutionsPerTask int `yaml:"max_executions_per_task"`
 }
 
+// QualityControlConfig represents quality control configuration
+type QualityControlConfig struct {
+	// Enabled enables the quality control system
+	Enabled bool `yaml:"enabled"`
+
+	// ReviewAgent is the name of the agent used for quality control reviews
+	ReviewAgent string `yaml:"review_agent"`
+
+	// RetryOnRed is the maximum number of retries when QC review is RED
+	RetryOnRed int `yaml:"retry_on_red"`
+}
+
 // Config represents conductor configuration options
 type Config struct {
 	// MaxConcurrency is the maximum number of concurrent tasks (0 = unlimited)
@@ -88,6 +100,9 @@ type Config struct {
 
 	// Learning contains learning system configuration
 	Learning LearningConfig `yaml:"learning"`
+
+	// QualityControl contains quality control configuration
+	QualityControl QualityControlConfig `yaml:"quality_control"`
 }
 
 // DefaultConsoleConfig returns ConsoleConfig with sensible default values
@@ -123,6 +138,11 @@ func DefaultConfig() *Config {
 			MinFailuresBeforeAdapt: 2,
 			KeepExecutionsDays:     90,
 			MaxExecutionsPerTask:   100,
+		},
+		QualityControl: QualityControlConfig{
+			Enabled:     false,
+			ReviewAgent: "quality-control",
+			RetryOnRed:  2,
 		},
 	}
 }
@@ -190,15 +210,16 @@ func LoadConfig(path string) (*Config, error) {
 	// Parse YAML
 	// Use a temporary struct to handle duration parsing
 	type yamlConfig struct {
-		MaxConcurrency int            `yaml:"max_concurrency"`
-		Timeout        string         `yaml:"timeout"`
-		LogLevel       string         `yaml:"log_level"`
-		LogDir         string         `yaml:"log_dir"`
-		DryRun         bool           `yaml:"dry_run"`
-		SkipCompleted  bool           `yaml:"skip_completed"`
-		RetryFailed    bool           `yaml:"retry_failed"`
-		Console        ConsoleConfig  `yaml:"console"`
-		Learning       LearningConfig `yaml:"learning"`
+		MaxConcurrency int                      `yaml:"max_concurrency"`
+		Timeout        string                   `yaml:"timeout"`
+		LogLevel       string                   `yaml:"log_level"`
+		LogDir         string                   `yaml:"log_dir"`
+		DryRun         bool                     `yaml:"dry_run"`
+		SkipCompleted  bool                     `yaml:"skip_completed"`
+		RetryFailed    bool                     `yaml:"retry_failed"`
+		Console        ConsoleConfig            `yaml:"console"`
+		Learning       LearningConfig           `yaml:"learning"`
+		QualityControl QualityControlConfig     `yaml:"quality_control"`
 	}
 
 	var yamlCfg yamlConfig
@@ -303,6 +324,23 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.Learning.MaxExecutionsPerTask = learning.MaxExecutionsPerTask
 			}
 		}
+
+		// Merge QualityControl config
+		if qcSection, exists := rawMap["quality_control"]; exists && qcSection != nil {
+			// QualityControl section exists in YAML, merge it
+			qc := yamlCfg.QualityControl
+			qcMap, _ := qcSection.(map[string]interface{})
+
+			if _, exists := qcMap["enabled"]; exists {
+				cfg.QualityControl.Enabled = qc.Enabled
+			}
+			if _, exists := qcMap["review_agent"]; exists {
+				cfg.QualityControl.ReviewAgent = qc.ReviewAgent
+			}
+			if _, exists := qcMap["retry_on_red"]; exists {
+				cfg.QualityControl.RetryOnRed = qc.RetryOnRed
+			}
+		}
 	}
 
 	// Apply environment variable overrides (highest priority)
@@ -400,6 +438,16 @@ func (c *Config) Validate() error {
 		}
 		if c.Learning.MaxExecutionsPerTask < 0 {
 			return fmt.Errorf("learning.max_executions_per_task must be >= 0, got %d", c.Learning.MaxExecutionsPerTask)
+		}
+	}
+
+	// Validate quality control configuration
+	if c.QualityControl.Enabled {
+		if c.QualityControl.ReviewAgent == "" {
+			return fmt.Errorf("quality_control.review_agent cannot be empty when quality control is enabled")
+		}
+		if c.QualityControl.RetryOnRed < 0 {
+			return fmt.Errorf("quality_control.retry_on_red must be >= 0, got %d", c.QualityControl.RetryOnRed)
 		}
 	}
 
