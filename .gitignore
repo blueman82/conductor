@@ -57,6 +57,11 @@ temp/
 coverage.out
 coverage.html
 
+# Generated test files
+TEST_SUMMARY.txt
+*.test-output
+test-results/
+
 # Transcripts (session logs)
 transcripts/
 conductor
@@ -75,10 +80,13 @@ docs/
 
 # Keep tracked documentation files (must explicitly add new files)
 !docs/learning.md
+!docs/original_poc_partial.md
 !docs/phase-2a-guide.md
 !docs/plan-format.md
+!docs/TEST_REPORT.md
 !docs/troubleshooting.md
 !docs/usage.md
+!docs/verify_tests.md
 !docs/worktree-best-practices.md
 
 # Keep examples directory and tracked files
