@@ -778,6 +778,7 @@ func TestOrchestratorConcurrentExecution(t *testing.T) {
 	mockWave := &mockWaveExecutor{
 		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
 			results := []models.TaskResult{}
+			var resultsMu sync.Mutex
 			var wg sync.WaitGroup
 
 			for _, task := range plan.Tasks {
@@ -788,10 +789,12 @@ func TestOrchestratorConcurrentExecution(t *testing.T) {
 					executionOrder = append(executionOrder, t.Number)
 					orderMu.Unlock()
 
+					resultsMu.Lock()
 					results = append(results, models.TaskResult{
 						Task:   t,
 						Status: models.StatusGreen,
 					})
+					resultsMu.Unlock()
 				}(task)
 			}
 			wg.Wait()

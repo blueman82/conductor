@@ -1252,6 +1252,7 @@ func TestPreTaskHook_AdaptsAgent(t *testing.T) {
 	// Set learning store and related fields
 	executor.LearningStore = mockStore
 	executor.PlanFile = "plan.md"
+	executor.AutoAdaptAgent = true // Enable automatic agent adaptation
 
 	task := models.Task{
 		Number: "1",
