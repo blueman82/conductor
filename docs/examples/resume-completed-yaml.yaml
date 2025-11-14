@@ -15,6 +15,7 @@ plan:
       name: Database Schema
       files: [migrations/001_users.sql]
       estimated_time: 10 minutes
+      agent: backend-developer
       status: completed
       description: |
         Create users table with authentication fields.
@@ -26,6 +27,7 @@ plan:
       files: [models/user.go]
       depends_on: [Task 1]
       estimated_time: 15 minutes
+      agent: backend-developer
       status: completed
       description: |
         Implement User struct and ORM methods.
@@ -37,6 +39,7 @@ plan:
       files: [services/auth.go]
       depends_on: [Task 2]
       estimated_time: 20 minutes
+      agent: backend-developer
       description: |
         Implement login, register, and token refresh services.
         This is a pending task and will execute normally.
@@ -47,6 +50,7 @@ plan:
       files: [handlers/auth_handler.go]
       depends_on: [Task 3]
       estimated_time: 15 minutes
+      agent: backend-developer
       description: |
         Implement /auth/login and /auth/register endpoints.
         Will execute after Task 3 completes.
@@ -57,6 +61,7 @@ plan:
       files: [tests/auth_integration_test.go]
       depends_on: [Task 4]
       estimated_time: 20 minutes
+      agent: backend-developer
       description: |
         Write end-to-end tests for the auth flow.
         Final task in the pipeline.

@@ -10,6 +10,7 @@ This example demonstrates resuming a partially-completed plan using the skip-com
 
 **File(s)**: migrations/001_users.sql
 **Estimated time**: 10 minutes
+**Agent**: backend-developer
 **Status**: completed
 
 Create users table with authentication fields:
@@ -27,6 +28,7 @@ This task was already completed in the previous run and will be skipped.
 **File(s)**: models/user.go
 **Depends on**: Task 1
 **Estimated time**: 15 minutes
+**Agent**: backend-developer
 **Status**: completed
 
 Implement the User struct with database methods:
@@ -44,6 +46,7 @@ This task was also completed previously and will be skipped.
 **File(s)**: services/auth.go
 **Depends on**: Task 2
 **Estimated time**: 20 minutes
+**Agent**: backend-developer
 
 Implement core authentication business logic:
 - Login service (email + password verification)
@@ -61,6 +64,7 @@ This is a pending task. It will execute normally on resume.
 **File(s)**: handlers/auth_handler.go
 **Depends on**: Task 3
 **Estimated time**: 15 minutes
+**Agent**: backend-developer
 
 Implement RESTful endpoints for authentication:
 - POST /auth/login
@@ -78,6 +82,7 @@ Add proper error handling and validation.
 **File(s)**: tests/auth_integration_test.go
 **Depends on**: Task 4
 **Estimated time**: 20 minutes
+**Agent**: backend-developer
 
 Write comprehensive end-to-end tests:
 - Test user registration flow
