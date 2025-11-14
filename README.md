@@ -4,6 +4,43 @@
 
 Conductor is a production-ready Go CLI tool that executes implementation plans by orchestrating multiple Claude Code agents in coordinated parallel waves. It parses plan files, calculates task dependencies using graph algorithms, and manages parallel execution with quality control reviews.
 
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [Key Features](#key-features)
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Your First Execution](#your-first-execution)
+- [Basic Usage](#basic-usage)
+  - [Validate a Plan](#validate-a-plan)
+  - [Run a Plan](#run-a-plan)
+  - [Resume Interrupted Plans](#resume-interrupted-plans)
+  - [Command-Line Flags](#command-line-flags)
+- [Configuration](#configuration)
+  - [Config File Location](#config-file-location)
+  - [Setup](#setup)
+  - [Configuration Priority](#configuration-priority)
+  - [Example Configuration](#example-configuration)
+  - [Build-Time Configuration](#build-time-configuration)
+- [Adaptive Learning System](#adaptive-learning-system-v20)
+- [Plan Format](#plan-format)
+  - [Markdown Format](#markdown-format)
+  - [YAML Format](#yaml-format)
+- [Conductor Plugin](#conductor-plugin-included)
+- [Documentation](#documentation)
+- [Architecture Overview](#architecture-overview)
+- [Development](#development)
+- [Multi-File Plans](#multi-file-plans)
+- [Project Status](#project-status)
+- [Dependencies](#dependencies)
+- [Contributing](#contributing)
+- [License](#license)
+- [Support](#support)
+- [Acknowledgments](#acknowledgments)
+
+---
+
 ## What It Does
 
 Conductor automates complex multi-step implementations by:
@@ -15,6 +52,8 @@ Conductor automates complex multi-step implementations by:
 5. **Reviewing** task outputs with quality control agents
 6. **Managing** retries on failures and marking completed tasks
 7. **Logging** detailed execution progress with file-based output
+
+[⬆ back to top](#table-of-contents)
 
 ## Key Features
 
@@ -33,6 +72,8 @@ Conductor automates complex multi-step implementations by:
   - Automatically adapts agent selection after failures
   - Learns from past successes to optimize future runs
   - CLI commands for statistics and insights
+
+[⬆ back to top](#table-of-contents)
 
 ## Quick Start
 
@@ -136,6 +177,8 @@ Implement main logic.
 ./conductor run my-plan.md --verbose
 ```
 
+[⬆ back to top](#table-of-contents)
+
 ## Basic Usage
 
 ### Validate a Plan
@@ -225,6 +268,8 @@ conductor learning export <output-file>
 conductor learning clear
 ```
 
+[⬆ back to top](#table-of-contents)
+
 ## Configuration
 
 ### Config File Location
@@ -294,6 +339,8 @@ This ensures:
 - ✅ Config always loaded from conductor repo (`.conductor/config.yaml`)
 - ✅ Works correctly from any directory
 
+[⬆ back to top](#table-of-contents)
+
 ## Adaptive Learning System (v2.0+)
 
 Conductor v2.0 introduces an intelligent learning system that automatically improves task execution over time by learning from past successes and failures.
@@ -362,6 +409,8 @@ Learning data is stored locally in `.conductor/learning/` (excluded from git).
 
 **See [Learning System Guide](docs/conductor.md#adaptive-learning-system) for complete documentation.**
 
+[⬆ back to top](#table-of-contents)
+
 ## Plan Format
 
 Conductor supports two plan formats:
@@ -397,6 +446,8 @@ plan:
 
 For complete format specifications, see [Plan Format Guide](docs/conductor.md#plan-format).
 
+[⬆ back to top](#table-of-contents)
+
 ## Conductor Plugin (Included)
 
 Generate implementation plans automatically using Claude Code slash commands. The plugin is included in this monorepo under the `plugin/` directory.
@@ -428,12 +479,16 @@ See [plugin/docs](plugin/docs) for complete plugin documentation.
 - Interactive or automated plan generation
 - Integrates seamlessly with conductor binary
 
+[⬆ back to top](#table-of-contents)
+
 ## Documentation
 
 - **[Complete Reference Guide](docs/conductor.md)** - Comprehensive guide covering usage, plan formats, multi-file plans, learning system, and troubleshooting
 - **[Development Setup](docs/setup.md)** - Local development environment setup
 - **[Split Plan Examples](docs/examples/split-plan-README.md)** - Example split plans
 - **[Plugin Docs](plugin/docs)** - Plan generation & design tools
+
+[⬆ back to top](#table-of-contents)
 
 ## Architecture Overview
 
@@ -473,6 +528,8 @@ Multiple Plan Files (.md/.yaml)
 - **Quality Control**: Reviews task outputs using dedicated QC agent
 - **Plan Updater**: Thread-safe updates to plan files with file locking
 - **Worktree Groups**: Organize tasks into execution groups with isolation levels
+
+[⬆ back to top](#table-of-contents)
 
 ## Development
 
@@ -538,6 +595,8 @@ make build-major
 
 The VERSION file serves as the single source of truth and is automatically injected into the binary at build time. When using pre-built releases, versions always match - no build step needed.
 
+[⬆ back to top](#table-of-contents)
+
 ## Multi-File Plans
 
 Conductor supports splitting large implementation plans across multiple files with automatic merging and dependency management:
@@ -559,6 +618,8 @@ conductor validate *.md
 - ✅ 100% backward compatible with single-file plans
 
 See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-splitting) for detailed documentation and examples.
+
+[⬆ back to top](#table-of-contents)
 
 ## Project Status
 
@@ -587,6 +648,8 @@ Conductor is feature-complete with:
 - ✅ Three-tier accessibility (executor, generator, automation)
 - ✅ AI Counsel MCP integration (optional)
 
+[⬆ back to top](#table-of-contents)
+
 ## Dependencies
 
 Minimal external dependencies:
@@ -596,6 +659,8 @@ Minimal external dependencies:
 - `gopkg.in/yaml.v3` - YAML parsing
 
 No networking, no ML frameworks, no web frameworks. Just local CLI orchestration.
+
+[⬆ back to top](#table-of-contents)
 
 ## Contributing
 
@@ -607,15 +672,21 @@ Contributions are welcome! Please:
 4. Ensure all tests pass (`go test ./...`)
 5. Submit a pull request
 
+[⬆ back to top](#table-of-contents)
+
 ## License
 
 [MIT License](LICENSE)
+
+[⬆ back to top](#table-of-contents)
 
 ## Support
 
 - **Documentation**: [docs/](docs/)
 - **Issues**: [GitHub Issues](https://github.com/blueman82/conductor/issues)
 - **Troubleshooting**: [Troubleshooting Guide](docs/conductor.md#troubleshooting--faq)
+
+[⬆ back to top](#table-of-contents)
 
 ## Acknowledgments
 
