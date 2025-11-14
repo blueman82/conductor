@@ -67,26 +67,30 @@ make build
 conductor --version
 ```
 
-The `make build` command compiles the binary and installs it to `~/bin/conductor`, making it available system-wide. Once installed, you can use the `conductor` command from anywhere on your system.
+The `make build` command:
+- Compiles the binary to `~/bin/conductor`, making it available system-wide
+- **Automatically adds ~/bin to ~/.zshrc and ~/.bashrc if not already in PATH**
+- Reminds you to run `source ~/.zshrc` if PATH was added
 
 **PATH Setup:**
 
-If the `conductor` command is not found, ensure `~/bin` is in your PATH:
+The `make build` command automatically adds `~/bin` to your shell configuration files (~/.zshrc and ~/.bashrc) if it's not already in your PATH. After building:
 
+- **If ~/bin was already in PATH**: `conductor` command is ready to use immediately
+- **If ~/bin was added by make build**: Run `source ~/.zshrc` (or `source ~/.bashrc`) to activate it in current shell
+
+To verify ~/bin is in PATH:
 ```bash
-# Check if ~/bin is in PATH
 echo $PATH | grep ~/bin
+```
 
-# If not found, add ~/bin to PATH:
+To manually add ~/bin to PATH (if needed):
+```bash
 export PATH="$HOME/bin:$PATH"
-
-# Make it permanent by adding to shell config:
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc   # For bash
-# OR
+# Add to ~/.zshrc or ~/.bashrc to make permanent
 echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc    # For zsh
-
-# Reload shell config
-source ~/.bashrc   # or source ~/.zshrc
+# OR
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc   # For bash
 ```
 
 ### VERSION File Management
