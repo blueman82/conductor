@@ -83,6 +83,34 @@ conductor --version
 - ✅ Fast installation (30 seconds vs 1-2 minutes to build)
 - ✅ Works immediately, no PATH updates needed
 
+### Plan Generation Plugin (Recommended)
+
+Install the **Conductor Tools Plugin** to generate plans from Claude Code:
+
+**In Claude Code:**
+
+```bash
+/plugin
+```
+
+Search for and install **conductor-tools**
+
+Then use these commands:
+```bash
+/doc "feature description"           # Generate Markdown plan
+/doc-yaml "feature description"      # Generate YAML plan
+/cook-man "feature description"      # Interactive design session
+```
+
+**Key Benefits:**
+- ✅ Analyzes your project structure automatically
+- ✅ Recommends appropriate agents based on task type
+- ✅ Detects dependencies between tasks
+- ✅ Multiple output formats (Markdown or YAML)
+- ✅ Plans are immediately executable with `conductor run`
+
+See [Conductor Tools Plugin](../../plugin/conductor-tools/) for complete documentation and [Installation Guide](../../plugin/conductor-tools/INSTALLATION.md) for setup help.
+
 ### Build from Source (for Developers)
 
 Clone the repository and build locally:

@@ -1,0 +1,32 @@
+{
+  "name": "conductor-tools",
+  "version": "1.0.0",
+  "description": "Comprehensive implementation plan generator for Conductor - autonomous multi-agent orchestrator. Generate Markdown/YAML plans with /doc, /doc-yaml, and /cook-man commands.",
+  "author": "Conductor Contributors",
+  "license": "MIT",
+  "keywords": [
+    "conductor",
+    "planning",
+    "implementation",
+    "orchestration",
+    "agents",
+    "workflow",
+    "automation",
+    "multi-agent"
+  ],
+  "components": {
+    "commands": [
+      "commands/doc.md",
+      "commands/doc-yaml.md",
+      "commands/cook-man.md"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blueman82/conductor"
+  },
+  "homepage": "https://github.com/blueman82/conductor",
+  "bugs": {
+    "url": "https://github.com/blueman82/conductor/issues"
+  }
+}

@@ -448,36 +448,69 @@ For complete format specifications, see [Plan Format Guide](docs/conductor.md#pl
 
 [⬆ back to top](#table-of-contents)
 
-## Conductor Plugin (Included)
+## Conductor Tools Plugin
 
-Generate implementation plans automatically using Claude Code slash commands. The plugin is included in this monorepo under the `plugin/` directory.
+Generate Conductor-ready implementation plans directly from Claude Code using the **Conductor Tools Plugin**.
 
-### Installation
+### Quick Installation
 
-```bash
-# From the conductor repository root
-cp -r plugin ~/.claude/plugins/conductor-tools
-
-# Verify installation
-ls ~/.claude/plugins/conductor-tools
-```
-
-### Usage
+In Claude Code:
 
 ```bash
-# Use commands in Claude Code
-/doc design.md                  # Generate Markdown plan
-/doc-yaml design.md            # Generate YAML plan
-/cook-man design.md            # Interactive plan generation
-/cook-auto design.md           # Automated plan generation (optional MCP)
+/plugin
 ```
 
-See [plugin/docs](plugin/docs) for complete plugin documentation.
+Search for **conductor-tools** and click install. Done! Your commands are ready:
 
-**What it does:**
-- Design → Plan conversion (Markdown & YAML)
-- Interactive or automated plan generation
-- Integrates seamlessly with conductor binary
+```bash
+/doc "feature description"           # Generate Markdown plan
+/doc-yaml "feature description"      # Generate YAML plan
+/cook-man "feature description"      # Interactive design session
+```
+
+### Why Use the Plugin?
+
+- ✅ **Auto-discovers** your project structure (reads codebase before planning)
+- ✅ **Smart agent selection** - recommends appropriate agents
+- ✅ **Dependency detection** - identifies task ordering
+- ✅ **Multiple formats** - Markdown (human) or YAML (automation)
+- ✅ **Interactive design** - `/cook-man` refines requirements before planning
+- ✅ **Immediately executable** - generated plans work directly with `conductor run`
+
+### Quick Example
+
+```bash
+# Generate a plan
+/doc "Add OAuth2 authentication with JWT"
+
+# Execute immediately
+conductor run generated-plan.md --verbose
+```
+
+### Available Commands
+
+| Command | Output | Best For |
+|---------|--------|----------|
+| `/doc` | Markdown `.md` | Human-readable, team discussion |
+| `/doc-yaml` | YAML `.yaml` | Automation, tooling, config management |
+| `/cook-man` | Interactive | Complex features, design validation |
+
+### Documentation
+
+- **[Plugin README](plugin/conductor-tools/README.md)** - Features and examples
+- **[Installation Guide](plugin/conductor-tools/INSTALLATION.md)** - Detailed setup (with troubleshooting)
+- **[Plugin Source](plugin/conductor-tools/)** - Implementation details
+
+### Manual Installation (if needed)
+
+```bash
+# From conductor repository
+cd plugin/conductor-tools
+cp -r . ~/.claude/plugins/conductor-tools
+# Restart Claude Code
+```
+
+See [Installation Guide](plugin/conductor-tools/INSTALLATION.md) for other methods and troubleshooting.
 
 [⬆ back to top](#table-of-contents)
 
