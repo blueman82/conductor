@@ -75,35 +75,34 @@ Conductor uses semantic versioning stored in a `VERSION` file at the project roo
 **Key Points:**
 - The `VERSION` file stores the semantic version (e.g., `2.0.1`)
 - Version is injected at build time via `-ldflags` in the Makefile
-- The file is **not tracked in git** (listed in `.gitignore`)
-- Each developer environment maintains its own local `VERSION` file
-- The file **must exist locally** before running `make build`
+- The file **is tracked in git** (required for version management)
+- Each developer has a local copy that may differ from others (for local development)
+- The file **must exist locally** before running make build-patch/minor/major
 
-**Creating VERSION File:**
+**Build Commands and VERSION:**
+
+- **`make build`** - Uses current VERSION from file, injects into binary. Works even if VERSION is missing (but shows blank version). No changes to VERSION file.
+
+- **`make build-patch`** - Increments patch version (1.0.0 → 1.0.1), then builds. **Requires VERSION file to exist.**
+
+- **`make build-minor`** - Increments minor version (1.0.0 → 1.1.0), resets patch to 0, then builds. **Requires VERSION file to exist.**
+
+- **`make build-major`** - Increments major version (1.0.0 → 2.0.0), resets minor and patch to 0, then builds. **Requires VERSION file to exist.**
+
+**Example Usage:**
 ```bash
-# Initialize with version 2.0.1
-echo "2.0.1" > VERSION
-```
-
-### Build with Auto-Increment Versioning
-
-Conductor supports auto-increment build targets that update the `VERSION` file and build the binary:
-
-```bash
-# Build with current version (requires VERSION file to exist)
+# Build with current version (2.0.1)
 make build
 
-# Auto-increment patch version (1.1.0 → 1.1.1) and build
+# Bump patch version to 2.0.2 and build
 make build-patch
 
-# Auto-increment minor version (1.1.0 → 1.2.0) and build
+# Bump minor version to 2.1.0 and build
 make build-minor
 
-# Auto-increment major version (1.1.0 → 2.0.0) and build
+# Bump major version to 3.0.0 and build
 make build-major
 ```
-
-Each `build-*` command automatically increments the VERSION file and builds the binary. The `VERSION` file is the single source of truth, automatically injected at build time.
 
 ---
 
