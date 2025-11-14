@@ -69,12 +69,29 @@ go build ./cmd/conductor
 go install ./cmd/conductor
 ```
 
+### VERSION File Management
+
+Conductor uses semantic versioning stored in a `VERSION` file at the project root.
+
+**Key Points:**
+- The `VERSION` file stores the semantic version (e.g., `2.0.1`)
+- Version is injected at build time via `-ldflags` in the Makefile
+- The file is **not tracked in git** (listed in `.gitignore`)
+- Each developer environment maintains its own local `VERSION` file
+- The file **must exist locally** before running `make build`
+
+**Creating VERSION File:**
+```bash
+# Initialize with version 2.0.1
+echo "2.0.1" > VERSION
+```
+
 ### Build with Auto-Increment Versioning
 
-Conductor uses semantic versioning with auto-increment targets:
+Conductor supports auto-increment build targets that update the `VERSION` file:
 
 ```bash
-# Build with current version
+# Build with current version (requires VERSION file to exist)
 make build
 
 # Auto-increment patch version (1.1.0 → 1.1.1)
@@ -2541,24 +2558,43 @@ This section covers development practices, project structure, and testing guidel
 
 ### Building
 
-Build with the current version:
+**Recommended for Development:**
 ```bash
+# Build binary locally (creates ./conductor in current directory)
 make build
+
+# Use the locally built binary
+./conductor --version
+./conductor run plan.md
 ```
 
-Auto-increment and build:
+**Optional System-Wide Installation:**
+```bash
+# Install to ~/bin/ for system-wide access
+make install
+
+# Now you can use 'conductor' from anywhere
+conductor --version
+```
+
+**Most users should:**
+- Run `make build` to create `./conductor` locally
+- Use the binary directly with `./conductor <command>`
+- Optionally run `make install` once if you want `conductor` in your PATH
+
+**Auto-increment and build:**
 ```bash
 make build-patch   # 1.0.0 → 1.0.1
 make build-minor   # 1.0.0 → 1.1.0
 make build-major   # 1.0.0 → 2.0.0
 ```
 
-Or build manually:
+**Manual build (without Makefile):**
 ```bash
 go build -o conductor ./cmd/conductor
 ```
 
-Verify the build:
+**Verify the build:**
 ```bash
 ./conductor --version
 ```
