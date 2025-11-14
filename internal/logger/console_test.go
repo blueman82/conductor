@@ -825,10 +825,10 @@ func TestConsoleLogger_LogProgress_BasicDisplay(t *testing.T) {
 
 	// Create 4 completed tasks out of 8 total
 	results := []models.TaskResult{
-		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
-		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}},
-		{Task: models.Task{Number: "3", Name: "Task 3", Status: "completed"}},
-		{Task: models.Task{Number: "4", Name: "Task 4", Status: "completed"}},
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "3", Name: "Task 3", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "4", Name: "Task 4", Status: "completed"}, Status: "GREEN"},
 		{Task: models.Task{Number: "5", Name: "Task 5", Status: "pending"}},
 		{Task: models.Task{Number: "6", Name: "Task 6", Status: "pending"}},
 		{Task: models.Task{Number: "7", Name: "Task 7", Status: "pending"}},
@@ -874,6 +874,7 @@ func TestConsoleLogger_LogProgress_WithAverageDuration(t *testing.T) {
 				StartedAt:   nil,
 				CompletedAt: &now,
 			},
+			Status: "GREEN",
 		},
 		{
 			Task: models.Task{
@@ -881,6 +882,7 @@ func TestConsoleLogger_LogProgress_WithAverageDuration(t *testing.T) {
 				StartedAt:   nil,
 				CompletedAt: &now,
 			},
+			Status: "GREEN",
 		},
 		{
 			Task: models.Task{
@@ -888,6 +890,7 @@ func TestConsoleLogger_LogProgress_WithAverageDuration(t *testing.T) {
 				StartedAt:   nil,
 				CompletedAt: &now,
 			},
+			Status: "GREEN",
 		},
 		{
 			Task: models.Task{
@@ -895,6 +898,7 @@ func TestConsoleLogger_LogProgress_WithAverageDuration(t *testing.T) {
 				StartedAt:   nil,
 				CompletedAt: &now,
 			},
+			Status: "GREEN",
 		},
 		{
 			Task: models.Task{
@@ -961,14 +965,14 @@ func TestConsoleLogger_LogProgress_AllTasksComplete(t *testing.T) {
 
 	// All 8 tasks completed
 	results := []models.TaskResult{
-		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
-		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}},
-		{Task: models.Task{Number: "3", Name: "Task 3", Status: "completed"}},
-		{Task: models.Task{Number: "4", Name: "Task 4", Status: "completed"}},
-		{Task: models.Task{Number: "5", Name: "Task 5", Status: "completed"}},
-		{Task: models.Task{Number: "6", Name: "Task 6", Status: "completed"}},
-		{Task: models.Task{Number: "7", Name: "Task 7", Status: "completed"}},
-		{Task: models.Task{Number: "8", Name: "Task 8", Status: "completed"}},
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "3", Name: "Task 3", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "4", Name: "Task 4", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "5", Name: "Task 5", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "6", Name: "Task 6", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "7", Name: "Task 7", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "8", Name: "Task 8", Status: "completed"}, Status: "GREEN"},
 	}
 
 	logger.LogProgress(results)
@@ -994,7 +998,7 @@ func TestConsoleLogger_LogProgress_ColorOutput(t *testing.T) {
 		logger.colorOutput = true // Force color output for testing
 
 		results := []models.TaskResult{
-			{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+			{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}, Status: "GREEN"},
 			{Task: models.Task{Number: "2", Name: "Task 2", Status: "pending"}},
 		}
 
@@ -1015,7 +1019,7 @@ func TestConsoleLogger_LogProgress_ColorOutput(t *testing.T) {
 		logger.colorOutput = false // Disable color for testing
 
 		results := []models.TaskResult{
-			{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+			{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}, Status: "GREEN"},
 			{Task: models.Task{Number: "2", Name: "Task 2", Status: "pending"}},
 		}
 
@@ -1045,7 +1049,7 @@ func TestConsoleLogger_LogProgress_TimestampPrefix(t *testing.T) {
 	logger := NewConsoleLogger(buf, "info")
 
 	results := []models.TaskResult{
-		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}, Status: "GREEN"},
 		{Task: models.Task{Number: "2", Name: "Task 2", Status: "pending"}},
 	}
 
@@ -1078,8 +1082,8 @@ func TestConsoleLogger_LogProgress_ProgressBarIntegration(t *testing.T) {
 
 	// Test with 50% completion
 	results := []models.TaskResult{
-		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}},
-		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}},
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed"}, Status: "GREEN"},
+		{Task: models.Task{Number: "2", Name: "Task 2", Status: "completed"}, Status: "GREEN"},
 		{Task: models.Task{Number: "3", Name: "Task 3", Status: "pending"}},
 		{Task: models.Task{Number: "4", Name: "Task 4", Status: "pending"}},
 	}
@@ -1111,7 +1115,7 @@ func TestConsoleLogger_LogProgress_EdgeCaseNilStartedAt(t *testing.T) {
 
 	// Tasks without StartedAt (no duration data)
 	results := []models.TaskResult{
-		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed", StartedAt: nil}},
+		{Task: models.Task{Number: "1", Name: "Task 1", Status: "completed", StartedAt: nil}, Status: "GREEN"},
 		{Task: models.Task{Number: "2", Name: "Task 2", Status: "pending"}},
 	}
 
