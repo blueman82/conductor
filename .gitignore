@@ -67,35 +67,23 @@ test-results/
 transcripts/
 conductor
 
-# Ignore all docs/ except explicitly tracked files
-docs/
-!docs/conductor.md
-!docs/examples/
-!docs/plans/
-!docs/plans/adaptive-learning-system/
-!docs/plans/enhanced-console-output/
-!docs/plans/project-initialization.yaml
-!docs/plans/adaptive-learning-system/plan-01-foundation.md
-!docs/plans/adaptive-learning-system/plan-01-foundation.yaml
-!docs/plans/adaptive-learning-system/plan-02-configuration-testing.md
-!docs/plans/adaptive-learning-system/plan-02-configuration-testing.yaml
-!docs/plans/enhanced-console-output/index.yaml
-!docs/plans/enhanced-console-output/plan-01-foundation.md
-!docs/plans/enhanced-console-output/plan-01-foundation.yaml
-!docs/plans/enhanced-console-output/plan-02-integration.md
-!docs/plans/enhanced-console-output/plan-02-integration.yaml
-!docs/plans/enhanced-console-output/plan-03-completion.yaml
-!docs/plans/enhanced-console-output/tasks-16-18.md
-!docs/plans/enhanced-console-output/tasks-7-12.md
-!docs/examples/resume-completed-markdown.md
-!docs/examples/resume-completed-yaml.yaml
-!docs/examples/skip-completed-examples.md
-!docs/examples/split-plan-backend-1-setup.md
-!docs/examples/split-plan-backend-2-features.md
-!docs/examples/split-plan-backend-3-testing.md
-!docs/examples/split-plan-README.md
-!docs/concept_ai_corp_conductor_hybrid.md
-!docs/worktree-best-practices.md
+# Deployment strategies (local planning docs)
+docs/plans/subagent-deployment-strategy.md
+
+# MCP integration documentation (local research)
+docs/mcp-headless-invocation.md
+
+# Claude agent invocation documentation (local research)
+docs/claude_code_agents_invocation.md
+
+# Plan READMEs (local planning documentation)
+docs/plans/**/README.md
+
+# Never track these in docs/
+docs/original_poc_partial.md
+docs/TEST_REPORT.md
+docs/TEST_SUMMARY.txt
+docs/verify_tests.md
 
 # Internal development documentation (local reference only)
 PATTERN_EXTRACTION_REFERENCE.md
