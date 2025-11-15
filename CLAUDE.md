@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.0.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, and auto-incrementing version management.
+**Current Status**: Production-ready v2.1.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, inter-retry agent swapping, and auto-incrementing version management.
 
 ## Development Commands
 
@@ -136,8 +136,8 @@ Multiple Plan Files (.md/.yaml)
 
 **Executor (`internal/executor/`)**:
 - `graph.go`: Dependency graph builder using Kahn's algorithm for wave calculation. DFS with color marking for cycle detection. Validates all dependencies exist.
-- `qc.go`: Quality control reviews using dedicated agent. Parses GREEN/RED/YELLOW flags from output. Handles retry logic (max 2 attempts on RED).
-- `task.go`: Task executor implementing invoke → review → retry pipeline. Handles GREEN/RED/YELLOW flags, retries on RED, updates plan file on completion. 84.5% test coverage with comprehensive error path testing.
+- `qc.go`: Quality control reviews using dedicated agent. Parses GREEN/RED/YELLOW flags from JSON or legacy text output. Uses `parseQCJSON()` with Claude CLI envelope extraction. Handles retry logic (max 2 attempts on RED).
+- `task.go`: Task executor implementing invoke → review → retry pipeline. Handles GREEN/RED/YELLOW flags, retries on RED, updates plan file on completion. Inter-retry agent swapping via `learning.SelectBetterAgent()`. Single `updateFeedback()` call after QC review (not before). 84.5% test coverage with comprehensive error path testing.
 - `wave.go`: Wave executor for sequential wave execution with bounded concurrency. Filters completed tasks before execution based on SkipCompleted config. Creates synthetic GREEN results for skipped tasks. Respects RetryFailed flag for failed task re-execution.
 
 **Agent (`internal/agent/`)**:
@@ -206,41 +206,79 @@ prompt = fmt.Sprintf("use the %s subagent to: %s", agent, task.Prompt)
 
 ### Quality Control Pattern
 
-QC reviews use structured JSON output format:
+QC reviews use structured JSON output format with envelope extraction:
 
-**JSON Schema:**
+**JSON Response Schema (`internal/models/response.go`):**
 ```go
 type QCResponse struct {
-    Verdict         string   // "GREEN", "RED", "YELLOW"
-    Feedback        string   // Detailed review feedback
-    Issues          []Issue  // Specific issues found
-    Recommendations []string // Suggested improvements
-    ShouldRetry     bool     // Whether to retry
-    SuggestedAgent  string   // Alternative agent suggestion
+    Verdict         string   `json:"verdict"`          // "GREEN", "RED", "YELLOW"
+    Feedback        string   `json:"feedback"`         // Detailed review feedback
+    Issues          []Issue  `json:"issues"`           // Specific issues found
+    Recommendations []string `json:"recommendations"`  // Suggested improvements
+    ShouldRetry     bool     `json:"should_retry"`     // Whether to retry
+    SuggestedAgent  string   `json:"suggested_agent"`  // Alternative agent suggestion
 }
 
 type Issue struct {
-    Severity    string // "critical", "warning", "info"
-    Description string // Issue description
-    Location    string // File:line or component
+    Severity    string `json:"severity"`    // "critical", "warning", "info"
+    Description string `json:"description"` // Issue description
+    Location    string `json:"location"`    // File:line or component
 }
 ```
 
-**Dual Feedback Storage:**
-- Plain text feedback stored in TaskResult.QCFeedback (for human-readable logs)
-- Structured JSON stored in TaskResult.QCData (for programmatic analysis)
-- Both formats persisted to learning database for pattern analysis
+**QC JSON Parsing (`internal/executor/qc.go`):**
+```go
+// parseQCJSON extracts and validates QC response from Claude CLI output
+func parseQCJSON(output string) (*models.QCResponse, error) {
+    // Step 1: Extract "result" field from Claude CLI envelope
+    claudeOut, _ := agent.ParseClaudeOutput(output)
+    actualOutput := claudeOut.Content
 
-**Inter-Retry Agent Swapping:**
-Quality control can suggest alternative agents via SuggestedAgent field. When QC returns RED verdict with a suggested agent and learning config enables auto_adapt_agent, conductor automatically switches to the suggested agent for retry attempts.
+    // Step 2: Strip markdown code fences if present (```json...```)
+    if strings.HasPrefix(strings.TrimSpace(actualOutput), "```") {
+        actualOutput = extractJSONFromCodeFence(actualOutput)
+    }
 
-Flow: Task fails → QC suggests better agent → Auto-swap on retry → Enhanced success rate
+    // Step 3: Parse and validate JSON
+    var resp models.QCResponse
+    json.Unmarshal([]byte(actualOutput), &resp)
+    resp.Validate()
+    return &resp, nil
+}
+```
+
+Claude CLI returns wrapped JSON: `{"type":"result","result":"..."}`. The `agent.ParseClaudeOutput()` function extracts the inner `result` field, then `extractJSONFromCodeFence()` strips any markdown wrappers before JSON parsing.
+
+**Dual Feedback Storage (`internal/executor/task.go`):**
+- `updateFeedback()` called ONLY after QC review completes (line ~647)
+- Stores: attempt number, agent, verdict, agent output, QC feedback, timestamp
+- Uses `updater.UpdateTaskFeedback()` to write execution history to plan files
+- Eliminates duplicate entries by avoiding pre-QC storage
+
+```go
+// Called once per attempt, after QC review is complete
+te.updateFeedback(task, attempt+1, invocation.Output, qcFeedback, verdict)
+```
+
+**Inter-Retry Agent Swapping (v2.1):**
+Quality control can suggest alternative agents via `SuggestedAgent` field. When QC returns RED verdict with a suggested agent, conductor uses `learning.SelectBetterAgent()` to determine the optimal agent for retry:
+
+```go
+// After RED verdict, check for agent swap opportunity
+if newAgent, reason := learning.SelectBetterAgent(task.Agent, history, review.SuggestedAgent);
+   newAgent != "" && newAgent != task.Agent {
+    task.Agent = newAgent  // Swap agent for next retry
+}
+```
+
+Flow: Task fails (RED) → QC suggests better agent → `SelectBetterAgent()` validates → Auto-swap on retry → Enhanced success rate
 
 **Retry Logic:**
 - Only retry on RED verdict
 - Up to MaxRetries (default: 2)
 - Agent swapping occurs between retries when suggested
-- Respects min_failures_before_adapt threshold from config
+- Controlled by `learning.swap_during_retries` config (default: true)
+- Respects `min_failures_before_adapt` threshold from config
 
 ### Adaptive Learning System
 
@@ -290,11 +328,15 @@ Learning can be configured in `.conductor/config.yaml`:
 ```yaml
 learning:
   enabled: true                    # Enable/disable learning system
-  dir: .conductor/learning         # Storage directory
-  max_history: 100                 # Max entries per task
-  auto_adapt_agent: true          # Enable inter-retry agent swapping
+  db_path: .conductor/learning/executions.db  # SQLite database path
+  auto_adapt_agent: true          # Enable agent adaptation based on patterns
+  swap_during_retries: true       # v2.1: swap agents within same run (not just between runs)
   enhance_prompts: true           # Add learned context to prompts
+  qc_reads_plan_context: true     # v2.1: QC loads execution history from plan file
+  qc_reads_db_context: true       # v2.1: QC loads execution history from database
+  max_context_entries: 10         # v2.1: limit context to last N attempts
   min_failures_before_adapt: 2    # Failure threshold before adapting
+  max_executions_per_task: 100    # Max entries per task in database
   keep_executions_days: 90        # Data retention period
 ```
 
@@ -302,6 +344,16 @@ learning:
 Hooks are automatically invoked during task execution:
 - Pre-task: `PreTaskHook(task, store)` - injects failure context
 - Post-task: `PostTaskHook(task, result, store)` - stores outcome
+
+**QC Context Loading (`internal/executor/qc.go`):**
+```go
+// LoadContext loads execution history from database for the task
+func (qc *QualityController) LoadContext(ctx context.Context, task models.Task, store *learning.Store) (string, error) {
+    history, err := store.GetExecutionHistory(ctx, task.SourceFile, task.Number)
+    // Formats historical attempts with verdicts, feedback, and errors
+    // for QC agent to make informed retry recommendations
+}
+```
 
 ## Test-Driven Development
 
@@ -377,15 +429,24 @@ result, err := invoker.Invoke(ctx, task)
 
 ## Production Status
 
-Conductor v2.0.0 is production-ready with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support, adaptive learning system, and auto-incrementing version management implemented and tested.
+Conductor v2.1.0 is production-ready with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support, adaptive learning system, inter-retry agent swapping, and auto-incrementing version management implemented and tested.
 
 **Major Features:**
 - Multi-agent orchestration with dependency resolution
-- Quality control reviews with retry logic
+- Quality control reviews with structured JSON responses
+- Inter-retry agent swapping based on QC recommendations
 - Adaptive learning from execution history
 - Multi-file plan support with cross-file dependencies
 - Resumable execution with state tracking
+- Dual feedback storage (plan files + database)
 - Comprehensive logging and error handling
+
+**v2.1 Enhancements:**
+- QC JSON parsing with Claude CLI envelope extraction
+- `extractJSONFromCodeFence()` strips markdown wrappers
+- Single `updateFeedback()` call eliminates duplicate history entries
+- `learning.SelectBetterAgent()` for intelligent agent swapping
+- QC loads historical context via `LoadContext()` for informed retry decisions
 
 ## Multi-File Plan Examples
 

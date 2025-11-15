@@ -432,7 +432,9 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 }
 
 // updateFeedback stores execution attempt feedback to the plan file.
-// This is called after each retry attempt to maintain execution history.
+// This is called ONLY after QC review completes, when we have the full context
+// (agent output + verdict + QC feedback). We do NOT call this before QC review
+// to avoid creating duplicate execution history entries.
 func (te *DefaultTaskExecutor) updateFeedback(task models.Task, attempt int, agentOutput, qcFeedback, verdict string) error {
 	// Only update if we have a plan file configured
 	if te.cfg.PlanPath == "" {
@@ -597,11 +599,6 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		result.Output = output
 		result.Duration = totalDuration
 
-		// Store agent output to plan file for this attempt (after agent invocation)
-		if err := te.updateFeedback(task, attempt+1, invocation.Output, "", ""); err != nil {
-			// Log warning but continue (non-fatal)
-		}
-
 		// Initialize execution attempt record
 		execAttempt := models.ExecutionAttempt{
 			Attempt:     attempt + 1, // 1-indexed
@@ -643,7 +640,8 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			execAttempt.QCFeedback = review.Feedback
 			execAttempt.Verdict = review.Flag
 
-			// Store QC feedback to plan file for this attempt (after QC review)
+			// Store QC feedback to plan file for this attempt (after QC review completes)
+			// This is the ONLY call to updateFeedback - we skip the pre-QC call to avoid duplicates
 			verdict := review.Flag
 			qcFeedback := review.Feedback
 			if err := te.updateFeedback(task, attempt+1, invocation.Output, qcFeedback, verdict); err != nil {

@@ -74,6 +74,10 @@ Conductor automates complex multi-step implementations by:
   - Dual feedback storage (plain text + structured JSON)
   - Learns from past successes to optimize future runs
   - CLI commands for statistics and insights
+- **Structured QC Responses** (v2.1+): Quality control returns JSON with verdicts, issues, and recommendations
+  - Automatic parsing of Claude CLI JSON envelopes and markdown code fences
+  - Agent suggestions for improved retry success rates
+  - Enhanced context loading from plan files and database
 
 [⬆ back to top](#table-of-contents)
 
@@ -93,23 +97,23 @@ Download pre-built binary from the latest release:
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux (x86_64)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Verify installation
 conductor --version
-# v2.0.5
+# v2.1.0
 ```
 
 #### Option 2: Build from Source
@@ -129,7 +133,7 @@ go build ./cmd/conductor
 
 # Verify installation
 conductor --version
-# v2.0.5
+# v2.1.0
 ```
 
 #### Option 3: Install Plugin for Plan Generation
@@ -325,6 +329,12 @@ learning:
   enhance_prompts: true   # Add learned context to prompts (default: true)
   min_failures_before_adapt: 2  # Failure threshold before adapting
   keep_executions_days: 90      # Retention period for learning data
+
+# Structured QC Responses (v2.1+)
+feedback:
+  store_in_plan_file: true    # Write feedback to plan files (human-readable)
+  store_in_database: true     # Write feedback to database (long-term learning)
+  format: json                # Structured JSON output from QC
 ```
 
 For detailed configuration options, see [Usage Guide](docs/conductor.md#usage--commands).
@@ -345,7 +355,7 @@ This ensures:
 
 ## Adaptive Learning System (v2.0+)
 
-Conductor v2.0 introduces an intelligent learning system that automatically improves task execution over time by learning from past successes and failures.
+Conductor v2.0 introduces an intelligent learning system that automatically improves task execution over time by learning from past successes and failures. **v2.1** adds structured QC responses, inter-retry agent swapping, and enhanced context loading.
 
 ### What It Does
 
@@ -354,6 +364,9 @@ Conductor v2.0 introduces an intelligent learning system that automatically impr
 - **Adapts Agent Selection**: Automatically switches to better-performing agents after repeated failures
 - **Enhances Prompts**: Enriches task prompts with learned context from execution history
 - **Provides Insights**: CLI commands for viewing statistics, history, and trends
+- **Structured QC Responses** (v2.1+): QC returns JSON with verdicts, issues, recommendations, and agent suggestions
+- **Inter-Retry Agent Swapping** (v2.1+): Automatically swaps agents during retry loop based on QC suggestions
+- **Dual Feedback Storage** (v2.1+): Stores feedback in both plan files and database for redundancy
 
 ### Quick Example
 
@@ -399,18 +412,62 @@ learning:
   enhance_prompts: true           # Add learned context to prompts (default: true)
   min_failures_before_adapt: 2    # Failure threshold (default: 2)
   keep_executions_days: 90        # Data retention (default: 90)
+
+  # v2.1+ Inter-retry agent swapping
+  swap_during_retries: true       # Swap agents during retry loop (default: true)
+
+  # v2.1+ QC context loading
+  qc_reads_plan_context: true     # Load context from plan file
+  qc_reads_db_context: true       # Load context from database
+  max_context_entries: 10         # Limit context to last N attempts
+
+# v2.1+ Feedback storage
+feedback:
+  store_in_plan_file: true        # Human-readable, git-trackable
+  store_in_database: true         # Long-term learning, pattern analysis
+  format: json                    # Structured JSON output
 ```
 
 ### How It Works
 
 1. **Pre-Task Hook**: Analyzes execution history and adapts strategy before task runs
 2. **Task Execution**: Runs task with selected agent, captures structured JSON output
-3. **QC Review**: Quality control agent evaluates output, suggests alternative agents if needed
-4. **Inter-Retry Swapping**: On RED verdict with suggested agent, automatically swaps for retry
-5. **Dual Storage**: Persists both plain text feedback and structured JSON to database
-6. **Post-Task Hook**: Records execution results to SQLite database for pattern analysis
+3. **QC Review**: Quality control agent evaluates output with historical context, returns structured JSON
+4. **Structured Response Parsing** (v2.1+): Extracts verdict, issues, recommendations from nested JSON envelopes
+5. **Inter-Retry Swapping**: On RED verdict with suggested agent, automatically swaps for retry
+6. **Dual Storage**: Persists feedback to both plan files (human-readable) and database (pattern analysis)
+7. **Post-Task Hook**: Records execution results to SQLite database for pattern analysis
 
 Learning data is stored locally in `.conductor/learning/` (excluded from git).
+
+### QC JSON Response Format (v2.1+)
+
+Quality control now returns structured JSON responses that conductor automatically parses:
+
+```json
+{
+  "verdict": "GREEN",           // GREEN, RED, or YELLOW
+  "feedback": "Task completed successfully with comprehensive implementation",
+  "issues": [
+    {
+      "severity": "warning",
+      "description": "Missing error handling in edge case",
+      "location": "internal/executor/task.go:145"
+    }
+  ],
+  "recommendations": [
+    "Add unit tests for new functions",
+    "Consider extracting helper method"
+  ],
+  "should_retry": false,
+  "suggested_agent": ""         // Alternative agent suggestion on RED verdict
+}
+```
+
+Conductor handles Claude CLI JSON envelopes automatically:
+- Extracts nested JSON from `{"type":"result",...,"result":"..."}`
+- Strips markdown code fences (`\`\`\`json ... \`\`\``)
+- Falls back gracefully on parse errors
 
 **See [Learning System Guide](docs/conductor.md#adaptive-learning-system) for complete documentation.**
 
@@ -661,7 +718,7 @@ See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-split
 
 ## Project Status
 
-**Current Status**: Production-ready v2.0.0
+**Current Status**: Production-ready v2.1.0
 
 Conductor is feature-complete with:
 - ✅ Complete implementation with 86%+ test coverage
@@ -678,6 +735,18 @@ Conductor is feature-complete with:
   - Automatic agent adaptation
   - Pattern detection and analysis
   - Four CLI learning commands
+- ✅ **Structured QC responses** (v2.1)
+  - JSON parsing with nested envelope extraction
+  - Markdown code fence stripping
+  - Detailed issues and recommendations
+- ✅ **Inter-retry agent swapping** (v2.1)
+  - QC suggests alternative agents on failures
+  - Automatic agent swap during retry loop
+  - Configurable swap behavior
+- ✅ **Dual feedback storage** (v2.1)
+  - Plan file storage (human-readable, git-trackable)
+  - Database storage (long-term learning)
+  - No duplicate entries
 - ✅ Comprehensive documentation
 
 ### Conductor Plugin

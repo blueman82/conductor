@@ -16,6 +16,9 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [conductor run](#conductor-run)
   - [Learning Commands](#learning-commands)
 - [Configuration](#configuration)
+  - [Quality Control Settings](#quality-control)
+  - [Feedback Storage Settings](#dual-feedback-storage-v210)
+  - [Learning Settings](#configuration-learning)
 - [Multi-File Plans & Objective Splitting](#multi-file-plans--objective-splitting)
   - [Core Concepts](#core-concepts)
   - [Usage Examples](#multi-file-usage-examples)
@@ -28,6 +31,10 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
 - [Adaptive Learning System](#adaptive-learning-system)
   - [Overview](#learning-overview)
   - [How It Works](#how-it-works)
+  - [Inter-Retry Agent Swapping](#inter-retry-agent-swapping-v210)
+  - [Structured QC Responses](#structured-qc-response-format-v210)
+  - [Dual Feedback Storage](#dual-feedback-storage-v210)
+  - [Execution History Format](#execution-history-format-v210)
   - [Configuration](#configuration-learning)
   - [CLI Commands](#cli-commands-learning)
 - [Troubleshooting & FAQ](#troubleshooting--faq)
@@ -58,23 +65,23 @@ Download a pre-built binary from [GitHub Releases](https://github.com/blueman82/
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux
-curl -L https://github.com/blueman82/conductor/releases/download/v2.0.5/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Verify installation
 conductor --version
-# v2.0.5
+# v2.1.0
 ```
 
 **Benefits of using pre-built binaries:**
@@ -889,37 +896,62 @@ dry_run: false            # Simulate without executing (default: false)
 skip_completed: false     # Skip tasks marked as completed (default: false)
 retry_failed: false       # Retry tasks marked as failed (default: false)
 
+# Console output configuration
+console:
+  # Color output control
+  # - auto: Auto-detect based on TTY (default)
+  # - true: Force colors on
+  # - false: Force colors off
+  colors_enabled: auto
+
 # Quality control settings
-qc_enabled: true          # Enable QC reviews (default: true)
-max_retries: 2            # Retry attempts on RED verdict (default: 2)
-qc_agent: quality-control # Agent for QC reviews (default: quality-control)
+quality_control:
+  enabled: true              # Enable QC reviews (default: true)
+  review_agent: conductor-qc # Agent for QC reviews (default: conductor-qc)
+  retry_on_red: 2            # Retry attempts on RED verdict (default: 2)
+
+# Feedback storage settings
+feedback:
+  store_in_plan_file: true   # Store execution history in plan file (default: true)
+  store_in_database: true    # Store execution history in database (default: true)
+  format: json               # Response format: json or text (default: json)
+  store_on_green: true       # Store successful executions (default: true)
+  store_on_red: true         # Store failed executions (default: true)
+  store_on_yellow: true      # Store warning executions (default: true)
 
 # Logging settings
 log_dir: .conductor/logs  # Log directory (default: .conductor/logs)
 log_level: info           # Log level: debug, info, warn, error (default: info)
-log_to_file: true         # Enable file logging (default: true)
-log_to_console: true      # Enable console logging (default: true)
-
-# Agent settings
-agent_dir: ~/.claude/agents  # Directory for agent discovery (default: ~/.claude/agents)
-
-# File locking settings
-lock_timeout: 30s         # File lock acquisition timeout (default: 30s)
-lock_retry_interval: 100ms # Lock retry interval (default: 100ms)
 
 # Learning settings
 learning:
   # Enable or disable the learning system (default: true)
   enabled: true
 
-  # Database path (default: .conductor/learning)
-  db_path: .conductor/learning
+  # Database path (default: .conductor/learning/executions.db)
+  db_path: .conductor/learning/executions.db
 
   # Auto-adapt agent selection based on learned patterns (default: false)
   auto_adapt_agent: false
 
+  # Enable agent swapping during retry loops (default: true)
+  # When a task fails, QC can suggest a better agent for the next retry attempt
+  swap_during_retries: true
+
   # Enhance prompts with learned context (default: true)
   enhance_prompts: true
+
+  # Enable QC to read plan file context (default: true)
+  # QC agent loads execution history from current run before reviewing
+  qc_reads_plan_context: true
+
+  # Enable QC to read database context (default: true)
+  # QC agent loads historical execution data before reviewing
+  qc_reads_db_context: true
+
+  # Maximum context entries to load (default: 10)
+  # Limits the number of historical attempts included in QC context
+  max_context_entries: 10
 
   # Minimum failures before adapting strategy (default: 2)
   min_failures_before_adapt: 2
@@ -981,6 +1013,58 @@ Each task output is reviewed by a quality control agent:
 - **GREEN**: Task completed successfully, proceed
 - **YELLOW**: Task completed with warnings, proceed
 - **RED**: Task failed, retry up to max_retries
+
+#### Structured QC Response Format (v2.1.0)
+
+Quality control agents return structured JSON responses for richer analysis:
+
+**QC Response Schema:**
+```json
+{
+  "verdict": "RED",
+  "feedback": "Implementation is incomplete. Error handling not implemented.",
+  "issues": [
+    {
+      "severity": "critical",
+      "description": "Missing error handling for database connection failures",
+      "location": "internal/db/client.go:45"
+    },
+    {
+      "severity": "warning",
+      "description": "Unused import detected",
+      "location": "internal/db/client.go:3"
+    }
+  ],
+  "recommendations": [
+    "Add try-catch for database connection",
+    "Implement retry logic with exponential backoff",
+    "Remove unused imports"
+  ],
+  "should_retry": true,
+  "suggested_agent": "golang-pro"
+}
+```
+
+**Schema Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `verdict` | string | QC decision: GREEN, RED, or YELLOW |
+| `feedback` | string | Human-readable summary of the review |
+| `issues` | array | List of specific issues found |
+| `issues[].severity` | string | Issue severity: critical, warning, or info |
+| `issues[].description` | string | Detailed issue description |
+| `issues[].location` | string | File:line or component where issue found |
+| `recommendations` | array | Suggested improvements or fixes |
+| `should_retry` | boolean | Whether the task should be retried |
+| `suggested_agent` | string | Alternative agent for retry (optional) |
+
+**Benefits of Structured Responses:**
+- Actionable insights with specific locations
+- Automatic agent adaptation based on suggestions
+- Detailed issue tracking for pattern analysis
+- Clear retry decisions with reasoning
+- Enhanced debugging with structured feedback
 
 ### Output & Logs
 
@@ -1726,7 +1810,7 @@ QUESTION 3: Does group depend on others?
 
 ## Adaptive Learning System
 
-**Version**: Conductor v2.0.0
+**Version**: Conductor v2.1.0
 **Status**: Production-ready
 
 ### Learning Overview
@@ -1739,6 +1823,7 @@ The adaptive learning system is a feedback mechanism that improves task executio
 - Adapts agent selection after repeated failures
 - Enhances prompts with learned context from past executions
 - Improves success rates over time through cross-run intelligence
+- Enables inter-retry agent swapping based on QC recommendations
 
 **Benefits:**
 - Automatic recovery from repeated failures
@@ -1746,10 +1831,14 @@ The adaptive learning system is a feedback mechanism that improves task executio
 - Pattern recognition for common failure types
 - Historical intelligence across multiple runs
 - Graceful degradation (learning failures never break task execution)
+- Intelligent agent selection during retry loops
 
 **Key Features:**
 - SQLite-based execution history database
 - Three integration hooks: pre-task, QC-review, post-task
+- Structured QC responses with agent suggestions
+- Inter-retry agent swapping based on QC feedback
+- Dual feedback storage (plan files and database)
 - Pattern detection for 6+ common failure types
 - Session and run number tracking
 - Four CLI observability commands
@@ -1763,6 +1852,7 @@ The adaptive learning system is a feedback mechanism that improves task executio
 ```
 1. Pre-Task Hook
    ├─ Query execution history for this task
+   ├─ Load context from database and/or plan file (configurable)
    ├─ Analyze failure patterns and agent performance
    ├─ Adapt agent if 2+ failures detected (configurable)
    └─ Enhance prompt with learning context
@@ -1771,14 +1861,57 @@ The adaptive learning system is a feedback mechanism that improves task executio
    └─ Execute task with (potentially adapted) agent
 
 3. QC-Review Hook
-   ├─ Capture QC verdict (GREEN/RED/YELLOW)
+   ├─ Load historical context (if qc_reads_plan_context/qc_reads_db_context enabled)
+   ├─ Capture structured QC response (verdict, issues, recommendations)
+   ├─ Parse suggested_agent for inter-retry swapping
    └─ Extract failure patterns from output
 
 4. Post-Task Hook
-   ├─ Record execution to database
-   ├─ Store: agent used, QC verdict, patterns, timing
+   ├─ Record execution to dual storage (plan file + database)
+   ├─ Store: agent used, QC verdict, patterns, timing, feedback
    └─ Update run statistics
+
+5. Inter-Retry Agent Swap (if RED verdict)
+   ├─ Check if suggested_agent provided by QC
+   ├─ Verify swap_during_retries enabled in config
+   └─ Swap to suggested agent for next retry attempt
 ```
+
+#### Inter-Retry Agent Swapping (v2.1.0)
+
+When a task fails with a RED verdict, the QC agent can suggest a better agent for the retry:
+
+```
+Initial Execution:
+  Task 5 → backend-developer agent → RED verdict
+  QC suggests: "golang-pro" (better at Go-specific tasks)
+
+Retry 1:
+  Task 5 → golang-pro agent (auto-swapped) → GREEN verdict
+```
+
+**Configuration:**
+```yaml
+learning:
+  swap_during_retries: true        # Enable inter-retry swapping
+  min_failures_before_adapt: 2     # Require 2+ failures before adapting
+```
+
+**Workflow:**
+
+1. Task executes with assigned agent
+2. QC reviews output and returns RED verdict
+3. QC includes `suggested_agent` field in response
+4. Conductor checks if `swap_during_retries` is enabled
+5. If enabled, conductor swaps to suggested agent for next retry
+6. Retry executes with new agent
+7. If successful, learning system records which agent succeeded
+
+**Benefits:**
+- Faster recovery from failures without manual intervention
+- Leverages QC agent's understanding of task requirements
+- Automatic correction of agent mismatches
+- Learning system tracks successful agent swaps for future runs
 
 #### Failure Pattern Detection
 
@@ -1829,14 +1962,26 @@ learning:
   # Enable or disable the learning system (default: true)
   enabled: true
 
-  # Database path (default: .conductor/learning)
-  db_path: .conductor/learning
+  # Database path (default: .conductor/learning/executions.db)
+  db_path: .conductor/learning/executions.db
 
   # Auto-adapt agent selection based on learned patterns (default: false)
   auto_adapt_agent: false
 
+  # Enable agent swapping during retry loops (default: true)
+  swap_during_retries: true
+
   # Enhance prompts with learned context (default: true)
   enhance_prompts: true
+
+  # Enable QC to read plan file context (default: true)
+  qc_reads_plan_context: true
+
+  # Enable QC to read database context (default: true)
+  qc_reads_db_context: true
+
+  # Maximum context entries to load (default: 10)
+  max_context_entries: 10
 
   # Minimum failures before adapting strategy (default: 2)
   min_failures_before_adapt: 2
@@ -1853,9 +1998,13 @@ learning:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enabled` | bool | `true` | Master switch for learning system |
-| `db_path` | string | `.conductor/learning` | Path to SQLite database |
+| `db_path` | string | `.conductor/learning/executions.db` | Path to SQLite database file |
 | `auto_adapt_agent` | bool | `false` | Automatically switch agents on failures |
+| `swap_during_retries` | bool | `true` | Enable inter-retry agent swapping |
 | `enhance_prompts` | bool | `true` | Add learned context to prompts |
+| `qc_reads_plan_context` | bool | `true` | QC loads execution history from plan |
+| `qc_reads_db_context` | bool | `true` | QC loads execution history from database |
+| `max_context_entries` | int | `10` | Maximum historical entries for QC context |
 | `min_failures_before_adapt` | int | `2` | Failure threshold before adapting |
 | `keep_executions_days` | int | `90` | Days to retain history (0 = forever) |
 | `max_executions_per_task` | int | `100` | Max records per task |
@@ -1887,6 +2036,94 @@ learning:
   enabled: false
 ```
 
+#### Dual Feedback Storage (v2.1.0)
+
+Conductor stores execution feedback in two complementary locations:
+
+**1. Plan File Storage (Human-Readable)**
+
+Execution history is embedded directly in plan files:
+
+**Markdown Format:**
+```markdown
+## Task 5: Implement error handling
+
+### Execution History
+
+#### Attempt 1 - 2025-11-15T16:41:59Z
+**Agent**: backend-developer
+**Verdict**: RED
+**Output**:
+```
+Implementation incomplete. Missing error handling...
+```
+**QC Feedback**:
+```
+Task failed validation. Error handling not implemented for database connections.
+```
+
+#### Attempt 2 - 2025-11-15T16:45:30Z
+**Agent**: golang-pro
+**Verdict**: GREEN
+**Output**:
+```
+Successfully implemented error handling with retry logic...
+```
+**QC Feedback**:
+```
+Implementation complete with proper error handling.
+```
+```
+
+**YAML Format:**
+```yaml
+tasks:
+  - id: 5
+    name: Implement error handling
+    agent: golang-pro
+    execution_history:
+      - attempt_number: "1"
+        agent: "backend-developer"
+        verdict: "RED"
+        agent_output: "Implementation incomplete..."
+        qc_feedback: "Task failed validation..."
+        timestamp: "2025-11-15T16:41:59Z"
+      - attempt_number: "2"
+        agent: "golang-pro"
+        verdict: "GREEN"
+        agent_output: "Successfully implemented..."
+        qc_feedback: "Implementation complete..."
+        timestamp: "2025-11-15T16:45:30Z"
+```
+
+**2. Database Storage (Long-Term Analysis)**
+
+Structured data stored in SQLite for pattern analysis:
+- Location: `.conductor/learning/executions.db`
+- Queryable execution records
+- Cross-run pattern detection
+- Agent performance metrics
+- Failure categorization
+
+**Configuration:**
+```yaml
+feedback:
+  store_in_plan_file: true   # Enable plan file storage
+  store_in_database: true    # Enable database storage
+  format: json               # Response format (json or text)
+  store_on_green: true       # Store successful executions
+  store_on_red: true         # Store failed executions
+  store_on_yellow: true      # Store warning executions
+```
+
+**Benefits of Dual Storage:**
+- Plan files provide immediate visibility into task history
+- Database enables long-term pattern analysis
+- No duplicates: single authoritative record per attempt
+- Human-readable format for debugging
+- Machine-readable format for automation
+- Complete execution audit trail
+
 ### CLI Commands (Learning)
 
 See [Learning Commands](#learning-commands) section above for detailed documentation of:
@@ -1910,7 +2147,58 @@ $ conductor run plan.md --skip-completed
 $ conductor learning stats plan.md
 ```
 
-#### Scenario 1: Automatic Agent Adaptation
+#### Scenario 1: Inter-Retry Agent Swapping (v2.1.0)
+
+```yaml
+# .conductor/config.yaml
+learning:
+  enabled: true
+  swap_during_retries: true
+  qc_reads_plan_context: true
+  qc_reads_db_context: true
+quality_control:
+  retry_on_red: 2
+```
+
+**What happens:**
+
+1. **Attempt 1**: Task 5 executes with `backend-developer` agent
+2. **QC Review**: Returns RED verdict with `"suggested_agent": "golang-pro"`
+3. **Retry 1**: Conductor swaps to `golang-pro` agent (inter-retry swap)
+4. **Result**: Task 5 succeeds with suggested agent
+
+**Console output:**
+```
+[INFO] Executing Task 5 with agent: backend-developer
+[WARN] Task 5 received RED verdict
+[INFO] QC suggested agent: golang-pro
+[INFO] Swapping agent for retry: backend-developer → golang-pro
+[INFO] Retry 1/2: Executing Task 5 with agent: golang-pro
+[SUCCESS] Task 5 completed: GREEN
+```
+
+**QC Response:**
+```json
+{
+  "verdict": "RED",
+  "feedback": "Implementation uses non-idiomatic Go patterns",
+  "issues": [
+    {
+      "severity": "critical",
+      "description": "Using panic for error handling instead of returning errors",
+      "location": "internal/db/client.go:42"
+    }
+  ],
+  "recommendations": [
+    "Use Go error handling patterns (return error, not panic)",
+    "Switch to an agent specialized in Go development"
+  ],
+  "should_retry": true,
+  "suggested_agent": "golang-pro"
+}
+```
+
+#### Scenario 2: Automatic Agent Adaptation (Cross-Run)
 
 ```yaml
 # .conductor/config.yaml
@@ -1936,7 +2224,7 @@ learning:
 [SUCCESS] Task 3 completed: GREEN
 ```
 
-#### Scenario 2: Pattern-Based Learning
+#### Scenario 3: Pattern-Based Learning
 
 ```bash
 # Run plan that encounters compilation errors
@@ -1957,7 +2245,7 @@ Common issues: syntax errors, missing imports
 Suggestion: Verify syntax before execution
 ```
 
-#### Scenario 3: Cross-Run Intelligence
+#### Scenario 4: Cross-Run Intelligence
 
 ```bash
 # Day 1: First execution
@@ -1974,7 +2262,7 @@ $ conductor learning stats feature-plan.md
 # Shows: "Success rate improved from 60% to 100%"
 ```
 
-#### Scenario 4: Exporting for Analysis
+#### Scenario 5: Exporting for Analysis
 
 ```bash
 # Export learning data
@@ -1989,6 +2277,32 @@ $ cat data.json | jq -r '.[] | select(.success == true) | .agent' | sort | uniq 
     8 backend-developer
     5 fullstack-dev
 ```
+
+#### Scenario 6: QC Context Loading
+
+```yaml
+# .conductor/config.yaml
+learning:
+  qc_reads_plan_context: true
+  qc_reads_db_context: true
+  max_context_entries: 10
+```
+
+**What happens:**
+
+1. Task executes and produces output
+2. QC agent receives context including:
+   - Last 10 execution attempts from plan file
+   - Historical patterns from database
+   - Previous QC feedback
+3. QC makes informed decision based on historical context
+4. QC can suggest alternative agents based on past successes
+
+**Benefits:**
+- QC understands task history before reviewing
+- Avoids repeating same suggestions
+- Learns from what worked and what did not
+- Provides contextually relevant recommendations
 
 ### Database Schema
 
@@ -2021,6 +2335,83 @@ CREATE TABLE approach_history (
 );
 ```
 
+### Execution History Format (v2.1.0)
+
+Each task execution attempt is recorded with the following schema:
+
+**Plan File Format (YAML):**
+```yaml
+execution_history:
+  - attempt_number: "1"
+    agent: "backend-developer"
+    verdict: "RED"
+    agent_output: |
+      Started implementing error handling...
+      Encountered issue with database connection...
+      Implementation incomplete.
+    qc_feedback: |
+      Task failed validation. Error handling not implemented properly.
+      Missing retry logic for transient failures.
+      Suggested agent: golang-pro
+    timestamp: "2025-11-15T16:41:59Z"
+
+  - attempt_number: "2"
+    agent: "golang-pro"
+    verdict: "GREEN"
+    agent_output: |
+      Implemented error handling with proper Go patterns.
+      Added retry logic with exponential backoff.
+      All tests passing.
+    qc_feedback: |
+      Implementation complete and follows Go best practices.
+      Error handling is comprehensive.
+    timestamp: "2025-11-15T16:45:30Z"
+```
+
+**Schema Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `attempt_number` | string | Sequential attempt number (1, 2, 3...) |
+| `agent` | string | Agent used for this attempt |
+| `verdict` | string | QC verdict: GREEN, RED, or YELLOW |
+| `agent_output` | string | Raw output from the task agent |
+| `qc_feedback` | string | Feedback from quality control review |
+| `timestamp` | string | ISO 8601 timestamp of execution |
+
+**Plan File Format (Markdown):**
+```markdown
+### Execution History
+
+#### Attempt 1 - 2025-11-15T16:41:59Z
+**Agent**: backend-developer
+**Verdict**: RED
+**Output**:
+```
+Started implementing error handling...
+Implementation incomplete.
+```
+**QC Feedback**:
+```
+Task failed validation. Missing retry logic.
+```
+
+#### Attempt 2 - 2025-11-15T16:45:30Z
+**Agent**: golang-pro
+**Verdict**: GREEN
+**Output**:
+```
+Implemented error handling with proper patterns.
+```
+**QC Feedback**:
+```
+Implementation complete.
+```
+```
+
+**No Duplicate Storage:**
+Each execution attempt is stored exactly once with full context. The plan file contains human-readable history while the database stores the same information in queryable format. This ensures a single source of truth without redundancy.
+
 ### Learning FAQ
 
 **Q: Does learning work with all plan formats?**
@@ -2043,6 +2434,23 @@ A: Recommended to start with `false` (manual control) and enable after understan
 
 **Q: Does learning work in CI/CD environments?**
 A: Yes, but learning database won't persist between runs unless you configure persistent storage. For CI/CD, you may want to disable learning.
+
+**Q: What's the difference between inter-retry swapping and auto_adapt_agent?**
+A: Inter-retry swapping (`swap_during_retries`) occurs during the retry loop based on QC suggestions. Auto-adapt agent (`auto_adapt_agent`) occurs at pre-task hook based on historical failures across runs.
+
+**Q: How does QC know which agent to suggest?**
+A: QC analyzes the task output and failure patterns. It can suggest agents based on:
+- Task type (Go code suggests golang-pro)
+- Failure patterns (syntax errors suggest different approach)
+- Historical success data from database context
+
+**Q: Can I disable dual feedback storage?**
+A: Yes, configure in `.conductor/config.yaml`:
+```yaml
+feedback:
+  store_in_plan_file: false  # Disable plan file storage
+  store_in_database: true    # Keep database storage only
+```
 
 ---
 
@@ -2427,6 +2835,98 @@ $ conductor learning show plan.md "Task 3"
 
 # Check available agent history
 $ conductor learning stats plan.md
+```
+
+#### Inter-Retry Swapping Not Working
+
+**Symptom**: Agent not swapping during retries despite QC suggestions
+
+**Solution:**
+```bash
+# Check swap configuration
+$ cat .conductor/config.yaml | grep swap_during_retries
+
+# Enable inter-retry swapping
+learning:
+  swap_during_retries: true  # Must be true
+
+# Verify QC response includes suggested_agent
+# Check task logs for QC response:
+$ grep "suggested_agent" .conductor/logs/task-*.log
+
+# Check QC agent returns proper JSON format
+# QC must return structured response with suggested_agent field
+```
+
+#### QC JSON Parsing Errors
+
+**Symptom**: "Failed to parse QC response" or malformed JSON errors
+
+**Solution:**
+```bash
+# Check feedback format configuration
+$ cat .conductor/config.yaml | grep format
+
+# Ensure JSON format is enabled
+feedback:
+  format: json  # Must be json for structured responses
+
+# Verify QC agent returns valid JSON
+# Common issues:
+# 1. QC agent not trained for JSON output
+# 2. Response contains non-JSON text before/after JSON
+# 3. Missing required fields (verdict is required)
+
+# Check QC logs for raw response
+$ cat .conductor/logs/qc-*.log
+
+# Fallback: Use text format if JSON parsing fails consistently
+feedback:
+  format: text  # Plain text format (less features)
+```
+
+**Valid QC JSON Response:**
+```json
+{
+  "verdict": "GREEN",
+  "feedback": "Implementation complete",
+  "issues": [],
+  "recommendations": [],
+  "should_retry": false
+}
+```
+
+**Invalid QC Response (will cause parsing errors):**
+```
+Here's my review:
+{
+  "verdict": "GREEN"
+}
+Additional notes...
+```
+
+#### Context Not Loading for QC
+
+**Symptom**: QC not seeing execution history
+
+**Solution:**
+```bash
+# Check context loading configuration
+learning:
+  qc_reads_plan_context: true   # Load from plan file
+  qc_reads_db_context: true     # Load from database
+  max_context_entries: 10       # Increase if needed
+
+# Verify plan file has execution_history section
+$ grep "execution_history" plan.yaml
+
+# Check database has execution records
+$ sqlite3 .conductor/learning/executions.db \
+  "SELECT COUNT(*) FROM task_executions;"
+
+# Increase context limit if needed
+learning:
+  max_context_entries: 20  # Default is 10
 ```
 
 #### Learning Commands Show No Data
