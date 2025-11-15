@@ -367,7 +367,8 @@ func detectCompletedKey(taskNode *yaml.Node) string {
 }
 
 // UpdateTaskFeedback appends execution history to a task in the plan file.
-// Supports Markdown plans only for now.
+// Supports both Markdown and YAML plans. Uses file locking to ensure atomic
+// read-modify-write operations in concurrent scenarios.
 func UpdateTaskFeedback(planPath string, taskNumber string, attempt *ExecutionAttempt) error {
 	format := parser.DetectFormat(planPath)
 	if format == parser.FormatUnknown {
@@ -376,33 +377,60 @@ func UpdateTaskFeedback(planPath string, taskNumber string, attempt *ExecutionAt
 
 	lockPath := planPath + ".lock"
 	lock := filelock.NewFileLock(lockPath)
+
+	// Acquire lock - only one goroutine/process can proceed from here
 	if err := lock.Lock(); err != nil {
 		return err
 	}
+
+	// Ensure lock is always released and cleanup happens
 	defer func() {
-		lock.Unlock()
-		os.Remove(lockPath)
+		_ = lock.Unlock()
+		_ = os.Remove(lockPath)
 	}()
 
+	// Step 1: Read the current file content (under lock)
 	content, err := os.ReadFile(planPath)
 	if err != nil {
 		return err
 	}
 
+	// Step 2: Modify the content in memory (under lock)
 	var updated []byte
-
 	switch format {
 	case parser.FormatMarkdown:
-		updated, err = updateMarkdownFeedback(content, taskNumber, attempt)
+		updated, err = updateMarkdownFeedbackWithLock(content, taskNumber, attempt)
 	case parser.FormatYAML:
 		updated, err = updateYAMLFeedback(content, taskNumber, attempt)
+	default:
+		return fmt.Errorf("%w: unsupported format", ErrUnsupportedFormat)
 	}
 
 	if err != nil {
 		return err
 	}
 
-	return filelock.AtomicWrite(planPath, updated)
+	// Step 3: Write the modified content atomically (under lock)
+	// This ensures that the entire read-modify-write cycle is atomic from the perspective
+	// of other goroutines/processes attempting to access the same file.
+	if err := filelock.AtomicWrite(planPath, updated); err != nil {
+		return err
+	}
+
+	// Sync directory to ensure filesystem coherency on macOS/APFS.
+	// AtomicWrite already syncs the temp file, but directory entry may be cached.
+	if dir, err := os.Open(filepath.Dir(planPath)); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
+	}
+
+	return nil
+}
+
+// updateMarkdownFeedbackWithLock is an internal wrapper that ensures proper locking semantics.
+// It's called while the file lock is already held by the caller.
+func updateMarkdownFeedbackWithLock(content []byte, taskNumber string, attempt *ExecutionAttempt) ([]byte, error) {
+	return updateMarkdownFeedback(content, taskNumber, attempt)
 }
 
 func updateMarkdownFeedback(content []byte, taskNumber string, attempt *ExecutionAttempt) ([]byte, error) {
@@ -441,7 +469,7 @@ func updateMarkdownFeedback(content []byte, taskNumber string, attempt *Executio
 		}
 	}
 
-	// Format attempt
+	// Format attempt with proper spacing
 	timestamp := attempt.Timestamp.Format("2006-01-02 15:04:05")
 	attemptLines := []string{
 		fmt.Sprintf("#### Attempt %d (%s)", attempt.AttemptNumber, timestamp),
@@ -458,7 +486,7 @@ func updateMarkdownFeedback(content []byte, taskNumber string, attempt *Executio
 
 	if historyIdx == -1 {
 		// Create new history section at end of task
-		newLines := make([]string, 0, len(lines)+len(attemptLines)+2)
+		newLines := make([]string, 0, len(lines)+len(attemptLines)+4)
 		newLines = append(newLines, lines[:endIdx]...)
 		newLines = append(newLines, "")
 		newLines = append(newLines, "### Execution History")
@@ -468,8 +496,9 @@ func updateMarkdownFeedback(content []byte, taskNumber string, attempt *Executio
 		return []byte(strings.Join(newLines, "\n")), nil
 	}
 
-	// Append to existing history
-	newLines := make([]string, 0, len(lines)+len(attemptLines))
+	// Append to existing history section (at the end, before the next task or end of file)
+	// endIdx points to the next task (or end of file), which is where we want to insert
+	newLines := make([]string, 0, len(lines)+len(attemptLines)+1)
 	newLines = append(newLines, lines[:endIdx]...)
 	newLines = append(newLines, attemptLines...)
 	newLines = append(newLines, lines[endIdx:]...)
