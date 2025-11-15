@@ -561,6 +561,121 @@ func TestLoadContext(t *testing.T) {
 	}
 }
 
+func TestBuildQCJSONPrompt(t *testing.T) {
+	tests := []struct {
+		name         string
+		basePrompt   string
+		wantContains []string
+	}{
+		{
+			name:       "adds JSON instruction",
+			basePrompt: "Review this task execution",
+			wantContains: []string{
+				"Review this task execution",
+				"IMPORTANT: Respond ONLY with valid JSON",
+				"verdict",
+				"feedback",
+				"issues",
+				"recommendations",
+				"should_retry",
+				"suggested_agent",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qc := NewQualityController(nil)
+			prompt := qc.buildQCJSONPrompt(tt.basePrompt)
+
+			for _, want := range tt.wantContains {
+				if !contains(prompt, want) {
+					t.Errorf("buildQCJSONPrompt() missing expected content %q\nGot: %s", want, prompt)
+				}
+			}
+		})
+	}
+}
+
+func TestParseQCJSON(t *testing.T) {
+	tests := []struct {
+		name        string
+		output      string
+		wantVerdict string
+		wantAgent   string
+		wantErr     bool
+	}{
+		{
+			name:        "GREEN verdict",
+			output:      `{"verdict":"GREEN","feedback":"Good"}`,
+			wantVerdict: "GREEN",
+			wantAgent:   "",
+			wantErr:     false,
+		},
+		{
+			name:        "RED with suggestion",
+			output:      `{"verdict":"RED","feedback":"Needs work","suggested_agent":"golang-pro"}`,
+			wantVerdict: "RED",
+			wantAgent:   "golang-pro",
+			wantErr:     false,
+		},
+		{
+			name:        "YELLOW verdict",
+			output:      `{"verdict":"YELLOW","feedback":"Minor issues"}`,
+			wantVerdict: "YELLOW",
+			wantAgent:   "",
+			wantErr:     false,
+		},
+		{
+			name:        "full response with issues",
+			output:      `{"verdict":"RED","feedback":"Failed","issues":[{"severity":"critical","description":"Test failed","location":"foo.go:10"}],"recommendations":["Fix test"],"should_retry":true,"suggested_agent":"test-expert"}`,
+			wantVerdict: "RED",
+			wantAgent:   "test-expert",
+			wantErr:     false,
+		},
+		{
+			name:        "invalid JSON",
+			output:      `not json`,
+			wantVerdict: "",
+			wantAgent:   "",
+			wantErr:     true,
+		},
+		{
+			name:        "missing verdict",
+			output:      `{"feedback":"Something"}`,
+			wantVerdict: "",
+			wantAgent:   "",
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := parseQCJSON(tt.output)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("parseQCJSON() error = nil, wantErr = true")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("parseQCJSON() unexpected error = %v", err)
+				return
+			}
+
+			if resp.Verdict != tt.wantVerdict {
+				t.Errorf("parseQCJSON() verdict = %q, want %q", resp.Verdict, tt.wantVerdict)
+			}
+
+			if resp.SuggestedAgent != tt.wantAgent {
+				t.Errorf("parseQCJSON() suggested_agent = %q, want %q", resp.SuggestedAgent, tt.wantAgent)
+			}
+		})
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		func() bool {

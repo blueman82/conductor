@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -59,6 +60,22 @@ Respond with GREEN if all requirements met, RED if needs rework, YELLOW if minor
 
 	// Add formatting instructions
 	return agent.PrepareAgentPrompt(basePrompt)
+}
+
+// buildQCJSONPrompt appends JSON instruction to QC prompts
+func (qc *QualityController) buildQCJSONPrompt(basePrompt string) string {
+	jsonInstruction := `
+
+IMPORTANT: Respond ONLY with valid JSON in this format:
+{
+  "verdict": "GREEN|RED|YELLOW",
+  "feedback": "Detailed review feedback",
+  "issues": [{"severity": "critical|warning|info", "description": "...", "location": "..."}],
+  "recommendations": ["suggestion1"],
+  "should_retry": false,
+  "suggested_agent": "agent-name"
+}`
+	return basePrompt + jsonInstruction
 }
 
 // ParseReviewResponse extracts the QC flag and feedback from agent output
@@ -127,8 +144,11 @@ func ParseReviewResponse(output string) (flag string, feedback string) {
 
 // Review executes a quality control review of a task output
 func (qc *QualityController) Review(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
-	// Build the review prompt
-	prompt := qc.BuildReviewPrompt(task, output)
+	// Build the base review prompt
+	basePrompt := qc.BuildReviewPrompt(task, output)
+
+	// Add JSON instruction
+	prompt := qc.buildQCJSONPrompt(basePrompt)
 
 	// Create a review task for the invoker
 	reviewTask := models.Task{
@@ -144,7 +164,17 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 		return nil, fmt.Errorf("QC review failed: %w", err)
 	}
 
-	// Parse the review response
+	// Try parsing as JSON first
+	qcResp, jsonErr := parseQCJSON(result.Output)
+	if jsonErr == nil {
+		// Success: use JSON response
+		return &ReviewResult{
+			Flag:     qcResp.Verdict,
+			Feedback: qcResp.Feedback,
+		}, nil
+	}
+
+	// Fallback: use legacy parsing
 	flag, feedback := ParseReviewResponse(result.Output)
 
 	return &ReviewResult{
@@ -162,6 +192,24 @@ func (qc *QualityController) ShouldRetry(result *ReviewResult, currentAttempt in
 
 	// Check if we haven't exceeded max retries
 	return currentAttempt < qc.MaxRetries
+}
+
+// parseQCJSON parses JSON response from QC agent, with strict validation
+func parseQCJSON(output string) (*models.QCResponse, error) {
+	var resp models.QCResponse
+
+	// Try parsing as JSON
+	err := json.Unmarshal([]byte(output), &resp)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	// Validate parsed JSON
+	if err := resp.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return &resp, nil
 }
 
 // LoadContext loads execution history from database for the task
