@@ -1659,3 +1659,149 @@ func TestQualityControlDefaults(t *testing.T) {
 		t.Errorf("QualityControl.RetryOnRed = %d, want 2", cfg.QualityControl.RetryOnRed)
 	}
 }
+
+// TestConfig_FeedbackDefaults tests that feedback config has correct defaults
+func TestConfig_FeedbackDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if !cfg.Feedback.StoreInPlanFile {
+		t.Errorf("Feedback.StoreInPlanFile = %v, want true", cfg.Feedback.StoreInPlanFile)
+	}
+	if !cfg.Feedback.StoreInDatabase {
+		t.Errorf("Feedback.StoreInDatabase = %v, want true", cfg.Feedback.StoreInDatabase)
+	}
+	if cfg.Feedback.Format != "json" {
+		t.Errorf("Feedback.Format = %q, want %q", cfg.Feedback.Format, "json")
+	}
+	if !cfg.Feedback.StoreOnGreen {
+		t.Errorf("Feedback.StoreOnGreen = %v, want true", cfg.Feedback.StoreOnGreen)
+	}
+	if !cfg.Feedback.StoreOnRed {
+		t.Errorf("Feedback.StoreOnRed = %v, want true", cfg.Feedback.StoreOnRed)
+	}
+	if !cfg.Feedback.StoreOnYellow {
+		t.Errorf("Feedback.StoreOnYellow = %v, want true", cfg.Feedback.StoreOnYellow)
+	}
+}
+
+// TestConfig_EnhancedLearningDefaults tests new learning config defaults
+func TestConfig_EnhancedLearningDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if !cfg.Learning.SwapDuringRetries {
+		t.Errorf("Learning.SwapDuringRetries = %v, want true", cfg.Learning.SwapDuringRetries)
+	}
+	if !cfg.Learning.QCReadsPlanContext {
+		t.Errorf("Learning.QCReadsPlanContext = %v, want true", cfg.Learning.QCReadsPlanContext)
+	}
+	if !cfg.Learning.QCReadsDBContext {
+		t.Errorf("Learning.QCReadsDBContext = %v, want true", cfg.Learning.QCReadsDBContext)
+	}
+	if cfg.Learning.MaxContextEntries != 10 {
+		t.Errorf("Learning.MaxContextEntries = %d, want 10", cfg.Learning.MaxContextEntries)
+	}
+}
+
+// TestConfig_FeedbackYAMLLoading tests loading feedback config from YAML
+func TestConfig_FeedbackYAMLLoading(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `feedback:
+  store_in_plan_file: false
+  store_in_database: false
+  format: plain
+  store_on_green: false
+  store_on_red: true
+  store_on_yellow: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.Feedback.StoreInPlanFile {
+		t.Errorf("Feedback.StoreInPlanFile = %v, want false", cfg.Feedback.StoreInPlanFile)
+	}
+	if cfg.Feedback.StoreInDatabase {
+		t.Errorf("Feedback.StoreInDatabase = %v, want false", cfg.Feedback.StoreInDatabase)
+	}
+	if cfg.Feedback.Format != "plain" {
+		t.Errorf("Feedback.Format = %q, want %q", cfg.Feedback.Format, "plain")
+	}
+	if cfg.Feedback.StoreOnGreen {
+		t.Errorf("Feedback.StoreOnGreen = %v, want false", cfg.Feedback.StoreOnGreen)
+	}
+	if !cfg.Feedback.StoreOnRed {
+		t.Errorf("Feedback.StoreOnRed = %v, want true", cfg.Feedback.StoreOnRed)
+	}
+	if !cfg.Feedback.StoreOnYellow {
+		t.Errorf("Feedback.StoreOnYellow = %v, want true", cfg.Feedback.StoreOnYellow)
+	}
+}
+
+// TestConfig_EnhancedLearningYAMLLoading tests loading enhanced learning fields from YAML
+func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `learning:
+  enabled: true
+  db_path: /custom/db.db
+  auto_adapt_agent: true
+  swap_during_retries: false
+  enhance_prompts: false
+  qc_reads_plan_context: false
+  qc_reads_db_context: false
+  max_context_entries: 20
+  min_failures_before_adapt: 3
+  keep_executions_days: 60
+  max_executions_per_task: 200
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if !cfg.Learning.Enabled {
+		t.Errorf("Learning.Enabled = %v, want true", cfg.Learning.Enabled)
+	}
+	if cfg.Learning.DBPath != "/custom/db.db" {
+		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, "/custom/db.db")
+	}
+	if !cfg.Learning.AutoAdaptAgent {
+		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
+	}
+	if cfg.Learning.SwapDuringRetries {
+		t.Errorf("Learning.SwapDuringRetries = %v, want false", cfg.Learning.SwapDuringRetries)
+	}
+	if cfg.Learning.EnhancePrompts {
+		t.Errorf("Learning.EnhancePrompts = %v, want false", cfg.Learning.EnhancePrompts)
+	}
+	if cfg.Learning.QCReadsPlanContext {
+		t.Errorf("Learning.QCReadsPlanContext = %v, want false", cfg.Learning.QCReadsPlanContext)
+	}
+	if cfg.Learning.QCReadsDBContext {
+		t.Errorf("Learning.QCReadsDBContext = %v, want false", cfg.Learning.QCReadsDBContext)
+	}
+	if cfg.Learning.MaxContextEntries != 20 {
+		t.Errorf("Learning.MaxContextEntries = %d, want 20", cfg.Learning.MaxContextEntries)
+	}
+	if cfg.Learning.MinFailuresBeforeAdapt != 3 {
+		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 3", cfg.Learning.MinFailuresBeforeAdapt)
+	}
+	if cfg.Learning.KeepExecutionsDays != 60 {
+		t.Errorf("Learning.KeepExecutionsDays = %d, want 60", cfg.Learning.KeepExecutionsDays)
+	}
+	if cfg.Learning.MaxExecutionsPerTask != 200 {
+		t.Errorf("Learning.MaxExecutionsPerTask = %d, want 200", cfg.Learning.MaxExecutionsPerTask)
+	}
+}
