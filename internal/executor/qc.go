@@ -210,20 +210,77 @@ func (qc *QualityController) ShouldRetry(result *ReviewResult, currentAttempt in
 
 // parseQCJSON parses JSON response from QC agent, with strict validation
 func parseQCJSON(output string) (*models.QCResponse, error) {
+	// Step 1: Extract "result" field from Claude CLI envelope
+	// The output is wrapped in a JSON envelope with a nested "result" field
+	claudeOut, _ := agent.ParseClaudeOutput(output)
+	actualOutput := claudeOut.Content
+
+	// Fallback to raw output if ParseClaudeOutput returns empty content
+	if actualOutput == "" {
+		actualOutput = output
+	}
+
+	// Step 1.5: Extract JSON from markdown code fences if present
+	// QC agent may wrap JSON in ```json...```
+	if strings.HasPrefix(strings.TrimSpace(actualOutput), "```") {
+		actualOutput = extractJSONFromCodeFence(actualOutput)
+	}
+
 	var resp models.QCResponse
 
-	// Try parsing as JSON
-	err := json.Unmarshal([]byte(output), &resp)
+	// Step 2: Parse extracted JSON as QCResponse
+	err := json.Unmarshal([]byte(actualOutput), &resp)
 	if err != nil {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 
-	// Validate parsed JSON
+	// Step 3: Validate parsed JSON
 	if err := resp.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
 	return &resp, nil
+}
+
+// extractJSONFromCodeFence removes markdown code fence wrappers (```json...```)
+// Returns the extracted JSON or the original string if no fences found
+func extractJSONFromCodeFence(content string) string {
+	trimmed := strings.TrimSpace(content)
+
+	// Look for ```json...``` pattern
+	if strings.HasPrefix(trimmed, "```json") {
+		// Find opening fence
+		start := strings.Index(trimmed, "```json")
+		if start != -1 {
+			// Move past the opening fence and any newline
+			start += len("```json")
+			if start < len(trimmed) && trimmed[start] == '\n' {
+				start++
+			}
+
+			// Find closing fence
+			end := strings.LastIndex(trimmed, "```")
+			if end > start {
+				return strings.TrimSpace(trimmed[start:end])
+			}
+		}
+	}
+
+	// Fallback: look for any ``` markers
+	if strings.HasPrefix(trimmed, "```") {
+		start := strings.Index(trimmed, "```") + 3
+		// Skip any language identifier on same line
+		if newlineIdx := strings.Index(trimmed[start:], "\n"); newlineIdx != -1 {
+			start += newlineIdx + 1
+		}
+
+		end := strings.LastIndex(trimmed, "```")
+		if end > start {
+			return strings.TrimSpace(trimmed[start:end])
+		}
+	}
+
+	return content
 }
 
 // LoadContext loads execution history from database for the task

@@ -836,6 +836,20 @@ func TestParseQCJSON(t *testing.T) {
 			wantAgent:   "",
 			wantErr:     true,
 		},
+		{
+			name:        "Claude CLI envelope format",
+			output:      `{"type":"result","subtype":"success","result":"{\"verdict\":\"GREEN\",\"feedback\":\"Good work\",\"issues\":[],\"recommendations\":[],\"should_retry\":false,\"suggested_agent\":\"\"}"}`,
+			wantVerdict: "GREEN",
+			wantAgent:   "",
+			wantErr:     false,
+		},
+		{
+			name:        "Claude envelope with RED and agent suggestion",
+			output:      `{"type":"result","subtype":"success","result":"{\"verdict\":\"RED\",\"feedback\":\"Tests failing\",\"issues\":[],\"recommendations\":[],\"should_retry\":true,\"suggested_agent\":\"golang-pro\"}"}`,
+			wantVerdict: "RED",
+			wantAgent:   "golang-pro",
+			wantErr:     false,
+		},
 	}
 
 	for _, tt := range tests {

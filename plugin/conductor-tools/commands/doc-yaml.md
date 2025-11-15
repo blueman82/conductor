@@ -1810,10 +1810,78 @@ plan:
             - "Throw ValidationError for invalid input"
             - "Catch and log DatabaseError, return null"
 
-      code_quality:
-        purpose: |
-          Mandatory code quality checks that MUST pass before considering a task complete.
-          Run these commands before committing code.
+      verification:  # REQUIRED - quality gates for task completion
+        automated_tests:
+          command: "language-specific test command (pytest, npm test, go test ./...)"
+          expected_output: |
+            All tests passing for this task's test file
+
+        success_criteria:
+          - "All tests pass"
+          - "Type checker passes (mypy, tsc, go vet)"
+          - "Code compiles/runs without errors"
+
+      code_quality:  # REQUIRED - language-specific quality pipeline
+        # Choose the appropriate section based on your task's language
+        # Include ONLY the language section that applies to your task
+
+        python:
+          full_quality_pipeline:
+            command: |
+              # Run all quality checks in sequence
+              python -m black . && \
+              python -m mypy src/ && \
+              python -m pytest
+            description: "Complete quality check pipeline for Python"
+            exit_on_failure: true
+
+        typescript:
+          full_quality_pipeline:
+            command: |
+              # Run all quality checks in sequence
+              npx prettier --write . && \
+              npx tsc --noEmit && \
+              npm test
+            description: "Complete quality check pipeline for TypeScript"
+            exit_on_failure: true
+
+        go:
+          full_quality_pipeline:
+            command: |
+              # Run all quality checks in sequence
+              gofmt -w . && \
+              go vet ./... && \
+              go test ./...
+            description: "Complete quality check pipeline for Go"
+            exit_on_failure: true
+
+      commit:
+        # NOTE: This 'commit' object is for PLANNING the commit you intend to make.
+        type: "feat"  # Options: feat, fix, test, refactor, docs, chore
+        message: "descriptive commit message"
+        body: |
+          Optional commit body explaining why this change was made.
+
+        files:
+          - "path/to/implementation.ext"
+          - "path/to/test.ext"
+
+  # Advanced Examples: Detailed Quality Control (Expansion of Required Fields)
+  #
+  # NOTE: The examples below show advanced usage of verification and code_quality sections.
+  # Basic verification and code_quality sections are REQUIRED for every task (see template above).
+  # Use these examples as reference for comprehensive quality gates when needed.
+
+  ## Advanced code_quality Configuration
+
+  # The code_quality section can be expanded beyond the basic full_quality_pipeline
+  # to include detailed tool-by-tool configuration, as shown below:
+
+  advanced_code_quality_examples:
+    code_quality:
+      purpose: |
+        Mandatory code quality checks that MUST pass before considering a task complete.
+        Run these commands before committing code.
 
         python:
           formatter:
@@ -2396,22 +2464,40 @@ plan:
               - "Link to issue tracking proper fix"
               - "Scope exemption as narrowly as possible (line-level, not file-level)"
 
-      commit:
-        # NOTE: This 'commit' object is for PLANNING the commit you intend to make.
-        # After task completion, conductor will add a separate 'git_commit' field
-        # containing the actual git hash. These serve different purposes:
-        #   - commit: (object) Planning - what commit WILL be made
-        #   - git_commit: (string) Tracking - what commit WAS made
-        type: "feat"  # Options: feat, fix, test, refactor, docs, chore
-        message: "add user authentication flow"
-        body: |
-          Optional commit body explaining why this change was made.
-          Can include breaking changes, references to issues, etc.
+  ## Advanced verification Configuration
 
-        files:
-          - "path/to/implementation.ext"
-          - "path/to/test.ext"
-          - "path/to/types.ext"
+  # The verification section can be expanded beyond the basic structure
+  # to include detailed manual testing steps, quality gates, and success criteria:
+
+  advanced_verification_examples:
+    verification:
+      manual_testing:
+        - step: "Start the development server"
+          command: "npm run dev"
+        - step: "Navigate to /feature-path"
+          expected: "Should see feature working"
+        - step: "Test edge case X"
+          expected: "Should handle gracefully"
+
+      automated_tests:
+        command: "npm test path/to/test.ext"
+        expected_output: |
+          All tests passing:
+          ✓ Feature test 1
+          ✓ Feature test 2
+          ✓ Edge case test
+
+      success_criteria:
+        - "All unit tests pass"
+        - "No TypeScript errors"
+        - "Linter passes"
+
+      quality_gates:
+        purpose: |
+          Automated quality gates that must pass before a task is considered complete.
+          These are mandatory checks that enforce code quality standards.
+
+        # (Full quality_gates examples continue from the detailed code_quality examples above)
 
   ## Task Lifecycle: From Plan to Completion
 
@@ -3290,7 +3376,8 @@ After generating the YAML plan:
 2. **Validate completeness**:
    - Every task has test-first approach defined
    - Every task has clear file paths (no placeholders)
-   - Every task has verification steps
+   - **Every task has verification section with automated_tests and success_criteria (REQUIRED)**
+   - **Every task has code_quality section with full_quality_pipeline for the appropriate language (REQUIRED)**
    - Every task has a worktree_group assignment
    - Every task has an agent assigned (singular field, not array)
    - All assigned agents exist in the discovered agent list
@@ -3351,6 +3438,7 @@ After generating the YAML plan:
 - **Be educational**: Explain the "why" behind decisions in description fields
 - **Be thorough**: Assume zero codebase knowledge from the engineer
 - **Be test-focused**: TDD is mandatory, explain test design clearly with examples
+- **Be quality-focused**: Every task MUST include both verification (automated_tests, success_criteria) and code_quality (full_quality_pipeline) sections - these are not optional
 - **Be commit-focused**: Make commit strategy explicit with clear sequence
 - **Be agent-aware**: Assign the most appropriate agent from the discovered list to each task based on the work type. Every task MUST have an agent assigned (singular field, not array).
 - **Be YAML-compliant**: Ensure proper syntax, indentation, and structure
