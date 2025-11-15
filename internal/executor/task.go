@@ -34,6 +34,7 @@ type Reviewer interface {
 type LearningStore interface {
 	AnalyzeFailures(ctx context.Context, planFile, taskNumber string, minFailures int) (*learning.FailureAnalysis, error)
 	RecordExecution(ctx context.Context, exec *learning.TaskExecution) error
+	GetExecutionHistory(ctx context.Context, planFile, taskNumber string) ([]*learning.TaskExecution, error)
 }
 
 // TaskExecution represents a single task execution record for learning storage.
@@ -596,6 +597,11 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		result.Output = output
 		result.Duration = totalDuration
 
+		// Store agent output to plan file for this attempt (after agent invocation)
+		if err := te.updateFeedback(task, attempt+1, invocation.Output, "", ""); err != nil {
+			// Log warning but continue (non-fatal)
+		}
+
 		// Initialize execution attempt record
 		execAttempt := models.ExecutionAttempt{
 			Attempt:     attempt + 1, // 1-indexed
@@ -636,6 +642,14 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			// Store QC feedback in execution attempt
 			execAttempt.QCFeedback = review.Feedback
 			execAttempt.Verdict = review.Flag
+
+			// Store QC feedback to plan file for this attempt (after QC review)
+			verdict := review.Flag
+			qcFeedback := review.Feedback
+			if err := te.updateFeedback(task, attempt+1, invocation.Output, qcFeedback, verdict); err != nil {
+				// Log warning but continue (non-fatal)
+			}
+
 			// Call QC review hook to extract patterns and store metadata
 			te.qcReviewHook(ctx, &task, review.Flag, review.Feedback, output)
 			// Update result task to include metadata
@@ -677,14 +691,27 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			// Track RED failures for agent swap
 			redCount := attempt + 1
 
-			// Agent swap during retries: if enabled and threshold reached and QC suggested agent
-			if te.SwapDuringRetries &&
-			   redCount >= te.MinFailuresBeforeAdapt &&
-			   review.SuggestedAgent != "" &&
-			   task.Agent != review.SuggestedAgent {
-				// Swap agent for next retry
-				task.Agent = review.SuggestedAgent
-				result.Task.Agent = review.SuggestedAgent
+			// Agent swap during retries: if enabled and threshold reached
+			if te.SwapDuringRetries && redCount >= te.MinFailuresBeforeAdapt {
+				// Load execution history for agent selection
+				var history []*learning.TaskExecution
+				if te.LearningStore != nil {
+					ctx2 := context.Background()
+					fileToQuery := te.PlanFile
+					if task.SourceFile != "" {
+						fileToQuery = task.SourceFile
+					}
+					history, _ = te.LearningStore.GetExecutionHistory(ctx2, fileToQuery, task.Number)
+				}
+
+				// Call SelectBetterAgent to determine best agent
+				if newAgent, reason := learning.SelectBetterAgent(task.Agent, history, review.SuggestedAgent); newAgent != "" && newAgent != task.Agent {
+					// Log agent swap (in production: use proper logger)
+					// fmt.Printf("Swapping agent: %s → %s (reason: %s)\n", task.Agent, newAgent, reason)
+					_ = reason // Suppress unused variable warning
+					task.Agent = newAgent
+					result.Task.Agent = newAgent
+				}
 			}
 		default:
 			lastErr = NewTaskError(task.Number, fmt.Sprintf("quality control returned unsupported flag %q", review.Flag), nil)

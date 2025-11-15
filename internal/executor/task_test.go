@@ -1168,6 +1168,20 @@ func (m *MockLearningStore) GetRecordedExecutions() []*learning.TaskExecution {
 	return append([]*learning.TaskExecution{}, m.RecordedExecutions...)
 }
 
+func (m *MockLearningStore) GetExecutionHistory(ctx context.Context, planFile, taskNumber string) ([]*learning.TaskExecution, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	// Return recorded executions for the requested task
+	var history []*learning.TaskExecution
+	for _, exec := range m.RecordedExecutions {
+		if exec.PlanFile == planFile && exec.TaskNumber == taskNumber {
+			history = append(history, exec)
+		}
+	}
+	return history, nil
+}
+
 // TestPreTaskHook_NoHistory verifies that hook is no-op when no failure history exists
 func TestPreTaskHook_NoHistory(t *testing.T) {
 	mockStore := &MockLearningStore{
@@ -3544,4 +3558,177 @@ func TestDefaultTaskExecutor_UpdateFeedback_ErrorHandling(t *testing.T) {
 			t.Errorf("Expected nil error for invalid task, got: %v", err)
 		}
 	})
+}
+// mockInvokerWithOutput is a simple mock that returns a fixed output
+type mockInvokerWithOutput struct {
+	output string
+}
+
+func (m *mockInvokerWithOutput) Invoke(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+	return &agent.InvocationResult{
+		Output:   m.output,
+		ExitCode: 0,
+		Duration: 100 * time.Millisecond,
+	}, nil
+}
+
+// mockReviewer provides a simple mock reviewer with a custom review function
+type mockReviewer struct {
+	reviewFunc func(ctx context.Context, task models.Task, output string) (*ReviewResult, error)
+}
+
+func (m *mockReviewer) Review(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
+	if m.reviewFunc != nil {
+		return m.reviewFunc(ctx, task, output)
+	}
+	return &ReviewResult{Flag: models.StatusGreen, Feedback: "OK"}, nil
+}
+
+func (m *mockReviewer) ShouldRetry(result *ReviewResult, currentAttempt int) bool {
+	return result != nil && result.Flag == models.StatusRed && currentAttempt < 3
+}
+
+func TestExecute_CallsUpdateFeedbackDuringRetries(t *testing.T) {
+	// Create temp plan file with proper format
+	tmpDir := t.TempDir()
+	planPath := filepath.Join(tmpDir, "test-plan.md")
+	planContent := `# Test Plan
+
+- [ ] Task 5: Test Task
+
+## Task 5: Test Task
+**Status**: pending
+**Agent**: backend-developer
+
+Test task for feedback updates.
+`
+	if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Mock invoker that returns output
+	mockInvoker := &mockInvokerWithOutput{
+		output: `{"content":"Test output completed"}`,
+	}
+
+	// Mock QC that returns RED on first attempt, GREEN on second
+	attemptCount := 0
+	mockQC := &mockReviewer{
+		reviewFunc: func(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
+			attemptCount++
+			if attemptCount == 1 {
+				return &ReviewResult{Flag: models.StatusRed, Feedback: "Issues found", SuggestedAgent: "golang-pro"}, nil
+			}
+			return &ReviewResult{Flag: models.StatusGreen, Feedback: "Looks good"}, nil
+		},
+	}
+
+	cfg := TaskExecutorConfig{
+		PlanPath: planPath,
+		QualityControl: models.QualityControlConfig{
+			Enabled:     true,
+			RetryOnRed:  3,
+			ReviewAgent: "quality-control",
+		},
+	}
+
+	te, err := NewTaskExecutor(mockInvoker, mockQC, nil, cfg)
+	if err != nil {
+		t.Fatalf("NewTaskExecutor failed: %v", err)
+	}
+
+	task := models.Task{Number: "5", Name: "Test Task", Prompt: "Do something"}
+	result, err := te.Execute(context.Background(), task)
+
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("Expected GREEN status, got %s", result.Status)
+	}
+
+	// Verify execution history was written to plan file
+	content, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "Execution History") {
+		t.Error("Expected 'Execution History' section in plan file")
+	}
+
+	if !strings.Contains(contentStr, "Attempt 1") {
+		t.Error("Expected 'Attempt 1' in execution history")
+	}
+
+	if !strings.Contains(contentStr, "Attempt 2") {
+		t.Error("Expected 'Attempt 2' in execution history (after retry)")
+	}
+}
+
+func TestExecute_CallsSelectBetterAgentOnRetry(t *testing.T) {
+	// This test verifies SelectBetterAgent is called during agent swap
+	// Create minimal learning store for history
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	store, err := learning.NewStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	mockInvoker := &mockInvokerWithOutput{output: `{"content":"test output"}`}
+
+	attemptCount := 0
+	mockQC := &mockReviewer{
+		reviewFunc: func(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
+			attemptCount++
+			if attemptCount < 3 {
+				return &ReviewResult{Flag: models.StatusRed, Feedback: "Retry needed", SuggestedAgent: "golang-pro"}, nil
+			}
+			return &ReviewResult{Flag: models.StatusGreen, Feedback: "Good"}, nil
+		},
+	}
+
+	// Use a mock updater to avoid file system errors
+	mockUpdater := &recordingUpdater{}
+
+	cfg := TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:     true,
+			RetryOnRed:  5,
+			ReviewAgent: "quality-control",
+		},
+	}
+
+	te, err := NewTaskExecutor(mockInvoker, mockQC, mockUpdater, cfg)
+	if err != nil {
+		t.Fatalf("NewTaskExecutor failed: %v", err)
+	}
+
+	te.LearningStore = store
+	te.SwapDuringRetries = true
+	te.MinFailuresBeforeAdapt = 2
+	te.PlanFile = "test-plan.md"
+
+	task := models.Task{Number: "1", Name: "Test", Prompt: "Do something", Agent: "backend-developer"}
+	result, _ := te.Execute(context.Background(), task)
+
+	// Verify agent was swapped (SelectBetterAgent was called)
+	if result.Task.Agent == "backend-developer" {
+		t.Error("Expected agent to be swapped from backend-developer")
+	}
+
+	// Should have swapped to golang-pro (QC suggestion)
+	if result.Task.Agent != "golang-pro" {
+		t.Errorf("Expected agent to be swapped to golang-pro, got %s", result.Task.Agent)
+	}
+
+	// Verify we had 3 attempts (2 RED, 1 GREEN)
+	if attemptCount != 3 {
+		t.Errorf("Expected 3 attempts, got %d", attemptCount)
+	}
 }
