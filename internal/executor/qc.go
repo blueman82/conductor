@@ -14,9 +14,10 @@ import (
 
 // QualityController manages quality control reviews using Claude Code agents
 type QualityController struct {
-	Invoker     InvokerInterface
-	ReviewAgent string // Agent name to use for reviews (e.g., "quality-control")
-	MaxRetries  int    // Maximum number of retry attempts for RED responses
+	Invoker       InvokerInterface
+	ReviewAgent   string          // Agent name to use for reviews (e.g., "quality-control")
+	MaxRetries    int             // Maximum number of retry attempts for RED responses
+	LearningStore *learning.Store // Learning store for historical context (optional)
 }
 
 // InvokerInterface defines the interface for agent invocation
@@ -26,21 +27,23 @@ type InvokerInterface interface {
 
 // ReviewResult captures the result of a quality control review
 type ReviewResult struct {
-	Flag     string // "GREEN", "RED", or "YELLOW"
-	Feedback string // Detailed feedback from the reviewer
+	Flag           string // "GREEN", "RED", or "YELLOW"
+	Feedback       string // Detailed feedback from the reviewer
+	SuggestedAgent string // Alternative agent suggestion for retry
 }
 
 // NewQualityController creates a new QualityController with default settings
 func NewQualityController(invoker InvokerInterface) *QualityController {
 	return &QualityController{
-		Invoker:     invoker,
-		ReviewAgent: "quality-control",
-		MaxRetries:  2,
+		Invoker:       invoker,
+		ReviewAgent:   "quality-control",
+		MaxRetries:    2,
+		LearningStore: nil, // Set externally when learning is enabled
 	}
 }
 
 // BuildReviewPrompt creates a comprehensive review prompt for the QC agent
-func (qc *QualityController) BuildReviewPrompt(task models.Task, output string) string {
+func (qc *QualityController) BuildReviewPrompt(ctx context.Context, task models.Task, output string) string {
 	basePrompt := fmt.Sprintf(`Review the following task execution:
 
 Task: %s
@@ -50,13 +53,23 @@ Requirements:
 
 Agent Output:
 %s
+`, task.Name, task.Prompt, output)
+
+	// Load historical context if learning enabled
+	if qc.LearningStore != nil {
+		if historicalContext, err := qc.LoadContext(ctx, task, qc.LearningStore); err == nil && historicalContext != "" {
+			basePrompt += "\n\n" + historicalContext
+		}
+	}
+
+	basePrompt += `
 
 Provide quality control review in this format:
 Quality Control: [GREEN/RED/YELLOW]
 Feedback: [your detailed feedback]
 
 Respond with GREEN if all requirements met, RED if needs rework, YELLOW if minor issues.
-`, task.Name, task.Prompt, output)
+`
 
 	// Add formatting instructions
 	return agent.PrepareAgentPrompt(basePrompt)
@@ -83,7 +96,7 @@ func ParseReviewResponse(output string) (flag string, feedback string) {
 	// If output is JSON-wrapped (from claude CLI invocation), extract the "result" field
 	if strings.Contains(output, `"result"`) && strings.Contains(output, `"type"`) {
 		// Try to extract result field from JSON
-		resultRegex := regexp.MustCompile(`"result":\s*"([^"]*(?:\\.[^"]*)*)`)
+		resultRegex := regexp.MustCompile(`"result":\s*"([^"]*(?:\\.[^"]*)*)"`)
 		matches := resultRegex.FindStringSubmatch(output)
 		if len(matches) > 1 {
 			// Unescape the JSON string
@@ -144,8 +157,8 @@ func ParseReviewResponse(output string) (flag string, feedback string) {
 
 // Review executes a quality control review of a task output
 func (qc *QualityController) Review(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
-	// Build the base review prompt
-	basePrompt := qc.BuildReviewPrompt(task, output)
+	// Build the base review prompt with historical context
+	basePrompt := qc.BuildReviewPrompt(ctx, task, output)
 
 	// Add JSON instruction
 	prompt := qc.buildQCJSONPrompt(basePrompt)
@@ -169,8 +182,9 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 	if jsonErr == nil {
 		// Success: use JSON response
 		return &ReviewResult{
-			Flag:     qcResp.Verdict,
-			Feedback: qcResp.Feedback,
+			Flag:           qcResp.Verdict,
+			Feedback:       qcResp.Feedback,
+			SuggestedAgent: qcResp.SuggestedAgent,
 		}, nil
 	}
 

@@ -69,7 +69,8 @@ func TestBuildReviewPrompt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qc := NewQualityController(nil)
-			prompt := qc.BuildReviewPrompt(tt.task, tt.output)
+			ctx := context.Background()
+			prompt := qc.BuildReviewPrompt(ctx, tt.task, tt.output)
 
 			for _, want := range tt.wantContains {
 				if !contains(prompt, want) {
@@ -78,6 +79,71 @@ func TestBuildReviewPrompt(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildReviewPromptWithLearning(t *testing.T) {
+	// Create in-memory store
+	store, err := learning.NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Add some historical data
+	task := models.Task{
+		Number:     "1",
+		Name:       "Test task",
+		SourceFile: "plan.md",
+	}
+
+	exec := &learning.TaskExecution{
+		PlanFile:     "plan.md",
+		RunNumber:    1,
+		TaskNumber:   "1",
+		TaskName:     "Test task",
+		Success:      false,
+		QCVerdict:    "RED",
+		QCFeedback:   "Tests failed",
+		ErrorMessage: "compilation error",
+	}
+
+	if err := store.RecordExecution(context.Background(), exec); err != nil {
+		t.Fatalf("RecordExecution() error = %v", err)
+	}
+
+	// Test with learning enabled
+	t.Run("includes historical context when learning enabled", func(t *testing.T) {
+		qc := NewQualityController(nil)
+		qc.LearningStore = store
+
+		ctx := context.Background()
+		prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
+
+		// Should include historical context
+		if !contains(prompt, "=== Historical Attempts ===") {
+			t.Error("BuildReviewPrompt() missing historical attempts header")
+		}
+		if !contains(prompt, "Tests failed") {
+			t.Error("BuildReviewPrompt() missing historical feedback")
+		}
+		if !contains(prompt, "compilation error") {
+			t.Error("BuildReviewPrompt() missing historical error")
+		}
+	})
+
+	// Test without learning
+	t.Run("no historical context when learning disabled", func(t *testing.T) {
+		qc := NewQualityController(nil)
+		qc.LearningStore = nil
+
+		ctx := context.Background()
+		prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
+
+		// Should NOT include historical context
+		if contains(prompt, "=== Historical Attempts ===") {
+			t.Error("BuildReviewPrompt() should not include historical context when learning disabled")
+		}
+	})
 }
 
 func TestParseReviewResponse(t *testing.T) {
@@ -334,6 +400,76 @@ func TestReview(t *testing.T) {
 	}
 }
 
+func TestReviewWithLearning(t *testing.T) {
+	// Create in-memory store
+	store, err := learning.NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	defer store.Close()
+
+	task := models.Task{
+		Number:     "1",
+		Name:       "Test task",
+		SourceFile: "plan.md",
+		Prompt:     "Do something",
+	}
+
+	// Add historical failure
+	exec := &learning.TaskExecution{
+		PlanFile:     "plan.md",
+		RunNumber:    1,
+		TaskNumber:   "1",
+		TaskName:     "Test task",
+		Success:      false,
+		QCVerdict:    "RED",
+		QCFeedback:   "Previous attempt failed",
+		ErrorMessage: "compilation error",
+	}
+
+	if err := store.RecordExecution(context.Background(), exec); err != nil {
+		t.Fatalf("RecordExecution() error = %v", err)
+	}
+
+	// Mock that captures the prompt
+	var capturedPrompt string
+	mock := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			capturedPrompt = task.Prompt
+			return &agent.InvocationResult{
+				Output:   "Quality Control: GREEN\n\nLooks good now!",
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := NewQualityController(mock)
+	qc.LearningStore = store
+
+	ctx := context.Background()
+	result, err := qc.Review(ctx, task, "Task output")
+
+	if err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+
+	if result.Flag != models.StatusGreen {
+		t.Errorf("Review() Flag = %q, want GREEN", result.Flag)
+	}
+
+	// Verify historical context was included in prompt
+	if !contains(capturedPrompt, "=== Historical Attempts ===") {
+		t.Error("Review() prompt missing historical context header")
+	}
+	if !contains(capturedPrompt, "Previous attempt failed") {
+		t.Error("Review() prompt missing previous QC feedback")
+	}
+	if !contains(capturedPrompt, "compilation error") {
+		t.Error("Review() prompt missing previous error message")
+	}
+}
+
 func TestQualityControlFlow(t *testing.T) {
 	// Integration test of full QC workflow
 	t.Run("complete workflow with GREEN response", func(t *testing.T) {
@@ -432,16 +568,20 @@ func TestNewQualityController(t *testing.T) {
 	if qc.MaxRetries != 2 {
 		t.Errorf("NewQualityController() MaxRetries = %d, want 2", qc.MaxRetries)
 	}
+
+	if qc.LearningStore != nil {
+		t.Errorf("NewQualityController() LearningStore = %v, want nil", qc.LearningStore)
+	}
 }
 
 // Helper function to check if a string contains a substring
 func TestLoadContext(t *testing.T) {
 	tests := []struct {
-		name           string
-		task           models.Task
-		dbHistory      []*learning.TaskExecution
-		wantContains   []string
-		wantErr        bool
+		name         string
+		task         models.Task
+		dbHistory    []*learning.TaskExecution
+		wantContains []string
+		wantErr      bool
 	}{
 		{
 			name: "empty history",

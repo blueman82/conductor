@@ -145,6 +145,7 @@ type DefaultTaskExecutor struct {
 	metrics                *learning.PatternMetrics // Pattern detection metrics (optional)
 	AutoAdaptAgent         bool                     // Enable automatic agent adaptation
 	MinFailuresBeforeAdapt int                      // Minimum failures before adapting agent
+	SwapDuringRetries      bool                     // Enable inter-retry agent swapping
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -447,6 +448,15 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	// Acquire per-file lock to ensure only one task updates this file at a time
 	unlock := te.FileLockManager.Lock(fileToLock)
 	defer unlock()
+	// Sync LearningStore with QualityController for historical context loading
+	if te.LearningStore != nil && te.reviewer != nil {
+		if qc, ok := te.reviewer.(*QualityController); ok {
+			if store, ok := te.LearningStore.(*learning.Store); ok {
+				qc.LearningStore = store
+			}
+		}
+	}
+
 
 	// Pre-task hook: Query learning database and adapt agent/prompt
 	if err := te.preTaskHook(ctx, &task); err != nil {
@@ -476,6 +486,9 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 	var totalDuration time.Duration
 	var lastErr error
+
+	// Track execution history for all attempts
+	var executionHistory []models.ExecutionAttempt
 
 	for attempt := 0; attempt <= maxAttempt; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -547,7 +560,21 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		result.Output = output
 		result.Duration = totalDuration
 
+		// Initialize execution attempt record
+		execAttempt := models.ExecutionAttempt{
+			Attempt:     attempt + 1, // 1-indexed
+			Agent:       task.Agent,
+			AgentOutput: invocation.Output, // Store raw JSON output
+			Duration:    invocation.Duration,
+		}
+
 		if !te.qcEnabled || te.reviewer == nil {
+			// No QC - mark as GREEN and store in history
+			execAttempt.Verdict = models.StatusGreen
+			execAttempt.QCFeedback = "" // No QC feedback
+			executionHistory = append(executionHistory, execAttempt)
+			result.ExecutionHistory = executionHistory
+
 			result.Status = models.StatusGreen
 			result.RetryCount = attempt
 			if err := te.updatePlanStatus(task, StatusCompleted, true); err != nil {
@@ -570,11 +597,18 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 		if review != nil {
 			result.ReviewFeedback = review.Feedback
+			// Store QC feedback in execution attempt
+			execAttempt.QCFeedback = review.Feedback
+			execAttempt.Verdict = review.Flag
 			// Call QC review hook to extract patterns and store metadata
 			te.qcReviewHook(ctx, &task, review.Flag, review.Feedback, output)
 			// Update result task to include metadata
 			result.Task = task
 		}
+
+		// Append attempt to history
+		executionHistory = append(executionHistory, execAttempt)
+		result.ExecutionHistory = executionHistory
 
 		switch {
 		case review == nil || review.Flag == "":
@@ -603,6 +637,19 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			return result, nil
 		case review.Flag == models.StatusRed:
 			lastErr = ErrQualityGateFailed
+
+			// Track RED failures for agent swap
+			redCount := attempt + 1
+
+			// Agent swap during retries: if enabled and threshold reached and QC suggested agent
+			if te.SwapDuringRetries &&
+			   redCount >= te.MinFailuresBeforeAdapt &&
+			   review.SuggestedAgent != "" &&
+			   task.Agent != review.SuggestedAgent {
+				// Swap agent for next retry
+				task.Agent = review.SuggestedAgent
+				result.Task.Agent = review.SuggestedAgent
+			}
 		default:
 			lastErr = NewTaskError(task.Number, fmt.Sprintf("quality control returned unsupported flag %q", review.Flag), nil)
 		}

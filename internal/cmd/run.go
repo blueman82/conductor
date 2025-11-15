@@ -454,8 +454,9 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Create invoker for Claude CLI calls
 	invoker := agent.NewInvoker()
 
-	// Create quality controller
+	// Create quality controller with learning integration
 	qc := executor.NewQualityController(invoker)
+	qc.LearningStore = learningStore // Enable historical context loading
 
 	// Create task executor config
 	taskExecCfg := executor.TaskExecutorConfig{
@@ -478,6 +479,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.RunNumber = 1 // Increment per plan re-run
 	taskExec.AutoAdaptAgent = cfg.Learning.AutoAdaptAgent
 	taskExec.MinFailuresBeforeAdapt = cfg.Learning.MinFailuresBeforeAdapt
+	taskExec.SwapDuringRetries = cfg.Learning.SwapDuringRetries
 
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithConfig(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
