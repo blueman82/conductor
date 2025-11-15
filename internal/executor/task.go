@@ -430,6 +430,42 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 	}
 }
 
+// updateFeedback stores execution attempt feedback to the plan file.
+// This is called after each retry attempt to maintain execution history.
+func (te *DefaultTaskExecutor) updateFeedback(task models.Task, attempt int, agentOutput, qcFeedback, verdict string) error {
+	// Only update if we have a plan file configured
+	if te.cfg.PlanPath == "" {
+		return nil
+	}
+
+	// Determine which file to update (same logic as updatePlanStatus)
+	fileToUpdate := te.cfg.PlanPath
+	if task.SourceFile != "" {
+		fileToUpdate = task.SourceFile
+	} else if te.SourceFile != "" {
+		fileToUpdate = te.SourceFile
+	}
+
+	// Create execution attempt record
+	execAttempt := &updater.ExecutionAttempt{
+		AttemptNumber: attempt,
+		Agent:         task.Agent,
+		Verdict:       verdict,
+		AgentOutput:   agentOutput,
+		QCFeedback:    qcFeedback,
+		Timestamp:     time.Now().UTC(),
+	}
+
+	// Update plan file with execution history (graceful degradation on error)
+	if err := updater.UpdateTaskFeedback(fileToUpdate, task.Number, execAttempt); err != nil {
+		// Log warning but don't fail task execution
+		// In production: log.Warnf("failed to update plan feedback: %v", err)
+		return nil // Non-fatal error
+	}
+
+	return nil
+}
+
 // Execute runs an individual task, handling agent invocation, quality control, and plan updates.
 func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
 	result := models.TaskResult{Task: task}

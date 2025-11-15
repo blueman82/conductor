@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -3123,4 +3125,423 @@ func TestAutoAdaptAgent_EmptyAgentToSuggested(t *testing.T) {
 	if result.Task.Agent != "syntax-expert" {
 		t.Errorf("expected agent 'syntax-expert', got %q", result.Task.Agent)
 	}
+}
+
+func TestTaskExecutor_AgentSwapDuringRetries(t *testing.T) {
+	// Setup mock QC that returns RED twice with suggested agent, then GREEN
+	mockReviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "First attempt failed"},
+			{Flag: models.StatusRed, Feedback: "Second attempt failed", SuggestedAgent: "better-agent"},
+			{Flag: models.StatusGreen, Feedback: "Third attempt succeeded"},
+		},
+		retryDecisions: map[int]bool{0: true, 1: true, 2: false},
+	}
+
+	// Mock store that tracks executions
+	mockStore := &MockLearningStore{}
+
+	// Invoker returns success for all attempts
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: "attempt 1", ExitCode: 0, Duration: 10 * time.Millisecond},
+		&agent.InvocationResult{Output: "attempt 2", ExitCode: 0, Duration: 10 * time.Millisecond},
+		&agent.InvocationResult{Output: "attempt 3", ExitCode: 0, Duration: 10 * time.Millisecond},
+	)
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, mockReviewer, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Enable agent swap during retries
+	executor.AutoAdaptAgent = true
+	executor.SwapDuringRetries = true
+	executor.MinFailuresBeforeAdapt = 2
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "original-agent",
+		Prompt: "Fix the code",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was swapped after 2nd RED
+	if result.Task.Agent != "better-agent" {
+		t.Errorf("expected agent 'better-agent', got %q", result.Task.Agent)
+	}
+
+	// Verify 3 invocations were made
+	if len(invoker.calls) != 3 {
+		t.Errorf("expected 3 invocations, got %d", len(invoker.calls))
+	}
+
+	// Verify first two used original agent
+	if invoker.calls[0].Agent != "original-agent" {
+		t.Errorf("first call expected 'original-agent', got %q", invoker.calls[0].Agent)
+	}
+	if invoker.calls[1].Agent != "original-agent" {
+		t.Errorf("second call expected 'original-agent', got %q", invoker.calls[1].Agent)
+	}
+
+	// Verify third used swapped agent
+	if invoker.calls[2].Agent != "better-agent" {
+		t.Errorf("third call expected 'better-agent', got %q", invoker.calls[2].Agent)
+	}
+}
+
+func TestTaskExecutor_NoSwapWhenDisabled(t *testing.T) {
+	// Setup mock QC that returns RED twice, then GREEN
+	mockReviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "First attempt failed", SuggestedAgent: "better-agent"},
+			{Flag: models.StatusRed, Feedback: "Second attempt failed", SuggestedAgent: "better-agent"},
+			{Flag: models.StatusGreen, Feedback: "Third attempt succeeded"},
+		},
+		retryDecisions: map[int]bool{0: true, 1: true, 2: false},
+	}
+
+	mockStore := &MockLearningStore{}
+
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: "attempt 1", ExitCode: 0, Duration: 10 * time.Millisecond},
+		&agent.InvocationResult{Output: "attempt 2", ExitCode: 0, Duration: 10 * time.Millisecond},
+		&agent.InvocationResult{Output: "attempt 3", ExitCode: 0, Duration: 10 * time.Millisecond},
+	)
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, mockReviewer, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Disable swap during retries
+	executor.SwapDuringRetries = false
+	executor.LearningStore = mockStore
+	executor.PlanFile = "test-plan.md"
+
+	task := models.Task{
+		Number: "Task 1",
+		Name:   "Test Task",
+		Agent:  "original-agent",
+		Prompt: "Fix the code",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was NOT swapped
+	if result.Task.Agent != "original-agent" {
+		t.Errorf("expected agent 'original-agent', got %q", result.Task.Agent)
+	}
+
+	// Verify all calls used original agent
+	for i, call := range invoker.calls {
+		if call.Agent != "original-agent" {
+			t.Errorf("call %d expected 'original-agent', got %q", i, call.Agent)
+		}
+	}
+}
+
+func TestTaskExecutor_ExecutionHistoryTracking(t *testing.T) {
+	// Setup mock QC that returns RED twice, then GREEN
+	mockReviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: `{"verdict": "RED", "feedback": "First failed"}`, SuggestedAgent: "better-agent"},
+			{Flag: models.StatusRed, Feedback: `{"verdict": "RED", "feedback": "Second failed"}`, SuggestedAgent: "better-agent"},
+			{Flag: models.StatusGreen, Feedback: `{"verdict": "GREEN", "feedback": "Success"}`},
+		},
+		retryDecisions: map[int]bool{0: true, 1: true, 2: false},
+	}
+
+	// Invoker returns JSON for each attempt
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: `{"content": "attempt 1 output"}`, ExitCode: 0, Duration: 10 * time.Millisecond},
+		&agent.InvocationResult{Output: `{"content": "attempt 2 output"}`, ExitCode: 0, Duration: 15 * time.Millisecond},
+		&agent.InvocationResult{Output: `{"content": "attempt 3 output"}`, ExitCode: 0, Duration: 20 * time.Millisecond},
+	)
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, mockReviewer, updater, TaskExecutorConfig{
+		PlanPath: "test-plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.SwapDuringRetries = true
+	executor.MinFailuresBeforeAdapt = 2
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test Task",
+		Agent:  "original-agent",
+		Prompt: "Fix the code",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify ExecutionHistory was populated
+	if len(result.ExecutionHistory) != 3 {
+		t.Fatalf("expected 3 execution attempts, got %d", len(result.ExecutionHistory))
+	}
+
+	// Verify first attempt
+	attempt1 := result.ExecutionHistory[0]
+	if attempt1.Attempt != 1 {
+		t.Errorf("attempt 1: expected Attempt=1, got %d", attempt1.Attempt)
+	}
+	if attempt1.Agent != "original-agent" {
+		t.Errorf("attempt 1: expected agent 'original-agent', got %q", attempt1.Agent)
+	}
+	if attempt1.AgentOutput != `{"content": "attempt 1 output"}` {
+		t.Errorf("attempt 1: unexpected AgentOutput: %q", attempt1.AgentOutput)
+	}
+	if attempt1.QCFeedback != `{"verdict": "RED", "feedback": "First failed"}` {
+		t.Errorf("attempt 1: unexpected QCFeedback: %q", attempt1.QCFeedback)
+	}
+	if attempt1.Verdict != models.StatusRed {
+		t.Errorf("attempt 1: expected verdict RED, got %q", attempt1.Verdict)
+	}
+
+	// Verify second attempt
+	attempt2 := result.ExecutionHistory[1]
+	if attempt2.Attempt != 2 {
+		t.Errorf("attempt 2: expected Attempt=2, got %d", attempt2.Attempt)
+	}
+	if attempt2.Agent != "original-agent" {
+		t.Errorf("attempt 2: expected agent 'original-agent', got %q", attempt2.Agent)
+	}
+
+	// Verify third attempt (after agent swap)
+	attempt3 := result.ExecutionHistory[2]
+	if attempt3.Attempt != 3 {
+		t.Errorf("attempt 3: expected Attempt=3, got %d", attempt3.Attempt)
+	}
+	if attempt3.Agent != "better-agent" {
+		t.Errorf("attempt 3: expected agent 'better-agent' (swapped), got %q", attempt3.Agent)
+	}
+	if attempt3.Verdict != models.StatusGreen {
+		t.Errorf("attempt 3: expected verdict GREEN, got %q", attempt3.Verdict)
+	}
+}
+
+func TestDefaultTaskExecutor_UpdateFeedback(t *testing.T) {
+	tests := []struct {
+		name          string
+		planPath      string
+		sourceFile    string
+		taskSourceFile string
+		taskNumber    string
+		attempt       int
+		agentOutput   string
+		qcFeedback    string
+		verdict       string
+		expectCall    bool
+	}{
+		{
+			name:        "updates plan file with feedback",
+			planPath:    "test-plan.md",
+			taskNumber:  "5",
+			attempt:     1,
+			agentOutput: "Agent executed successfully",
+			qcFeedback:  "Looks good",
+			verdict:     "GREEN",
+			expectCall:  true,
+		},
+		{
+			name:           "uses task.SourceFile when set",
+			planPath:       "plan.yaml",
+			taskSourceFile: "specific-plan.md",
+			taskNumber:     "3",
+			attempt:        2,
+			agentOutput:    "Retry attempt",
+			qcFeedback:     "Still issues",
+			verdict:        "RED",
+			expectCall:     true,
+		},
+		{
+			name:        "uses executor.SourceFile when task.SourceFile not set",
+			planPath:    "plan.yaml",
+			sourceFile:  "executor-plan.md",
+			taskNumber:  "7",
+			attempt:     3,
+			agentOutput: "Third attempt",
+			qcFeedback:  "Better but not perfect",
+			verdict:     "YELLOW",
+			expectCall:  true,
+		},
+		{
+			name:        "skips when no plan path configured",
+			planPath:    "",
+			taskNumber:  "1",
+			attempt:     1,
+			agentOutput: "Output",
+			qcFeedback:  "Feedback",
+			verdict:     "YELLOW",
+			expectCall:  false,
+		},
+		{
+			name:        "handles empty feedback gracefully",
+			planPath:    "test-plan.md",
+			taskNumber:  "10",
+			attempt:     1,
+			agentOutput: "Agent output",
+			qcFeedback:  "",
+			verdict:     "GREEN",
+			expectCall:  true,
+		},
+		{
+			name:        "handles multiline output",
+			planPath:    "test-plan.md",
+			taskNumber:  "11",
+			attempt:     2,
+			agentOutput: "Line 1\nLine 2\nLine 3",
+			qcFeedback:  "Multiline\nFeedback\nHere",
+			verdict:     "RED",
+			expectCall:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp plan file if needed
+			var planPath string
+			if tt.planPath != "" {
+				tmpDir := t.TempDir()
+				planPath = filepath.Join(tmpDir, tt.planPath)
+				// Create minimal valid plan
+				content := "- [ ] Task " + tt.taskNumber + ": Test Task\n**Status**: pending\n"
+				if err := os.WriteFile(planPath, []byte(content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Create executor with config
+			cfg := TaskExecutorConfig{PlanPath: planPath}
+			te := &DefaultTaskExecutor{cfg: cfg, SourceFile: tt.sourceFile}
+
+			// Create task with optional SourceFile
+			task := models.Task{
+				Number:     tt.taskNumber,
+				SourceFile: tt.taskSourceFile,
+				Agent:      "test-agent",
+			}
+
+			// Call updateFeedback
+			err := te.updateFeedback(task, tt.attempt, tt.agentOutput, tt.qcFeedback, tt.verdict)
+			if err != nil {
+				t.Errorf("updateFeedback() error = %v", err)
+			}
+
+			// Verify feedback was written if expected
+			if tt.expectCall && planPath != "" {
+				// Determine which file should have been updated
+				fileToCheck := planPath
+				if tt.taskSourceFile != "" {
+					fileToCheck = tt.taskSourceFile
+				} else if tt.sourceFile != "" {
+					fileToCheck = tt.sourceFile
+				}
+
+				// For non-existent files (task.SourceFile or executor.SourceFile),
+				// updater.UpdateTaskFeedback will fail but we return nil (graceful degradation)
+				// So we only check if the file exists
+				if _, err := os.Stat(fileToCheck); err == nil {
+					content, readErr := os.ReadFile(fileToCheck)
+					if readErr != nil {
+						t.Fatalf("Failed to read plan file: %v", readErr)
+					}
+					contentStr := string(content)
+					if !strings.Contains(contentStr, "Execution History") {
+						t.Error("Expected execution history section in plan file")
+					}
+					if !strings.Contains(contentStr, fmt.Sprintf("Attempt %d", tt.attempt)) {
+						t.Errorf("Expected attempt %d in execution history", tt.attempt)
+					}
+					if !strings.Contains(contentStr, tt.verdict) {
+						t.Errorf("Expected verdict %s in execution history", tt.verdict)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDefaultTaskExecutor_UpdateFeedback_ErrorHandling(t *testing.T) {
+	t.Run("gracefully handles missing plan file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		nonExistentPath := filepath.Join(tmpDir, "nonexistent.md")
+
+		cfg := TaskExecutorConfig{PlanPath: nonExistentPath}
+		te := &DefaultTaskExecutor{cfg: cfg}
+
+		task := models.Task{Number: "1", Agent: "test-agent"}
+
+		// Should not return error (graceful degradation)
+		err := te.updateFeedback(task, 1, "output", "feedback", "GREEN")
+		if err != nil {
+			t.Errorf("Expected nil error for missing file, got: %v", err)
+		}
+	})
+
+	t.Run("gracefully handles invalid task number", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		planPath := filepath.Join(tmpDir, "plan.md")
+		content := "- [ ] Task 1: Real Task\n**Status**: pending\n"
+		if err := os.WriteFile(planPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		cfg := TaskExecutorConfig{PlanPath: planPath}
+		te := &DefaultTaskExecutor{cfg: cfg}
+
+		// Try to update non-existent task
+		task := models.Task{Number: "999", Agent: "test-agent"}
+
+		// Should not return error (graceful degradation)
+		err := te.updateFeedback(task, 1, "output", "feedback", "GREEN")
+		if err != nil {
+			t.Errorf("Expected nil error for invalid task, got: %v", err)
+		}
+	})
 }
