@@ -378,16 +378,10 @@ func UpdateTaskFeedback(planPath string, taskNumber string, attempt *ExecutionAt
 	lockPath := planPath + ".lock"
 	lock := filelock.NewFileLock(lockPath)
 
-	// Acquire lock - only one goroutine/process can proceed from here
 	if err := lock.Lock(); err != nil {
 		return err
 	}
-
-	// Ensure lock is always released and cleanup happens
-	defer func() {
-		_ = lock.Unlock()
-		_ = os.Remove(lockPath)
-	}()
+	defer lock.Unlock()
 
 	// Step 1: Read the current file content (under lock)
 	content, err := os.ReadFile(planPath)
@@ -413,18 +407,7 @@ func UpdateTaskFeedback(planPath string, taskNumber string, attempt *ExecutionAt
 	// Step 3: Write the modified content atomically (under lock)
 	// This ensures that the entire read-modify-write cycle is atomic from the perspective
 	// of other goroutines/processes attempting to access the same file.
-	if err := filelock.AtomicWrite(planPath, updated); err != nil {
-		return err
-	}
-
-	// Sync directory to ensure filesystem coherency on macOS/APFS.
-	// AtomicWrite already syncs the temp file, but directory entry may be cached.
-	if dir, err := os.Open(filepath.Dir(planPath)); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
-	}
-
-	return nil
+	return filelock.AtomicWrite(planPath, updated)
 }
 
 // updateMarkdownFeedbackWithLock is an internal wrapper that ensures proper locking semantics.
