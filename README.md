@@ -70,6 +70,8 @@ Conductor automates complex multi-step implementations by:
 - **Adaptive Learning** (v2.0+): AI-powered learning system that improves over time
   - Tracks execution history and failure patterns
   - Automatically adapts agent selection after failures
+  - Inter-retry agent swapping based on QC suggestions
+  - Dual feedback storage (plain text + structured JSON)
   - Learns from past successes to optimize future runs
   - CLI commands for statistics and insights
 
@@ -356,18 +358,18 @@ Conductor v2.0 introduces an intelligent learning system that automatically impr
 ### Quick Example
 
 ```bash
-# First run - task fails with backend-developer agent
-$ conductor run plan.md
+# Run with inter-retry agent swapping enabled
+$ conductor run plan.md --verbose
+
+# Task fails with backend-developer agent
 # [ERROR] Task 3 failed: compilation error
 
-# Second run - task fails again
-$ conductor run plan.md --retry-failed
-# [ERROR] Task 3 failed: compilation error
+# QC suggests golang-pro agent
+# [INFO] QC suggested agent: golang-pro
 
-# Third run - learning system adapts
-$ conductor run plan.md --retry-failed
+# Conductor automatically swaps to golang-pro for retry
 # [INFO] Adapting agent: backend-developer → golang-pro
-# [SUCCESS] Task 3 completed successfully
+# [SUCCESS] Task 3 completed successfully with golang-pro
 ```
 
 ### CLI Commands
@@ -402,8 +404,11 @@ learning:
 ### How It Works
 
 1. **Pre-Task Hook**: Analyzes execution history and adapts strategy before task runs
-2. **QC-Review Hook**: Extracts failure patterns from quality control output
-3. **Post-Task Hook**: Records execution results to SQLite database
+2. **Task Execution**: Runs task with selected agent, captures structured JSON output
+3. **QC Review**: Quality control agent evaluates output, suggests alternative agents if needed
+4. **Inter-Retry Swapping**: On RED verdict with suggested agent, automatically swaps for retry
+5. **Dual Storage**: Persists both plain text feedback and structured JSON to database
+6. **Post-Task Hook**: Records execution results to SQLite database for pattern analysis
 
 Learning data is stored locally in `.conductor/learning/` (excluded from git).
 

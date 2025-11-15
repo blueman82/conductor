@@ -206,24 +206,41 @@ prompt = fmt.Sprintf("use the %s subagent to: %s", agent, task.Prompt)
 
 ### Quality Control Pattern
 
-QC reviews follow structured format:
+QC reviews use structured JSON output format:
+
+**JSON Schema:**
+```go
+type QCResponse struct {
+    Verdict         string   // "GREEN", "RED", "YELLOW"
+    Feedback        string   // Detailed review feedback
+    Issues          []Issue  // Specific issues found
+    Recommendations []string // Suggested improvements
+    ShouldRetry     bool     // Whether to retry
+    SuggestedAgent  string   // Alternative agent suggestion
+}
+
+type Issue struct {
+    Severity    string // "critical", "warning", "info"
+    Description string // Issue description
+    Location    string // File:line or component
+}
 ```
-Review the following task execution:
 
-Task: {task.Name}
+**Dual Feedback Storage:**
+- Plain text feedback stored in TaskResult.QCFeedback (for human-readable logs)
+- Structured JSON stored in TaskResult.QCData (for programmatic analysis)
+- Both formats persisted to learning database for pattern analysis
 
-Output:
-{output}
+**Inter-Retry Agent Swapping:**
+Quality control can suggest alternative agents via SuggestedAgent field. When QC returns RED verdict with a suggested agent and learning config enables auto_adapt_agent, conductor automatically switches to the suggested agent for retry attempts.
 
-Provide quality control review in this format:
-Quality Control: [GREEN/RED/YELLOW]
+Flow: Task fails → QC suggests better agent → Auto-swap on retry → Enhanced success rate
 
-Feedback: [your detailed feedback]
-```
-
-Parser extracts flag via regex: `Quality Control:\s*(GREEN|RED|YELLOW)`
-
-Retry logic: Only retry on RED, up to MaxRetries (default: 2)
+**Retry Logic:**
+- Only retry on RED verdict
+- Up to MaxRetries (default: 2)
+- Agent swapping occurs between retries when suggested
+- Respects min_failures_before_adapt threshold from config
 
 ### Adaptive Learning System
 
@@ -272,9 +289,13 @@ conductor learning clear
 Learning can be configured in `.conductor/config.yaml`:
 ```yaml
 learning:
-  enabled: true  # Enable/disable learning system
-  dir: .conductor/learning  # Storage directory
-  max_history: 100  # Max entries per task
+  enabled: true                    # Enable/disable learning system
+  dir: .conductor/learning         # Storage directory
+  max_history: 100                 # Max entries per task
+  auto_adapt_agent: true          # Enable inter-retry agent swapping
+  enhance_prompts: true           # Add learned context to prompts
+  min_failures_before_adapt: 2    # Failure threshold before adapting
+  keep_executions_days: 90        # Data retention period
 ```
 
 **Hook Integration:**
