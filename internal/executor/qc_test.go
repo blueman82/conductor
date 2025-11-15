@@ -451,7 +451,7 @@ func TestLoadContext(t *testing.T) {
 				SourceFile: "plan.md",
 			},
 			dbHistory:    []*learning.TaskExecution{},
-			wantContains: []string{"=== Historical Attempts ==="},
+			wantContains: []string{"=== Historical Attempts ===", "No previous attempts found"},
 			wantErr:      false,
 		},
 		{
@@ -512,6 +512,55 @@ func TestLoadContext(t *testing.T) {
 				"missing import",
 				"RED",
 				"Import missing",
+			},
+			wantErr: false,
+		},
+		{
+			name: "history with success only",
+			task: models.Task{
+				Number:     "4",
+				Name:       "Task success",
+				SourceFile: "plan.md",
+			},
+			dbHistory: []*learning.TaskExecution{
+				{
+					TaskNumber: "4",
+					TaskName:   "Task success",
+					Success:    true,
+					QCVerdict:  "GREEN",
+					QCFeedback: "Perfect implementation",
+				},
+			},
+			wantContains: []string{
+				"=== Historical Attempts ===",
+				"Task success",
+				"Success: true",
+				"GREEN",
+				"Perfect implementation",
+			},
+			wantErr: false,
+		},
+		{
+			name: "history without QC feedback",
+			task: models.Task{
+				Number:     "5",
+				Name:       "No feedback task",
+				SourceFile: "plan.md",
+			},
+			dbHistory: []*learning.TaskExecution{
+				{
+					TaskNumber: "5",
+					TaskName:   "No feedback task",
+					Success:    true,
+					QCVerdict:  "GREEN",
+					QCFeedback: "",
+				},
+			},
+			wantContains: []string{
+				"=== Historical Attempts ===",
+				"No feedback task",
+				"Success: true",
+				"GREEN",
 			},
 			wantErr: false,
 		},
