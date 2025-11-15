@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -161,4 +162,37 @@ func (qc *QualityController) ShouldRetry(result *ReviewResult, currentAttempt in
 
 	// Check if we haven't exceeded max retries
 	return currentAttempt < qc.MaxRetries
+}
+
+// LoadContext loads execution history from database for the task
+func (qc *QualityController) LoadContext(ctx context.Context, task models.Task, store *learning.Store) (string, error) {
+	var sb strings.Builder
+
+	sb.WriteString("=== Historical Attempts ===\n")
+
+	// Load from database
+	history, err := store.GetExecutionHistory(ctx, task.SourceFile, task.Number)
+	if err != nil {
+		return "", fmt.Errorf("get execution history: %w", err)
+	}
+
+	if len(history) == 0 {
+		sb.WriteString("No previous attempts found\n")
+		return sb.String(), nil
+	}
+
+	for i, exec := range history {
+		sb.WriteString(fmt.Sprintf("\n--- Attempt %d ---\n", len(history)-i))
+		sb.WriteString(fmt.Sprintf("Task: %s\n", exec.TaskName))
+		sb.WriteString(fmt.Sprintf("Success: %v\n", exec.Success))
+		sb.WriteString(fmt.Sprintf("QC Verdict: %s\n", exec.QCVerdict))
+		if exec.QCFeedback != "" {
+			sb.WriteString(fmt.Sprintf("QC Feedback: %s\n", exec.QCFeedback))
+		}
+		if exec.ErrorMessage != "" {
+			sb.WriteString(fmt.Sprintf("Error: %s\n", exec.ErrorMessage))
+		}
+	}
+
+	return sb.String(), nil
 }

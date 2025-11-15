@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -434,6 +435,132 @@ func TestNewQualityController(t *testing.T) {
 }
 
 // Helper function to check if a string contains a substring
+func TestLoadContext(t *testing.T) {
+	tests := []struct {
+		name           string
+		task           models.Task
+		dbHistory      []*learning.TaskExecution
+		wantContains   []string
+		wantErr        bool
+	}{
+		{
+			name: "empty history",
+			task: models.Task{
+				Number:     "1",
+				Name:       "Test task",
+				SourceFile: "plan.md",
+			},
+			dbHistory:    []*learning.TaskExecution{},
+			wantContains: []string{"=== Historical Attempts ==="},
+			wantErr:      false,
+		},
+		{
+			name: "single failure in history",
+			task: models.Task{
+				Number:     "2",
+				Name:       "Fix bug",
+				SourceFile: "plan.md",
+			},
+			dbHistory: []*learning.TaskExecution{
+				{
+					TaskNumber:   "2",
+					TaskName:     "Fix bug",
+					Success:      false,
+					ErrorMessage: "compilation error",
+					QCVerdict:    "RED",
+					QCFeedback:   "Tests failing",
+				},
+			},
+			wantContains: []string{
+				"=== Historical Attempts ===",
+				"Fix bug",
+				"compilation error",
+				"RED",
+				"Tests failing",
+			},
+			wantErr: false,
+		},
+		{
+			name: "multiple attempts in history",
+			task: models.Task{
+				Number:     "3",
+				Name:       "Implement feature",
+				SourceFile: "plan.md",
+			},
+			dbHistory: []*learning.TaskExecution{
+				{
+					TaskNumber: "3",
+					TaskName:   "Implement feature",
+					Success:    true,
+					QCVerdict:  "GREEN",
+					QCFeedback: "All good",
+				},
+				{
+					TaskNumber:   "3",
+					TaskName:     "Implement feature",
+					Success:      false,
+					ErrorMessage: "missing import",
+					QCVerdict:    "RED",
+					QCFeedback:   "Import missing",
+				},
+			},
+			wantContains: []string{
+				"=== Historical Attempts ===",
+				"Implement feature",
+				"GREEN",
+				"All good",
+				"missing import",
+				"RED",
+				"Import missing",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create in-memory store
+			store, err := learning.NewStore(":memory:")
+			if err != nil {
+				t.Fatalf("NewStore() error = %v", err)
+			}
+			defer store.Close()
+
+			// Populate test data
+			for _, exec := range tt.dbHistory {
+				exec.PlanFile = tt.task.SourceFile
+				exec.RunNumber = 1
+				if err := store.RecordExecution(context.Background(), exec); err != nil {
+					t.Fatalf("RecordExecution() error = %v", err)
+				}
+			}
+
+			qc := NewQualityController(nil)
+			ctx := context.Background()
+
+			context, err := qc.LoadContext(ctx, tt.task, store)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("LoadContext() error = nil, wantErr = true")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("LoadContext() unexpected error = %v", err)
+				return
+			}
+
+			for _, want := range tt.wantContains {
+				if !contains(context, want) {
+					t.Errorf("LoadContext() missing expected content %q\nGot: %s", want, context)
+				}
+			}
+		})
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		func() bool {
