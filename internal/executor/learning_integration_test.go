@@ -999,3 +999,40 @@ func TestCrossRun_MultipleFailuresAndRecovery(t *testing.T) {
 	// Should detect compilation_error pattern
 	assert.Contains(t, analysis.CommonPatterns, "compilation_error")
 }
+
+// TestRetryFlow_AgentSwappingAfterThreshold tests full retry flow with agent swapping
+func TestRetryFlow_AgentSwappingAfterThreshold(t *testing.T) {
+	t.Skip("TODO: Implement retry flow integration test with agent swapping")
+	// Test structure:
+	// 1. Execute task with initial agent
+	// 2. Task fails, QC reviews and suggests different agent
+	// 3. Store failure in DB with QC feedback
+	// 4. Check if threshold reached
+	// 5. Swap agent if threshold met
+	// 6. Retry with new agent
+	// 7. Verify feedback in both plan and DB
+}
+
+// TestRetryFlow_FeedbackStorageFormats tests dual feedback storage
+func TestRetryFlow_FeedbackStorageFormats(t *testing.T) {
+	t.Skip("TODO: Implement feedback storage format test")
+	// Test structure:
+	// 1. Execute task that fails
+	// 2. QC reviews and returns structured feedback
+	// 3. Verify plain text feedback in TaskResult.QCFeedback
+	// 4. Verify JSON data in TaskResult.QCData
+	// 5. Verify both formats stored in learning DB
+	// 6. Verify both formats persisted to plan file
+}
+
+// TestRetryFlow_ConfigVariations tests retry behavior with different config flags
+func TestRetryFlow_ConfigVariations(t *testing.T) {
+	t.Skip("TODO: Implement config variations test")
+	// Test structure:
+	// Test cases:
+	// - learning_enabled = false: no agent swap
+	// - auto_adapt_agent = false: no agent swap
+	// - min_failures_before_adapt = 3: swap only after 3 failures
+	// - enhance_prompts = false: no prompt enhancement
+	// Verify each config affects behavior correctly
+}

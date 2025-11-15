@@ -266,6 +266,24 @@ func (fl *FileLogger) LogTaskResult(result models.TaskResult) error {
 		content += fmt.Sprintf("Prompt:\n%s\n\n", result.Task.Prompt)
 	}
 
+	// Log execution history if available (for retry tracking)
+	if len(result.ExecutionHistory) > 0 {
+		content += "=== Execution History ===\n\n"
+		for _, attempt := range result.ExecutionHistory {
+			content += fmt.Sprintf("#### Attempt %d (Agent: %s) - %s\n", attempt.Attempt, attempt.Agent, attempt.Verdict)
+			content += fmt.Sprintf("Duration: %.1fs\n\n", attempt.Duration.Seconds())
+
+			if attempt.AgentOutput != "" {
+				content += fmt.Sprintf("Agent Output (JSON):\n%s\n\n", attempt.AgentOutput)
+			}
+
+			if attempt.QCFeedback != "" {
+				content += fmt.Sprintf("QC Review (JSON):\n%s\n\n", attempt.QCFeedback)
+			}
+		}
+	}
+
+	// Legacy fields (for compatibility with single-attempt tasks)
 	if result.Output != "" {
 		content += fmt.Sprintf("Output:\n%s\n\n", result.Output)
 	}

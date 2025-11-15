@@ -555,3 +555,106 @@ func readRunLog(t *testing.T, tmpDir string) string {
 	}
 	return string(content)
 }
+
+// TestLogTaskResult_WithExecutionHistory verifies task logs include execution history
+func TestLogTaskResult_WithExecutionHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	logger, err := NewFileLoggerWithDir(filepath.Join(tmpDir, "logs"))
+	if err != nil {
+		t.Fatalf("NewFileLogger() error = %v", err)
+	}
+	defer logger.Close()
+
+	// Create task result with execution history
+	result := models.TaskResult{
+		Task: models.Task{
+			Number: "5",
+			Name:   "Test Task with Retries",
+			Agent:  "better-agent",
+		},
+		Status:     models.StatusGreen,
+		Duration:   45 * time.Millisecond,
+		RetryCount: 2,
+		ExecutionHistory: []models.ExecutionAttempt{
+			{
+				Attempt:     1,
+				Agent:       "original-agent",
+				AgentOutput: `{"status": "failed", "summary": "First attempt failed"}`,
+				QCFeedback:  `{"verdict": "RED", "feedback": "Compilation error"}`,
+				Verdict:     models.StatusRed,
+				Duration:    10 * time.Millisecond,
+			},
+			{
+				Attempt:     2,
+				Agent:       "original-agent",
+				AgentOutput: `{"status": "failed", "summary": "Second attempt failed"}`,
+				QCFeedback:  `{"verdict": "RED", "feedback": "Still has errors", "suggested_agent": "better-agent"}`,
+				Verdict:     models.StatusRed,
+				Duration:    15 * time.Millisecond,
+			},
+			{
+				Attempt:     3,
+				Agent:       "better-agent",
+				AgentOutput: `{"status": "success", "summary": "Fixed all issues"}`,
+				QCFeedback:  `{"verdict": "GREEN", "feedback": "All tests pass"}`,
+				Verdict:     models.StatusGreen,
+				Duration:    20 * time.Millisecond,
+			},
+		},
+	}
+
+	err = logger.LogTaskResult(result)
+	if err != nil {
+		t.Fatalf("LogTaskResult() error = %v", err)
+	}
+
+	// Read task log file
+	taskLogPath := filepath.Join(tmpDir, "logs", "tasks", "task-5.log")
+	content, err := os.ReadFile(taskLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read task log: %v", err)
+	}
+
+	logContent := string(content)
+
+	// Verify header
+	if !strings.Contains(logContent, "=== Task 5: Test Task with Retries ===") {
+		t.Errorf("Missing task header")
+	}
+
+	// Verify execution history section
+	if !strings.Contains(logContent, "=== Execution History ===") {
+		t.Errorf("Missing execution history section")
+	}
+
+	// Verify attempt 1
+	if !strings.Contains(logContent, "#### Attempt 1 (Agent: original-agent) - RED") {
+		t.Errorf("Missing attempt 1 header")
+	}
+	if !strings.Contains(logContent, `{"status": "failed", "summary": "First attempt failed"}`) {
+		t.Errorf("Missing attempt 1 agent output")
+	}
+	if !strings.Contains(logContent, `{"verdict": "RED", "feedback": "Compilation error"}`) {
+		t.Errorf("Missing attempt 1 QC feedback")
+	}
+
+	// Verify attempt 2
+	if !strings.Contains(logContent, "#### Attempt 2 (Agent: original-agent) - RED") {
+		t.Errorf("Missing attempt 2 header")
+	}
+	if !strings.Contains(logContent, `{"verdict": "RED", "feedback": "Still has errors", "suggested_agent": "better-agent"}`) {
+		t.Errorf("Missing attempt 2 QC feedback with suggested agent")
+	}
+
+	// Verify attempt 3 (after agent swap)
+	if !strings.Contains(logContent, "#### Attempt 3 (Agent: better-agent) - GREEN") {
+		t.Errorf("Missing attempt 3 header with swapped agent")
+	}
+	if !strings.Contains(logContent, `{"status": "success", "summary": "Fixed all issues"}`) {
+		t.Errorf("Missing attempt 3 agent output")
+	}
+	if !strings.Contains(logContent, `{"verdict": "GREEN", "feedback": "All tests pass"}`) {
+		t.Errorf("Missing attempt 3 QC feedback")
+	}
+}

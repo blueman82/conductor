@@ -520,14 +520,7 @@ Before finalizing any YAML file (especially after splitting):
 The YAML plan MUST follow this exact structure:
 
 ```yaml
-plan:
-  # Metadata about the implementation plan
-  metadata:
-    feature_name: "Descriptive Feature Name"
-    created: "YYYY-MM-DD"
-    target: "Brief description of what we're building"
-    estimated_tasks: <number>
-
+conductor:
   # Worktree groups for parallel execution while respecting dependencies
   worktree_groups:
     - group_id: "chain-1"
@@ -608,6 +601,14 @@ plan:
         git checkout main
         git merge feature/<feature-slug>/chain-5
         git push origin main
+
+plan:
+  # Metadata about the implementation plan
+  metadata:
+    feature_name: "Descriptive Feature Name"
+    created: "YYYY-MM-DD"
+    target: "Brief description of what we're building"
+    estimated_tasks: <number>
 
   # Context for the engineer implementing this
   context:

@@ -34,6 +34,16 @@ const (
 	markdownCheckboxPattern = `^(?P<prefix>\s*[-*+]\s+\[)(?P<mark>[ xX])(?P<suffix>\]\s+Task\s+%s\b.*)$`
 )
 
+// ExecutionAttempt captures details of a single task execution attempt.
+type ExecutionAttempt struct {
+	AttemptNumber int
+	Agent         string
+	Verdict       string
+	AgentOutput   string
+	QCFeedback    string
+	Timestamp     time.Time
+}
+
 var (
 	markdownStatusPattern = regexp.MustCompile(`(?i)status\s*:\s*([^)|]+)`)
 
@@ -354,4 +364,179 @@ func detectCompletedKey(taskNode *yaml.Node) string {
 		}
 	}
 	return ""
+}
+
+// UpdateTaskFeedback appends execution history to a task in the plan file.
+// Supports Markdown plans only for now.
+func UpdateTaskFeedback(planPath string, taskNumber string, attempt *ExecutionAttempt) error {
+	format := parser.DetectFormat(planPath)
+	if format == parser.FormatUnknown {
+		return fmt.Errorf("%w: %s", ErrUnsupportedFormat, filepath.Ext(planPath))
+	}
+
+	lockPath := planPath + ".lock"
+	lock := filelock.NewFileLock(lockPath)
+	if err := lock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		lock.Unlock()
+		os.Remove(lockPath)
+	}()
+
+	content, err := os.ReadFile(planPath)
+	if err != nil {
+		return err
+	}
+
+	var updated []byte
+
+	switch format {
+	case parser.FormatMarkdown:
+		updated, err = updateMarkdownFeedback(content, taskNumber, attempt)
+	case parser.FormatYAML:
+		updated, err = updateYAMLFeedback(content, taskNumber, attempt)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return filelock.AtomicWrite(planPath, updated)
+}
+
+func updateMarkdownFeedback(content []byte, taskNumber string, attempt *ExecutionAttempt) ([]byte, error) {
+	lines := strings.Split(string(content), "\n")
+
+	// Find task line
+	taskPattern := regexp.MustCompile(fmt.Sprintf(`^(?:\s*[-*+]\s+\[[xX ]\]\s+)?Task\s+%s\b`, regexp.QuoteMeta(taskNumber)))
+	taskIdx := -1
+	for i, line := range lines {
+		if taskPattern.MatchString(line) {
+			taskIdx = i
+			break
+		}
+	}
+
+	if taskIdx == -1 {
+		return nil, fmt.Errorf("%w: task %s not found in markdown plan", ErrTaskNotFound, taskNumber)
+	}
+
+	// Find next task or end of file
+	nextTaskPattern := regexp.MustCompile(`^(?:\s*[-*+]\s+\[[xX ]\]\s+)?Task\s+\d+\b`)
+	endIdx := len(lines)
+	for i := taskIdx + 1; i < len(lines); i++ {
+		if nextTaskPattern.MatchString(lines[i]) {
+			endIdx = i
+			break
+		}
+	}
+
+	// Find or create Execution History section
+	historyIdx := -1
+	for i := taskIdx + 1; i < endIdx; i++ {
+		if strings.TrimSpace(lines[i]) == "### Execution History" {
+			historyIdx = i
+			break
+		}
+	}
+
+	// Format attempt
+	timestamp := attempt.Timestamp.Format("2006-01-02 15:04:05")
+	attemptLines := []string{
+		fmt.Sprintf("#### Attempt %d (%s)", attempt.AttemptNumber, timestamp),
+		fmt.Sprintf("Agent: %s", attempt.Agent),
+		fmt.Sprintf("Verdict: %s", attempt.Verdict),
+		"",
+		"Agent Output:",
+		attempt.AgentOutput,
+		"",
+		"QC Feedback:",
+		attempt.QCFeedback,
+		"",
+	}
+
+	if historyIdx == -1 {
+		// Create new history section at end of task
+		newLines := make([]string, 0, len(lines)+len(attemptLines)+2)
+		newLines = append(newLines, lines[:endIdx]...)
+		newLines = append(newLines, "")
+		newLines = append(newLines, "### Execution History")
+		newLines = append(newLines, "")
+		newLines = append(newLines, attemptLines...)
+		newLines = append(newLines, lines[endIdx:]...)
+		return []byte(strings.Join(newLines, "\n")), nil
+	}
+
+	// Append to existing history
+	newLines := make([]string, 0, len(lines)+len(attemptLines))
+	newLines = append(newLines, lines[:endIdx]...)
+	newLines = append(newLines, attemptLines...)
+	newLines = append(newLines, lines[endIdx:]...)
+	return []byte(strings.Join(newLines, "\n")), nil
+}
+
+func updateYAMLFeedback(content []byte, taskNumber string, attempt *ExecutionAttempt) ([]byte, error) {
+	var doc yaml.Node
+
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+	if err := decoder.Decode(&doc); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidPlan, err)
+	}
+
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil, fmt.Errorf("%w: missing document node", ErrInvalidPlan)
+	}
+
+	root := doc.Content[0]
+	planNode := findMapValue(root, "plan")
+	if planNode == nil {
+		return nil, fmt.Errorf("%w: plan section not found", ErrInvalidPlan)
+	}
+
+	tasksNode := findMapValue(planNode, "tasks")
+	if tasksNode == nil || tasksNode.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("%w: tasks sequence not found", ErrInvalidPlan)
+	}
+
+	taskNode := findTaskNode(tasksNode, taskNumber)
+	if taskNode == nil {
+		return nil, fmt.Errorf("%w: task %s not found in YAML plan", ErrTaskNotFound, taskNumber)
+	}
+
+	// Find or create execution_history array
+	historyNode := findMapValue(taskNode, "execution_history")
+	if historyNode == nil {
+		// Create new sequence
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "execution_history"}
+		historyNode = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		taskNode.Content = append(taskNode.Content, keyNode, historyNode)
+	}
+
+	// Create attempt node
+	attemptNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	addKeyValue := func(key, value string) {
+		attemptNode.Content = append(attemptNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
+	}
+
+	addKeyValue("attempt_number", fmt.Sprintf("%d", attempt.AttemptNumber))
+	addKeyValue("agent", attempt.Agent)
+	addKeyValue("verdict", attempt.Verdict)
+	addKeyValue("agent_output", attempt.AgentOutput)
+	addKeyValue("qc_feedback", attempt.QCFeedback)
+	addKeyValue("timestamp", attempt.Timestamp.Format(time.RFC3339))
+
+	// Append to history
+	historyNode.Content = append(historyNode.Content, attemptNode)
+
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&doc); err != nil {
+		return nil, fmt.Errorf("failed to encode YAML plan: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }

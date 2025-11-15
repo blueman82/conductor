@@ -208,18 +208,18 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction prefix
-					expectedPrefix := "Do not use markdown formatting or emojis in your response. "
-					expectedPrompt := expectedPrefix + "Do work"
+					// Verify prompt includes formatting instruction prefix and JSON instruction
 					hasPrompt := false
 					for _, arg := range args {
-						if arg == expectedPrompt {
+						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
+							strings.Contains(arg, "Do work") &&
+							strings.Contains(arg, "IMPORTANT: Respond ONLY with valid JSON") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions when agent doesn't exist in registry")
+						t.Error("Prompt should include formatting instructions and JSON instruction when agent doesn't exist in registry")
 					}
 				},
 			},
@@ -236,18 +236,18 @@ Swift agent content
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction prefix
-					expectedPrefix := "Do not use markdown formatting or emojis in your response. "
-					expectedPrompt := expectedPrefix + "Create something"
+					// Verify prompt includes formatting instruction prefix and JSON instruction
 					hasPrompt := false
 					for _, arg := range args {
-						if arg == expectedPrompt {
+						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
+							strings.Contains(arg, "Create something") &&
+							strings.Contains(arg, "IMPORTANT: Respond ONLY with valid JSON") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions when no registry is available")
+						t.Error("Prompt should include formatting instructions and JSON instruction when no registry is available")
 					}
 				},
 			},
@@ -547,6 +547,189 @@ func TestClaudeOutputMarshaling(t *testing.T) {
 }
 
 // TestBuildCommandArgsWithAgentsFlag tests Method 1 agent invocation using --agents JSON flag
+func TestInvoker_BuildJSONPrompt(t *testing.T) {
+	tests := []struct {
+		name           string
+		originalPrompt string
+		wantContains   []string
+	}{
+		{
+			name:           "appends JSON instruction",
+			originalPrompt: "Implement authentication",
+			wantContains: []string{
+				"Implement authentication",
+				"IMPORTANT: Respond ONLY with valid JSON",
+				`"status": "success|failed"`,
+				`"summary"`,
+				`"output"`,
+				`"errors"`,
+				`"files_modified"`,
+				`"metadata"`,
+			},
+		},
+		{
+			name:           "preserves original prompt",
+			originalPrompt: "Build iOS app with SwiftUI",
+			wantContains: []string{
+				"Build iOS app with SwiftUI",
+				"IMPORTANT: Respond ONLY with valid JSON",
+			},
+		},
+		{
+			name:           "handles empty prompt",
+			originalPrompt: "",
+			wantContains: []string{
+				"IMPORTANT: Respond ONLY with valid JSON",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			invoker := NewInvoker()
+			prompt := invoker.buildJSONPrompt(tt.originalPrompt)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(prompt, want) {
+					t.Errorf("buildJSONPrompt() missing %q", want)
+				}
+			}
+		})
+	}
+}
+
+func TestParseAgentJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		want    *models.AgentResponse
+		wantErr bool
+	}{
+		{
+			name:   "valid JSON",
+			output: `{"status":"success","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
+			want: &models.AgentResponse{
+				Status:   "success",
+				Summary:  "Done",
+				Output:   "result",
+				Errors:   []string{},
+				Files:    []string{},
+				Metadata: map[string]interface{}{},
+			},
+			wantErr: false,
+		},
+		{
+			name:   "valid JSON with errors",
+			output: `{"status":"failed","summary":"Build failed","output":"compilation errors","errors":["undefined variable"],"files_modified":["main.go"],"metadata":{}}`,
+			want: &models.AgentResponse{
+				Status:   "failed",
+				Summary:  "Build failed",
+				Output:   "compilation errors",
+				Errors:   []string{"undefined variable"},
+				Files:    []string{"main.go"},
+				Metadata: map[string]interface{}{},
+			},
+			wantErr: false,
+		},
+		{
+			name:   "malformed JSON - fallback to plain text",
+			output: "plain text output",
+			want: &models.AgentResponse{
+				Status:   "success",
+				Summary:  "Plain text response",
+				Output:   "plain text output",
+				Errors:   []string{},
+				Files:    []string{},
+				Metadata: map[string]interface{}{"parse_fallback": true},
+			},
+			wantErr: false,
+		},
+		{
+			name:   "empty response",
+			output: "",
+			want: &models.AgentResponse{
+				Status:   "success",
+				Summary:  "Plain text response",
+				Output:   "",
+				Errors:   []string{},
+				Files:    []string{},
+				Metadata: map[string]interface{}{"parse_fallback": true},
+			},
+			wantErr: false,
+		},
+		{
+			name:   "partial JSON - fallback",
+			output: `{"status":"success"`,
+			want: &models.AgentResponse{
+				Status:   "success",
+				Summary:  "Plain text response",
+				Output:   `{"status":"success"`,
+				Errors:   []string{},
+				Files:    []string{},
+				Metadata: map[string]interface{}{"parse_fallback": true},
+			},
+			wantErr: false,
+		},
+		{
+			name:   "JSON with extra fields",
+			output: `{"status":"success","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{},"extra":"ignored"}`,
+			want: &models.AgentResponse{
+				Status:   "success",
+				Summary:  "Done",
+				Output:   "result",
+				Errors:   []string{},
+				Files:    []string{},
+				Metadata: map[string]interface{}{},
+			},
+			wantErr: false,
+		},
+		{
+			name:   "invalid status value - fallback",
+			output: `{"status":"invalid","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
+			want: &models.AgentResponse{
+				Status:   "success",
+				Summary:  "Plain text response",
+				Output:   `{"status":"invalid","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
+				Errors:   []string{},
+				Files:    []string{},
+				Metadata: map[string]interface{}{"parse_fallback": true},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseAgentJSON(tt.output)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseAgentJSON() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got.Status != tt.want.Status {
+				t.Errorf("Status = %v, want %v", got.Status, tt.want.Status)
+			}
+			if got.Summary != tt.want.Summary {
+				t.Errorf("Summary = %v, want %v", got.Summary, tt.want.Summary)
+			}
+			if got.Output != tt.want.Output {
+				t.Errorf("Output = %v, want %v", got.Output, tt.want.Output)
+			}
+			if len(got.Errors) != len(tt.want.Errors) {
+				t.Errorf("Errors length = %v, want %v", len(got.Errors), len(tt.want.Errors))
+			}
+			if len(got.Files) != len(tt.want.Files) {
+				t.Errorf("Files length = %v, want %v", len(got.Files), len(tt.want.Files))
+			}
+			if tt.want.Metadata != nil {
+				if fallback, ok := tt.want.Metadata["parse_fallback"]; ok && fallback == true {
+					if got.Metadata["parse_fallback"] != true {
+						t.Errorf("Missing parse_fallback metadata flag")
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestBuildCommandArgsWithAgentsFlag(t *testing.T) {
 	tests := []struct {
 		name          string

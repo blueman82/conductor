@@ -62,6 +62,27 @@ quality_control:
   # If not specified in plan, falls back to config value, then default 2
   retry_on_red: 2
 
+# Feedback storage configuration
+# Controls where and how task execution feedback is stored
+feedback:
+  # Store execution history in plan file (default: true)
+  # Creates "Execution History" sections in Markdown or execution_history arrays in YAML
+  store_in_plan_file: true
+
+  # Store execution history in database (default: true)
+  # Stores structured data in .conductor/learning/executions.db
+  store_in_database: true
+
+  # Format for agent/QC responses (default: json)
+  # Options: json (structured), text (plain text)
+  format: json
+
+  # Control which verdicts trigger feedback storage
+  # All enabled by default for complete execution history
+  store_on_green: true
+  store_on_red: true
+  store_on_yellow: true
+
 # ===== ADVANCED CONFIGURATION =====
 # The settings below are optional and have sensible defaults.
 # Uncomment and modify only if you need to change them.
@@ -101,12 +122,28 @@ learning:
   # When enabled, conductor will automatically suggest or switch agents based on past successes
   auto_adapt_agent: false
 
+  # Enable agent swapping during retry loops (default: true)
+  # When a task fails repeatedly, swap to a better-performing agent suggested by QC or history
+  swap_during_retries: true
+
   # Enhance prompts with learned context (default: true)
   # When enabled, conductor enriches task prompts with relevant execution history
   enhance_prompts: true
 
+  # Enable QC to read plan file context (default: true)
+  # QC agent loads execution history from current run's plan file before reviewing
+  qc_reads_plan_context: true
+
+  # Enable QC to read database context (default: true)
+  # QC agent loads historical execution data from database before reviewing
+  qc_reads_db_context: true
+
+  # Maximum context entries to load (default: 10)
+  # Limits the number of historical attempts included in QC context
+  max_context_entries: 10
+
   # Minimum failures before adapting strategy (default: 2)
-  # Conductor will consider adapting after this many consecutive failures
+  # Conductor will consider adapting (swapping agents) after this many consecutive failures
   min_failures_before_adapt: 2
 
   # Days to keep execution history (default: 90)
@@ -128,7 +165,34 @@ learning:
 # Example: Enable automatic agent adaptation
 # learning:
 #   auto_adapt_agent: true
+#   swap_during_retries: true
 #   min_failures_before_adapt: 3
+
+# Example: Disable QC context loading
+# learning:
+#   qc_reads_plan_context: false
+#   qc_reads_db_context: false
+
+# Example: Limit context to recent attempts only
+# learning:
+#   max_context_entries: 5
+
+# Feedback Storage Examples
+
+# Example: Store only failures
+# feedback:
+#   store_on_green: false
+#   store_on_red: true
+#   store_on_yellow: true
+
+# Example: Store only in database, skip plan file updates
+# feedback:
+#   store_in_plan_file: false
+#   store_in_database: true
+
+# Example: Use plain text format instead of JSON
+# feedback:
+#   format: text
 
 # Quality Control Examples
 

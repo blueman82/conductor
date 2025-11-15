@@ -18,10 +18,11 @@ type Invoker struct {
 
 // InvocationResult captures the result of invoking the claude CLI
 type InvocationResult struct {
-	Output   string
-	ExitCode int
-	Duration time.Duration
-	Error    error
+	Output        string
+	ExitCode      int
+	Duration      time.Duration
+	Error         error
+	AgentResponse *models.AgentResponse
 }
 
 // ClaudeOutput represents the JSON output structure from claude CLI
@@ -74,6 +75,58 @@ func PrepareAgentPrompt(prompt string) string {
 	return instructionPrefix + prompt
 }
 
+// buildJSONPrompt appends JSON instruction to agent prompts
+func (inv *Invoker) buildJSONPrompt(originalPrompt string) string {
+	jsonInstruction := `
+
+IMPORTANT: Respond ONLY with valid JSON in this format:
+{
+  "status": "success|failed",
+  "summary": "Brief description",
+  "output": "Full execution output",
+  "errors": ["error1"],
+  "files_modified": ["file1.go"],
+  "metadata": {}
+}`
+	return originalPrompt + jsonInstruction
+}
+
+// parseAgentJSON parses JSON response from agent, with fallback to plain text
+func parseAgentJSON(output string) (*models.AgentResponse, error) {
+	var resp models.AgentResponse
+
+	// Try parsing as JSON
+	err := json.Unmarshal([]byte(output), &resp)
+	if err != nil {
+		// Fallback: wrap plain text
+		resp = models.AgentResponse{
+			Status:   "success",
+			Summary:  "Plain text response",
+			Output:   output,
+			Errors:   []string{},
+			Files:    []string{},
+			Metadata: map[string]interface{}{"parse_fallback": true},
+		}
+		return &resp, nil
+	}
+
+	// Validate parsed JSON
+	if err := resp.Validate(); err != nil {
+		// Invalid JSON structure, fallback to plain text
+		resp = models.AgentResponse{
+			Status:   "success",
+			Summary:  "Plain text response",
+			Output:   output,
+			Errors:   []string{},
+			Files:    []string{},
+			Metadata: map[string]interface{}{"parse_fallback": true},
+		}
+		return &resp, nil
+	}
+
+	return &resp, nil
+}
+
 // BuildCommandArgs constructs the command-line arguments for invoking claude CLI
 // Uses Method 1: --agents JSON flag to pass agent definition explicitly for better automation reliability
 //
@@ -88,7 +141,7 @@ func PrepareAgentPrompt(prompt string) string {
 //
 // Arguments order:
 //  1. --agents (if agent specified and found)
-//  2. -p (prompt with "use the X subagent to:" prefix if agent present)
+//  2. -p (prompt with "use the X subagent to:" prefix if agent present + JSON instruction)
 //  3. --dangerously-skip-permissions
 //  4. --settings (disableAllHooks)
 //  5. --output-format json
@@ -116,6 +169,9 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 
 	// Add formatting instructions to the prompt
 	prompt = PrepareAgentPrompt(prompt)
+
+	// Add JSON instruction to prompt
+	prompt = inv.buildJSONPrompt(prompt)
 
 	// Add -p flag for non-interactive print mode (essential for automation)
 	args = append(args, "-p", prompt)
@@ -156,6 +212,18 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 		} else {
 			result.Error = err
 		}
+	}
+
+	// Parse agent response from output
+	parsedOutput, parseErr := ParseClaudeOutput(string(output))
+	if parseErr == nil && parsedOutput.Content != "" {
+		// Parse the content as AgentResponse JSON
+		agentResp, _ := parseAgentJSON(parsedOutput.Content)
+		result.AgentResponse = agentResp
+	} else {
+		// Fallback: parse raw output as AgentResponse
+		agentResp, _ := parseAgentJSON(string(output))
+		result.AgentResponse = agentResp
 	}
 
 	return result, nil

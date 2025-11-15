@@ -10,15 +10,26 @@ const (
 	StatusFailed = "FAILED" // Task failed to execute
 )
 
+// ExecutionAttempt represents a single execution attempt (for retry tracking)
+type ExecutionAttempt struct {
+	Attempt      int    // Attempt number (1-indexed)
+	Agent        string // Agent used for this attempt
+	AgentOutput  string // Raw JSON output from agent
+	QCFeedback   string // Raw JSON output from QC review
+	Verdict      string // QC verdict: "GREEN", "RED", "YELLOW"
+	Duration     time.Duration
+}
+
 // TaskResult represents the result of executing a single task
 type TaskResult struct {
-	Task           Task          // The task that was executed
-	Status         string        // Status: "GREEN", "RED", "TIMEOUT", "FAILED"
-	Output         string        // Captured output from agent
-	Error          error         // Error if execution failed
-	Duration       time.Duration // Time taken to execute
-	RetryCount     int           // Number of retries attempted
-	ReviewFeedback string        // Feedback from QC review
+	Task             Task               // The task that was executed
+	Status           string             // Status: "GREEN", "RED", "TIMEOUT", "FAILED"
+	Output           string             // Captured output from agent
+	Error            error              // Error if execution failed
+	Duration         time.Duration      // Time taken to execute
+	RetryCount       int                // Number of retries attempted
+	ReviewFeedback   string             // Feedback from QC review
+	ExecutionHistory []ExecutionAttempt // Detailed history of all attempts
 }
 
 // ExecutionResult represents the aggregate result of executing a plan
