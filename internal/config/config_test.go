@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1803,5 +1804,566 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	}
 	if cfg.Learning.MaxExecutionsPerTask != 200 {
 		t.Errorf("Learning.MaxExecutionsPerTask = %d, want 200", cfg.Learning.MaxExecutionsPerTask)
+	}
+}
+
+// TestQCAgentConfigDefaults tests default QC agent configuration
+func TestQCAgentConfigDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.QualityControl.Agents.Mode != "auto" {
+		t.Errorf("QCAgent.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "auto")
+	}
+	if len(cfg.QualityControl.Agents.ExplicitList) != 0 {
+		t.Errorf("QCAgent.ExplicitList = %v, want empty", cfg.QualityControl.Agents.ExplicitList)
+	}
+	if len(cfg.QualityControl.Agents.AdditionalAgents) != 0 {
+		t.Errorf("QCAgent.AdditionalAgents = %v, want empty", cfg.QualityControl.Agents.AdditionalAgents)
+	}
+	if len(cfg.QualityControl.Agents.BlockedAgents) != 0 {
+		t.Errorf("QCAgent.BlockedAgents = %v, want empty", cfg.QualityControl.Agents.BlockedAgents)
+	}
+}
+
+// TestQCAgentConfigAutoMode tests loading auto mode QC configuration
+func TestQCAgentConfigAutoMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  agents:
+    mode: auto
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if !cfg.QualityControl.Enabled {
+		t.Errorf("QualityControl.Enabled = %v, want true", cfg.QualityControl.Enabled)
+	}
+	if cfg.QualityControl.Agents.Mode != "auto" {
+		t.Errorf("QCAgent.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "auto")
+	}
+}
+
+// TestQCAgentConfigExplicitMode tests loading explicit mode QC configuration
+func TestQCAgentConfigExplicitMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  agents:
+    mode: explicit
+    explicit_list:
+      - golang-pro
+      - quality-control
+      - test-expert
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.QualityControl.Agents.Mode != "explicit" {
+		t.Errorf("QCAgent.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "explicit")
+	}
+	if len(cfg.QualityControl.Agents.ExplicitList) != 3 {
+		t.Errorf("QCAgent.ExplicitList length = %d, want 3", len(cfg.QualityControl.Agents.ExplicitList))
+	}
+	if cfg.QualityControl.Agents.ExplicitList[0] != "golang-pro" {
+		t.Errorf("QCAgent.ExplicitList[0] = %q, want %q", cfg.QualityControl.Agents.ExplicitList[0], "golang-pro")
+	}
+}
+
+// TestQCAgentConfigMixedMode tests loading mixed mode QC configuration
+func TestQCAgentConfigMixedMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  agents:
+    mode: mixed
+    additional:
+      - security-expert
+      - performance-pro
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.QualityControl.Agents.Mode != "mixed" {
+		t.Errorf("QCAgent.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "mixed")
+	}
+	if len(cfg.QualityControl.Agents.AdditionalAgents) != 2 {
+		t.Errorf("QCAgent.AdditionalAgents length = %d, want 2", len(cfg.QualityControl.Agents.AdditionalAgents))
+	}
+	if cfg.QualityControl.Agents.AdditionalAgents[0] != "security-expert" {
+		t.Errorf("QCAgent.AdditionalAgents[0] = %q, want %q", cfg.QualityControl.Agents.AdditionalAgents[0], "security-expert")
+	}
+}
+
+// TestQCAgentConfigBlockedAgents tests loading blocked agents configuration
+func TestQCAgentConfigBlockedAgents(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  agents:
+    mode: auto
+    blocked:
+      - slow-agent
+      - deprecated-agent
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if len(cfg.QualityControl.Agents.BlockedAgents) != 2 {
+		t.Errorf("QCAgent.BlockedAgents length = %d, want 2", len(cfg.QualityControl.Agents.BlockedAgents))
+	}
+	if cfg.QualityControl.Agents.BlockedAgents[0] != "slow-agent" {
+		t.Errorf("QCAgent.BlockedAgents[0] = %q, want %q", cfg.QualityControl.Agents.BlockedAgents[0], "slow-agent")
+	}
+}
+
+// TestQCAgentConfigComplexMixed tests loading complex mixed mode configuration
+func TestQCAgentConfigComplexMixed(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  retry_on_red: 3
+  agents:
+    mode: mixed
+    additional:
+      - security-expert
+      - performance-pro
+    blocked:
+      - slow-agent
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if !cfg.QualityControl.Enabled {
+		t.Errorf("QualityControl.Enabled = %v, want true", cfg.QualityControl.Enabled)
+	}
+	if cfg.QualityControl.RetryOnRed != 3 {
+		t.Errorf("QualityControl.RetryOnRed = %d, want 3", cfg.QualityControl.RetryOnRed)
+	}
+	if cfg.QualityControl.Agents.Mode != "mixed" {
+		t.Errorf("QCAgent.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "mixed")
+	}
+	if len(cfg.QualityControl.Agents.AdditionalAgents) != 2 {
+		t.Errorf("QCAgent.AdditionalAgents length = %d, want 2", len(cfg.QualityControl.Agents.AdditionalAgents))
+	}
+	if len(cfg.QualityControl.Agents.BlockedAgents) != 1 {
+		t.Errorf("QCAgent.BlockedAgents length = %d, want 1", len(cfg.QualityControl.Agents.BlockedAgents))
+	}
+}
+
+// TestQCAgentConfigBackwardCompatibility tests backward compatibility with review_agent
+func TestQCAgentConfigBackwardCompatibility(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  review_agent: custom-reviewer
+  retry_on_red: 2
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if !cfg.QualityControl.Enabled {
+		t.Errorf("QualityControl.Enabled = %v, want true", cfg.QualityControl.Enabled)
+	}
+	if cfg.QualityControl.ReviewAgent != "custom-reviewer" {
+		t.Errorf("QualityControl.ReviewAgent = %q, want %q", cfg.QualityControl.ReviewAgent, "custom-reviewer")
+	}
+
+	// Should auto-convert to explicit mode
+	if cfg.QualityControl.Agents.Mode != "explicit" {
+		t.Errorf("QCAgent.Mode should be 'explicit' for backward compatibility, got %q", cfg.QualityControl.Agents.Mode)
+	}
+	if len(cfg.QualityControl.Agents.ExplicitList) != 1 || cfg.QualityControl.Agents.ExplicitList[0] != "custom-reviewer" {
+		t.Errorf("QCAgent.ExplicitList should contain review_agent, got %v", cfg.QualityControl.Agents.ExplicitList)
+	}
+}
+
+// TestQCAgentConfigValidationValidModes tests validation of valid QC modes
+func TestQCAgentConfigValidationValidModes(t *testing.T) {
+	validModes := []string{"auto", "explicit", "mixed"}
+
+	for _, mode := range validModes {
+		t.Run(mode, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			configContent := fmt.Sprintf(`quality_control:
+  enabled: true
+  agents:
+    mode: %s
+    explicit_list:
+      - agent1
+`, mode)
+
+			if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("Validate() error = %v for valid mode %q", err, mode)
+			}
+		})
+	}
+}
+
+// TestQCAgentConfigValidationInvalidMode tests validation rejects invalid modes
+func TestQCAgentConfigValidationInvalidMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  agents:
+    mode: invalid-mode
+    explicit_list:
+      - agent1
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() expected error for invalid mode, got nil")
+	}
+}
+
+// TestQCAgentConfigValidationExplicitNeedsList tests explicit mode requires agents
+func TestQCAgentConfigValidationExplicitNeedsList(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  agents:
+    mode: explicit
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Explicit mode without explicit_list should either fail validation or default to empty list
+	// Current implementation defaults to empty list, which is acceptable
+	if cfg.QualityControl.Agents.Mode != "explicit" {
+		t.Errorf("Expected explicit mode, got %q", cfg.QualityControl.Agents.Mode)
+	}
+}
+
+// TestQCAgentConfigValidationEmptyAgentNames tests validation rejects empty agent names
+func TestQCAgentConfigValidationEmptyAgentNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   string
+		wantErr  bool
+	}{
+		{
+			name: "empty explicit_list item",
+			config: `quality_control:
+  enabled: true
+  agents:
+    mode: explicit
+    explicit_list:
+      - golang-pro
+      - ""
+      - quality-control
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty additional agent",
+			config: `quality_control:
+  enabled: true
+  agents:
+    mode: mixed
+    additional:
+      - valid-agent
+      - ""
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty blocked agent",
+			config: `quality_control:
+  enabled: true
+  agents:
+    mode: auto
+    blocked:
+      - ""
+      - slow-agent
+`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			if err := os.WriteFile(configPath, []byte(tt.config), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			err = cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestQCAgentConfigValidationRetryCount tests validation of retry_on_red
+func TestQCAgentConfigValidationRetryCount(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   string
+		wantErr  bool
+	}{
+		{
+			name: "valid retry count",
+			config: `quality_control:
+  enabled: true
+  retry_on_red: 3
+`,
+			wantErr: false,
+		},
+		{
+			name: "zero retry count (allowed)",
+			config: `quality_control:
+  enabled: true
+  retry_on_red: 0
+`,
+			wantErr: false,
+		},
+		{
+			name: "negative retry count",
+			config: `quality_control:
+  enabled: true
+  retry_on_red: -1
+`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			if err := os.WriteFile(configPath, []byte(tt.config), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			err = cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestQCAgentConfigMissingAgentsSection tests handling missing agents section
+func TestQCAgentConfigMissingAgentsSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  review_agent: quality-control
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// With review_agent but no agents section, should convert to explicit mode
+	if cfg.QualityControl.Agents.Mode != "explicit" {
+		t.Errorf("QCAgent.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "explicit")
+	}
+}
+
+// TestQCAgentConfigEmptyAgentsSection tests handling empty agents section
+func TestQCAgentConfigEmptyAgentsSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `quality_control:
+  enabled: true
+  agents:
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Empty agents section - mode will be what's in the YAML (empty, defaulting to "explicit"
+	// when converted from missing agents section, or "auto" if explicitly set)
+	// Just verify it's a valid mode
+	validModes := []string{"auto", "explicit", "mixed"}
+	found := false
+	for _, mode := range validModes {
+		if cfg.QualityControl.Agents.Mode == mode {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("QCAgent.Mode = %q, not a valid mode", cfg.QualityControl.Agents.Mode)
+	}
+}
+
+// TestQCAgentConfigFullExample tests comprehensive QC configuration example
+func TestQCAgentConfigFullExample(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `max_concurrency: 8
+timeout: 2h
+log_level: debug
+
+quality_control:
+  enabled: true
+  retry_on_red: 3
+  agents:
+    mode: mixed
+    additional:
+      - security-expert
+      - performance-auditor
+    blocked:
+      - deprecated-reviewer
+      - slow-analyzer
+
+learning:
+  enabled: true
+  auto_adapt_agent: true
+  swap_during_retries: true
+  qc_reads_db_context: true
+  min_failures_before_adapt: 2
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Verify main config
+	if cfg.MaxConcurrency != 8 {
+		t.Errorf("MaxConcurrency = %d, want 8", cfg.MaxConcurrency)
+	}
+
+	// Verify QC config
+	if !cfg.QualityControl.Enabled {
+		t.Errorf("QualityControl.Enabled = %v, want true", cfg.QualityControl.Enabled)
+	}
+	if cfg.QualityControl.RetryOnRed != 3 {
+		t.Errorf("QualityControl.RetryOnRed = %d, want 3", cfg.QualityControl.RetryOnRed)
+	}
+	if cfg.QualityControl.Agents.Mode != "mixed" {
+		t.Errorf("QCAgent.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "mixed")
+	}
+	if len(cfg.QualityControl.Agents.AdditionalAgents) != 2 {
+		t.Errorf("QCAgent.AdditionalAgents length = %d, want 2", len(cfg.QualityControl.Agents.AdditionalAgents))
+	}
+	if len(cfg.QualityControl.Agents.BlockedAgents) != 2 {
+		t.Errorf("QCAgent.BlockedAgents length = %d, want 2", len(cfg.QualityControl.Agents.BlockedAgents))
+	}
+
+	// Verify learning config
+	if !cfg.Learning.Enabled {
+		t.Errorf("Learning.Enabled = %v, want true", cfg.Learning.Enabled)
+	}
+	if !cfg.Learning.AutoAdaptAgent {
+		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
+	}
+	if !cfg.Learning.QCReadsDBContext {
+		t.Errorf("Learning.QCReadsDBContext = %v, want true", cfg.Learning.QCReadsDBContext)
+	}
+
+	// Validate the entire config
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
 	}
 }

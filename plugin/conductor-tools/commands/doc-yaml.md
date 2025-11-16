@@ -521,6 +521,42 @@ The YAML plan MUST follow this exact structure:
 
 ```yaml
 conductor:
+  # Default agent for tasks without explicit agent assignment
+  default_agent: general-purpose
+
+  # Maximum number of concurrent task waves
+  max_concurrency: 3
+
+  # Quality control configuration with multi-agent support
+  quality_control:
+    enabled: true
+    review_agent: quality-control
+    retry_on_red: 2
+
+    # Multi-agent QC configuration
+    agents:
+      # mode: auto - Automatically selects QC agents based on file types (RECOMMENDED)
+      # mode: explicit - Uses ONLY agents specified in explicit_list
+      # mode: mixed - Combines auto-selected agents with those in additional list
+      mode: auto
+
+      # explicit_list: Required when mode is explicit - list of agents to use
+      # Leave empty by default unless using explicit mode
+      # Example: ["typescript-pro", "python-pro"] when mode is explicit
+      explicit_list: []
+
+      # additional: Extra agents to add when mode is mixed
+      # Leave empty by default to let auto-selection handle agent matching
+      # Added to auto-selected agents when mode is mixed
+      # Example: ["custom-agent"] for mixed mode
+      additional: []
+
+      # blocked: List of agent names to exclude from QC selection
+      # Leave empty by default, no exclusions
+      # Filters auto-selected agents in auto and mixed modes
+      # Example: ["slow-agent"] to prevent certain agents from reviewing
+      blocked: []
+
   # Worktree groups for parallel execution while respecting dependencies
   worktree_groups:
     - group_id: "chain-1"

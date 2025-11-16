@@ -28,7 +28,7 @@ import (
 )
 
 // Logger interface for orchestrator progress reporting.
-// Supports wave-level, task-level, and summary logging.
+// Supports wave-level, task-level, summary, and quality control logging.
 // Implementations can log to console, file, or other destinations.
 type Logger interface {
 	LogWaveStart(wave models.Wave)
@@ -36,6 +36,9 @@ type Logger interface {
 	LogTaskResult(result models.TaskResult) error
 	LogProgress(results []models.TaskResult)
 	LogSummary(result models.ExecutionResult)
+	LogQCAgentSelection(agents []string, mode string)
+	LogQCIndividualVerdicts(verdicts map[string]string)
+	LogQCAggregatedResult(verdict string, strategy string)
 }
 
 // WaveExecutorInterface defines the behavior required to execute waves.

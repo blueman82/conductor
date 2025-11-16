@@ -866,3 +866,293 @@ Create API handler for user endpoints.
 		t.Errorf("Expected time 2h, got %v", task.EstimatedTime)
 	}
 }
+
+func TestParseMarkdownWithQCInvalidMode(t *testing.T) {
+	markdown := `---
+conductor:
+  quality_control:
+    enabled: true
+    agents:
+      mode: "INVALID"
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`
+
+	parser := NewMarkdownParser()
+	_, err := parser.Parse(strings.NewReader(markdown))
+	if err == nil {
+		t.Error("Expected error for invalid QC agents mode, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid QC agents mode") {
+		t.Errorf("Expected error about invalid mode, got: %v", err)
+	}
+}
+
+func TestParseMarkdownWithQCExplicitModeNoList(t *testing.T) {
+	markdown := `---
+conductor:
+  quality_control:
+    enabled: true
+    agents:
+      mode: "explicit"
+      explicit_list: []
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`
+
+	parser := NewMarkdownParser()
+	_, err := parser.Parse(strings.NewReader(markdown))
+	if err == nil {
+		t.Error("Expected error for explicit mode with empty explicit_list, got nil")
+	}
+	if !strings.Contains(err.Error(), "explicit mode requires non-empty explicit_list") {
+		t.Errorf("Expected error about explicit_list requirement, got: %v", err)
+	}
+}
+
+func TestParseMarkdownWithQCModeCaseNormalization(t *testing.T) {
+	tests := []struct {
+		name         string
+		modeInput    string
+		expectPass   bool
+		withList     bool
+	}{
+		{"auto lowercase", "auto", true, false},
+		{"auto uppercase", "AUTO", true, false},
+		{"auto mixed case", "Auto", true, false},
+		{"explicit lowercase", "explicit", true, true},
+		{"explicit uppercase", "EXPLICIT", true, true},
+		{"mixed lowercase", "mixed", true, false},
+		{"invalid mode", "INVALID", false, false},
+		{"spaces trimmed", "  auto  ", true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			markdown := `---
+conductor:
+  quality_control:
+    enabled: true
+    agents:
+      mode: "` + tt.modeInput + `"`
+			if tt.withList {
+				markdown += `
+      explicit_list:
+        - agent1
+        - agent2`
+			}
+			markdown += `
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`
+
+			parser := NewMarkdownParser()
+			plan, err := parser.Parse(strings.NewReader(markdown))
+
+			if tt.expectPass {
+				if err != nil {
+					t.Errorf("Expected success, got error: %v", err)
+				}
+				// Mode should be normalized to lowercase
+				expectedMode := strings.ToLower(strings.TrimSpace(tt.modeInput))
+				if plan.QualityControl.Agents.Mode != expectedMode {
+					t.Errorf("Expected normalized mode %q, got %q", expectedMode, plan.QualityControl.Agents.Mode)
+				}
+			} else {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			}
+		})
+	}
+}
+
+func TestParseMarkdownWithQCAgentConfig(t *testing.T) {
+	tests := []struct {
+		name              string
+		markdown          string
+		expectedMode      string
+		expectedExplicit  []string
+		expectedAdditional []string
+		expectedBlocked   []string
+	}{
+		{
+			name: "markdown with QC auto mode",
+			markdown: `---
+conductor:
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+    retry_on_red: 2
+    agents:
+      mode: "auto"
+      blocked: ["deprecated-agent"]
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`,
+			expectedMode:      "auto",
+			expectedBlocked:   []string{"deprecated-agent"},
+			expectedExplicit:  []string{},
+			expectedAdditional: []string{},
+		},
+		{
+			name: "markdown with QC explicit mode",
+			markdown: `---
+conductor:
+  quality_control:
+    enabled: true
+    retry_on_red: 3
+    agents:
+      mode: "explicit"
+      explicit_list:
+        - golang-pro
+        - code-reviewer
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`,
+			expectedMode:      "explicit",
+			expectedExplicit:  []string{"golang-pro", "code-reviewer"},
+			expectedAdditional: []string{},
+			expectedBlocked:   []string{},
+		},
+		{
+			name: "markdown with QC mixed mode",
+			markdown: `---
+conductor:
+  quality_control:
+    enabled: true
+    agents:
+      mode: "mixed"
+      additional:
+        - security-auditor
+        - performance-reviewer
+      blocked:
+        - old-agent
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`,
+			expectedMode:      "mixed",
+			expectedExplicit:  []string{},
+			expectedAdditional: []string{"security-auditor", "performance-reviewer"},
+			expectedBlocked:   []string{"old-agent"},
+		},
+		{
+			name: "markdown without agents section (backward compatibility)",
+			markdown: `---
+conductor:
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`,
+			expectedMode:      "",
+			expectedExplicit:  []string{},
+			expectedAdditional: []string{},
+			expectedBlocked:   []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewMarkdownParser()
+			plan, err := parser.Parse(strings.NewReader(tt.markdown))
+			if err != nil {
+				t.Fatalf("Failed to parse markdown: %v", err)
+			}
+
+			// Verify QC configuration
+			if plan.QualityControl.Agents.Mode != tt.expectedMode {
+				t.Errorf("Expected mode %q, got %q", tt.expectedMode, plan.QualityControl.Agents.Mode)
+			}
+
+			// Check explicit list
+			if len(plan.QualityControl.Agents.ExplicitList) != len(tt.expectedExplicit) {
+				t.Errorf("Expected %d explicit agents, got %d", len(tt.expectedExplicit), len(plan.QualityControl.Agents.ExplicitList))
+			}
+			for i, agent := range tt.expectedExplicit {
+				if i >= len(plan.QualityControl.Agents.ExplicitList) {
+					break
+				}
+				if plan.QualityControl.Agents.ExplicitList[i] != agent {
+					t.Errorf("Expected explicit agent %d to be %q, got %q", i, agent, plan.QualityControl.Agents.ExplicitList[i])
+				}
+			}
+
+			// Check additional agents
+			if len(plan.QualityControl.Agents.AdditionalAgents) != len(tt.expectedAdditional) {
+				t.Errorf("Expected %d additional agents, got %d", len(tt.expectedAdditional), len(plan.QualityControl.Agents.AdditionalAgents))
+			}
+			for i, agent := range tt.expectedAdditional {
+				if i >= len(plan.QualityControl.Agents.AdditionalAgents) {
+					break
+				}
+				if plan.QualityControl.Agents.AdditionalAgents[i] != agent {
+					t.Errorf("Expected additional agent %d to be %q, got %q", i, agent, plan.QualityControl.Agents.AdditionalAgents[i])
+				}
+			}
+
+			// Check blocked agents
+			if len(plan.QualityControl.Agents.BlockedAgents) != len(tt.expectedBlocked) {
+				t.Errorf("Expected %d blocked agents, got %d", len(tt.expectedBlocked), len(plan.QualityControl.Agents.BlockedAgents))
+			}
+			for i, agent := range tt.expectedBlocked {
+				if i >= len(plan.QualityControl.Agents.BlockedAgents) {
+					break
+				}
+				if plan.QualityControl.Agents.BlockedAgents[i] != agent {
+					t.Errorf("Expected blocked agent %d to be %q, got %q", i, agent, plan.QualityControl.Agents.BlockedAgents[i])
+				}
+			}
+		})
+	}
+}

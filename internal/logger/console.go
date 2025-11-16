@@ -826,6 +826,167 @@ func (cl *ConsoleLogger) LogTaskStart(task models.Task, current int, total int) 
 	cl.writer.Write([]byte(message))
 }
 
+// LogQCAgentSelection logs which QC agents were selected for review.
+// Format: "[HH:MM:SS] [QC] Selected agents: [agent1, agent2] (mode: auto)"
+// Thread-safe with mutex protection.
+func (cl *ConsoleLogger) LogQCAgentSelection(agents []string, mode string) {
+	if cl.writer == nil {
+		return
+	}
+
+	// QC logging is at INFO level
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	// Format agents as comma-separated list
+	agentsList := fmt.Sprintf("[%s]", strings.Join(agents, ", "))
+
+	var message string
+	if cl.colorOutput {
+		// Cyan for [QC] prefix
+		qcPrefix := color.New(color.FgCyan).Sprint("[QC]")
+		// Magenta for agent names
+		agentColored := color.New(color.FgMagenta).Sprint(agentsList)
+		message = fmt.Sprintf("[%s] %s Selected agents: %s (mode: %s)\n", ts, qcPrefix, agentColored, mode)
+	} else {
+		// Plain text format
+		message = fmt.Sprintf("[%s] [QC] Selected agents: %s (mode: %s)\n", ts, agentsList, mode)
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
+// LogQCIndividualVerdicts logs verdicts from each QC agent.
+// Format: "[HH:MM:SS] [QC] Individual verdicts: agent1=GREEN, agent2=RED"
+// Thread-safe with mutex protection. Verdicts are color-coded if color output is enabled.
+func (cl *ConsoleLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
+	if cl.writer == nil {
+		return
+	}
+
+	// QC logging is at DEBUG level (more detailed)
+	if !cl.shouldLog("debug") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	// Build verdict strings sorted by agent name for consistent output
+	var agentNames []string
+	for agent := range verdicts {
+		agentNames = append(agentNames, agent)
+	}
+
+	// Sort for consistent output
+	for i := 0; i < len(agentNames); i++ {
+		for j := i + 1; j < len(agentNames); j++ {
+			if agentNames[j] < agentNames[i] {
+				agentNames[i], agentNames[j] = agentNames[j], agentNames[i]
+			}
+		}
+	}
+
+	var verdictsStrs []string
+	for _, agent := range agentNames {
+		verdict := verdicts[agent]
+		verdictsStrs = append(verdictsStrs, fmt.Sprintf("%s=%s", agent, verdict))
+	}
+
+	verdictsStr := strings.Join(verdictsStrs, ", ")
+
+	var message string
+	if cl.colorOutput {
+		// Cyan for [QC] prefix
+		qcPrefix := color.New(color.FgCyan).Sprint("[QC]")
+		// Color-code individual verdicts
+		coloredVerdicts := cl.colorizeVerdicts(verdicts, agentNames)
+		message = fmt.Sprintf("[%s] %s Individual verdicts: %s\n", ts, qcPrefix, coloredVerdicts)
+	} else {
+		// Plain text format
+		message = fmt.Sprintf("[%s] [QC] Individual verdicts: %s\n", ts, verdictsStr)
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
+// colorizeVerdicts creates a color-coded verdict string where each verdict is colored
+// according to its status (GREEN=green, YELLOW=yellow, RED=red).
+func (cl *ConsoleLogger) colorizeVerdicts(verdicts map[string]string, agentNames []string) string {
+	var parts []string
+	for _, agent := range agentNames {
+		verdict := verdicts[agent]
+		var coloredVerdict string
+
+		switch verdict {
+		case models.StatusGreen:
+			coloredVerdict = color.New(color.FgGreen).Sprint(verdict)
+		case models.StatusYellow:
+			coloredVerdict = color.New(color.FgYellow).Sprint(verdict)
+		case models.StatusRed:
+			coloredVerdict = color.New(color.FgRed).Sprint(verdict)
+		default:
+			coloredVerdict = verdict
+		}
+
+		parts = append(parts, fmt.Sprintf("%s=%s", agent, coloredVerdict))
+	}
+
+	return strings.Join(parts, ", ")
+}
+
+// LogQCAggregatedResult logs the final aggregated QC verdict.
+// Format: "[HH:MM:SS] [QC] Final verdict: GREEN (strictest-wins)"
+// The verdict is color-coded (GREEN=green, YELLOW=yellow, RED=red).
+// Thread-safe with mutex protection.
+func (cl *ConsoleLogger) LogQCAggregatedResult(verdict string, strategy string) {
+	if cl.writer == nil {
+		return
+	}
+
+	// QC logging is at INFO level
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	var message string
+	if cl.colorOutput {
+		// Cyan for [QC] prefix
+		qcPrefix := color.New(color.FgCyan).Sprint("[QC]")
+		// Color-code the verdict
+		var verdictColored string
+		switch verdict {
+		case models.StatusGreen:
+			verdictColored = color.New(color.FgGreen).Sprint(verdict)
+		case models.StatusYellow:
+			verdictColored = color.New(color.FgYellow).Sprint(verdict)
+		case models.StatusRed:
+			verdictColored = color.New(color.FgRed).Sprint(verdict)
+		default:
+			verdictColored = verdict
+		}
+		message = fmt.Sprintf("[%s] %s Final verdict: %s (%s)\n", ts, qcPrefix, verdictColored, strategy)
+	} else {
+		// Plain text format
+		message = fmt.Sprintf("[%s] [QC] Final verdict: %s (%s)\n", ts, verdict, strategy)
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
 // LogProgress logs real-time progress of task execution with percentage, counts, and average duration.
 // Format: "[HH:MM:SS] Progress: [████░░░░░░] 50% (4/8 tasks) - Avg: 3.2s/task"
 // Handles edge cases: zero tasks, all completed, no duration data.
@@ -989,4 +1150,16 @@ func (n *NoOpLogger) LogProgress(results []models.TaskResult) {
 
 // LogSummary is a no-op implementation.
 func (n *NoOpLogger) LogSummary(result models.ExecutionResult) {
+}
+
+// LogQCAgentSelection is a no-op implementation.
+func (n *NoOpLogger) LogQCAgentSelection(agents []string, mode string) {
+}
+
+// LogQCIndividualVerdicts is a no-op implementation.
+func (n *NoOpLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
+}
+
+// LogQCAggregatedResult is a no-op implementation.
+func (n *NoOpLogger) LogQCAggregatedResult(verdict string, strategy string) {
 }

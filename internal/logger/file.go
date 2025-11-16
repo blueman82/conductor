@@ -312,6 +312,66 @@ func (fl *FileLogger) LogProgress(results []models.TaskResult) {
 	// No-op: progress bars are console-only for now
 }
 
+// LogQCAgentSelection logs which QC agents were selected for review.
+// Format: "[HH:MM:SS] [QC] Selected agents: [agent1, agent2] (mode: auto)"
+func (fl *FileLogger) LogQCAgentSelection(agents []string, mode string) {
+	// QC logging is at INFO level
+	if !fl.shouldLog("info") {
+		return
+	}
+
+	// Format agents as comma-separated list
+	agentsList := fmt.Sprintf("[%s]", strings.Join(agents, ", "))
+	message := fmt.Sprintf("[%s] [QC] Selected agents: %s (mode: %s)\n", time.Now().Format("15:04:05"), agentsList, mode)
+	fl.writeRunLog(message)
+}
+
+// LogQCIndividualVerdicts logs verdicts from each QC agent.
+// Format: "[HH:MM:SS] [QC] Individual verdicts: agent1=GREEN, agent2=RED"
+func (fl *FileLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
+	// QC logging is at DEBUG level (more detailed)
+	if !fl.shouldLog("debug") {
+		return
+	}
+
+	// Build verdict strings sorted by agent name for consistent output
+	var agentNames []string
+	for agent := range verdicts {
+		agentNames = append(agentNames, agent)
+	}
+
+	// Sort for consistent output
+	for i := 0; i < len(agentNames); i++ {
+		for j := i + 1; j < len(agentNames); j++ {
+			if agentNames[j] < agentNames[i] {
+				agentNames[i], agentNames[j] = agentNames[j], agentNames[i]
+			}
+		}
+	}
+
+	var verdictsStrs []string
+	for _, agent := range agentNames {
+		verdict := verdicts[agent]
+		verdictsStrs = append(verdictsStrs, fmt.Sprintf("%s=%s", agent, verdict))
+	}
+
+	verdictsStr := strings.Join(verdictsStrs, ", ")
+	message := fmt.Sprintf("[%s] [QC] Individual verdicts: %s\n", time.Now().Format("15:04:05"), verdictsStr)
+	fl.writeRunLog(message)
+}
+
+// LogQCAggregatedResult logs the final aggregated QC verdict.
+// Format: "[HH:MM:SS] [QC] Final verdict: GREEN (strictest-wins)"
+func (fl *FileLogger) LogQCAggregatedResult(verdict string, strategy string) {
+	// QC logging is at INFO level
+	if !fl.shouldLog("info") {
+		return
+	}
+
+	message := fmt.Sprintf("[%s] [QC] Final verdict: %s (%s)\n", time.Now().Format("15:04:05"), verdict, strategy)
+	fl.writeRunLog(message)
+}
+
 // Close flushes and closes the run log file.
 // It should be called when the logger is no longer needed.
 func (fl *FileLogger) Close() error {

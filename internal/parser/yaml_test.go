@@ -485,3 +485,291 @@ plan:
 		})
 	}
 }
+
+func TestParseYAMLWithQCInvalidMode(t *testing.T) {
+	yamlContent := `
+conductor:
+  quality_control:
+    enabled: true
+    agents:
+      mode: "INVALID"
+
+plan:
+  metadata:
+    feature_name: "Test Plan"
+  tasks:
+    - task_number: 1
+      name: "Test Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+`
+
+	parser := NewYAMLParser()
+	_, err := parser.Parse(strings.NewReader(yamlContent))
+	if err == nil {
+		t.Error("Expected error for invalid QC agents mode, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid QC agents mode") {
+		t.Errorf("Expected error about invalid mode, got: %v", err)
+	}
+}
+
+func TestParseYAMLWithQCExplicitModeNoList(t *testing.T) {
+	yamlContent := `
+conductor:
+  quality_control:
+    enabled: true
+    agents:
+      mode: "explicit"
+      explicit_list: []
+
+plan:
+  metadata:
+    feature_name: "Test Plan"
+  tasks:
+    - task_number: 1
+      name: "Test Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+`
+
+	parser := NewYAMLParser()
+	_, err := parser.Parse(strings.NewReader(yamlContent))
+	if err == nil {
+		t.Error("Expected error for explicit mode with empty explicit_list, got nil")
+	}
+	if !strings.Contains(err.Error(), "explicit mode requires non-empty explicit_list") {
+		t.Errorf("Expected error about explicit_list requirement, got: %v", err)
+	}
+}
+
+func TestParseYAMLWithQCModeCaseNormalization(t *testing.T) {
+	tests := []struct {
+		name       string
+		modeInput  string
+		expectPass bool
+		withList   bool
+	}{
+		{"auto lowercase", "auto", true, false},
+		{"auto uppercase", "AUTO", true, false},
+		{"auto mixed case", "Auto", true, false},
+		{"explicit lowercase", "explicit", true, true},
+		{"explicit uppercase", "EXPLICIT", true, true},
+		{"mixed lowercase", "mixed", true, false},
+		{"invalid mode", "INVALID", false, false},
+		{"spaces trimmed", "  auto  ", true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yamlContent := `
+conductor:
+  quality_control:
+    enabled: true
+    agents:
+      mode: "` + tt.modeInput + `"`
+			if tt.withList {
+				yamlContent += `
+      explicit_list:
+        - agent1
+        - agent2`
+			}
+			yamlContent += `
+
+plan:
+  metadata:
+    feature_name: "Test Plan"
+  tasks:
+    - task_number: 1
+      name: "Test Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+`
+
+			parser := NewYAMLParser()
+			plan, err := parser.Parse(strings.NewReader(yamlContent))
+
+			if tt.expectPass {
+				if err != nil {
+					t.Errorf("Expected success, got error: %v", err)
+				}
+				// Mode should be normalized to lowercase
+				expectedMode := strings.ToLower(strings.TrimSpace(tt.modeInput))
+				if plan.QualityControl.Agents.Mode != expectedMode {
+					t.Errorf("Expected normalized mode %q, got %q", expectedMode, plan.QualityControl.Agents.Mode)
+				}
+			} else {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			}
+		})
+	}
+}
+
+func TestParseYAMLWithQCAgentConfig(t *testing.T) {
+	tests := []struct {
+		name              string
+		yamlContent       string
+		expectedMode      string
+		expectedExplicit  []string
+		expectedAdditional []string
+		expectedBlocked   []string
+	}{
+		{
+			name: "QC with auto mode",
+			yamlContent: `
+conductor:
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+    retry_on_red: 2
+    agents:
+      mode: "auto"
+      blocked: ["deprecated-agent"]
+plan:
+  metadata:
+    feature_name: "QC Test"
+  tasks:
+    - task_number: 1
+      name: "Task 1"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+`,
+			expectedMode:      "auto",
+			expectedBlocked:   []string{"deprecated-agent"},
+			expectedExplicit:  []string{},
+			expectedAdditional: []string{},
+		},
+		{
+			name: "QC with explicit mode",
+			yamlContent: `
+conductor:
+  quality_control:
+    enabled: true
+    retry_on_red: 3
+    agents:
+      mode: "explicit"
+      explicit_list: ["golang-pro", "code-reviewer"]
+plan:
+  metadata:
+    feature_name: "QC Explicit Test"
+  tasks:
+    - task_number: 1
+      name: "Task 1"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+`,
+			expectedMode:      "explicit",
+			expectedExplicit:  []string{"golang-pro", "code-reviewer"},
+			expectedAdditional: []string{},
+			expectedBlocked:   []string{},
+		},
+		{
+			name: "QC with mixed mode",
+			yamlContent: `
+conductor:
+  quality_control:
+    enabled: true
+    agents:
+      mode: "mixed"
+      additional: ["security-auditor", "performance-reviewer"]
+      blocked: ["old-agent"]
+plan:
+  metadata:
+    feature_name: "QC Mixed Test"
+  tasks:
+    - task_number: 1
+      name: "Task 1"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+`,
+			expectedMode:      "mixed",
+			expectedExplicit:  []string{},
+			expectedAdditional: []string{"security-auditor", "performance-reviewer"},
+			expectedBlocked:   []string{"old-agent"},
+		},
+		{
+			name: "QC without agents section (backward compatibility)",
+			yamlContent: `
+conductor:
+  quality_control:
+    enabled: true
+    review_agent: "quality-control"
+plan:
+  metadata:
+    feature_name: "QC Legacy Test"
+  tasks:
+    - task_number: 1
+      name: "Task 1"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+`,
+			expectedMode:      "",
+			expectedExplicit:  []string{},
+			expectedAdditional: []string{},
+			expectedBlocked:   []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewYAMLParser()
+			plan, err := parser.Parse(strings.NewReader(tt.yamlContent))
+			if err != nil {
+				t.Fatalf("Failed to parse YAML: %v", err)
+			}
+
+			// Verify QC configuration
+			if plan.QualityControl.Agents.Mode != tt.expectedMode {
+				t.Errorf("Expected mode %q, got %q", tt.expectedMode, plan.QualityControl.Agents.Mode)
+			}
+
+			// Check explicit list
+			if len(plan.QualityControl.Agents.ExplicitList) != len(tt.expectedExplicit) {
+				t.Errorf("Expected %d explicit agents, got %d", len(tt.expectedExplicit), len(plan.QualityControl.Agents.ExplicitList))
+			}
+			for i, agent := range tt.expectedExplicit {
+				if i >= len(plan.QualityControl.Agents.ExplicitList) {
+					break
+				}
+				if plan.QualityControl.Agents.ExplicitList[i] != agent {
+					t.Errorf("Expected explicit agent %d to be %q, got %q", i, agent, plan.QualityControl.Agents.ExplicitList[i])
+				}
+			}
+
+			// Check additional agents
+			if len(plan.QualityControl.Agents.AdditionalAgents) != len(tt.expectedAdditional) {
+				t.Errorf("Expected %d additional agents, got %d", len(tt.expectedAdditional), len(plan.QualityControl.Agents.AdditionalAgents))
+			}
+			for i, agent := range tt.expectedAdditional {
+				if i >= len(plan.QualityControl.Agents.AdditionalAgents) {
+					break
+				}
+				if plan.QualityControl.Agents.AdditionalAgents[i] != agent {
+					t.Errorf("Expected additional agent %d to be %q, got %q", i, agent, plan.QualityControl.Agents.AdditionalAgents[i])
+				}
+			}
+
+			// Check blocked agents
+			if len(plan.QualityControl.Agents.BlockedAgents) != len(tt.expectedBlocked) {
+				t.Errorf("Expected %d blocked agents, got %d", len(tt.expectedBlocked), len(plan.QualityControl.Agents.BlockedAgents))
+			}
+			for i, agent := range tt.expectedBlocked {
+				if i >= len(plan.QualityControl.Agents.BlockedAgents) {
+					break
+				}
+				if plan.QualityControl.Agents.BlockedAgents[i] != agent {
+					t.Errorf("Expected blocked agent %d to be %q, got %q", i, agent, plan.QualityControl.Agents.BlockedAgents[i])
+				}
+			}
+		})
+	}
+}

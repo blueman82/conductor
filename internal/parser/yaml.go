@@ -96,6 +96,12 @@ type yamlConductorConfig struct {
 		Enabled     bool   `yaml:"enabled"`
 		ReviewAgent string `yaml:"review_agent"`
 		RetryOnRed  int    `yaml:"retry_on_red"`
+		Agents      struct {
+			Mode         string   `yaml:"mode"`
+			ExplicitList []string `yaml:"explicit_list"`
+			Additional   []string `yaml:"additional"`
+			Blocked      []string `yaml:"blocked"`
+		} `yaml:"agents"`
 	} `yaml:"quality_control"`
 	WorktreeGroups []struct {
 		GroupID        string `yaml:"group_id"`
@@ -221,6 +227,30 @@ func parseConductorConfigYAML(cfg *yamlConductorConfig, plan *models.Plan) error
 		Enabled:     cfg.QualityControl.Enabled,
 		ReviewAgent: cfg.QualityControl.ReviewAgent,
 		RetryOnRed:  cfg.QualityControl.RetryOnRed,
+	}
+
+	// Parse QC agent configuration if present
+	if cfg.QualityControl.Agents.Mode != "" || len(cfg.QualityControl.Agents.ExplicitList) > 0 ||
+		len(cfg.QualityControl.Agents.Additional) > 0 || len(cfg.QualityControl.Agents.Blocked) > 0 {
+
+		// Normalize and validate mode
+		mode := strings.ToLower(strings.TrimSpace(cfg.QualityControl.Agents.Mode))
+		validModes := map[string]bool{"auto": true, "explicit": true, "mixed": true, "": true}
+		if !validModes[mode] {
+			return fmt.Errorf("invalid QC agents mode: %q", mode)
+		}
+
+		// Explicit mode requires explicit_list
+		if mode == "explicit" && len(cfg.QualityControl.Agents.ExplicitList) == 0 {
+			return fmt.Errorf("explicit mode requires non-empty explicit_list")
+		}
+
+		plan.QualityControl.Agents = models.QCAgentConfig{
+			Mode:             mode,
+			ExplicitList:     cfg.QualityControl.Agents.ExplicitList,
+			AdditionalAgents: cfg.QualityControl.Agents.Additional,
+			BlockedAgents:    cfg.QualityControl.Agents.Blocked,
+		}
 	}
 
 	// Parse worktree groups

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -93,13 +94,32 @@ type LearningConfig struct {
 	MaxExecutionsPerTask int `yaml:"max_executions_per_task"`
 }
 
+// QCAgentConfig represents multi-agent QC configuration
+type QCAgentConfig struct {
+	// Mode specifies agent selection mode: "auto", "explicit", or "mixed"
+	Mode string `yaml:"mode"`
+
+	// ExplicitList is the list of agents to use when mode is "explicit"
+	ExplicitList []string `yaml:"explicit_list"`
+
+	// AdditionalAgents are extra agents added to auto-selection when mode is "mixed"
+	AdditionalAgents []string `yaml:"additional"`
+
+	// BlockedAgents are agents that should never be used (for auto/mixed modes)
+	BlockedAgents []string `yaml:"blocked"`
+}
+
 // QualityControlConfig represents quality control configuration
 type QualityControlConfig struct {
 	// Enabled enables the quality control system
 	Enabled bool `yaml:"enabled"`
 
 	// ReviewAgent is the name of the agent used for quality control reviews
+	// DEPRECATED: Use Agents.ExplicitList instead. Kept for backward compatibility.
 	ReviewAgent string `yaml:"review_agent"`
+
+	// Agents contains multi-agent QC configuration (v2.2+)
+	Agents QCAgentConfig `yaml:"agents"`
 
 	// RetryOnRed is the maximum number of retries when QC review is RED
 	RetryOnRed int `yaml:"retry_on_red"`
@@ -189,10 +209,27 @@ func DefaultConfig() *Config {
 		},
 		QualityControl: QualityControlConfig{
 			Enabled:     false,
-			ReviewAgent: "quality-control",
-			RetryOnRed:  2,
+			ReviewAgent: "quality-control", // Deprecated, kept for backward compat
+			Agents: QCAgentConfig{
+				Mode:             "auto",
+				ExplicitList:     []string{},
+				AdditionalAgents: []string{},
+				BlockedAgents:    []string{},
+			},
+			RetryOnRed: 2,
 		},
 	}
+}
+
+// interfaceSliceToStringSlice converts []interface{} to []string
+func interfaceSliceToStringSlice(slice []interface{}) []string {
+	result := make([]string, 0, len(slice))
+	for _, item := range slice {
+		if str, ok := item.(string); ok {
+			result = append(result, str)
+		}
+	}
+	return result
 }
 
 // applyConsoleEnvOverrides applies environment variable overrides to console configuration
@@ -426,6 +463,37 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := qcMap["retry_on_red"]; exists {
 				cfg.QualityControl.RetryOnRed = qc.RetryOnRed
 			}
+
+			// Handle new multi-agent QC configuration (v2.2+)
+			if agentsSection, exists := qcMap["agents"]; exists && agentsSection != nil {
+				agentsMap, _ := agentsSection.(map[string]interface{})
+
+				if mode, exists := agentsMap["mode"]; exists {
+					if modeStr, ok := mode.(string); ok {
+						cfg.QualityControl.Agents.Mode = modeStr
+					}
+				}
+				if explicitList, exists := agentsMap["explicit_list"]; exists {
+					if list, ok := explicitList.([]interface{}); ok {
+						cfg.QualityControl.Agents.ExplicitList = interfaceSliceToStringSlice(list)
+					}
+				}
+				if additional, exists := agentsMap["additional"]; exists {
+					if list, ok := additional.([]interface{}); ok {
+						cfg.QualityControl.Agents.AdditionalAgents = interfaceSliceToStringSlice(list)
+					}
+				}
+				if blocked, exists := agentsMap["blocked"]; exists {
+					if list, ok := blocked.([]interface{}); ok {
+						cfg.QualityControl.Agents.BlockedAgents = interfaceSliceToStringSlice(list)
+					}
+				}
+			} else if cfg.QualityControl.ReviewAgent != "" && cfg.QualityControl.Agents.Mode == "auto" {
+				// Backward compatibility: if no agents section but review_agent is set,
+				// convert to explicit mode with single agent
+				cfg.QualityControl.Agents.Mode = "explicit"
+				cfg.QualityControl.Agents.ExplicitList = []string{cfg.QualityControl.ReviewAgent}
+			}
 		}
 	}
 
@@ -529,11 +597,45 @@ func (c *Config) Validate() error {
 
 	// Validate quality control configuration
 	if c.QualityControl.Enabled {
-		if c.QualityControl.ReviewAgent == "" {
-			return fmt.Errorf("quality_control.review_agent cannot be empty when quality control is enabled")
-		}
+		// Validate retry count
 		if c.QualityControl.RetryOnRed < 0 {
 			return fmt.Errorf("quality_control.retry_on_red must be >= 0, got %d", c.QualityControl.RetryOnRed)
+		}
+
+		// Validate multi-agent QC configuration
+		validModes := map[string]bool{
+			"auto":     true,
+			"explicit": true,
+			"mixed":    true,
+		}
+		if !validModes[c.QualityControl.Agents.Mode] {
+			return fmt.Errorf("quality_control.agents.mode must be one of: auto, explicit, mixed; got %q", c.QualityControl.Agents.Mode)
+		}
+
+		// If mode is explicit, must have at least one agent
+		if c.QualityControl.Agents.Mode == "explicit" && len(c.QualityControl.Agents.ExplicitList) == 0 {
+			// No fallback to deprecated ReviewAgent - this is a configuration error
+			return fmt.Errorf("quality_control.agents.explicit_list cannot be empty when mode is 'explicit'. Provide at least one agent name, or switch to mode 'auto'")
+		}
+
+		// Validate agent names are non-empty strings
+		for i, agent := range c.QualityControl.Agents.ExplicitList {
+			trimmed := strings.TrimSpace(agent)
+			if trimmed == "" {
+				return fmt.Errorf("quality_control.agents.explicit_list[%d] cannot be empty", i)
+			}
+		}
+		for i, agent := range c.QualityControl.Agents.AdditionalAgents {
+			trimmed := strings.TrimSpace(agent)
+			if trimmed == "" {
+				return fmt.Errorf("quality_control.agents.additional[%d] cannot be empty", i)
+			}
+		}
+		for i, agent := range c.QualityControl.Agents.BlockedAgents {
+			trimmed := strings.TrimSpace(agent)
+			if trimmed == "" {
+				return fmt.Errorf("quality_control.agents.blocked[%d] cannot be empty", i)
+			}
 		}
 	}
 

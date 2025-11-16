@@ -15,8 +15,29 @@ console:
 # Quality control configuration
 quality_control:
   enabled: true
-  review_agent: conductor-qc
+  review_agent: conductor-qc  # DEPRECATED: use agents section below
   retry_on_red: 2
+
+  # Multi-agent QC configuration (v2.2+)
+  # Supports parallel reviews from multiple specialized agents
+  agents:
+    # Mode: "auto", "explicit", or "mixed"
+    # - auto: automatically select agents based on task file types
+    # - explicit: use only the agents in explicit_list
+    # - mixed: auto-select + additional agents from additional list
+    mode: auto
+
+    # Explicit agent list (used when mode=explicit)
+    # Example: [conductor-qc, golang-pro, code-reviewer]
+    explicit_list: []
+
+    # Additional agents to add to auto-selection (used when mode=mixed)
+    # Example: [security-auditor] - always include security review
+    additional: []
+
+    # Agents to never use (for auto/mixed modes)
+    # Example: [deprecated-agent]
+    blocked: []
 
 # Feedback system configuration (v2.1+)
 # Controls how agent and QC outputs are stored for learning and visibility

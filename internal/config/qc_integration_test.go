@@ -250,7 +250,7 @@ func TestQualityControlConfigValidation(t *testing.T) {
   review_agent: ""
   retry_on_red: 2
 `,
-			wantError: true,
+			wantError: false, // v2.2+: empty review_agent is valid with auto mode (auto-selects agents)
 		},
 		{
 			name: "QC enabled but negative retry_on_red",

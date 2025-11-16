@@ -123,6 +123,10 @@ Examples:
 	cmd.Flags().Bool("retry-failed", false, "Retry tasks that failed")
 	cmd.Flags().Bool("no-retry-failed", false, "Do not retry failed tasks (overrides config)")
 
+	// Multi-agent QC flags (v2.2+)
+	cmd.Flags().String("qc-agents", "", "Override QC agents (comma-separated, e.g., golang-pro,code-reviewer)")
+	cmd.Flags().String("qc-mode", "", "Override QC agent selection mode (auto, explicit, mixed)")
+
 	return cmd
 }
 
@@ -213,6 +217,28 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Merge CLI flags with config (flags take precedence)
 	cfg.MergeWithFlags(maxConcurrencyPtr, timeoutPtr, logDirPtr, dryRunPtr, skipCompletedPtr, retryFailedPtr)
+
+	// Process multi-agent QC flags (v2.2+)
+	qcAgentsFlag, _ := cmd.Flags().GetString("qc-agents")
+	qcModeFlag, _ := cmd.Flags().GetString("qc-mode")
+
+	if cmd.Flags().Changed("qc-agents") && qcAgentsFlag != "" {
+		// Parse comma-separated agents list
+		agentsList := strings.Split(qcAgentsFlag, ",")
+		for i := range agentsList {
+			agentsList[i] = strings.TrimSpace(agentsList[i])
+		}
+		cfg.QualityControl.Agents.Mode = "explicit"
+		cfg.QualityControl.Agents.ExplicitList = agentsList
+	}
+
+	if cmd.Flags().Changed("qc-mode") && qcModeFlag != "" {
+		validModes := map[string]bool{"auto": true, "explicit": true, "mixed": true}
+		if !validModes[qcModeFlag] {
+			return fmt.Errorf("invalid --qc-mode %q: must be auto, explicit, or mixed", qcModeFlag)
+		}
+		cfg.QualityControl.Agents.Mode = qcModeFlag
+	}
 
 	// Validate merged configuration
 	if err := cfg.Validate(); err != nil {
@@ -345,7 +371,13 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		plan.QualityControl = models.QualityControlConfig{
 			Enabled:     cfg.QualityControl.Enabled,
 			ReviewAgent: cfg.QualityControl.ReviewAgent,
-			RetryOnRed:  cfg.QualityControl.RetryOnRed,
+			Agents: models.QCAgentConfig{
+				Mode:             cfg.QualityControl.Agents.Mode,
+				ExplicitList:     cfg.QualityControl.Agents.ExplicitList,
+				AdditionalAgents: cfg.QualityControl.Agents.AdditionalAgents,
+				BlockedAgents:    cfg.QualityControl.Agents.BlockedAgents,
+			},
+			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
 	}
 
@@ -454,9 +486,19 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Create invoker for Claude CLI calls
 	invoker := agent.NewInvoker()
 
+	// Create agent registry for QC agent auto-selection
+	agentRegistry := agent.NewRegistry("")
+	if _, err := agentRegistry.Discover(); err != nil {
+		// Log warning but don't fail - auto-selection will still work with fallback
+		fmt.Fprintf(cmd.OutOrStderr(), "Warning: agent discovery failed, QC auto-selection may be limited: %v\n", err)
+	}
+
 	// Create quality controller with learning integration
 	qc := executor.NewQualityController(invoker)
-	qc.LearningStore = learningStore // Enable historical context loading
+	qc.Registry = agentRegistry           // Wire registry for agent verification
+	qc.LearningStore = learningStore      // Enable historical context loading
+	qc.AgentConfig = plan.QualityControl.Agents // Apply plan-level QC agent configuration
+	qc.Logger = multiLog                  // Wire logger for QC events
 
 	// Create task executor config
 	taskExecCfg := executor.TaskExecutorConfig{
@@ -575,6 +617,27 @@ func (ml *multiLogger) LogProgress(results []models.TaskResult) {
 func (ml *multiLogger) LogSummary(result models.ExecutionResult) {
 	for _, logger := range ml.loggers {
 		logger.LogSummary(result)
+	}
+}
+
+// LogQCAgentSelection forwards to all loggers
+func (ml *multiLogger) LogQCAgentSelection(agents []string, mode string) {
+	for _, logger := range ml.loggers {
+		logger.LogQCAgentSelection(agents, mode)
+	}
+}
+
+// LogQCIndividualVerdicts forwards to all loggers
+func (ml *multiLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
+	for _, logger := range ml.loggers {
+		logger.LogQCIndividualVerdicts(verdicts)
+	}
+}
+
+// LogQCAggregatedResult forwards to all loggers
+func (ml *multiLogger) LogQCAggregatedResult(verdict string, strategy string) {
+	for _, logger := range ml.loggers {
+		logger.LogQCAggregatedResult(verdict, strategy)
 	}
 }
 

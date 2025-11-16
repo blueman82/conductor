@@ -585,6 +585,18 @@ func (m *mockLoggerWithTaskTracking) LogSummary(result models.ExecutionResult) {
 	m.summaryCalls = append(m.summaryCalls, result)
 }
 
+func (m *mockLoggerWithTaskTracking) LogQCAgentSelection(agents []string, mode string) {
+	// no-op for mock
+}
+
+func (m *mockLoggerWithTaskTracking) LogQCIndividualVerdicts(verdicts map[string]string) {
+	// no-op for mock
+}
+
+func (m *mockLoggerWithTaskTracking) LogQCAggregatedResult(verdict string, strategy string) {
+	// no-op for mock
+}
+
 // TestOrchestratorMultipleWaves verifies handling of multiple waves
 func TestOrchestratorMultipleWaves(t *testing.T) {
 	mockWave := &mockWaveExecutor{

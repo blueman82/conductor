@@ -879,6 +879,574 @@ func TestParseQCJSON(t *testing.T) {
 	}
 }
 
+func TestShouldUseMultiAgent(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  models.QCAgentConfig
+		want    bool
+	}{
+		{
+			name: "auto mode always uses multi-agent",
+			config: models.QCAgentConfig{
+				Mode: "auto",
+			},
+			want: true,
+		},
+		{
+			name: "mixed mode always uses multi-agent",
+			config: models.QCAgentConfig{
+				Mode: "mixed",
+			},
+			want: true,
+		},
+		{
+			name: "explicit mode with single agent",
+			config: models.QCAgentConfig{
+				Mode:         "explicit",
+				ExplicitList: []string{"quality-control"},
+			},
+			want: false,
+		},
+		{
+			name: "explicit mode with multiple agents",
+			config: models.QCAgentConfig{
+				Mode:         "explicit",
+				ExplicitList: []string{"quality-control", "golang-pro"},
+			},
+			want: true,
+		},
+		{
+			name: "empty mode defaults to single-agent",
+			config: models.QCAgentConfig{
+				Mode: "",
+			},
+			want: false,
+		},
+		{
+			name: "unknown mode defaults to false",
+			config: models.QCAgentConfig{
+				Mode: "unknown",
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qc := NewQualityController(nil)
+			qc.AgentConfig = tt.config
+
+			got := qc.shouldUseMultiAgent()
+			if got != tt.want {
+				t.Errorf("shouldUseMultiAgent() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReviewMultiAgent(t *testing.T) {
+	tests := []struct {
+		name       string
+		task       models.Task
+		output     string
+		agents     []string
+		responses  map[string]*agent.InvocationResult
+		wantFlag   string
+		wantErr    bool
+	}{
+		{
+			name: "all GREEN responses",
+			task: models.Task{
+				Number: "1",
+				Name:   "Good task",
+				Prompt: "Do something",
+				Files:  []string{"main.go"},
+			},
+			output: "Task completed",
+			agents: []string{"quality-control", "golang-pro"},
+			responses: map[string]*agent.InvocationResult{
+				"quality-control": {
+					Output:   `{"verdict":"GREEN","feedback":"All good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+				"golang-pro": {
+					Output:   `{"verdict":"GREEN","feedback":"Excellent Go code","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+			},
+			wantFlag: models.StatusGreen,
+			wantErr:  false,
+		},
+		{
+			name: "one RED one GREEN -> RED (strictest wins)",
+			task: models.Task{
+				Number: "2",
+				Name:   "Mixed result",
+				Prompt: "Do something",
+				Files:  []string{"main.go"},
+			},
+			output: "Task output",
+			agents: []string{"quality-control", "golang-pro"},
+			responses: map[string]*agent.InvocationResult{
+				"quality-control": {
+					Output:   `{"verdict":"RED","feedback":"Tests failing","issues":[],"recommendations":[],"should_retry":true,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+				"golang-pro": {
+					Output:   `{"verdict":"GREEN","feedback":"Code is good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+			},
+			wantFlag: models.StatusRed,
+			wantErr:  false,
+		},
+		{
+			name: "one YELLOW one GREEN -> YELLOW",
+			task: models.Task{
+				Number: "3",
+				Name:   "Minor issues",
+				Prompt: "Do something",
+				Files:  []string{"main.go"},
+			},
+			output: "Task output",
+			agents: []string{"quality-control", "golang-pro"},
+			responses: map[string]*agent.InvocationResult{
+				"quality-control": {
+					Output:   `{"verdict":"YELLOW","feedback":"Minor doc issues","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+				"golang-pro": {
+					Output:   `{"verdict":"GREEN","feedback":"Code structure good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+			},
+			wantFlag: models.StatusYellow,
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockInvoker{
+				mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+					return tt.responses[task.Agent], nil
+				},
+			}
+
+			registry := &agent.Registry{
+				AgentsDir: "/tmp/test-agents",
+			}
+			// For testing purposes, we just use nil registry since we can't modify unexported fields
+			// The multi-agent test doesn't rely on language detection anyway
+
+			qc := NewQualityController(mock)
+			qc.Registry = registry
+			qc.AgentConfig = models.QCAgentConfig{
+				Mode: "auto",
+			}
+
+			ctx := context.Background()
+			result, err := qc.ReviewMultiAgent(ctx, tt.task, tt.output)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ReviewMultiAgent() error = nil, wantErr = true")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("ReviewMultiAgent() unexpected error = %v", err)
+				return
+			}
+
+			if result.Flag != tt.wantFlag {
+				t.Errorf("ReviewMultiAgent() Flag = %q, want %q", result.Flag, tt.wantFlag)
+			}
+
+		})
+	}
+}
+
+func TestAggregateVerdicts(t *testing.T) {
+	tests := []struct {
+		name    string
+		results []*ReviewResult
+		agents  []string
+		want    string
+	}{
+		{
+			name: "all GREEN",
+			results: []*ReviewResult{
+				{Flag: models.StatusGreen, Feedback: "Agent 1: Good", AgentName: "agent1"},
+				{Flag: models.StatusGreen, Feedback: "Agent 2: Good", AgentName: "agent2"},
+			},
+			agents: []string{"agent1", "agent2"},
+			want:   models.StatusGreen,
+		},
+		{
+			name: "RED overrides GREEN",
+			results: []*ReviewResult{
+				{Flag: models.StatusGreen, Feedback: "Agent 1: Good", AgentName: "agent1"},
+				{Flag: models.StatusRed, Feedback: "Agent 2: Bad", AgentName: "agent2"},
+			},
+			agents: []string{"agent1", "agent2"},
+			want:   models.StatusRed,
+		},
+		{
+			name: "RED overrides YELLOW",
+			results: []*ReviewResult{
+				{Flag: models.StatusYellow, Feedback: "Agent 1: Minor", AgentName: "agent1"},
+				{Flag: models.StatusRed, Feedback: "Agent 2: Bad", AgentName: "agent2"},
+			},
+			agents: []string{"agent1", "agent2"},
+			want:   models.StatusRed,
+		},
+		{
+			name: "YELLOW overrides GREEN",
+			results: []*ReviewResult{
+				{Flag: models.StatusGreen, Feedback: "Agent 1: Good", AgentName: "agent1"},
+				{Flag: models.StatusYellow, Feedback: "Agent 2: Minor", AgentName: "agent2"},
+			},
+			agents: []string{"agent1", "agent2"},
+			want:   models.StatusYellow,
+		},
+		{
+			name: "all YELLOW",
+			results: []*ReviewResult{
+				{Flag: models.StatusYellow, Feedback: "Agent 1: Minor", AgentName: "agent1"},
+				{Flag: models.StatusYellow, Feedback: "Agent 2: Minor", AgentName: "agent2"},
+			},
+			agents: []string{"agent1", "agent2"},
+			want:   models.StatusYellow,
+		},
+		{
+			name: "all RED",
+			results: []*ReviewResult{
+				{Flag: models.StatusRed, Feedback: "Agent 1: Bad", AgentName: "agent1"},
+				{Flag: models.StatusRed, Feedback: "Agent 2: Bad", AgentName: "agent2"},
+			},
+			agents: []string{"agent1", "agent2"},
+			want:   models.StatusRed,
+		},
+		{
+			name: "single GREEN",
+			results: []*ReviewResult{
+				{Flag: models.StatusGreen, Feedback: "All good", AgentName: "agent1"},
+			},
+			agents: []string{"agent1"},
+			want:   models.StatusGreen,
+		},
+		{
+			name: "single RED",
+			results: []*ReviewResult{
+				{Flag: models.StatusRed, Feedback: "Failed", AgentName: "agent1"},
+			},
+			agents: []string{"agent1"},
+			want:   models.StatusRed,
+		},
+		{
+			name: "single YELLOW",
+			results: []*ReviewResult{
+				{Flag: models.StatusYellow, Feedback: "Minor", AgentName: "agent1"},
+			},
+			agents: []string{"agent1"},
+			want:   models.StatusYellow,
+		},
+		{
+			name: "nil result in mix",
+			results: []*ReviewResult{
+				{Flag: models.StatusGreen, Feedback: "Agent 1: Good", AgentName: "agent1"},
+				nil,
+				{Flag: models.StatusGreen, Feedback: "Agent 3: Good", AgentName: "agent3"},
+			},
+			agents: []string{"agent1", "agent2", "agent3"},
+			want:   models.StatusGreen,
+		},
+		{
+			name: "RED with agent suggestion",
+			results: []*ReviewResult{
+				{Flag: models.StatusRed, Feedback: "Failed", AgentName: "agent1", SuggestedAgent: "golang-pro"},
+				{Flag: models.StatusGreen, Feedback: "Good", AgentName: "agent2"},
+			},
+			agents: []string{"agent1", "agent2"},
+			want:   models.StatusRed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qc := NewQualityController(nil)
+			result := qc.aggregateVerdicts(tt.results, tt.agents)
+
+			if result.Flag != tt.want {
+				t.Errorf("aggregateVerdicts() Flag = %q, want %q", result.Flag, tt.want)
+			}
+
+			// Check that feedback is combined
+			if len(tt.results) > 1 && result.Feedback == "" {
+				t.Error("aggregateVerdicts() should combine feedback from multiple agents")
+			}
+
+		})
+	}
+}
+
+func TestExtractJSONFromCodeFence(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "valid JSON with ```json fence",
+			input: "```json\n{\"verdict\":\"GREEN\",\"feedback\":\"Good\"}\n```",
+			want:  "{\"verdict\":\"GREEN\",\"feedback\":\"Good\"}",
+		},
+		{
+			name:  "valid JSON with just ``` fence",
+			input: "```\n{\"verdict\":\"RED\",\"feedback\":\"Bad\"}\n```",
+			want:  "{\"verdict\":\"RED\",\"feedback\":\"Bad\"}",
+		},
+		{
+			name:  "JSON without fences",
+			input: "{\"verdict\":\"GREEN\",\"feedback\":\"Good\"}",
+			want:  "{\"verdict\":\"GREEN\",\"feedback\":\"Good\"}",
+		},
+		{
+			name:  "multiline JSON in fence",
+			input: "```json\n{\n  \"verdict\": \"GREEN\",\n  \"feedback\": \"Good\"\n}\n```",
+			want:  "{\n  \"verdict\": \"GREEN\",\n  \"feedback\": \"Good\"\n}",
+		},
+		{
+			name:  "fence with language identifier",
+			input: "```javascript\n{\"verdict\":\"YELLOW\",\"feedback\":\"OK\"}\n```",
+			want:  "{\"verdict\":\"YELLOW\",\"feedback\":\"OK\"}",
+		},
+		{
+			name:  "text with fence - returns all text",
+			input: "Here's the result:\n```json\n{\"verdict\":\"GREEN\"}\n```\nDone",
+			want:  "Here's the result:\n```json\n{\"verdict\":\"GREEN\"}\n```\nDone", // No fence found at start/end
+		},
+		{
+			name:  "empty fence - returns empty string",
+			input: "```json\n\n```",
+			want:  "", // No JSON found in fence
+		},
+		{
+			name:  "whitespace around JSON",
+			input: "```json\n  {\"verdict\":\"GREEN\"}  \n```",
+			want:  "{\"verdict\":\"GREEN\"}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractJSONFromCodeFence(tt.input)
+			if got != tt.want {
+				t.Errorf("extractJSONFromCodeFence() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// mockQCLogger for testing QC logging calls
+type mockQCLogger struct {
+	agentSelectionCalls     []struct{ agents []string; mode string }
+	individualVerdictsCalls []map[string]string
+	aggregatedResultCalls   []struct{ verdict, strategy string }
+}
+
+func (m *mockQCLogger) LogQCAgentSelection(agents []string, mode string) {
+	m.agentSelectionCalls = append(m.agentSelectionCalls, struct {
+		agents []string
+		mode   string
+	}{agents: agents, mode: mode})
+}
+
+func (m *mockQCLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
+	m.individualVerdictsCalls = append(m.individualVerdictsCalls, verdicts)
+}
+
+func (m *mockQCLogger) LogQCAggregatedResult(verdict string, strategy string) {
+	m.aggregatedResultCalls = append(m.aggregatedResultCalls, struct {
+		verdict   string
+		strategy  string
+	}{verdict: verdict, strategy: strategy})
+}
+
+func TestReviewMultiAgent_LoggingCalls(t *testing.T) {
+	tests := []struct {
+		name          string
+		agents        []string
+		verdicts      []string
+		expectedCount int
+		expectLogging bool
+	}{
+		{
+			name:          "logs agent selection and results with multiple agents",
+			agents:        []string{"quality-control", "code-reviewer"},
+			verdicts:      []string{models.StatusGreen, models.StatusGreen},
+			expectedCount: 2,
+			expectLogging: true,
+		},
+		{
+			name:          "logs agent selection with single agent",
+			agents:        []string{"quality-control"},
+			verdicts:      []string{models.StatusGreen},
+			expectedCount: 1,
+			expectLogging: true,
+		},
+		{
+			name:          "logs mixed verdicts",
+			agents:        []string{"quality-control", "code-reviewer"},
+			verdicts:      []string{models.StatusGreen, models.StatusRed},
+			expectedCount: 2,
+			expectLogging: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLogger := &mockQCLogger{}
+			mockInv := &mockInvoker{
+				mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+					// Find which agent is being invoked
+					idx := 0
+					for i, a := range tt.agents {
+						if task.Agent == a {
+							idx = i
+							break
+						}
+					}
+					verdict := models.StatusGreen
+					if idx < len(tt.verdicts) {
+						verdict = tt.verdicts[idx]
+					}
+					return &agent.InvocationResult{
+						Output: `{
+							"verdict": "` + verdict + `",
+							"feedback": "Test feedback",
+							"issues": [],
+							"recommendations": [],
+							"should_retry": false,
+							"suggested_agent": ""
+						}`,
+						ExitCode: 0,
+						Duration: 100 * time.Millisecond,
+					}, nil
+				},
+			}
+
+			qc := NewQualityController(mockInv)
+			qc.Logger = mockLogger
+			qc.AgentConfig = models.QCAgentConfig{
+				Mode:         "explicit",
+				ExplicitList: tt.agents,
+			}
+
+			ctx := context.Background()
+			task := models.Task{
+				Number: "1",
+				Name:   "Test",
+				Prompt: "Review this",
+				Files:  []string{"test.go"},
+			}
+
+			result, err := qc.ReviewMultiAgent(ctx, task, "output")
+
+			if err != nil {
+				t.Errorf("ReviewMultiAgent() error = %v", err)
+			}
+
+			if result == nil {
+				t.Errorf("ReviewMultiAgent() returned nil result")
+			}
+
+			// Verify logging calls
+			if tt.expectLogging {
+				// For single agent, we don't log verdicts since it falls back to single-agent review
+				if len(tt.agents) == 1 {
+					if len(mockLogger.agentSelectionCalls) != 1 {
+						t.Errorf("expected 1 agent selection call, got %d", len(mockLogger.agentSelectionCalls))
+					}
+					// Single agent path doesn't call LogQCIndividualVerdicts
+					if len(mockLogger.individualVerdictsCalls) != 0 {
+						t.Errorf("single-agent path should not call LogQCIndividualVerdicts, got %d calls",
+							len(mockLogger.individualVerdictsCalls))
+					}
+				} else {
+					// Multi-agent path
+					if len(mockLogger.agentSelectionCalls) != 1 {
+						t.Errorf("expected 1 agent selection call, got %d", len(mockLogger.agentSelectionCalls))
+					}
+					if mockLogger.agentSelectionCalls[0].mode != "explicit" {
+						t.Errorf("expected mode 'explicit', got %q", mockLogger.agentSelectionCalls[0].mode)
+					}
+					if len(mockLogger.individualVerdictsCalls) != 1 {
+						t.Errorf("expected 1 verdicts call, got %d", len(mockLogger.individualVerdictsCalls))
+					}
+					if len(mockLogger.aggregatedResultCalls) != 1 {
+						t.Errorf("expected 1 aggregated result call, got %d", len(mockLogger.aggregatedResultCalls))
+					}
+					if mockLogger.aggregatedResultCalls[0].strategy != "strictest-wins" {
+						t.Errorf("expected strategy 'strictest-wins', got %q", mockLogger.aggregatedResultCalls[0].strategy)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestReviewMultiAgent_NoLoggingWithoutLogger(t *testing.T) {
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			return &agent.InvocationResult{
+				Output: `{
+					"verdict": "GREEN",
+					"feedback": "Good",
+					"issues": [],
+					"recommendations": [],
+					"should_retry": false,
+					"suggested_agent": ""
+				}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := NewQualityController(mockInv)
+	qc.Logger = nil // Explicitly no logger
+	qc.AgentConfig = models.QCAgentConfig{
+		Mode:         "explicit",
+		ExplicitList: []string{"quality-control", "code-reviewer"},
+	}
+
+	ctx := context.Background()
+	task := models.Task{
+		Number: "1",
+		Name:   "Test",
+		Prompt: "Review this",
+		Files:  []string{"test.go"},
+	}
+
+	result, err := qc.ReviewMultiAgent(ctx, task, "output")
+
+	if err != nil {
+		t.Errorf("ReviewMultiAgent() error = %v", err)
+	}
+
+	if result == nil {
+		t.Errorf("ReviewMultiAgent() returned nil result")
+	}
+
+	// Should not panic even with nil logger
+	if result.Flag != models.StatusGreen {
+		t.Errorf("expected GREEN verdict, got %q", result.Flag)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		func() bool {

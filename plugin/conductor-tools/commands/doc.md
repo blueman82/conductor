@@ -481,9 +481,26 @@ Start with: docs/plans/<feature-name>/plan-01-database.md - Task 1
 5. **Discoverable**: README index makes multi-file plans easy to understand
 6. **Consistent**: Metric-based approach produces repeatable results
 
-### 1. Implementation Plan Header
+### 1. Implementation Plan Header with Conductor Configuration
+
+For Conductor orchestration, the plan MUST include YAML frontmatter before the Markdown content. This frontmatter specifies executor configuration and multi-agent QC settings.
 
 ```markdown
+---
+conductor:
+  default_agent: general-purpose
+  max_concurrency: 3
+  quality_control:
+    enabled: true
+    review_agent: quality-control
+    retry_on_red: 2
+    agents:
+      mode: auto
+      explicit_list: []
+      additional: []
+      blocked: []
+---
+
 # Implementation Plan: [Feature Name]
 
 **Created**: [Date]
@@ -505,6 +522,21 @@ You are implementing this feature in a codebase that:
 - Keep changes minimal (YAGNI - You Aren't Gonna Need It)
 - Avoid duplication (DRY - Don't Repeat Yourself)
 ```
+
+**Conductor Frontmatter Explanation:**
+
+- `conductor.default_agent`: Default agent for tasks without explicit agent assignment (recommended: `general-purpose`)
+- `conductor.max_concurrency`: Maximum number of parallel task waves (recommended: 2-4)
+- `conductor.quality_control.enabled`: Enable QC review of task outputs (default: false, explicitly set to true here)
+- `conductor.quality_control.review_agent`: Agent to perform quality control reviews (recommended: `quality-control`)
+- `conductor.quality_control.retry_on_red`: Maximum retries when QC returns RED verdict (recommended: 2)
+- `conductor.quality_control.agents.mode`: QC agent selection mode:
+  - `auto` (RECOMMENDED): Automatically selects QC agents based on file types (optimal for most projects)
+  - `explicit`: Uses ONLY agents specified in `explicit_list` (required field when mode is explicit)
+  - `mixed`: Combines auto-selected agents with those in `additional` list
+- `conductor.quality_control.agents.explicit_list`: Required when mode is `explicit` - list of agents to use (empty by default)
+- `conductor.quality_control.agents.additional`: Extra agents to add when mode is `mixed` (added to auto-selected agents)
+- `conductor.quality_control.agents.blocked`: List of agent names to exclude from QC selection (filters auto-selected agents)
 
 ### 2. Worktree Groups Section
 

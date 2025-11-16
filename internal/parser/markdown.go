@@ -28,9 +28,17 @@ type conductorConfig struct {
 }
 
 type qualityControlYAML struct {
-	Enabled     bool   `yaml:"enabled"`
-	ReviewAgent string `yaml:"review_agent"`
-	RetryOnRed  int    `yaml:"retry_on_red"`
+	Enabled     bool       `yaml:"enabled"`
+	ReviewAgent string     `yaml:"review_agent"`
+	RetryOnRed  int        `yaml:"retry_on_red"`
+	Agents      *agentsYAML `yaml:"agents"`
+}
+
+type agentsYAML struct {
+	Mode         string   `yaml:"mode"`
+	ExplicitList []string `yaml:"explicit_list"`
+	Additional   []string `yaml:"additional"`
+	Blocked      []string `yaml:"blocked"`
 }
 
 func NewMarkdownParser() *MarkdownParser {
@@ -416,6 +424,30 @@ func parseConductorConfig(frontmatter []byte, plan *models.Plan) error {
 			plan.QualityControl.Enabled = config.Conductor.QualityControl.Enabled
 			plan.QualityControl.ReviewAgent = config.Conductor.QualityControl.ReviewAgent
 			plan.QualityControl.RetryOnRed = config.Conductor.QualityControl.RetryOnRed
+
+			// Parse QC agent configuration if present
+			if config.Conductor.QualityControl.Agents != nil {
+				agents := config.Conductor.QualityControl.Agents
+
+				// Normalize and validate mode
+				mode := strings.ToLower(strings.TrimSpace(agents.Mode))
+				validModes := map[string]bool{"auto": true, "explicit": true, "mixed": true, "": true}
+				if !validModes[mode] {
+					return fmt.Errorf("invalid QC agents mode: %q", mode)
+				}
+
+				// Explicit mode requires explicit_list
+				if mode == "explicit" && len(agents.ExplicitList) == 0 {
+					return fmt.Errorf("explicit mode requires non-empty explicit_list")
+				}
+
+				plan.QualityControl.Agents = models.QCAgentConfig{
+					Mode:             mode,
+					ExplicitList:     agents.ExplicitList,
+					AdditionalAgents: agents.Additional,
+					BlockedAgents:    agents.Blocked,
+				}
+			}
 		}
 	}
 

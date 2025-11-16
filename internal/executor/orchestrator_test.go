@@ -59,6 +59,18 @@ func (m *mockLogger) LogSummary(result models.ExecutionResult) {
 	m.summaryCalls = append(m.summaryCalls, result)
 }
 
+func (m *mockLogger) LogQCAgentSelection(agents []string, mode string) {
+	// no-op for mock
+}
+
+func (m *mockLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
+	// no-op for mock
+}
+
+func (m *mockLogger) LogQCAggregatedResult(verdict string, strategy string) {
+	// no-op for mock
+}
+
 func TestOrchestratorExecutePlan(t *testing.T) {
 	tests := []struct {
 		name           string
