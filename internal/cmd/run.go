@@ -222,22 +222,39 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	qcAgentsFlag, _ := cmd.Flags().GetString("qc-agents")
 	qcModeFlag, _ := cmd.Flags().GetString("qc-mode")
 
-	if cmd.Flags().Changed("qc-agents") && qcAgentsFlag != "" {
-		// Parse comma-separated agents list
-		agentsList := strings.Split(qcAgentsFlag, ",")
-		for i := range agentsList {
-			agentsList[i] = strings.TrimSpace(agentsList[i])
+	// Validate conflicting QC flags upfront
+	if cmd.Flags().Changed("qc-agents") && cmd.Flags().Changed("qc-mode") {
+		if qcModeFlag != "explicit" {
+			return fmt.Errorf("--qc-agents implies explicit mode; cannot use with --qc-mode=%s (use --qc-mode=explicit or omit --qc-mode)", qcModeFlag)
 		}
-		cfg.QualityControl.Agents.Mode = "explicit"
-		cfg.QualityControl.Agents.ExplicitList = agentsList
 	}
 
+	// Process --qc-mode first (if no conflict, it takes precedence as explicit config)
 	if cmd.Flags().Changed("qc-mode") && qcModeFlag != "" {
 		validModes := map[string]bool{"auto": true, "explicit": true, "mixed": true}
 		if !validModes[qcModeFlag] {
 			return fmt.Errorf("invalid --qc-mode %q: must be auto, explicit, or mixed", qcModeFlag)
 		}
 		cfg.QualityControl.Agents.Mode = qcModeFlag
+	}
+
+	// Process --qc-agents (this always forces explicit mode)
+	if cmd.Flags().Changed("qc-agents") && qcAgentsFlag != "" {
+		rawList := strings.Split(qcAgentsFlag, ",")
+		agentsList := make([]string, 0, len(rawList))
+		for _, agent := range rawList {
+			trimmed := strings.TrimSpace(agent)
+			if trimmed != "" {
+				agentsList = append(agentsList, trimmed)
+			}
+		}
+
+		if len(agentsList) == 0 {
+			return fmt.Errorf("--qc-agents requires at least one non-empty agent name")
+		}
+
+		cfg.QualityControl.Agents.Mode = "explicit"
+		cfg.QualityControl.Agents.ExplicitList = agentsList
 	}
 
 	// Validate merged configuration
