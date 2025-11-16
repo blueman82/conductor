@@ -32,12 +32,12 @@ type Issue struct {
 
 // QCResponse represents structured JSON output from QC review
 type QCResponse struct {
-	Verdict         string   `json:"verdict"`          // "GREEN", "RED", "YELLOW"
-	Feedback        string   `json:"feedback"`         // Detailed review feedback
-	Issues          []Issue  `json:"issues"`           // Specific issues found
-	Recommendations []string `json:"recommendations"`  // Suggested improvements
-	ShouldRetry     bool     `json:"should_retry"`     // Whether to retry
-	SuggestedAgent  string   `json:"suggested_agent"`  // Alternative agent suggestion
+	Verdict         string   `json:"verdict"`         // "GREEN", "RED", "YELLOW"
+	Feedback        string   `json:"feedback"`        // Detailed review feedback
+	Issues          []Issue  `json:"issues"`          // Specific issues found
+	Recommendations []string `json:"recommendations"` // Suggested improvements
+	ShouldRetry     bool     `json:"should_retry"`    // Whether to retry
+	SuggestedAgent  string   `json:"suggested_agent"` // Alternative agent suggestion
 }
 
 // Validate checks if required fields are present

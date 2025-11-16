@@ -1171,7 +1171,7 @@ func (m *MockLearningStore) GetRecordedExecutions() []*learning.TaskExecution {
 func (m *MockLearningStore) GetExecutionHistory(ctx context.Context, planFile, taskNumber string) ([]*learning.TaskExecution, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	// Return recorded executions for the requested task
 	var history []*learning.TaskExecution
 	for _, exec := range m.RecordedExecutions {
@@ -3381,16 +3381,16 @@ func TestTaskExecutor_ExecutionHistoryTracking(t *testing.T) {
 
 func TestDefaultTaskExecutor_UpdateFeedback(t *testing.T) {
 	tests := []struct {
-		name          string
-		planPath      string
-		sourceFile    string
+		name           string
+		planPath       string
+		sourceFile     string
 		taskSourceFile string
-		taskNumber    string
-		attempt       int
-		agentOutput   string
-		qcFeedback    string
-		verdict       string
-		expectCall    bool
+		taskNumber     string
+		attempt        int
+		agentOutput    string
+		qcFeedback     string
+		verdict        string
+		expectCall     bool
 	}{
 		{
 			name:        "updates plan file with feedback",
@@ -3559,6 +3559,7 @@ func TestDefaultTaskExecutor_UpdateFeedback_ErrorHandling(t *testing.T) {
 		}
 	})
 }
+
 // mockInvokerWithOutput is a simple mock that returns a fixed output
 type mockInvokerWithOutput struct {
 	output string

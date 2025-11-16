@@ -8,9 +8,9 @@ import (
 
 func TestAgentResponse_Marshal(t *testing.T) {
 	tests := []struct {
-		name    string
-		resp    AgentResponse
-		want    string
+		name string
+		resp AgentResponse
+		want string
 	}{
 		{
 			name: "complete response",

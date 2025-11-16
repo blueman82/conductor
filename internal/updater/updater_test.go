@@ -1017,7 +1017,6 @@ func TestYAMLFeedbackMultipleAttempts(t *testing.T) {
 	}
 }
 
-
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

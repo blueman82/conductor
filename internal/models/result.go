@@ -12,12 +12,12 @@ const (
 
 // ExecutionAttempt represents a single execution attempt (for retry tracking)
 type ExecutionAttempt struct {
-	Attempt      int    // Attempt number (1-indexed)
-	Agent        string // Agent used for this attempt
-	AgentOutput  string // Raw JSON output from agent
-	QCFeedback   string // Raw JSON output from QC review
-	Verdict      string // QC verdict: "GREEN", "RED", "YELLOW"
-	Duration     time.Duration
+	Attempt     int    // Attempt number (1-indexed)
+	Agent       string // Agent used for this attempt
+	AgentOutput string // Raw JSON output from agent
+	QCFeedback  string // Raw JSON output from QC review
+	Verdict     string // QC verdict: "GREEN", "RED", "YELLOW"
+	Duration    time.Duration
 }
 
 // TaskResult represents the result of executing a single task

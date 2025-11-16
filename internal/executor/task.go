@@ -496,7 +496,6 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		}
 	}
 
-
 	// Pre-task hook: Query learning database and adapt agent/prompt
 	if err := te.preTaskHook(ctx, &task); err != nil {
 		// Hook errors are non-fatal but should be logged
