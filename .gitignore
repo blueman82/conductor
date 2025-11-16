@@ -54,6 +54,9 @@ tmp/
 temp/
 *.tmp
 
+# Lock files (file locking mechanism)
+*.lock
+
 # Test cache
 .cache/
 
