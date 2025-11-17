@@ -99,10 +99,13 @@ type yamlConductorConfig struct {
 		ReviewAgent string `yaml:"review_agent"`
 		RetryOnRed  int    `yaml:"retry_on_red"`
 		Agents      struct {
-			Mode         string   `yaml:"mode"`
-			ExplicitList []string `yaml:"explicit_list"`
-			Additional   []string `yaml:"additional"`
-			Blocked      []string `yaml:"blocked"`
+			Mode              string   `yaml:"mode"`
+			ExplicitList      []string `yaml:"explicit_list"`
+			Additional        []string `yaml:"additional"`
+			Blocked           []string `yaml:"blocked"`
+			MaxAgents         int      `yaml:"max_agents"`
+			CacheTTLSeconds   int      `yaml:"cache_ttl_seconds"`
+			RequireCodeReview bool     `yaml:"require_code_review"`
 		} `yaml:"agents"`
 	} `yaml:"quality_control"`
 	WorktreeGroups []struct {
@@ -239,7 +242,7 @@ func parseConductorConfigYAML(cfg *yamlConductorConfig, plan *models.Plan) error
 
 		// Normalize and validate mode
 		mode := strings.ToLower(strings.TrimSpace(cfg.QualityControl.Agents.Mode))
-		validModes := map[string]bool{"auto": true, "explicit": true, "mixed": true, "": true}
+		validModes := map[string]bool{"auto": true, "explicit": true, "mixed": true, "intelligent": true, "": true}
 		if !validModes[mode] {
 			return fmt.Errorf("invalid QC agents mode: %q", mode)
 		}
@@ -250,10 +253,13 @@ func parseConductorConfigYAML(cfg *yamlConductorConfig, plan *models.Plan) error
 		}
 
 		plan.QualityControl.Agents = models.QCAgentConfig{
-			Mode:             mode,
-			ExplicitList:     cfg.QualityControl.Agents.ExplicitList,
-			AdditionalAgents: cfg.QualityControl.Agents.Additional,
-			BlockedAgents:    cfg.QualityControl.Agents.Blocked,
+			Mode:              mode,
+			ExplicitList:      cfg.QualityControl.Agents.ExplicitList,
+			AdditionalAgents:  cfg.QualityControl.Agents.Additional,
+			BlockedAgents:     cfg.QualityControl.Agents.Blocked,
+			MaxAgents:         cfg.QualityControl.Agents.MaxAgents,
+			CacheTTLSeconds:   cfg.QualityControl.Agents.CacheTTLSeconds,
+			RequireCodeReview: cfg.QualityControl.Agents.RequireCodeReview,
 		}
 	}
 

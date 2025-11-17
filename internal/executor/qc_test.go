@@ -1293,6 +1293,10 @@ func (m *mockQCLogger) LogQCCriteriaResults(agentName string, results []models.C
 	// no-op for mock
 }
 
+func (m *mockQCLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+	// no-op for mock
+}
+
 func TestReviewMultiAgent_LoggingCalls(t *testing.T) {
 	tests := []struct {
 		name          string

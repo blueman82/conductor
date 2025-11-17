@@ -617,12 +617,13 @@ func (c *Config) Validate() error {
 
 		// Validate multi-agent QC configuration
 		validModes := map[string]bool{
-			"auto":     true,
-			"explicit": true,
-			"mixed":    true,
+			"auto":        true,
+			"explicit":    true,
+			"mixed":       true,
+			"intelligent": true,
 		}
 		if !validModes[c.QualityControl.Agents.Mode] {
-			return fmt.Errorf("quality_control.agents.mode must be one of: auto, explicit, mixed; got %q", c.QualityControl.Agents.Mode)
+			return fmt.Errorf("quality_control.agents.mode must be one of: auto, explicit, mixed, intelligent; got %q", c.QualityControl.Agents.Mode)
 		}
 
 		// If mode is explicit, must have at least one agent

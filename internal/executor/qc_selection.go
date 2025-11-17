@@ -13,6 +13,11 @@ import (
 type SelectionContext struct {
 	ExecutingAgent      string
 	IntelligentSelector *IntelligentSelector
+	// Output fields (populated after selection)
+	UsedMode        string // Actual mode used (may differ from config if fallback occurred)
+	FallbackOccured bool   // True if intelligent selection fell back to auto
+	FallbackReason  string // Reason for fallback (error message)
+	Rationale       string // Rationale from intelligent selection (if successful)
 }
 
 // SelectQCAgents determines which QC agents to use based on configuration and task context
@@ -35,7 +40,7 @@ func SelectQCAgentsWithContext(
 	case "intelligent":
 		// Use Claude-based intelligent selection
 		if selCtx != nil && selCtx.IntelligentSelector != nil {
-			selectedAgents, _, err := IntelligentSelectQCAgents(
+			selectedAgents, rationale, err := IntelligentSelectQCAgents(
 				ctx,
 				task,
 				selCtx.ExecutingAgent,
@@ -45,13 +50,29 @@ func SelectQCAgentsWithContext(
 			)
 			if err == nil && len(selectedAgents) > 0 {
 				agents = selectedAgents
+				selCtx.UsedMode = "intelligent"
+				selCtx.Rationale = rationale
 				// Intelligent selection already applies guardrails, skip to blocked filter
 				break
 			}
 			// Fallback to auto if intelligent fails
+			if selCtx != nil {
+				selCtx.FallbackOccured = true
+				if err != nil {
+					selCtx.FallbackReason = err.Error()
+				} else {
+					selCtx.FallbackReason = "no agents selected by intelligent selection"
+				}
+			}
+		} else if selCtx != nil {
+			selCtx.FallbackOccured = true
+			selCtx.FallbackReason = "intelligent selector not initialized"
 		}
 		// Fallback to auto-selection
 		agents = AutoSelectQCAgents(task, registry)
+		if selCtx != nil && selCtx.UsedMode == "" {
+			selCtx.UsedMode = "auto (fallback from intelligent)"
+		}
 	case "explicit":
 		// Use only explicitly listed agents
 		agents = agentConfig.ExplicitList

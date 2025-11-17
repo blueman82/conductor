@@ -431,7 +431,7 @@ func parseConductorConfig(frontmatter []byte, plan *models.Plan) error {
 
 				// Normalize and validate mode
 				mode := strings.ToLower(strings.TrimSpace(agents.Mode))
-				validModes := map[string]bool{"auto": true, "explicit": true, "mixed": true, "": true}
+				validModes := map[string]bool{"auto": true, "explicit": true, "mixed": true, "intelligent": true, "": true}
 				if !validModes[mode] {
 					return fmt.Errorf("invalid QC agents mode: %q", mode)
 				}

@@ -83,6 +83,11 @@ Conductor automates complex multi-step implementations by:
   - QC agents verify each criterion individually (PASS/FAIL)
   - Multi-agent unanimous consensus required (all agents must agree)
   - Backward compatible with legacy blob review
+- **Intelligent QC Agent Selection** (v2.4+): Claude-based agent recommendations
+  - Analyzes task context (name, files, description) + executing agent
+  - Recommends domain specialists (security-auditor, database-optimizer)
+  - Deterministic guardrails (max agents cap, code-reviewer baseline)
+  - Caches results to minimize API calls during retries
 
 [⬆ back to top](#table-of-contents)
 
@@ -340,6 +345,17 @@ feedback:
   store_in_plan_file: true    # Write feedback to plan files (human-readable)
   store_in_database: true     # Write feedback to database (long-term learning)
   format: json                # Structured JSON output from QC
+
+# Intelligent QC Agent Selection (v2.4+)
+quality_control:
+  enabled: true
+  retry_on_red: 2
+  agents:
+    mode: intelligent         # Claude-based selection (auto|explicit|mixed|intelligent)
+    max_agents: 3             # Maximum QC agents to use
+    cache_ttl_seconds: 1800   # Cache duration for agent selections
+    require_code_review: true # Always include code-reviewer as baseline
+    blocked: []               # Agents to never use
 ```
 
 For detailed configuration options, see [Usage Guide](docs/conductor.md#usage--commands).
@@ -352,9 +368,9 @@ When you build conductor with `make build`, two values are automatically injecte
 2. **Repository Root** - Path to conductor repository
 
 This ensures:
-- ✅ Database always created in conductor repo (`.conductor/learning/executions.db`)
-- ✅ Config always loaded from conductor repo (`.conductor/config.yaml`)
-- ✅ Works correctly from any directory
+- Database always created in conductor repo (`.conductor/learning/executions.db`)
+- Config always loaded from conductor repo (`.conductor/config.yaml`)
+- Works correctly from any directory
 
 [⬆ back to top](#table-of-contents)
 
@@ -560,12 +576,12 @@ Search for **conductor-tools** and click install. Done! Your commands are ready:
 
 ### Why Use the Plugin?
 
-- ✅ **Auto-discovers** your project structure (reads codebase before planning)
-- ✅ **Smart agent selection** - recommends appropriate agents
-- ✅ **Dependency detection** - identifies task ordering
-- ✅ **Multiple formats** - Markdown (human) or YAML (automation)
-- ✅ **Interactive design** - `/cook-man` refines requirements before planning
-- ✅ **Immediately executable** - generated plans work directly with `conductor run`
+- **Auto-discovers** your project structure (reads codebase before planning)
+- **Smart agent selection** - recommends appropriate agents
+- **Dependency detection** - identifies task ordering
+- **Multiple formats** - Markdown (human) or YAML (automation)
+- **Interactive design** - `/cook-man` refines requirements before planning
+- **Immediately executable** - generated plans work directly with `conductor run`
 
 ### Quick Example
 
@@ -733,12 +749,12 @@ conductor validate *.md
 ```
 
 **Features:**
-- ✅ Multi-file plan loading with auto-format detection
-- ✅ Objective plan splitting by feature/component/service
-- ✅ Cross-file dependency management
-- ✅ Worktree groups for execution control
-- ✅ File-to-task mapping for resume operations
-- ✅ 100% backward compatible with single-file plans
+- Multi-file plan loading with auto-format detection
+- Objective plan splitting by feature/component/service
+- Cross-file dependency management
+- Worktree groups for execution control
+- File-to-task mapping for resume operations
+- 100% backward compatible with single-file plans
 
 See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-splitting) for detailed documentation and examples.
 
@@ -749,43 +765,47 @@ See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-split
 **Current Status**: Production-ready v2.1.0
 
 Conductor is feature-complete with:
-- ✅ Complete implementation with 86%+ test coverage
-- ✅ `conductor validate` and `conductor run` commands
-- ✅ Wave-based parallel execution with dependency management
-- ✅ Quality control reviews with automated retries
-- ✅ Multi-file plan loading and merging
-- ✅ Worktree group organization with isolation levels
-- ✅ Auto-incrementing version management (VERSION file)
-- ✅ File locking for concurrent updates
-- ✅ Agent discovery system
-- ✅ **Adaptive learning system** (v2.0)
+- Complete implementation with 86%+ test coverage
+- `conductor validate` and `conductor run` commands
+- Wave-based parallel execution with dependency management
+- Quality control reviews with automated retries
+- Multi-file plan loading and merging
+- Worktree group organization with isolation levels
+- Auto-incrementing version management (VERSION file)
+- File locking for concurrent updates
+- Agent discovery system
+- **Adaptive learning system** (v2.0)
   - SQLite-based execution history
   - Automatic agent adaptation
   - Pattern detection and analysis
   - Four CLI learning commands
-- ✅ **Structured QC responses** (v2.1)
+- **Structured QC responses** (v2.1)
   - JSON parsing with nested envelope extraction
   - Markdown code fence stripping
   - Detailed issues and recommendations
-- ✅ **Inter-retry agent swapping** (v2.1)
+- **Inter-retry agent swapping** (v2.1)
   - QC suggests alternative agents on failures
   - Automatic agent swap during retry loop
   - Configurable swap behavior
-- ✅ **Dual feedback storage** (v2.1)
+- **Dual feedback storage** (v2.1)
   - Plan file storage (human-readable, git-trackable)
   - Database storage (long-term learning)
   - No duplicate entries
-- ✅ **Structured success criteria** (v2.3)
+- **Structured success criteria** (v2.3)
   - Per-criterion QC verification
   - Multi-agent unanimous consensus
   - Backward compatible with legacy review
-- ✅ Comprehensive documentation
+- **Intelligent QC agent selection** (v2.4)
+  - Claude-based agent recommendations
+  - Task context + executing agent analysis
+  - Deterministic guardrails and caching
+- Comprehensive documentation
 
 ### Conductor Plugin
-- ✅ 4 slash commands (`/doc`, `/doc-yaml`, `/cook-auto`, `/cook-man`)
-- ✅ Complete documentation and guides
-- ✅ Three-tier accessibility (executor, generator, automation)
-- ✅ AI Counsel MCP integration (optional)
+- 4 slash commands (`/doc`, `/doc-yaml`, `/cook-auto`, `/cook-man`)
+- Complete documentation and guides
+- Three-tier accessibility (executor, generator, automation)
+- AI Counsel MCP integration (optional)
 
 [⬆ back to top](#table-of-contents)
 

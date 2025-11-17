@@ -389,10 +389,13 @@ func runCommand(cmd *cobra.Command, args []string) error {
 			Enabled:     cfg.QualityControl.Enabled,
 			ReviewAgent: cfg.QualityControl.ReviewAgent,
 			Agents: models.QCAgentConfig{
-				Mode:             cfg.QualityControl.Agents.Mode,
-				ExplicitList:     cfg.QualityControl.Agents.ExplicitList,
-				AdditionalAgents: cfg.QualityControl.Agents.AdditionalAgents,
-				BlockedAgents:    cfg.QualityControl.Agents.BlockedAgents,
+				Mode:              cfg.QualityControl.Agents.Mode,
+				ExplicitList:      cfg.QualityControl.Agents.ExplicitList,
+				AdditionalAgents:  cfg.QualityControl.Agents.AdditionalAgents,
+				BlockedAgents:     cfg.QualityControl.Agents.BlockedAgents,
+				MaxAgents:         cfg.QualityControl.Agents.MaxAgents,
+				CacheTTLSeconds:   cfg.QualityControl.Agents.CacheTTLSeconds,
+				RequireCodeReview: cfg.QualityControl.Agents.RequireCodeReview,
 			},
 			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
@@ -662,6 +665,13 @@ func (ml *multiLogger) LogQCAggregatedResult(verdict string, strategy string) {
 func (ml *multiLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
 	for _, logger := range ml.loggers {
 		logger.LogQCCriteriaResults(agentName, results)
+	}
+}
+
+// LogQCIntelligentSelectionMetadata forwards to all loggers
+func (ml *multiLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+	for _, logger := range ml.loggers {
+		logger.LogQCIntelligentSelectionMetadata(rationale, fallback, fallbackReason)
 	}
 }
 

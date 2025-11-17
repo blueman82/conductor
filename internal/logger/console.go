@@ -1036,6 +1036,60 @@ func (cl *ConsoleLogger) LogQCAggregatedResult(verdict string, strategy string) 
 	cl.writer.Write([]byte(message))
 }
 
+// LogQCIntelligentSelectionMetadata logs details about intelligent agent selection.
+// Logs rationale when successful, or fallback reason if intelligent selection failed.
+// Format: "[HH:MM:SS] [QC] Intelligent selection: <rationale>" or
+// "[HH:MM:SS] [QC] WARN: Fallback to auto mode: <reason>"
+// Thread-safe with mutex protection.
+func (cl *ConsoleLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+	if cl.writer == nil {
+		return
+	}
+
+	// QC logging is at INFO level
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	var message string
+	if fallback {
+		// Log fallback warning
+		if cl.colorOutput {
+			qcPrefix := color.New(color.FgCyan).Sprint("[QC]")
+			warnPrefix := color.New(color.FgYellow).Sprint("WARN:")
+			reason := fallbackReason
+			if reason == "" {
+				reason = "unknown"
+			}
+			message = fmt.Sprintf("[%s] %s %s Fallback to auto mode: %s\n", ts, qcPrefix, warnPrefix, reason)
+		} else {
+			reason := fallbackReason
+			if reason == "" {
+				reason = "unknown"
+			}
+			message = fmt.Sprintf("[%s] [QC] WARN: Fallback to auto mode: %s\n", ts, reason)
+		}
+	} else if rationale != "" {
+		// Log successful intelligent selection rationale
+		if cl.colorOutput {
+			qcPrefix := color.New(color.FgCyan).Sprint("[QC]")
+			message = fmt.Sprintf("[%s] %s Intelligent selection: %s\n", ts, qcPrefix, rationale)
+		} else {
+			message = fmt.Sprintf("[%s] [QC] Intelligent selection: %s\n", ts, rationale)
+		}
+	} else {
+		// No metadata to log
+		return
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
 // LogProgress logs real-time progress of task execution with percentage, counts, and average duration.
 // Format: "[HH:MM:SS] Progress: [████░░░░░░] 50% (4/8 tasks) - Avg: 3.2s/task"
 // Handles edge cases: zero tasks, all completed, no duration data.
@@ -1215,4 +1269,8 @@ func (n *NoOpLogger) LogQCAggregatedResult(verdict string, strategy string) {
 
 // LogQCCriteriaResults is a no-op implementation.
 func (n *NoOpLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
+}
+
+// LogQCIntelligentSelectionMetadata is a no-op implementation.
+func (n *NoOpLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
 }

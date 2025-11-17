@@ -40,6 +40,7 @@ type Logger interface {
 	LogQCIndividualVerdicts(verdicts map[string]string)
 	LogQCAggregatedResult(verdict string, strategy string)
 	LogQCCriteriaResults(agentName string, results []models.CriterionResult)
+	LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string)
 }
 
 // WaveExecutorInterface defines the behavior required to execute waves.

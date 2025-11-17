@@ -907,8 +907,39 @@ console:
 # Quality control settings
 quality_control:
   enabled: true              # Enable QC reviews (default: true)
-  review_agent: conductor-qc # Agent for QC reviews (default: conductor-qc)
+  # review_agent: conductor-qc # DEPRECATED: use agents section below
   retry_on_red: 2            # Retry attempts on RED verdict (default: 2)
+
+  # Multi-agent QC configuration (v2.2+)
+  agents:
+    # Selection mode: "auto", "explicit", "mixed", or "intelligent"
+    # - auto: Auto-select based on file extensions (.go→golang-pro)
+    # - explicit: Use only agents from explicit_list
+    # - mixed: Auto-select + additional agents
+    # - intelligent: Claude-based selection analyzing task context (v2.4+)
+    mode: auto
+
+    # explicit_list: [security-auditor, code-reviewer]  # For mode=explicit
+    # additional: [security-auditor]                     # For mode=mixed
+    # blocked: [deprecated-agent]                        # Agents to never use
+
+    # Intelligent selection settings (v2.4+)
+    max_agents: 4              # Max QC agents to select (default: 4)
+    cache_ttl_seconds: 3600    # Cache TTL in seconds (default: 3600)
+    require_code_review: true  # Always include code-reviewer baseline (default: true)
+
+# Intelligent QC Agent Selection Example (v2.4+)
+# For domain-aware, context-sensitive agent selection:
+#
+# quality_control:
+#   enabled: true
+#   retry_on_red: 2
+#   agents:
+#     mode: intelligent
+#     max_agents: 3
+#     cache_ttl_seconds: 1800
+#     require_code_review: true
+#     blocked: []
 
 # Feedback storage settings
 feedback:
@@ -1013,6 +1044,110 @@ Each task output is reviewed by a quality control agent:
 - **GREEN**: Task completed successfully, proceed
 - **YELLOW**: Task completed with warnings, proceed
 - **RED**: Task failed, retry up to max_retries
+
+#### Intelligent QC Agent Selection (v2.4+)
+
+Beyond file-extension based selection, Conductor v2.4 introduces intelligent agent selection using Claude to analyze task context and recommend the most appropriate QC agents.
+
+**Selection Modes:**
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `auto` (default) | File-extension mapping (.go→golang-pro, .py→python-pro) | Standard projects with clear file types |
+| `explicit` | Use only agents from `explicit_list` | When you know exactly which agents to use |
+| `mixed` | Auto-select + additional agents | Combine auto-detection with specific agents |
+| `intelligent` | Claude-based selection with task + executing agent context | Domain-aware, context-sensitive selection |
+
+**Intelligent Selection Configuration:**
+
+```yaml
+quality_control:
+  enabled: true
+  retry_on_red: 2
+  agents:
+    mode: intelligent
+    max_agents: 3
+    cache_ttl_seconds: 1800
+    require_code_review: true
+    blocked: []
+```
+
+**Benefits of Intelligent Selection:**
+
+1. **Domain-Aware**: Automatically recommends `security-auditor` for authentication tasks, `database-optimizer` for database operations, `performance-analyst` for optimization work
+2. **Stack-Aware**: Considers the executing agent's strengths and potential blind spots when selecting QC agents
+3. **Cost-Controlled**: Caches selection results to minimize redundant API calls during retries
+4. **Fallback Safety**: Automatically reverts to `auto` mode if intelligent selection fails
+
+**Guardrails and Safeguards:**
+
+- **MaxAgents Cap**: Limits selection to configured maximum (default: 4 agents)
+- **Code-Reviewer Baseline**: Always includes `code-reviewer` agent when `require_code_review: true`
+- **Registry Validation**: All recommended agents are validated against the registry allowlist
+- **Blocked Agents Filtered**: Agents in `blocked` list are never selected
+- **Graceful Fallback**: Returns to `auto` mode on API errors or parsing failures
+
+**Intelligent Selection Flow:**
+
+```
+1. Build Prompt
+   ├─ Include task context (name, files, description)
+   ├─ Include executing agent information
+   └─ Request agent recommendations
+
+2. Query Claude
+   └─ Single API call for agent recommendations
+
+3. Apply Guardrails
+   ├─ Cap at MaxAgents
+   ├─ Validate against registry
+   ├─ Filter blocked agents
+   └─ Ensure code-reviewer baseline (if required)
+
+4. Cache Results
+   └─ Store for cache_ttl_seconds to avoid redundant calls
+```
+
+**Configuration Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `mode` | string | `auto` | Selection mode: auto, explicit, mixed, or intelligent |
+| `max_agents` | int | `4` | Maximum number of QC agents to select |
+| `cache_ttl_seconds` | int | `3600` | Cache TTL in seconds (1 hour default) |
+| `require_code_review` | bool | `true` | Always include code-reviewer as baseline |
+| `blocked` | []string | `[]` | Agents to never use for QC |
+| `explicit_list` | []string | `[]` | Agents for explicit mode |
+| `additional` | []string | `[]` | Extra agents for mixed mode |
+
+**Example Scenarios:**
+
+*Authentication Task:*
+```yaml
+# Task: Implement JWT authentication
+# Intelligent selection recommends:
+# - code-reviewer (baseline)
+# - security-auditor (auth-specific)
+# - golang-pro (if .go files)
+```
+
+*Database Migration:*
+```yaml
+# Task: Add database indexes for performance
+# Intelligent selection recommends:
+# - code-reviewer (baseline)
+# - database-optimizer (DB-specific)
+# - performance-analyst (optimization focus)
+```
+
+*API Endpoint:*
+```yaml
+# Task: Create REST API endpoint
+# Intelligent selection recommends:
+# - code-reviewer (baseline)
+# - api-designer (REST patterns)
+# - golang-pro (if .go files)
+```
 
 #### Structured QC Response Format (v2.1.0)
 

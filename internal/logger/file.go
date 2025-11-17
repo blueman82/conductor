@@ -399,6 +399,32 @@ func (fl *FileLogger) LogQCCriteriaResults(agentName string, results []models.Cr
 	fl.writeRunLog(message)
 }
 
+// LogQCIntelligentSelectionMetadata logs details about intelligent agent selection.
+// Format: "[HH:MM:SS] [QC] Intelligent selection: <rationale>" or fallback warning
+func (fl *FileLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+	// QC logging is at INFO level
+	if !fl.shouldLog("info") {
+		return
+	}
+
+	var message string
+	ts := time.Now().Format("15:04:05")
+
+	if fallback {
+		reason := fallbackReason
+		if reason == "" {
+			reason = "unknown"
+		}
+		message = fmt.Sprintf("[%s] [QC] WARN: Fallback to auto mode: %s\n", ts, reason)
+	} else if rationale != "" {
+		message = fmt.Sprintf("[%s] [QC] Intelligent selection: %s\n", ts, rationale)
+	} else {
+		return
+	}
+
+	fl.writeRunLog(message)
+}
+
 // Close flushes and closes the run log file.
 // It should be called when the logger is no longer needed.
 func (fl *FileLogger) Close() error {

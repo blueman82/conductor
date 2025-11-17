@@ -75,6 +75,10 @@ func (m *mockLogger) LogQCCriteriaResults(agentName string, results []models.Cri
 	// no-op for mock
 }
 
+func (m *mockLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+	// no-op for mock
+}
+
 func TestOrchestratorExecutePlan(t *testing.T) {
 	tests := []struct {
 		name           string

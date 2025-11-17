@@ -101,6 +101,15 @@ func (is *IntelligentSelector) buildSelectionPrompt(
 	filesStr := strings.Join(task.Files, ", ")
 	agentsStr := strings.Join(availableAgents, ", ")
 
+	// Include success criteria if available
+	criteriaStr := ""
+	if len(task.SuccessCriteria) > 0 {
+		criteriaStr = "\n\nSUCCESS CRITERIA (what QC agents must verify):"
+		for i, criterion := range task.SuccessCriteria {
+			criteriaStr += fmt.Sprintf("\n%d. %s", i+1, criterion)
+		}
+	}
+
 	prompt := fmt.Sprintf(`You are selecting QC (Quality Control) reviewer agents for a completed task.
 
 TASK CONTEXT:
@@ -108,7 +117,7 @@ TASK CONTEXT:
 - Task Name: %s
 - Files Modified: [%s]
 - Executing Agent: %s
-- Task Description: %s
+- Task Description: %s%s
 
 AVAILABLE QC AGENTS (from registry):
 %s
@@ -119,6 +128,7 @@ Analyze the task context and recommend the best QC agents to review this work. C
 2. Language/stack expertise based on files modified
 3. The executing agent's strengths and potential blind spots
 4. Complementary perspectives for thorough review
+5. Success criteria requirements (if provided)
 
 Return a JSON object with:
 - "agents": array of %d or fewer agent names (from the available list)
@@ -141,6 +151,7 @@ RESPONSE FORMAT (JSON only):
 		filesStr,
 		executingAgent,
 		task.Prompt,
+		criteriaStr,
 		agentsStr,
 		maxAgents,
 		maxAgents,

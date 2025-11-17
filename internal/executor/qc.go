@@ -31,6 +31,7 @@ type QCLogger interface {
 	LogQCIndividualVerdicts(verdicts map[string]string)
 	LogQCAggregatedResult(verdict string, strategy string)
 	LogQCCriteriaResults(agentName string, results []models.CriterionResult)
+	LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string)
 }
 
 // InvokerInterface defines the interface for agent invocation
@@ -314,7 +315,7 @@ func (qc *QualityController) shouldUseMultiAgent() bool {
 	}
 
 	switch qc.AgentConfig.Mode {
-	case "auto", "mixed":
+	case "auto", "mixed", "intelligent":
 		return true // Auto-selection may result in multiple agents
 	case "explicit":
 		return len(qc.AgentConfig.ExplicitList) > 1 // Multiple explicit agents
@@ -343,6 +344,7 @@ func (qc *QualityController) ShouldRetry(result *ReviewResult, currentAttempt in
 func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
 	// Select which agents to use based on configuration
 	var agents []string
+	var selCtx *SelectionContext
 
 	// Use intelligent selection if mode is "intelligent" and selector is available
 	if qc.AgentConfig.Mode == "intelligent" {
@@ -351,7 +353,7 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 			qc.IntelligentSelector = NewIntelligentSelector(qc.Registry, qc.AgentConfig.CacheTTLSeconds)
 		}
 
-		selCtx := &SelectionContext{
+		selCtx = &SelectionContext{
 			ExecutingAgent:      task.Agent,
 			IntelligentSelector: qc.IntelligentSelector,
 		}
@@ -368,6 +370,11 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 	// Log agent selection
 	if qc.Logger != nil {
 		qc.Logger.LogQCAgentSelection(agents, qc.AgentConfig.Mode)
+
+		// Log intelligent selection metadata if available
+		if selCtx != nil && qc.AgentConfig.Mode == "intelligent" {
+			qc.Logger.LogQCIntelligentSelectionMetadata(selCtx.Rationale, selCtx.FallbackOccured, selCtx.FallbackReason)
+		}
 	}
 
 	// If only one agent, fall back to single-agent review for efficiency
