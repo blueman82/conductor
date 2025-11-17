@@ -21,6 +21,10 @@ type Task struct {
 	SourceFile    string                 // Source plan file this task originates from (for multi-file plans)
 	Metadata      map[string]interface{} // Additional metadata for hooks and extensions
 
+	// Structured verification (v2.3+)
+	SuccessCriteria []string `yaml:"success_criteria,omitempty" json:"success_criteria,omitempty"`
+	TestCommands    []string `yaml:"test_commands,omitempty" json:"test_commands,omitempty"`
+
 	// Execution metadata for enhanced console output
 	ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`
 	ExecutionEndTime   time.Time     `json:"execution_end_time,omitempty" yaml:"execution_end_time,omitempty"`

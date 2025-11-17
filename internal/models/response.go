@@ -30,14 +30,24 @@ type Issue struct {
 	Location    string `json:"location"`    // File:line or component
 }
 
+// CriterionResult represents the verification result for a single success criterion
+type CriterionResult struct {
+	Index      int    `json:"index"`                 // Machine-parseable index
+	Criterion  string `json:"criterion"`             // Human-readable criterion text
+	Passed     bool   `json:"passed"`                // Whether criterion was satisfied
+	Evidence   string `json:"evidence,omitempty"`    // Evidence supporting pass
+	FailReason string `json:"fail_reason,omitempty"` // Reason for failure
+}
+
 // QCResponse represents structured JSON output from QC review
 type QCResponse struct {
-	Verdict         string   `json:"verdict"`         // "GREEN", "RED", "YELLOW"
-	Feedback        string   `json:"feedback"`        // Detailed review feedback
-	Issues          []Issue  `json:"issues"`          // Specific issues found
-	Recommendations []string `json:"recommendations"` // Suggested improvements
-	ShouldRetry     bool     `json:"should_retry"`    // Whether to retry
-	SuggestedAgent  string   `json:"suggested_agent"` // Alternative agent suggestion
+	Verdict         string            `json:"verdict"`                    // "GREEN", "RED", "YELLOW"
+	Feedback        string            `json:"feedback"`                   // Detailed review feedback
+	Issues          []Issue           `json:"issues"`                     // Specific issues found
+	Recommendations []string          `json:"recommendations"`            // Suggested improvements
+	ShouldRetry     bool              `json:"should_retry"`               // Whether to retry
+	SuggestedAgent  string            `json:"suggested_agent"`            // Alternative agent suggestion
+	CriteriaResults []CriterionResult `json:"criteria_results,omitempty"` // Per-criterion verification results
 }
 
 // Validate checks if required fields are present

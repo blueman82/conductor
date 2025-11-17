@@ -943,6 +943,55 @@ func (cl *ConsoleLogger) colorizeVerdicts(verdicts map[string]string, agentNames
 	return strings.Join(parts, ", ")
 }
 
+// LogQCCriteriaResults logs the per-criterion verification results from a QC agent.
+// Format: "[HH:MM:SS] [QC] agent-name criteria: [0:PASS, 1:PASS, 2:FAIL, 3:PASS]"
+// Thread-safe with mutex protection. Each criterion shows index and PASS/FAIL status.
+func (cl *ConsoleLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
+	if cl.writer == nil {
+		return
+	}
+
+	// Criteria logging is at DEBUG level
+	if !cl.shouldLog("debug") {
+		return
+	}
+
+	if len(results) == 0 {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	// Build criteria status strings sorted by index
+	var parts []string
+	for _, cr := range results {
+		status := "FAIL"
+		if cr.Passed {
+			status = "PASS"
+		}
+		parts = append(parts, fmt.Sprintf("%d:%s", cr.Index, status))
+	}
+
+	criteriaStr := fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+
+	var message string
+	if cl.colorOutput {
+		// Cyan for [QC] prefix
+		qcPrefix := color.New(color.FgCyan).Sprint("[QC]")
+		// Magenta for agent name
+		agentColored := color.New(color.FgMagenta).Sprint(agentName)
+		message = fmt.Sprintf("[%s] %s %s criteria: %s\n", ts, qcPrefix, agentColored, criteriaStr)
+	} else {
+		// Plain text format
+		message = fmt.Sprintf("[%s] [QC] %s criteria: %s\n", ts, agentName, criteriaStr)
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
 // LogQCAggregatedResult logs the final aggregated QC verdict.
 // Format: "[HH:MM:SS] [QC] Final verdict: GREEN (strictest-wins)"
 // The verdict is color-coded (GREEN=green, YELLOW=yellow, RED=red).
@@ -1162,4 +1211,8 @@ func (n *NoOpLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
 
 // LogQCAggregatedResult is a no-op implementation.
 func (n *NoOpLogger) LogQCAggregatedResult(verdict string, strategy string) {
+}
+
+// LogQCCriteriaResults is a no-op implementation.
+func (n *NoOpLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
 }

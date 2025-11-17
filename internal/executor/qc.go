@@ -29,6 +29,7 @@ type QCLogger interface {
 	LogQCAgentSelection(agents []string, mode string)
 	LogQCIndividualVerdicts(verdicts map[string]string)
 	LogQCAggregatedResult(verdict string, strategy string)
+	LogQCCriteriaResults(agentName string, results []models.CriterionResult)
 }
 
 // InvokerInterface defines the interface for agent invocation
@@ -38,10 +39,11 @@ type InvokerInterface interface {
 
 // ReviewResult captures the result of a quality control review
 type ReviewResult struct {
-	Flag           string // "GREEN", "RED", or "YELLOW"
-	Feedback       string // Detailed feedback from the reviewer
-	SuggestedAgent string // Alternative agent suggestion for retry
-	AgentName      string // Name of agent that produced this result (v2.2+)
+	Flag            string                   // "GREEN", "RED", or "YELLOW"
+	Feedback        string                   // Detailed feedback from the reviewer
+	SuggestedAgent  string                   // Alternative agent suggestion for retry
+	AgentName       string                   // Name of agent that produced this result (v2.2+)
+	CriteriaResults []models.CriterionResult // Per-criterion verification results (v2.2+)
 }
 
 // NewQualityController creates a new QualityController with default settings
@@ -81,24 +83,75 @@ Agent Output:
 		}
 	}
 
-	basePrompt += `
-
-Provide quality control review in this format:
-Quality Control: [GREEN/RED/YELLOW]
-Feedback: [your detailed feedback]
-
-Respond with GREEN if all requirements met, RED if needs rework, YELLOW if minor issues.
-`
-
 	// Add formatting instructions
 	return agent.PrepareAgentPrompt(basePrompt)
 }
 
+// BuildStructuredReviewPrompt creates a QC prompt with numbered success criteria for verification.
+// Falls back to legacy prompt structure for tasks without explicit criteria.
+func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, task models.Task, output string) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("# Quality Control Review: %s\n\n", task.Name))
+	sb.WriteString("## Task Requirements\n")
+	sb.WriteString(task.Prompt)
+	sb.WriteString("\n\n")
+
+	if len(task.SuccessCriteria) > 0 {
+		sb.WriteString("## SUCCESS CRITERIA - VERIFY EACH ONE\n\n")
+		for i, criterion := range task.SuccessCriteria {
+			sb.WriteString(fmt.Sprintf("%d. [ ] %s\n", i, criterion))
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(task.TestCommands) > 0 {
+		sb.WriteString("## TEST COMMANDS\n")
+		for _, cmd := range task.TestCommands {
+			sb.WriteString(fmt.Sprintf("- `%s`\n", cmd))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("## AGENT OUTPUT\n```\n")
+	sb.WriteString(output)
+	sb.WriteString("\n```\n\n")
+
+	sb.WriteString("## RESPONSE FORMAT\nYou MUST ONLY respond with JSON including criteria_results array.\n")
+
+	return sb.String()
+}
+
 // buildQCJSONPrompt appends JSON instruction to QC prompts
 func (qc *QualityController) buildQCJSONPrompt(basePrompt string) string {
-	jsonInstruction := `
+	return qc.buildQCJSONPromptWithCriteria(basePrompt, false)
+}
 
-IMPORTANT: Respond ONLY with valid JSON in this format:
+// buildQCJSONPromptWithCriteria appends JSON instruction with optional criteria_results schema
+func (qc *QualityController) buildQCJSONPromptWithCriteria(basePrompt string, hasSuccessCriteria bool) string {
+	var jsonInstruction string
+	if hasSuccessCriteria {
+		jsonInstruction = `
+
+IMPORTANT: You MUST ONLY respond with valid JSON in this format:
+{
+  "verdict": "GREEN|RED|YELLOW",
+  "feedback": "Detailed review feedback",
+  "criteria_results": [
+    {"index": 0, "criterion": "first criterion text", "passed": true, "evidence": "evidence or fail reason"},
+    {"index": 1, "criterion": "second criterion text", "passed": false, "evidence": "why it failed"}
+  ],
+  "issues": [{"severity": "critical|warning|info", "description": "...", "location": "..."}],
+  "recommendations": ["suggestion1"],
+  "should_retry": false,
+  "suggested_agent": "agent-name"
+}
+
+Each criterion MUST have a corresponding entry in criteria_results with its index and pass/fail status.`
+	} else {
+		jsonInstruction = `
+
+IMPORTANT: You MUST ONLY respond with valid JSON in this format:
 {
   "verdict": "GREEN|RED|YELLOW",
   "feedback": "Detailed review feedback",
@@ -107,6 +160,7 @@ IMPORTANT: Respond ONLY with valid JSON in this format:
   "should_retry": false,
   "suggested_agent": "agent-name"
 }`
+	}
 	return basePrompt + jsonInstruction
 }
 
@@ -184,8 +238,16 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 	}
 
 	// Single agent review (legacy behavior)
-	basePrompt := qc.BuildReviewPrompt(ctx, task, output)
-	prompt := qc.buildQCJSONPrompt(basePrompt)
+	var basePrompt string
+	hasSuccessCriteria := len(task.SuccessCriteria) > 0
+	if hasSuccessCriteria {
+		// Use structured prompt for tasks with explicit success criteria
+		basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
+	} else {
+		// Use legacy prompt for backward compatibility
+		basePrompt = qc.BuildReviewPrompt(ctx, task, output)
+	}
+	prompt := qc.buildQCJSONPromptWithCriteria(basePrompt, hasSuccessCriteria)
 
 	// Create a review task for the invoker
 	reviewTask := models.Task{
@@ -205,12 +267,27 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 	qcResp, jsonErr := parseQCJSON(result.Output)
 	if jsonErr == nil {
 		// Success: use JSON response
-		return &ReviewResult{
-			Flag:           qcResp.Verdict,
-			Feedback:       qcResp.Feedback,
-			SuggestedAgent: qcResp.SuggestedAgent,
-			AgentName:      qc.ReviewAgent,
-		}, nil
+		reviewResult := &ReviewResult{
+			Flag:            qcResp.Verdict,
+			Feedback:        qcResp.Feedback,
+			SuggestedAgent:  qcResp.SuggestedAgent,
+			AgentName:       qc.ReviewAgent,
+			CriteriaResults: qcResp.CriteriaResults,
+		}
+
+		// Apply criteria aggregation if task has success criteria
+		if len(task.SuccessCriteria) > 0 {
+			if len(qcResp.CriteriaResults) == 0 {
+				// Agent didn't follow schema - treat as YELLOW (AI Counsel consensus)
+				reviewResult.Flag = models.StatusYellow
+				reviewResult.Feedback += " (Warning: Agent did not return criteria_results)"
+			} else {
+				// Override verdict based on criteria aggregation
+				reviewResult.Flag = qc.aggregateCriteriaResults(qcResp, task)
+			}
+		}
+
+		return reviewResult, nil
 	}
 
 	// Fallback: use legacy parsing
@@ -293,12 +370,26 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 		qc.Logger.LogQCIndividualVerdicts(verdictMap)
 	}
 
-	// Aggregate results using strictest-wins
-	final := qc.aggregateVerdicts(results, agents)
+	// Aggregate results: use per-criterion consensus for tasks with success criteria,
+	// otherwise use strictest-wins for legacy tasks
+	var final *ReviewResult
+	if len(task.SuccessCriteria) > 0 {
+		// Use multi-agent criteria aggregation (unanimous consensus)
+		final = qc.aggregateMultiAgentCriteria(results, task)
+		final.AgentName = fmt.Sprintf("multi-agent(%s)", strings.Join(agents, ","))
 
-	// Log aggregated result
-	if qc.Logger != nil {
-		qc.Logger.LogQCAggregatedResult(final.Flag, "strictest-wins")
+		// Log aggregated result
+		if qc.Logger != nil {
+			qc.Logger.LogQCAggregatedResult(final.Flag, "multi-agent-criteria-consensus")
+		}
+	} else {
+		// Use strictest-wins for legacy tasks without success criteria
+		final = qc.aggregateVerdicts(results, agents)
+
+		// Log aggregated result
+		if qc.Logger != nil {
+			qc.Logger.LogQCAggregatedResult(final.Flag, "strictest-wins")
+		}
 	}
 
 	return final, nil
@@ -306,8 +397,14 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 
 // reviewSingleAgent performs QC review with a single specified agent
 func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.Task, output string, agentName string) (*ReviewResult, error) {
-	basePrompt := qc.BuildReviewPrompt(ctx, task, output)
-	prompt := qc.buildQCJSONPrompt(basePrompt)
+	var basePrompt string
+	hasSuccessCriteria := len(task.SuccessCriteria) > 0
+	if hasSuccessCriteria {
+		basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
+	} else {
+		basePrompt = qc.BuildReviewPrompt(ctx, task, output)
+	}
+	prompt := qc.buildQCJSONPromptWithCriteria(basePrompt, hasSuccessCriteria)
 
 	reviewTask := models.Task{
 		Number: task.Number,
@@ -324,10 +421,11 @@ func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.
 	qcResp, jsonErr := parseQCJSON(result.Output)
 	if jsonErr == nil {
 		return &ReviewResult{
-			Flag:           qcResp.Verdict,
-			Feedback:       qcResp.Feedback,
-			SuggestedAgent: qcResp.SuggestedAgent,
-			AgentName:      agentName,
+			Flag:            qcResp.Verdict,
+			Feedback:        qcResp.Feedback,
+			SuggestedAgent:  qcResp.SuggestedAgent,
+			AgentName:       agentName,
+			CriteriaResults: qcResp.CriteriaResults,
 		}, nil
 	}
 
@@ -351,8 +449,14 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 			defer wg.Done()
 
 			// Build review prompt
-			basePrompt := qc.BuildReviewPrompt(ctx, task, output)
-			prompt := qc.buildQCJSONPrompt(basePrompt)
+			var basePrompt string
+			hasSuccessCriteria := len(task.SuccessCriteria) > 0
+			if hasSuccessCriteria {
+				basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
+			} else {
+				basePrompt = qc.BuildReviewPrompt(ctx, task, output)
+			}
+			prompt := qc.buildQCJSONPromptWithCriteria(basePrompt, hasSuccessCriteria)
 
 			// Create review task for this agent
 			reviewTask := models.Task{
@@ -380,12 +484,20 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 			qcResp, jsonErr := parseQCJSON(result.Output)
 			if jsonErr == nil {
 				reviewResult = &ReviewResult{
-					Flag:           qcResp.Verdict,
-					Feedback:       qcResp.Feedback,
-					SuggestedAgent: qcResp.SuggestedAgent,
-					AgentName:      agent,
+					Flag:            qcResp.Verdict,
+					Feedback:        qcResp.Feedback,
+					SuggestedAgent:  qcResp.SuggestedAgent,
+					AgentName:       agent,
+					CriteriaResults: qcResp.CriteriaResults,
+				}
+				// Log criteria results if available
+				if qc.Logger != nil && len(qcResp.CriteriaResults) > 0 {
+					qc.Logger.LogQCCriteriaResults(agent, qcResp.CriteriaResults)
 				}
 			} else {
+				// DEBUG: Log parse failure
+				fmt.Printf("[DEBUG] %s JSON parse error: %v\n", agent, jsonErr)
+				fmt.Printf("[DEBUG] %s output: %s\n", agent, result.Output)
 				flag, feedback := ParseReviewResponse(result.Output)
 				reviewResult = &ReviewResult{
 					Flag:      flag,
@@ -479,8 +591,10 @@ func parseQCJSON(output string) (*models.QCResponse, error) {
 	}
 
 	// Step 1.5: Extract JSON from markdown code fences if present
-	// QC agent may wrap JSON in ```json...```
-	if strings.HasPrefix(strings.TrimSpace(actualOutput), "```") {
+	// QC agent may wrap JSON in ```json...``` anywhere in output (not just at start)
+	// Use case-insensitive check for ```json (handles ```JSON, ```Json, etc.)
+	lowerOutput := strings.ToLower(actualOutput)
+	if strings.Contains(lowerOutput, "```json") || strings.HasPrefix(strings.TrimSpace(actualOutput), "```") {
 		actualOutput = extractJSONFromCodeFence(actualOutput)
 	}
 
@@ -505,10 +619,12 @@ func parseQCJSON(output string) (*models.QCResponse, error) {
 func extractJSONFromCodeFence(content string) string {
 	trimmed := strings.TrimSpace(content)
 
-	// Look for ```json...``` pattern
-	if strings.HasPrefix(trimmed, "```json") {
-		// Find opening fence
-		start := strings.Index(trimmed, "```json")
+	// Look for ```json...``` pattern ANYWHERE in content (case-insensitive)
+	// This handles both ```json and ```JSON variants
+	lowerContent := strings.ToLower(trimmed)
+	if strings.Contains(lowerContent, "```json") {
+		// Find opening fence (case-insensitive)
+		start := strings.Index(lowerContent, "```json")
 		if start != -1 {
 			// Move past the opening fence and any newline
 			start += len("```json")
@@ -516,15 +632,16 @@ func extractJSONFromCodeFence(content string) string {
 				start++
 			}
 
-			// Find closing fence
-			end := strings.LastIndex(trimmed, "```")
-			if end > start {
-				return strings.TrimSpace(trimmed[start:end])
+			// Find closing fence after the opening
+			remaining := trimmed[start:]
+			end := strings.Index(remaining, "```")
+			if end > 0 {
+				return strings.TrimSpace(remaining[:end])
 			}
 		}
 	}
 
-	// Fallback: look for any ``` markers
+	// Fallback: look for any ``` markers at START of content
 	if strings.HasPrefix(trimmed, "```") {
 		start := strings.Index(trimmed, "```") + 3
 		// Skip any language identifier on same line
@@ -539,6 +656,108 @@ func extractJSONFromCodeFence(content string) string {
 	}
 
 	return content
+}
+
+// aggregateCriteriaResults combines per-criterion verdicts using unanimous consensus.
+// If ANY criterion fails, returns RED. Empty CriteriaResults returns agent's original verdict for backward compatibility.
+func (qc *QualityController) aggregateCriteriaResults(resp *models.QCResponse, task models.Task) string {
+	if len(resp.CriteriaResults) == 0 {
+		return resp.Verdict // Backward compatible
+	}
+
+	for _, cr := range resp.CriteriaResults {
+		if !cr.Passed {
+			return models.StatusRed // Unanimous - any fail = RED
+		}
+	}
+
+	return models.StatusGreen
+}
+
+// aggregateMultiAgentCriteria combines per-criterion verdicts across multiple agents using unanimous consensus.
+// A criterion passes only if ALL agents unanimously agree it passes.
+// Falls back to aggregateVerdicts for tasks without success criteria.
+func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult, task models.Task) *ReviewResult {
+	// Fall back to standard aggregation if no success criteria defined
+	if len(task.SuccessCriteria) == 0 {
+		return qc.aggregateVerdicts(results, []string{})
+	}
+
+	// Collect votes per criterion from all agents
+	criterionVotes := make(map[int][]bool)
+	for i := range task.SuccessCriteria {
+		criterionVotes[i] = []bool{}
+	}
+
+	// Gather votes from each agent
+	for _, result := range results {
+		if result == nil || len(result.CriteriaResults) == 0 {
+			continue // Skip non-compliant agents (no criteria results)
+		}
+		for _, cr := range result.CriteriaResults {
+			if votes, ok := criterionVotes[cr.Index]; ok {
+				criterionVotes[cr.Index] = append(votes, cr.Passed)
+			}
+		}
+	}
+
+	// Check unanimous consensus per criterion and log results
+	allPassed := true
+	var consensusResults []string
+	for idx := 0; idx < len(task.SuccessCriteria); idx++ {
+		votes := criterionVotes[idx]
+		if len(votes) == 0 {
+			allPassed = false // No votes = fail (no consensus possible)
+			consensusResults = append(consensusResults, fmt.Sprintf("%d:FAIL", idx))
+		} else {
+			// Check if all votes are true (unanimous consensus)
+			criterion_passed := true
+			for _, passed := range votes {
+				if !passed {
+					criterion_passed = false
+					allPassed = false
+					break
+				}
+			}
+			if criterion_passed {
+				consensusResults = append(consensusResults, fmt.Sprintf("%d:PASS", idx))
+			} else {
+				consensusResults = append(consensusResults, fmt.Sprintf("%d:FAIL", idx))
+			}
+		}
+	}
+
+	// Log consensus results if logger available
+	if qc.Logger != nil && len(consensusResults) > 0 {
+		// Create a synthetic CriterionResult slice for logging
+		var logResults []models.CriterionResult
+		for _, consensusStr := range consensusResults {
+			// Parse "idx:PASS/FAIL" format
+			parts := strings.Split(consensusStr, ":")
+			if len(parts) == 2 {
+				var idx int
+				fmt.Sscanf(parts[0], "%d", &idx)
+				passed := parts[1] == "PASS"
+				logResults = append(logResults, models.CriterionResult{
+					Index:  idx,
+					Passed: passed,
+				})
+			}
+		}
+		if len(logResults) > 0 {
+			qc.Logger.LogQCCriteriaResults("consensus", logResults)
+		}
+	}
+
+	verdict := models.StatusGreen
+	if !allPassed {
+		verdict = models.StatusRed
+	}
+
+	return &ReviewResult{
+		Flag:     verdict,
+		Feedback: "Multi-agent criteria consensus",
+	}
 }
 
 // LoadContext loads execution history from database for the task

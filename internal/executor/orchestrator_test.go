@@ -71,6 +71,10 @@ func (m *mockLogger) LogQCAggregatedResult(verdict string, strategy string) {
 	// no-op for mock
 }
 
+func (m *mockLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
+	// no-op for mock
+}
+
 func TestOrchestratorExecutePlan(t *testing.T) {
 	tests := []struct {
 		name           string

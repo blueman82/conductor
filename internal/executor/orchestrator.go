@@ -39,6 +39,7 @@ type Logger interface {
 	LogQCAgentSelection(agents []string, mode string)
 	LogQCIndividualVerdicts(verdicts map[string]string)
 	LogQCAggregatedResult(verdict string, strategy string)
+	LogQCCriteriaResults(agentName string, results []models.CriterionResult)
 }
 
 // WaveExecutorInterface defines the behavior required to execute waves.

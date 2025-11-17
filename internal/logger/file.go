@@ -372,6 +372,33 @@ func (fl *FileLogger) LogQCAggregatedResult(verdict string, strategy string) {
 	fl.writeRunLog(message)
 }
 
+// LogQCCriteriaResults logs the per-criterion verification results from a QC agent.
+// Format: "[HH:MM:SS] [QC] agent-name criteria: [0:PASS, 1:PASS, 2:FAIL, 3:PASS]"
+func (fl *FileLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
+	// Criteria logging is at DEBUG level
+	if !fl.shouldLog("debug") {
+		return
+	}
+
+	if len(results) == 0 {
+		return
+	}
+
+	// Build criteria status strings
+	var parts []string
+	for _, cr := range results {
+		status := "FAIL"
+		if cr.Passed {
+			status = "PASS"
+		}
+		parts = append(parts, fmt.Sprintf("%d:%s", cr.Index, status))
+	}
+
+	criteriaStr := fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+	message := fmt.Sprintf("[%s] [QC] %s criteria: %s\n", time.Now().Format("15:04:05"), agentName, criteriaStr)
+	fl.writeRunLog(message)
+}
+
 // Close flushes and closes the run log file.
 // It should be called when the logger is no longer needed.
 func (fl *FileLogger) Close() error {

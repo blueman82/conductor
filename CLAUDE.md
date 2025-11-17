@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.1.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, inter-retry agent swapping, and auto-incrementing version management.
+**Current Status**: Production-ready v2.3.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, and auto-incrementing version management.
 
 ## Development Commands
 
@@ -280,6 +280,60 @@ Flow: Task fails (RED) → QC suggests better agent → `SelectBetterAgent()` va
 - Controlled by `learning.swap_during_retries` config (default: true)
 - Respects `min_failures_before_adapt` threshold from config
 
+### Structured Success Criteria (v2.3+)
+
+Tasks can define explicit success criteria for per-criterion QC verification:
+
+```yaml
+tasks:
+  - id: 5
+    name: "Add JWT Authentication"
+    files: [internal/auth/jwt.go]
+    success_criteria:
+      - "JWT validation function implemented"
+      - "Supports HS256 algorithm"
+      - "Unit tests achieve 90% coverage"
+    test_commands:
+      - "go test ./internal/auth/ -v"
+```
+
+**QC Verification Process:**
+1. Criteria numbered in prompt (0, 1, 2...)
+2. QC agents return per-criterion PASS/FAIL with evidence
+3. Multi-agent consensus: criterion passes only if ALL agents agree
+4. Any failed criterion = RED verdict (unanimous consensus required)
+
+**Response Schema (`internal/models/response.go`):**
+```go
+type QCResponse struct {
+    Verdict         string             `json:"verdict"`
+    Feedback        string             `json:"feedback"`
+    CriteriaResults []CriterionResult  `json:"criteria_results"`  // Per-criterion verdicts
+    Issues          []Issue            `json:"issues"`
+    Recommendations []string           `json:"recommendations"`
+    ShouldRetry     bool               `json:"should_retry"`
+    SuggestedAgent  string             `json:"suggested_agent"`
+}
+
+type CriterionResult struct {
+    Index    int    `json:"index"`     // Criterion index (0-based)
+    Passed   bool   `json:"passed"`    // PASS/FAIL
+    Evidence string `json:"evidence"`  // Evidence or reason
+}
+```
+
+**Multi-Agent QC (`internal/executor/qc.go`):**
+```go
+// MergeQCResponses combines results from multiple QC agents
+// using unanimous consensus (all must agree for PASS)
+func MergeQCResponses(responses []*models.QCResponse) *models.QCResponse {
+    // Unanimous consensus: criterion passes only if ALL agents mark PASS
+    // Any disagreement = FAIL
+}
+```
+
+**Backward Compatible**: Tasks without `success_criteria` use legacy blob review (unstructured output assessment).
+
 ### Adaptive Learning System
 
 Conductor learns from task execution history to improve future runs:
@@ -394,6 +448,8 @@ Conductor's parsers (Markdown and YAML) extract these fields from plan files:
 - `Agent` - Claude agent to execute the task
 - `Status` - Task completion status (completed, failed, in-progress, pending)
 - `CompletedAt` - Timestamp when task was completed
+- `SuccessCriteria` - List of explicit success criteria for QC verification (v2.3+)
+- `TestCommands` - Commands to run for verification (v2.3+)
 
 **Multi-file plan fields**:
 - `WorktreeGroup` - Group assignment for task organization

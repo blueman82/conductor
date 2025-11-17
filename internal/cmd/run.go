@@ -658,6 +658,13 @@ func (ml *multiLogger) LogQCAggregatedResult(verdict string, strategy string) {
 	}
 }
 
+// LogQCCriteriaResults forwards to all loggers
+func (ml *multiLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
+	for _, logger := range ml.loggers {
+		logger.LogQCCriteriaResults(agentName, results)
+	}
+}
+
 // getTask finds a task by number in a task list
 func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	for i := range tasks {

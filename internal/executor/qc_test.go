@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,8 +46,7 @@ func TestBuildReviewPrompt(t *testing.T) {
 			wantContains: []string{
 				"Implement feature X",
 				"Feature X implemented successfully",
-				"Quality Control:",
-				"GREEN/RED/YELLOW",
+				"Agent Output:",
 			},
 		},
 		{
@@ -761,7 +761,8 @@ func TestBuildQCJSONPrompt(t *testing.T) {
 			basePrompt: "Review this task execution",
 			wantContains: []string{
 				"Review this task execution",
-				"IMPORTANT: Respond ONLY with valid JSON",
+				"IMPORTANT:",
+				"valid JSON",
 				"verdict",
 				"feedback",
 				"issues",
@@ -1224,9 +1225,19 @@ func TestExtractJSONFromCodeFence(t *testing.T) {
 			want:  "{\"verdict\":\"YELLOW\",\"feedback\":\"OK\"}",
 		},
 		{
-			name:  "text with fence - returns all text",
+			name:  "text with fence - extracts JSON from fence",
 			input: "Here's the result:\n```json\n{\"verdict\":\"GREEN\"}\n```\nDone",
-			want:  "Here's the result:\n```json\n{\"verdict\":\"GREEN\"}\n```\nDone", // No fence found at start/end
+			want:  "{\"verdict\":\"GREEN\"}", // Fence found anywhere in content, JSON extracted
+		},
+		{
+			name:  "uppercase JSON marker",
+			input: "```JSON\n{\"verdict\":\"GREEN\"}\n```",
+			want:  "{\"verdict\":\"GREEN\"}", // Case-insensitive detection
+		},
+		{
+			name:  "mixed case Json marker",
+			input: "```Json\n{\"verdict\":\"GREEN\"}\n```",
+			want:  "{\"verdict\":\"GREEN\"}", // Case-insensitive detection
 		},
 		{
 			name:  "empty fence - returns empty string",
@@ -1273,6 +1284,10 @@ func (m *mockQCLogger) LogQCAggregatedResult(verdict string, strategy string) {
 		verdict   string
 		strategy  string
 	}{verdict: verdict, strategy: strategy})
+}
+
+func (m *mockQCLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
+	// no-op for mock
 }
 
 func TestReviewMultiAgent_LoggingCalls(t *testing.T) {
@@ -1445,6 +1460,935 @@ func TestReviewMultiAgent_NoLoggingWithoutLogger(t *testing.T) {
 	if result.Flag != models.StatusGreen {
 		t.Errorf("expected GREEN verdict, got %q", result.Flag)
 	}
+}
+
+func TestBuildStructuredReviewPrompt_WithCriteria(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Name:   "Test Task",
+		Prompt: "Implement feature",
+		SuccessCriteria: []string{
+			"Criterion A",
+			"Criterion B",
+		},
+		TestCommands: []string{"go test ./..."},
+	}
+
+	prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "agent output")
+
+	if !contains(prompt, "0. [ ] Criterion A") {
+		t.Error("should include numbered criterion 0")
+	}
+	if !contains(prompt, "1. [ ] Criterion B") {
+		t.Error("should include numbered criterion 1")
+	}
+	if !contains(prompt, "go test ./...") {
+		t.Error("should include test commands")
+	}
+	if !contains(prompt, "criteria_results") {
+		t.Error("should specify JSON response format with criteria_results")
+	}
+	if !contains(prompt, "agent output") {
+		t.Error("should include agent output")
+	}
+	if !contains(prompt, "Test Task") {
+		t.Error("should include task name")
+	}
+	if !contains(prompt, "Implement feature") {
+		t.Error("should include task prompt")
+	}
+}
+
+func TestBuildStructuredReviewPrompt_NoCriteria_UsesLegacy(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Name:   "Legacy Task",
+		Prompt: "Do something",
+	}
+
+	prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "output here")
+
+	// Should still produce a valid prompt but without criteria section
+	if !contains(prompt, "Legacy Task") {
+		t.Error("should include task name")
+	}
+	if !contains(prompt, "Do something") {
+		t.Error("should include task prompt")
+	}
+	if !contains(prompt, "output here") {
+		t.Error("should include agent output")
+	}
+	// Should NOT have numbered criteria
+	if contains(prompt, "0. [ ]") {
+		t.Error("should not include numbered criteria when SuccessCriteria is empty")
+	}
+}
+
+func TestBuildStructuredReviewPrompt_MultipleTestCommands(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Name:   "Multi Command Task",
+		Prompt: "Build feature",
+		SuccessCriteria: []string{
+			"Tests pass",
+		},
+		TestCommands: []string{
+			"go test ./...",
+			"go vet ./...",
+			"golangci-lint run",
+		},
+	}
+
+	prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "output")
+
+	if !contains(prompt, "go test ./...") {
+		t.Error("should include first test command")
+	}
+	if !contains(prompt, "go vet ./...") {
+		t.Error("should include second test command")
+	}
+	if !contains(prompt, "golangci-lint run") {
+		t.Error("should include third test command")
+	}
+}
+
+func TestBuildStructuredReviewPrompt_CriteriaIndexing(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Name:   "Indexing Test",
+		Prompt: "Check indexing",
+		SuccessCriteria: []string{
+			"First criterion",
+			"Second criterion",
+			"Third criterion",
+			"Fourth criterion",
+		},
+		TestCommands: []string{},
+	}
+
+	prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "output")
+
+	// Verify 0-based indexing for machine parsing
+	if !contains(prompt, "0. [ ] First criterion") {
+		t.Error("criterion 0 not found with correct format")
+	}
+	if !contains(prompt, "1. [ ] Second criterion") {
+		t.Error("criterion 1 not found with correct format")
+	}
+	if !contains(prompt, "2. [ ] Third criterion") {
+		t.Error("criterion 2 not found with correct format")
+	}
+	if !contains(prompt, "3. [ ] Fourth criterion") {
+		t.Error("criterion 3 not found with correct format")
+	}
+}
+
+func TestAggregateCriteriaResults_AllPass(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	resp := &models.QCResponse{
+		Verdict: "GREEN",
+		CriteriaResults: []models.CriterionResult{
+			{Index: 0, Passed: true},
+			{Index: 1, Passed: true},
+		},
+	}
+
+	verdict := qc.aggregateCriteriaResults(resp, task)
+	if verdict != models.StatusGreen {
+		t.Errorf("expected GREEN, got %s", verdict)
+	}
+}
+
+func TestAggregateCriteriaResults_OneFails_ReturnsRed(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	resp := &models.QCResponse{
+		CriteriaResults: []models.CriterionResult{
+			{Index: 0, Passed: true},
+			{Index: 1, Passed: false},
+		},
+	}
+
+	verdict := qc.aggregateCriteriaResults(resp, task)
+	if verdict != models.StatusRed {
+		t.Errorf("expected RED when criterion fails, got %s", verdict)
+	}
+}
+
+func TestAggregateCriteriaResults_NoCriteria_UsesAgentVerdict(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{},
+	}
+	resp := &models.QCResponse{
+		Verdict:         "YELLOW",
+		CriteriaResults: []models.CriterionResult{},
+	}
+
+	verdict := qc.aggregateCriteriaResults(resp, task)
+	if verdict != "YELLOW" {
+		t.Errorf("expected YELLOW (agent verdict), got %s", verdict)
+	}
+}
+
+func TestAggregateCriteriaResults_AllFail(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B", "C"},
+	}
+	resp := &models.QCResponse{
+		Verdict: "GREEN", // Agent says GREEN but criteria fail
+		CriteriaResults: []models.CriterionResult{
+			{Index: 0, Passed: false},
+			{Index: 1, Passed: false},
+			{Index: 2, Passed: false},
+		},
+	}
+
+	verdict := qc.aggregateCriteriaResults(resp, task)
+	if verdict != models.StatusRed {
+		t.Errorf("expected RED when all criteria fail, got %s", verdict)
+	}
+}
+
+func TestAggregateCriteriaResults_FirstFails(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	resp := &models.QCResponse{
+		Verdict: "GREEN",
+		CriteriaResults: []models.CriterionResult{
+			{Index: 0, Passed: false},
+			{Index: 1, Passed: true},
+		},
+	}
+
+	verdict := qc.aggregateCriteriaResults(resp, task)
+	if verdict != models.StatusRed {
+		t.Errorf("expected RED when first criterion fails, got %s", verdict)
+	}
+}
+
+func TestMultiAgentCriteriaConsensus_Unanimous(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	results := []*ReviewResult{
+		{
+			AgentName: "agent1",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: true},
+			},
+		},
+		{
+			AgentName: "agent2",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: true},
+			},
+		},
+	}
+
+	final := qc.aggregateMultiAgentCriteria(results, task)
+	if final.Flag != models.StatusGreen {
+		t.Errorf("expected GREEN (all unanimous), got %s", final.Flag)
+	}
+}
+
+func TestMultiAgentCriteriaConsensus_OneAgentFails(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	results := []*ReviewResult{
+		{
+			AgentName: "agent1",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: true},
+			},
+		},
+		{
+			AgentName: "agent2",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: false}, // One agent fails B
+			},
+		},
+	}
+
+	final := qc.aggregateMultiAgentCriteria(results, task)
+	if final.Flag != models.StatusRed {
+		t.Errorf("expected RED (not unanimous on B), got %s", final.Flag)
+	}
+}
+
+func TestMultiAgentCriteriaConsensus_MixedResults(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B", "C"},
+	}
+	results := []*ReviewResult{
+		{
+			AgentName: "agent1",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: false}, // Agent1 fails B
+				{Index: 2, Passed: true},
+			},
+		},
+		{
+			AgentName: "agent2",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: true},
+				{Index: 2, Passed: false}, // Agent2 fails C
+			},
+		},
+		{
+			AgentName: "agent3",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: true},
+				{Index: 2, Passed: true},
+			},
+		},
+	}
+
+	final := qc.aggregateMultiAgentCriteria(results, task)
+	if final.Flag != models.StatusRed {
+		t.Errorf("expected RED (mixed failures), got %s", final.Flag)
+	}
+}
+
+func TestMultiAgentCriteriaConsensus_SkipsAgentsWithoutCriteria(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	results := []*ReviewResult{
+		{
+			AgentName: "agent1",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: true},
+			},
+		},
+		{
+			AgentName:       "agent2",
+			CriteriaResults: []models.CriterionResult{}, // No criteria results
+		},
+		{
+			AgentName: "agent3",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+				{Index: 1, Passed: true},
+			},
+		},
+	}
+
+	final := qc.aggregateMultiAgentCriteria(results, task)
+	// Should be GREEN as agent2 is skipped (non-compliant)
+	if final.Flag != models.StatusGreen {
+		t.Errorf("expected GREEN (skips non-compliant agent), got %s", final.Flag)
+	}
+}
+
+func TestMultiAgentCriteriaConsensus_NoCriteria_FallsBackToAggregateVerdicts(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{},
+	}
+	results := []*ReviewResult{
+		{
+			AgentName: "agent1",
+			Flag:      models.StatusGreen,
+			Feedback:  "Good",
+		},
+		{
+			AgentName: "agent2",
+			Flag:      models.StatusYellow,
+			Feedback:  "Minor issues",
+		},
+	}
+
+	final := qc.aggregateMultiAgentCriteria(results, task)
+	// Should fall back to aggregateVerdicts (strictest-wins)
+	if final.Flag != models.StatusYellow {
+		t.Errorf("expected YELLOW (fallback to aggregateVerdicts), got %s", final.Flag)
+	}
+}
+
+func TestMultiAgentCriteriaConsensus_NilResult(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A"},
+	}
+	results := []*ReviewResult{
+		{
+			AgentName: "agent1",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+			},
+		},
+		nil, // Nil result
+		{
+			AgentName: "agent3",
+			CriteriaResults: []models.CriterionResult{
+				{Index: 0, Passed: true},
+			},
+		},
+	}
+
+	final := qc.aggregateMultiAgentCriteria(results, task)
+	if final.Flag != models.StatusGreen {
+		t.Errorf("expected GREEN (skips nil result), got %s", final.Flag)
+	}
+}
+
+func TestMultiAgentCriteriaConsensus_AllAgentsNonCompliant(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	results := []*ReviewResult{
+		{
+			AgentName:       "agent1",
+			CriteriaResults: []models.CriterionResult{}, // No criteria
+		},
+		{
+			AgentName:       "agent2",
+			CriteriaResults: []models.CriterionResult{}, // No criteria
+		},
+	}
+
+	final := qc.aggregateMultiAgentCriteria(results, task)
+	// No votes means fail (no consensus possible)
+	if final.Flag != models.StatusRed {
+		t.Errorf("expected RED (no compliant agents), got %s", final.Flag)
+	}
+}
+
+func TestReview_WithStructuredCriteria(t *testing.T) {
+	tests := []struct {
+		name         string
+		task         models.Task
+		response     string
+		wantFlag     string
+		wantCriteria bool
+	}{
+		{
+			name: "task with criteria uses structured prompt and criteria override",
+			task: models.Task{
+				Number: "1",
+				Name:   "Structured task",
+				Prompt: "Implement feature",
+				SuccessCriteria: []string{
+					"Tests pass",
+					"Code compiles",
+				},
+			},
+			response: `{"verdict":"GREEN","feedback":"All good","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":true,"evidence":"Compiles"}]}`,
+			wantFlag: models.StatusGreen,
+			wantCriteria: true,
+		},
+		{
+			name: "criteria failure overrides agent GREEN verdict",
+			task: models.Task{
+				Number: "2",
+				Name:   "Failing criteria",
+				Prompt: "Implement feature",
+				SuccessCriteria: []string{
+					"Tests pass",
+					"Code compiles",
+				},
+			},
+			response: `{"verdict":"GREEN","feedback":"Looks good","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":false,"fail_reason":"Does not compile"}]}`,
+			wantFlag: models.StatusRed,
+			wantCriteria: true,
+		},
+		{
+			name: "all criteria pass returns GREEN",
+			task: models.Task{
+				Number: "3",
+				Name:   "All pass",
+				Prompt: "Do it",
+				SuccessCriteria: []string{
+					"A",
+					"B",
+					"C",
+				},
+			},
+			response: `{"verdict":"YELLOW","feedback":"Minor issues","criteria_results":[{"index":0,"passed":true},{"index":1,"passed":true},{"index":2,"passed":true}]}`,
+			wantFlag: models.StatusGreen,
+			wantCriteria: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedPrompt string
+			mock := &mockInvoker{
+				mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+					capturedPrompt = task.Prompt
+					return &agent.InvocationResult{
+						Output:   tt.response,
+						ExitCode: 0,
+						Duration: 100 * time.Millisecond,
+					}, nil
+				},
+			}
+
+			qc := NewQualityController(mock)
+			// Disable multi-agent mode to test single-agent path
+			qc.AgentConfig.Mode = ""
+			ctx := context.Background()
+
+			result, err := qc.Review(ctx, tt.task, "agent output")
+			if err != nil {
+				t.Fatalf("Review() error = %v", err)
+			}
+
+			if result.Flag != tt.wantFlag {
+				t.Errorf("Review() Flag = %q, want %q", result.Flag, tt.wantFlag)
+			}
+
+			// Verify structured prompt was used
+			if tt.wantCriteria {
+				if !contains(capturedPrompt, "SUCCESS CRITERIA") {
+					t.Error("should use structured prompt with SUCCESS CRITERIA section")
+				}
+			}
+		})
+	}
+}
+
+func TestReview_LegacyTaskWithoutCriteria(t *testing.T) {
+	mock := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			return &agent.InvocationResult{
+				Output:   `{"verdict":"GREEN","feedback":"Looks good"}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := NewQualityController(mock)
+	// Disable multi-agent mode to test single-agent path
+	qc.AgentConfig.Mode = ""
+	task := models.Task{
+		Number: "1",
+		Name:   "Legacy task",
+		Prompt: "Do something",
+		// No SuccessCriteria
+	}
+
+	ctx := context.Background()
+	result, err := qc.Review(ctx, task, "output")
+	if err != nil {
+		t.Fatalf("Review() unexpected error: %v", err)
+	}
+
+	if result.Flag != models.StatusGreen {
+		t.Errorf("legacy task should use agent verdict, got %s", result.Flag)
+	}
+}
+
+func TestReview_FallbackToYellowOnMalformedResponse(t *testing.T) {
+	mock := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			// Agent returns valid JSON but no criteria_results (non-compliant)
+			return &agent.InvocationResult{
+				Output:   `{"verdict":"GREEN","feedback":"Looks good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := NewQualityController(mock)
+	// Disable multi-agent mode to test single-agent path
+	qc.AgentConfig.Mode = ""
+	task := models.Task{
+		Number: "1",
+		Name:   "Task with criteria",
+		Prompt: "Do something",
+		SuccessCriteria: []string{
+			"Criterion A",
+			"Criterion B",
+		},
+	}
+
+	ctx := context.Background()
+	result, err := qc.Review(ctx, task, "output")
+	if err != nil {
+		t.Fatalf("Review() unexpected error: %v", err)
+	}
+
+	// Should be YELLOW when agent doesn't return criteria_results for task with criteria
+	if result.Flag != models.StatusYellow {
+		t.Errorf("should fallback to YELLOW on missing criteria_results, got %s", result.Flag)
+	}
+
+	// Feedback should contain warning
+	if !contains(result.Feedback, "criteria_results") {
+		t.Error("feedback should mention missing criteria_results")
+	}
+}
+
+func TestReviewMultiAgent_WithCriteriaResults(t *testing.T) {
+	tests := []struct {
+		name         string
+		task         models.Task
+		output       string
+		agents       []string
+		responses    map[string]*agent.InvocationResult
+		wantFlag     string
+		wantStrategy string
+	}{
+		{
+			name: "all agents unanimous GREEN on all criteria",
+			task: models.Task{
+				Number: "1",
+				Name:   "Feature with criteria",
+				Prompt: "Implement feature",
+				SuccessCriteria: []string{
+					"Tests pass",
+					"Code compiles",
+				},
+			},
+			output: "Task completed",
+			agents: []string{"quality-control", "golang-pro"},
+			responses: map[string]*agent.InvocationResult{
+				"quality-control": {
+					Output:   `{"verdict":"GREEN","feedback":"All criteria met","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":true,"evidence":"Compiles"}],"issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+				"golang-pro": {
+					Output:   `{"verdict":"GREEN","feedback":"Go code is excellent","criteria_results":[{"index":0,"passed":true,"evidence":"All tests pass"},{"index":1,"passed":true,"evidence":"No compilation errors"}],"issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+			},
+			wantFlag:     models.StatusGreen,
+			wantStrategy: "multi-agent-criteria-consensus",
+		},
+		{
+			name: "agent disagreement on criterion -> RED",
+			task: models.Task{
+				Number: "2",
+				Name:   "Disagreement task",
+				Prompt: "Implement feature",
+				SuccessCriteria: []string{
+					"Tests pass",
+					"Code compiles",
+				},
+			},
+			output: "Task output",
+			agents: []string{"quality-control", "golang-pro"},
+			responses: map[string]*agent.InvocationResult{
+				"quality-control": {
+					Output:   `{"verdict":"GREEN","feedback":"All good","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":true,"evidence":"Compiles"}],"issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+				"golang-pro": {
+					Output:   `{"verdict":"RED","feedback":"Compilation issues","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":false,"fail_reason":"Does not compile"}],"issues":[],"recommendations":[],"should_retry":true,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+			},
+			wantFlag:     models.StatusRed,
+			wantStrategy: "multi-agent-criteria-consensus",
+		},
+		{
+			name: "legacy task without criteria uses strictest-wins",
+			task: models.Task{
+				Number: "3",
+				Name:   "Legacy task",
+				Prompt: "Do something",
+				// No SuccessCriteria
+			},
+			output: "Task output",
+			agents: []string{"quality-control", "golang-pro"},
+			responses: map[string]*agent.InvocationResult{
+				"quality-control": {
+					Output:   `{"verdict":"GREEN","feedback":"All good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+				"golang-pro": {
+					Output:   `{"verdict":"YELLOW","feedback":"Minor issues","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				},
+			},
+			wantFlag:     models.StatusYellow,
+			wantStrategy: "strictest-wins",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLogger := &mockQCLogger{}
+			mock := &mockInvoker{
+				mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+					return tt.responses[task.Agent], nil
+				},
+			}
+
+			qc := NewQualityController(mock)
+			qc.Logger = mockLogger
+			qc.AgentConfig = models.QCAgentConfig{
+				Mode:         "explicit",
+				ExplicitList: tt.agents,
+			}
+
+			ctx := context.Background()
+			result, err := qc.ReviewMultiAgent(ctx, tt.task, tt.output)
+
+			if err != nil {
+				t.Errorf("ReviewMultiAgent() error = %v", err)
+				return
+			}
+
+			if result.Flag != tt.wantFlag {
+				t.Errorf("ReviewMultiAgent() Flag = %q, want %q", result.Flag, tt.wantFlag)
+			}
+
+			// Verify logging strategy
+			if len(mockLogger.aggregatedResultCalls) > 0 {
+				strategy := mockLogger.aggregatedResultCalls[0].strategy
+				if strategy != tt.wantStrategy {
+					t.Errorf("ReviewMultiAgent() strategy = %q, want %q", strategy, tt.wantStrategy)
+				}
+			}
+
+			// Verify agent name includes multi-agent prefix
+			if !strings.Contains(result.AgentName, "multi-agent") {
+				t.Errorf("ReviewMultiAgent() AgentName should include multi-agent prefix, got %q", result.AgentName)
+			}
+		})
+	}
+}
+
+func TestReviewMultiAgent_WithoutCriteria_BackwardCompat(t *testing.T) {
+	// Verify backward compatibility: tasks without SuccessCriteria use strictest-wins
+	mock := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			if task.Agent == "quality-control" {
+				return &agent.InvocationResult{
+					Output:   `{"verdict":"GREEN","feedback":"Good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+					ExitCode: 0,
+				}, nil
+			}
+			return &agent.InvocationResult{
+				Output:   `{"verdict":"RED","feedback":"Bad","issues":[],"recommendations":[],"should_retry":true,"suggested_agent":""}`,
+				ExitCode: 0,
+			}, nil
+		},
+	}
+
+	mockLogger := &mockQCLogger{}
+	qc := NewQualityController(mock)
+	qc.Logger = mockLogger
+	qc.AgentConfig = models.QCAgentConfig{
+		Mode:         "explicit",
+		ExplicitList: []string{"quality-control", "golang-pro"},
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Legacy task",
+		Prompt: "Do something",
+		// NO SuccessCriteria
+	}
+
+	ctx := context.Background()
+	result, err := qc.ReviewMultiAgent(ctx, task, "output")
+
+	if err != nil {
+		t.Fatalf("ReviewMultiAgent() error = %v", err)
+	}
+
+	// Should be RED (strictest-wins: RED > GREEN)
+	if result.Flag != models.StatusRed {
+		t.Errorf("ReviewMultiAgent() Flag = %q, want RED", result.Flag)
+	}
+
+	// Should log strictest-wins strategy
+	if len(mockLogger.aggregatedResultCalls) > 0 {
+		strategy := mockLogger.aggregatedResultCalls[0].strategy
+		if strategy != "strictest-wins" {
+			t.Errorf("ReviewMultiAgent() should use strictest-wins for legacy tasks, got %q", strategy)
+		}
+	}
+}
+
+func TestReviewMultiAgent_CriteriaConsensusWithThreeAgents(t *testing.T) {
+	// Test unanimous consensus with three agents
+	task := models.Task{
+		Number: "1",
+		Name:   "Three agent consensus",
+		Prompt: "Implement feature",
+		SuccessCriteria: []string{
+			"Criterion A",
+			"Criterion B",
+			"Criterion C",
+		},
+	}
+
+	responses := map[string]*agent.InvocationResult{
+		"agent1": {
+			Output:   `{"verdict":"GREEN","feedback":"All pass","criteria_results":[{"index":0,"passed":true},{"index":1,"passed":true},{"index":2,"passed":true}],"issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+			ExitCode: 0,
+		},
+		"agent2": {
+			Output:   `{"verdict":"GREEN","feedback":"All pass","criteria_results":[{"index":0,"passed":true},{"index":1,"passed":true},{"index":2,"passed":true}],"issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+			ExitCode: 0,
+		},
+		"agent3": {
+			Output:   `{"verdict":"GREEN","feedback":"All pass","criteria_results":[{"index":0,"passed":true},{"index":1,"passed":true},{"index":2,"passed":true}],"issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+			ExitCode: 0,
+		},
+	}
+
+	mock := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			return responses[task.Agent], nil
+		},
+	}
+
+	qc := NewQualityController(mock)
+	qc.AgentConfig = models.QCAgentConfig{
+		Mode:         "explicit",
+		ExplicitList: []string{"agent1", "agent2", "agent3"},
+	}
+
+	ctx := context.Background()
+	result, err := qc.ReviewMultiAgent(ctx, task, "output")
+
+	if err != nil {
+		t.Fatalf("ReviewMultiAgent() error = %v", err)
+	}
+
+	if result.Flag != models.StatusGreen {
+		t.Errorf("ReviewMultiAgent() Flag = %q, want GREEN (unanimous consensus)", result.Flag)
+	}
+}
+
+func TestReviewMultiAgent_CriteriaPartialDisagreement(t *testing.T) {
+	// Test when agents disagree on some criteria (not all unanimous)
+	task := models.Task{
+		Number: "1",
+		Name:   "Partial disagreement",
+		Prompt: "Implement feature",
+		SuccessCriteria: []string{
+			"Tests pass",
+			"Compiles",
+		},
+	}
+
+	responses := map[string]*agent.InvocationResult{
+		"agent1": {
+			Output:   `{"verdict":"GREEN","feedback":"Both pass","criteria_results":[{"index":0,"passed":true},{"index":1,"passed":true}],"issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+			ExitCode: 0,
+		},
+		"agent2": {
+			Output:   `{"verdict":"RED","feedback":"Tests fail","criteria_results":[{"index":0,"passed":false},{"index":1,"passed":true}],"issues":[],"recommendations":[],"should_retry":true,"suggested_agent":""}`,
+			ExitCode: 0,
+		},
+	}
+
+	mock := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			return responses[task.Agent], nil
+		},
+	}
+
+	qc := NewQualityController(mock)
+	qc.AgentConfig = models.QCAgentConfig{
+		Mode:         "explicit",
+		ExplicitList: []string{"agent1", "agent2"},
+	}
+
+	ctx := context.Background()
+	result, err := qc.ReviewMultiAgent(ctx, task, "output")
+
+	if err != nil {
+		t.Fatalf("ReviewMultiAgent() error = %v", err)
+	}
+
+	// Should be RED because agent2 says tests fail, not unanimous
+	if result.Flag != models.StatusRed {
+		t.Errorf("ReviewMultiAgent() Flag = %q, want RED (not unanimous on tests)", result.Flag)
+	}
+}
+
+func TestReview_StructuredPromptContainsRequiredSections(t *testing.T) {
+	var capturedPrompt string
+	mock := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			capturedPrompt = task.Prompt
+			return &agent.InvocationResult{
+				Output:   `{"verdict":"GREEN","feedback":"OK","criteria_results":[{"index":0,"passed":true}]}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := NewQualityController(mock)
+	// Disable multi-agent mode to test single-agent path
+	qc.AgentConfig.Mode = ""
+	inputTask := models.Task{
+		Number: "1",
+		Name:   "Structured Review",
+		Prompt: "Build the feature",
+		SuccessCriteria: []string{
+			"Feature works correctly",
+		},
+		TestCommands: []string{
+			"go test ./...",
+		},
+	}
+
+	ctx := context.Background()
+	_, err := qc.Review(ctx, inputTask, "agent output here")
+	if err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+
+	// Verify structured prompt sections (they are combined with JSON instructions)
+	if !contains(capturedPrompt, "# Quality Control Review: Structured Review") {
+		t.Errorf("prompt missing task name header, got: %s", capturedPrompt[:min(500, len(capturedPrompt))])
+	}
+	if !contains(capturedPrompt, "SUCCESS CRITERIA - VERIFY EACH ONE") {
+		t.Error("prompt missing success criteria section")
+	}
+	if !contains(capturedPrompt, "0. [ ] Feature works correctly") {
+		t.Error("prompt missing numbered criterion")
+	}
+	if !contains(capturedPrompt, "TEST COMMANDS") {
+		t.Error("prompt missing test commands section")
+	}
+	if !contains(capturedPrompt, "go test ./...") {
+		t.Error("prompt missing test command")
+	}
+	if !contains(capturedPrompt, "agent output here") {
+		t.Error("prompt missing agent output")
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func contains(s, substr string) bool {

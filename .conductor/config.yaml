@@ -15,7 +15,7 @@ console:
 # Quality control configuration
 quality_control:
   enabled: true
-  review_agent: conductor-qc  # DEPRECATED: use agents section below
+  review_agent: conductor-qc # DEPRECATED: use agents section below
   retry_on_red: 2
 
   # Multi-agent QC configuration (v2.2+)
@@ -25,11 +25,11 @@ quality_control:
     # - auto: automatically select agents based on task file types
     # - explicit: use only the agents in explicit_list
     # - mixed: auto-select + additional agents from additional list
-    mode: auto
+    mode: explicit
 
     # Explicit agent list (used when mode=explicit)
     # Example: [conductor-qc, golang-pro, code-reviewer]
-    explicit_list: []
+    explicit_list: [conductor-qc, golang-pro]
 
     # Additional agents to add to auto-selection (used when mode=mixed)
     # Example: [security-auditor] - always include security review
@@ -43,16 +43,16 @@ quality_control:
 # Controls how agent and QC outputs are stored for learning and visibility
 feedback:
   # Storage locations - enable both for redundancy
-  store_in_plan_file: true    # Write feedback to plan files (human-readable)
-  store_in_database: true     # Write feedback to database (long-term learning)
+  store_in_plan_file: true # Write feedback to plan files (human-readable)
+  store_in_database: true # Write feedback to database (long-term learning)
 
   # Output format - agents return structured responses
-  format: json                # Only 'json' supported
+  format: json # Only 'json' supported
 
   # What to store for each verdict
-  store_on_green: true        # Store full output for successful tasks
-  store_on_red: true          # Store full output for failed tasks
-  store_on_yellow: true       # Store full output for tasks with warnings
+  store_on_green: true # Store full output for successful tasks
+  store_on_red: true # Store full output for failed tasks
+  store_on_yellow: true # Store full output for tasks with warnings
 
 # Learning system configuration
 # Tracks task execution history and adapts future executions based on patterns
@@ -80,9 +80,9 @@ learning:
 
   # QC context loading (v2.1+)
   # Controls what context QC agent reads before reviewing
-  qc_reads_plan_context: true     # Load execution history from plan file
-  qc_reads_db_context: true       # Load execution history from database
-  max_context_entries: 10         # Limit context to last N attempts
+  qc_reads_plan_context: true # Load execution history from plan file
+  qc_reads_db_context: true # Load execution history from database
+  max_context_entries: 10 # Limit context to last N attempts
 
   # Number of failures before suggesting alternative agent (default: 2)
   # Threshold for triggering agent adaptation recommendations

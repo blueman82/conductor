@@ -610,6 +610,112 @@ plan:
 	}
 }
 
+func TestYAMLParser_SuccessCriteria(t *testing.T) {
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Test task"
+      files: [test.go]
+      depends_on: []
+      estimated_time: 30m
+      description: "Do something"
+      success_criteria:
+        - "Criterion 1"
+        - "Criterion 2"
+      test_commands:
+        - "go test ./..."
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(plan.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(plan.Tasks))
+	}
+	task := plan.Tasks[0]
+	if len(task.SuccessCriteria) != 2 {
+		t.Errorf("expected 2 criteria, got %d", len(task.SuccessCriteria))
+	}
+	if len(task.SuccessCriteria) > 0 && task.SuccessCriteria[0] != "Criterion 1" {
+		t.Errorf("first criterion mismatch: %s", task.SuccessCriteria[0])
+	}
+	if len(task.SuccessCriteria) > 1 && task.SuccessCriteria[1] != "Criterion 2" {
+		t.Errorf("second criterion mismatch: %s", task.SuccessCriteria[1])
+	}
+	if len(task.TestCommands) != 1 {
+		t.Errorf("expected 1 test command, got %d", len(task.TestCommands))
+	}
+	if len(task.TestCommands) > 0 && task.TestCommands[0] != "go test ./..." {
+		t.Errorf("test command mismatch: %s", task.TestCommands[0])
+	}
+}
+
+func TestYAMLParser_NoSuccessCriteria_BackwardCompatible(t *testing.T) {
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Legacy task"
+      files: [test.go]
+      depends_on: []
+      estimated_time: 30m
+      description: "Legacy task without new fields"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(plan.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(plan.Tasks))
+	}
+	task := plan.Tasks[0]
+	if task.SuccessCriteria != nil && len(task.SuccessCriteria) != 0 {
+		t.Errorf("expected empty success_criteria, got %d items", len(task.SuccessCriteria))
+	}
+	if task.TestCommands != nil && len(task.TestCommands) != 0 {
+		t.Errorf("expected empty test_commands, got %d items", len(task.TestCommands))
+	}
+}
+
+func TestYAMLParser_MultipleTestCommands(t *testing.T) {
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Task with multiple test commands"
+      files: [test.go]
+      depends_on: []
+      estimated_time: 30m
+      description: "Test"
+      success_criteria:
+        - "All tests pass"
+        - "No linting errors"
+        - "Code coverage above 80%"
+      test_commands:
+        - "go test ./..."
+        - "golangci-lint run"
+        - "go test -cover ./..."
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	task := plan.Tasks[0]
+	if len(task.SuccessCriteria) != 3 {
+		t.Errorf("expected 3 criteria, got %d", len(task.SuccessCriteria))
+	}
+	if len(task.TestCommands) != 3 {
+		t.Errorf("expected 3 test commands, got %d", len(task.TestCommands))
+	}
+	if len(task.TestCommands) >= 2 && task.TestCommands[1] != "golangci-lint run" {
+		t.Errorf("second test command mismatch: %s", task.TestCommands[1])
+	}
+}
+
 func TestParseYAMLWithQCAgentConfig(t *testing.T) {
 	tests := []struct {
 		name              string
