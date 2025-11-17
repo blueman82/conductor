@@ -65,23 +65,23 @@ Download a pre-built binary from [GitHub Releases](https://github.com/blueman82/
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux
-curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Verify installation
 conductor --version
-# v2.1.0
+# v2.4.0
 ```
 
 **Benefits of using pre-built binaries:**
@@ -1945,7 +1945,7 @@ QUESTION 3: Does group depend on others?
 
 ## Adaptive Learning System
 
-**Version**: Conductor v2.1.0
+**Version**: Conductor v2.4.0
 **Status**: Production-ready
 
 ### Learning Overview
