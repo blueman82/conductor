@@ -1,0 +1,22 @@
+plan:
+  name: Structured Success Criteria Demo
+  tasks:
+    - task_number: 1
+      name: "Implement data layer"
+      files: ["data/storage.go"]
+      success_criteria:
+        - "All unit tests pass"
+        - "No race conditions detected"
+      prompt: |
+        Build the persistent data layer.
+      test_commands:
+        - "go test ./internal/data/..."
+    - task_number: 2
+      name: "Wire API"
+      files: ["api/server.go"]
+      depends_on: ["1"]
+      success_criteria:
+        - "REST contract documented"
+        - "Integration tests pass"
+      prompt: |
+        Connect the API to the new data layer.

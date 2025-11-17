@@ -1,0 +1,52 @@
+max_concurrency: 7
+timeout: 45m
+log_level: debug
+log_dir: /tmp/conductor/logs
+dry_run: true
+skip_completed: true
+retry_failed: true
+
+console:
+  enable_color: false
+  enable_progress_bar: false
+  enable_task_details: false
+  enable_qc_feedback: false
+  compact_mode: true
+  show_agent_names: false
+  show_file_counts: false
+  show_durations: false
+
+feedback:
+  store_in_plan_file: false
+  store_in_database: false
+  format: plain
+  store_on_green: false
+  store_on_red: true
+  store_on_yellow: false
+
+learning:
+  enabled: true
+  db_path: /tmp/learning.db
+  auto_adapt_agent: true
+  swap_during_retries: false
+  enhance_prompts: false
+  qc_reads_plan_context: false
+  qc_reads_db_context: false
+  max_context_entries: 25
+  min_failures_before_adapt: 3
+  keep_executions_days: 45
+  max_executions_per_task: 150
+
+quality_control:
+  enabled: true
+  review_agent: custom-qc
+  retry_on_red: 3
+  agents:
+    mode: explicit
+    explicit_list:
+      - qc-a
+      - qc-b
+    additional:
+      - extra-agent
+    blocked:
+      - blocked-agent
