@@ -74,26 +74,5 @@ transcripts/
 conductor
 
 # Deployment strategies (local planning docs)
-docs/plans/subagent-deployment-strategy.md
-
-# MCP integration documentation (local research)
-docs/mcp-headless-invocation.md
-
-# Claude agent invocation documentation (local research)
-docs/claude_code_agents_invocation.md
-
-# Plan directory (local internal planning - not for distribution)
-docs/plans/
-
-# Never track these in docs/
-docs/original_poc_partial.md
-docs/TEST_REPORT.md
-docs/TEST_SUMMARY.txt
-docs/verify_tests.md
-docs/subagent-deployment-strategy.md
-docs/concept_ai_corp_conductor_hybrid.md
-docs/TODO.md
-
-# Internal development documentation (local reference only)
-PATTERN_EXTRACTION_REFERENCE.md
-IMPLEMENTATION_SUMMARY.md
+docs/
+!docs/conductor.md
