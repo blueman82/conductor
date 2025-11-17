@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 
@@ -8,11 +9,49 @@ import (
 	"github.com/harrison/conductor/internal/models"
 )
 
+// SelectionContext provides context for intelligent agent selection
+type SelectionContext struct {
+	ExecutingAgent      string
+	IntelligentSelector *IntelligentSelector
+}
+
 // SelectQCAgents determines which QC agents to use based on configuration and task context
 func SelectQCAgents(task models.Task, agentConfig models.QCAgentConfig, registry *agent.Registry) []string {
+	// For backward compatibility, use non-intelligent modes
+	return SelectQCAgentsWithContext(context.Background(), task, agentConfig, registry, nil)
+}
+
+// SelectQCAgentsWithContext determines QC agents with support for intelligent selection
+func SelectQCAgentsWithContext(
+	ctx context.Context,
+	task models.Task,
+	agentConfig models.QCAgentConfig,
+	registry *agent.Registry,
+	selCtx *SelectionContext,
+) []string {
 	var agents []string
 
 	switch agentConfig.Mode {
+	case "intelligent":
+		// Use Claude-based intelligent selection
+		if selCtx != nil && selCtx.IntelligentSelector != nil {
+			selectedAgents, _, err := IntelligentSelectQCAgents(
+				ctx,
+				task,
+				selCtx.ExecutingAgent,
+				agentConfig,
+				registry,
+				selCtx.IntelligentSelector,
+			)
+			if err == nil && len(selectedAgents) > 0 {
+				agents = selectedAgents
+				// Intelligent selection already applies guardrails, skip to blocked filter
+				break
+			}
+			// Fallback to auto if intelligent fails
+		}
+		// Fallback to auto-selection
+		agents = AutoSelectQCAgents(task, registry)
 	case "explicit":
 		// Use only explicitly listed agents
 		agents = agentConfig.ExplicitList
@@ -27,7 +66,7 @@ func SelectQCAgents(task models.Task, agentConfig models.QCAgentConfig, registry
 		agents = AutoSelectQCAgents(task, registry)
 	}
 
-	// Remove blocked agents
+	// Remove blocked agents (intelligent mode already handles this, but double-check)
 	agents = filterBlockedAgents(agents, agentConfig.BlockedAgents)
 
 	// Ensure at least one agent is selected

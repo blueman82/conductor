@@ -96,7 +96,7 @@ type LearningConfig struct {
 
 // QCAgentConfig represents multi-agent QC configuration
 type QCAgentConfig struct {
-	// Mode specifies agent selection mode: "auto", "explicit", or "mixed"
+	// Mode specifies agent selection mode: "auto", "explicit", "mixed", or "intelligent"
 	Mode string `yaml:"mode"`
 
 	// ExplicitList is the list of agents to use when mode is "explicit"
@@ -107,6 +107,16 @@ type QCAgentConfig struct {
 
 	// BlockedAgents are agents that should never be used (for auto/mixed modes)
 	BlockedAgents []string `yaml:"blocked"`
+
+	// Intelligent selection settings (v2.4+)
+	// MaxAgents limits the number of agents selected (default: 4)
+	MaxAgents int `yaml:"max_agents"`
+
+	// CacheTTLSeconds is how long to cache intelligent selection results (default: 3600)
+	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
+
+	// RequireCodeReview ensures code-reviewer is always included as baseline (default: true)
+	RequireCodeReview bool `yaml:"require_code_review"`
 }
 
 // QualityControlConfig represents quality control configuration
@@ -211,10 +221,13 @@ func DefaultConfig() *Config {
 			Enabled:     false,
 			ReviewAgent: "quality-control", // Deprecated, kept for backward compat
 			Agents: QCAgentConfig{
-				Mode:             "auto",
-				ExplicitList:     []string{},
-				AdditionalAgents: []string{},
-				BlockedAgents:    []string{},
+				Mode:              "auto",
+				ExplicitList:      []string{},
+				AdditionalAgents:  []string{},
+				BlockedAgents:     []string{},
+				MaxAgents:         4,
+				CacheTTLSeconds:   3600,
+				RequireCodeReview: true,
 			},
 			RetryOnRed: 2,
 		},

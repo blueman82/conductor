@@ -22,10 +22,14 @@ type Wave struct {
 
 // QCAgentConfig represents multi-agent QC configuration (v2.2+)
 type QCAgentConfig struct {
-	Mode             string   // Selection mode: "auto", "explicit", or "mixed"
+	Mode             string   // Selection mode: "auto", "explicit", "mixed", or "intelligent"
 	ExplicitList     []string // Explicit list of agents (for mode=explicit)
 	AdditionalAgents []string // Additional agents (for mode=mixed)
 	BlockedAgents    []string // Agents to never use
+	// Intelligent selection settings (v2.4+)
+	MaxAgents         int  // Maximum number of agents to select (default: 4)
+	CacheTTLSeconds   int  // Cache TTL in seconds (default: 3600)
+	RequireCodeReview bool // Always include code-reviewer as baseline (default: true)
 }
 
 // QualityControlConfig holds configuration for the QA review process

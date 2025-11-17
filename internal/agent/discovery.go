@@ -175,6 +175,15 @@ func (r *Registry) Get(agentName string) (*Agent, bool) {
 	return agent, exists
 }
 
+// List returns all agents in the registry
+func (r *Registry) List() []*Agent {
+	agents := make([]*Agent, 0, len(r.agents))
+	for _, agent := range r.agents {
+		agents = append(agents, agent)
+	}
+	return agents
+}
+
 // parseAgentFile parses a single agent file
 func parseAgentFile(path string) (*Agent, error) {
 	content, err := os.ReadFile(path)

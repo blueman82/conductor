@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.3.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, and auto-incrementing version management.
+**Current Status**: Production-ready v2.3.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection (v2.4), and auto-incrementing version management.
 
 ## Development Commands
 
@@ -333,6 +333,65 @@ func MergeQCResponses(responses []*models.QCResponse) *models.QCResponse {
 ```
 
 **Backward Compatible**: Tasks without `success_criteria` use legacy blob review (unstructured output assessment).
+
+### Intelligent QC Agent Selection (v2.4+)
+
+Beyond file-extension based selection, Conductor supports intelligent agent selection using Claude to analyze task context:
+
+**Selection Modes:**
+- `"auto"` (default): File-extension mapping (.go→golang-pro, .py→python-pro)
+- `"explicit"`: Use only agents from `ExplicitList`
+- `"mixed"`: Auto-select + additional agents
+- `"intelligent"`: Claude-based selection with task + executing agent context
+
+**Intelligent Selection Flow:**
+1. Build prompt with task context (name, files, description) + executing agent
+2. Query Claude for agent recommendations (single API call)
+3. Apply deterministic guardrails (cap, registry validation, code-reviewer baseline)
+4. Cache results to avoid redundant API calls during retries
+
+**Configuration (`internal/models/plan.go`):**
+```go
+type QCAgentConfig struct {
+    Mode              string   // "auto", "explicit", "mixed", or "intelligent"
+    ExplicitList      []string // Explicit agent list
+    AdditionalAgents  []string // Extra agents for mixed mode
+    BlockedAgents     []string // Agents to never use
+    // Intelligent selection settings (v2.4+)
+    MaxAgents         int      // Maximum agents to select (default: 4)
+    CacheTTLSeconds   int      // Cache TTL in seconds (default: 3600)
+    RequireCodeReview bool     // Always include code-reviewer baseline (default: true)
+}
+```
+
+**Guardrails:**
+- Always includes `code-reviewer` as baseline (if RequireCodeReview=true)
+- Caps selection at MaxAgents (default: 4)
+- Validates all agents against registry allowlist
+- Filters blocked agents
+- Falls back to `"auto"` mode if intelligent selection fails
+
+**Example Usage:**
+```yaml
+quality_control:
+  enabled: true
+  agents:
+    mode: intelligent
+    max_agents: 3
+    cache_ttl_seconds: 1800
+    require_code_review: true
+    blocked: [deprecated-agent]
+```
+
+**Implementation Files:**
+- `internal/executor/qc_intelligent.go`: Intelligent selector with Claude invocation
+- `internal/executor/qc_cache.go`: TTL-based caching for selection results
+- `internal/executor/qc_selection.go`: Main selection logic with mode switching
+
+**Benefits:**
+- Domain-aware: Recommends security-auditor for auth tasks, database-optimizer for DB operations
+- Stack-aware: Considers executing agent's strengths and blind spots
+- Cost-controlled: Caches results to minimize API calls
 
 ### Adaptive Learning System
 

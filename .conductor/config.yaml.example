@@ -53,9 +53,36 @@ quality_control:
   # Enable or disable quality control reviews (default: true)
   enabled: true
 
-  # Agent to use for quality control reviews (default: conductor-qc)
-  # This agent reviews task outputs and returns GREEN/RED/YELLOW verdicts
-  review_agent: conductor-qc
+  # DEPRECATED: Single agent for QC (use agents.explicit_list instead)
+  # review_agent: conductor-qc
+
+  # Multi-agent QC configuration (v2.2+)
+  agents:
+    # Selection mode: "auto", "explicit", "mixed", or "intelligent"
+    # - auto: Auto-select based on file extensions (.go→golang-pro, .py→python-pro)
+    # - explicit: Use only agents from explicit_list
+    # - mixed: Auto-select + additional agents
+    # - intelligent: Claude-based selection analyzing task context (v2.4+)
+    mode: auto
+
+    # Explicit list of agents (for mode=explicit)
+    # explicit_list: [security-auditor, code-reviewer, golang-pro]
+
+    # Additional agents to add to auto-selection (for mode=mixed)
+    # additional: [security-auditor]
+
+    # Agents to never use (for any mode)
+    # blocked: [deprecated-agent]
+
+    # Intelligent selection settings (v2.4+)
+    # Maximum number of QC agents to select (default: 4)
+    max_agents: 4
+
+    # Cache TTL in seconds for intelligent selection results (default: 3600)
+    cache_ttl_seconds: 3600
+
+    # Always include code-reviewer as baseline (default: true)
+    require_code_review: true
 
   # Number of retries on RED verdicts (default: from plan or 2)
   # Plans can override this with conductor.quality_control.retry_on_red
@@ -201,9 +228,28 @@ learning:
 #   enabled: true
 #   retry_on_red: 3
 
-# Example: Use custom QC agent
+# Example: Use explicit multi-agent QC (multiple reviewers)
 # quality_control:
-#   review_agent: custom-qc-agent
+#   agents:
+#     mode: explicit
+#     explicit_list: [security-auditor, code-reviewer, golang-pro]
+#   retry_on_red: 2
+
+# Example: Use intelligent agent selection (Claude-based)
+# quality_control:
+#   agents:
+#     mode: intelligent
+#     max_agents: 3
+#     cache_ttl_seconds: 1800
+#     require_code_review: true
+#     blocked: [deprecated-agent]
+#   retry_on_red: 2
+
+# Example: Use auto mode with additional security reviewer
+# quality_control:
+#   agents:
+#     mode: mixed
+#     additional: [security-auditor]
 #   retry_on_red: 2
 
 # Note: Plans can override the retry_on_red value in their frontmatter:

@@ -21,10 +21,11 @@ quality_control:
   # Multi-agent QC configuration (v2.2+)
   # Supports parallel reviews from multiple specialized agents
   agents:
-    # Mode: "auto", "explicit", or "mixed"
+    # Mode: "auto", "explicit", "mixed", or "intelligent"
     # - auto: automatically select agents based on task file types
     # - explicit: use only the agents in explicit_list
     # - mixed: auto-select + additional agents from additional list
+    # - intelligent: Claude-based selection analyzing task context (v2.4+)
     mode: explicit
 
     # Explicit agent list (used when mode=explicit)
@@ -35,9 +36,15 @@ quality_control:
     # Example: [security-auditor] - always include security review
     additional: []
 
-    # Agents to never use (for auto/mixed modes)
+    # Agents to never use (for any mode)
     # Example: [deprecated-agent]
     blocked: []
+
+    # Intelligent selection settings (v2.4+)
+    # Used when mode=intelligent for Claude-based agent recommendations
+    max_agents: 4 # Maximum number of QC agents to select
+    cache_ttl_seconds: 3600 # Cache TTL for intelligent selection results (1 hour)
+    require_code_review: true # Always include code-reviewer as baseline
 
 # Feedback system configuration (v2.1+)
 # Controls how agent and QC outputs are stored for learning and visibility

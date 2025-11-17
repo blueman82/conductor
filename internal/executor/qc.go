@@ -15,13 +15,14 @@ import (
 
 // QualityController manages quality control reviews using Claude Code agents
 type QualityController struct {
-	Invoker       InvokerInterface
-	ReviewAgent   string               // DEPRECATED: Agent name for single-agent QC (backward compat)
-	AgentConfig   models.QCAgentConfig // Multi-agent QC configuration (v2.2+)
-	Registry      *agent.Registry      // Agent registry for auto-selection (v2.2+)
-	MaxRetries    int                  // Maximum number of retry attempts for RED responses
-	LearningStore *learning.Store      // Learning store for historical context (optional)
-	Logger        QCLogger             // Logger for QC events (optional, can be nil)
+	Invoker             InvokerInterface
+	ReviewAgent         string               // DEPRECATED: Agent name for single-agent QC (backward compat)
+	AgentConfig         models.QCAgentConfig // Multi-agent QC configuration (v2.2+)
+	Registry            *agent.Registry      // Agent registry for auto-selection (v2.2+)
+	MaxRetries          int                  // Maximum number of retry attempts for RED responses
+	LearningStore       *learning.Store      // Learning store for historical context (optional)
+	Logger              QCLogger             // Logger for QC events (optional, can be nil)
+	IntelligentSelector *IntelligentSelector // Intelligent selector for mode="intelligent" (v2.4+)
 }
 
 // QCLogger is the minimal interface for QC logging functionality
@@ -52,10 +53,13 @@ func NewQualityController(invoker InvokerInterface) *QualityController {
 		Invoker:     invoker,
 		ReviewAgent: "quality-control", // Deprecated, kept for backward compat
 		AgentConfig: models.QCAgentConfig{
-			Mode:             "auto",
-			ExplicitList:     []string{},
-			AdditionalAgents: []string{},
-			BlockedAgents:    []string{},
+			Mode:              "auto",
+			ExplicitList:      []string{},
+			AdditionalAgents:  []string{},
+			BlockedAgents:     []string{},
+			MaxAgents:         4,
+			CacheTTLSeconds:   3600,
+			RequireCodeReview: true,
 		},
 		Registry:      nil, // Set externally for auto-selection
 		MaxRetries:    2,
@@ -338,7 +342,23 @@ func (qc *QualityController) ShouldRetry(result *ReviewResult, currentAttempt in
 // Consider the cost implications when enabling auto mode, especially for large plans.
 func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
 	// Select which agents to use based on configuration
-	agents := SelectQCAgents(task, qc.AgentConfig, qc.Registry)
+	var agents []string
+
+	// Use intelligent selection if mode is "intelligent" and selector is available
+	if qc.AgentConfig.Mode == "intelligent" {
+		// Ensure intelligent selector is initialized
+		if qc.IntelligentSelector == nil && qc.Registry != nil {
+			qc.IntelligentSelector = NewIntelligentSelector(qc.Registry, qc.AgentConfig.CacheTTLSeconds)
+		}
+
+		selCtx := &SelectionContext{
+			ExecutingAgent:      task.Agent,
+			IntelligentSelector: qc.IntelligentSelector,
+		}
+		agents = SelectQCAgentsWithContext(ctx, task, qc.AgentConfig, qc.Registry, selCtx)
+	} else {
+		agents = SelectQCAgents(task, qc.AgentConfig, qc.Registry)
+	}
 
 	// Check for empty agent list (all agents blocked)
 	if len(agents) == 0 {
