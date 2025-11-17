@@ -76,3 +76,7 @@ conductor
 # Deployment strategies (local planning docs)
 docs/
 !docs/conductor.md
+
+# Orphaned documentation (removed from repo)
+IMPLEMENTATION_SUMMARY.md
+PATTERN_EXTRACTION_REFERENCE.md
