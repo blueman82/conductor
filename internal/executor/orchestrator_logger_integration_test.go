@@ -597,6 +597,10 @@ func (m *mockLoggerWithTaskTracking) LogQCAggregatedResult(verdict string, strat
 	// no-op for mock
 }
 
+func (m *mockLoggerWithTaskTracking) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
+	// no-op for mock
+}
+
 // TestOrchestratorMultipleWaves verifies handling of multiple waves
 func TestOrchestratorMultipleWaves(t *testing.T) {
 	mockWave := &mockWaveExecutor{

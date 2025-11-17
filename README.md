@@ -78,6 +78,11 @@ Conductor automates complex multi-step implementations by:
   - Automatic parsing of Claude CLI JSON envelopes and markdown code fences
   - Agent suggestions for improved retry success rates
   - Enhanced context loading from plan files and database
+- **Structured Success Criteria** (v2.3+): Per-criterion verification with multi-agent consensus
+  - Define explicit success criteria per task
+  - QC agents verify each criterion individually (PASS/FAIL)
+  - Multi-agent unanimous consensus required (all agents must agree)
+  - Backward compatible with legacy blob review
 
 [⬆ back to top](#table-of-contents)
 
@@ -506,6 +511,29 @@ plan:
       description: Task description and requirements.
 ```
 
+### YAML Format with Success Criteria (v2.3+)
+
+```yaml
+plan:
+  name: Plan Title
+  tasks:
+    - id: 1
+      name: Add JWT Authentication
+      files: [internal/auth/jwt.go, internal/auth/jwt_test.go]
+      depends_on: []
+      estimated_time: 10 minutes
+      agent: golang-pro
+      success_criteria:
+        - "JWT validation function implemented"
+        - "Supports HS256 algorithm"
+        - "Unit tests achieve 90% coverage"
+      test_commands:
+        - "go test ./internal/auth/ -v"
+      description: Implement JWT authentication with proper validation.
+```
+
+QC agents verify each criterion individually and require unanimous consensus across all agents. Tasks without `success_criteria` use legacy blob review.
+
 For complete format specifications, see [Plan Format Guide](docs/conductor.md#plan-format).
 
 [⬆ back to top](#table-of-contents)
@@ -747,6 +775,10 @@ Conductor is feature-complete with:
   - Plan file storage (human-readable, git-trackable)
   - Database storage (long-term learning)
   - No duplicate entries
+- ✅ **Structured success criteria** (v2.3)
+  - Per-criterion QC verification
+  - Multi-agent unanimous consensus
+  - Backward compatible with legacy review
 - ✅ Comprehensive documentation
 
 ### Conductor Plugin

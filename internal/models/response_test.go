@@ -337,3 +337,150 @@ func TestQCResponse_Validate(t *testing.T) {
 		})
 	}
 }
+
+func TestQCResponse_WithCriteriaResults(t *testing.T) {
+	resp := QCResponse{
+		Verdict:  "GREEN",
+		Feedback: "All criteria verified",
+		CriteriaResults: []CriterionResult{
+			{
+				Index:     0,
+				Criterion: "JWT validation implemented",
+				Passed:    true,
+				Evidence:  "Function exists at auth/jwt.go:45",
+			},
+			{
+				Index:      1,
+				Criterion:  "Tests achieve 90% coverage",
+				Passed:     false,
+				FailReason: "Coverage is 85%",
+			},
+		},
+	}
+
+	if len(resp.CriteriaResults) != 2 {
+		t.Errorf("expected 2 results, got %d", len(resp.CriteriaResults))
+	}
+	if resp.CriteriaResults[0].Passed != true {
+		t.Error("first criterion should pass")
+	}
+	if resp.CriteriaResults[1].Passed != false {
+		t.Error("second criterion should fail")
+	}
+	if resp.CriteriaResults[0].Evidence != "Function exists at auth/jwt.go:45" {
+		t.Errorf("unexpected evidence: %s", resp.CriteriaResults[0].Evidence)
+	}
+	if resp.CriteriaResults[1].FailReason != "Coverage is 85%" {
+		t.Errorf("unexpected fail reason: %s", resp.CriteriaResults[1].FailReason)
+	}
+}
+
+func TestCriterionResult_JSONMarshal(t *testing.T) {
+	tests := []struct {
+		name string
+		resp QCResponse
+		want string
+	}{
+		{
+			name: "with criteria results",
+			resp: QCResponse{
+				Verdict:  "GREEN",
+				Feedback: "OK",
+				CriteriaResults: []CriterionResult{
+					{
+						Index:     0,
+						Criterion: "Test passes",
+						Passed:    true,
+						Evidence:  "All tests green",
+					},
+				},
+			},
+			want: `{"verdict":"GREEN","feedback":"OK","issues":null,"recommendations":null,"should_retry":false,"suggested_agent":"","criteria_results":[{"index":0,"criterion":"Test passes","passed":true,"evidence":"All tests green"}]}`,
+		},
+		{
+			name: "empty criteria results omitted",
+			resp: QCResponse{
+				Verdict:  "GREEN",
+				Feedback: "OK",
+			},
+			want: `{"verdict":"GREEN","feedback":"OK","issues":null,"recommendations":null,"should_retry":false,"suggested_agent":""}`,
+		},
+		{
+			name: "with fail reason",
+			resp: QCResponse{
+				Verdict:  "RED",
+				Feedback: "Failed",
+				CriteriaResults: []CriterionResult{
+					{
+						Index:      0,
+						Criterion:  "Coverage target",
+						Passed:     false,
+						FailReason: "Only 70% coverage",
+					},
+				},
+			},
+			want: `{"verdict":"RED","feedback":"Failed","issues":null,"recommendations":null,"should_retry":false,"suggested_agent":"","criteria_results":[{"index":0,"criterion":"Coverage target","passed":false,"fail_reason":"Only 70% coverage"}]}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := json.Marshal(tt.resp)
+			if err != nil {
+				t.Errorf("Marshal() error = %v", err)
+				return
+			}
+			if string(got) != tt.want {
+				t.Errorf("Marshal() = %v, want %v", string(got), tt.want)
+			}
+		})
+	}
+}
+
+func TestCriterionResult_JSONUnmarshal(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    QCResponse
+		wantErr bool
+	}{
+		{
+			name:  "with criteria results",
+			input: `{"verdict":"GREEN","feedback":"OK","criteria_results":[{"index":0,"criterion":"Test passes","passed":true,"evidence":"All green"}]}`,
+			want: QCResponse{
+				Verdict:  "GREEN",
+				Feedback: "OK",
+				CriteriaResults: []CriterionResult{
+					{
+						Index:     0,
+						Criterion: "Test passes",
+						Passed:    true,
+						Evidence:  "All green",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:  "backward compatible - no criteria results",
+			input: `{"verdict":"GREEN","feedback":"OK"}`,
+			want: QCResponse{
+				Verdict:  "GREEN",
+				Feedback: "OK",
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got QCResponse
+			err := json.Unmarshal([]byte(tt.input), &got)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Unmarshal() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Unmarshal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

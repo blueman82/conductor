@@ -92,6 +92,7 @@ docs/TEST_SUMMARY.txt
 docs/verify_tests.md
 docs/subagent-deployment-strategy.md
 docs/concept_ai_corp_conductor_hybrid.md
+docs/TODO.md
 
 # Internal development documentation (local reference only)
 PATTERN_EXTRACTION_REFERENCE.md

@@ -1192,6 +1192,39 @@ plan:
       depends_on: []  # Empty if no dependencies, otherwise [2, 3] for tasks 2 and 3
       estimated_time: "30m"  # Options: 5m, 15m, 30m, 1h, 2h
 
+      # SUCCESS CRITERIA - TASK-LEVEL FIELDS FOR CONDUCTOR QC
+      # These fields are parsed DIRECTLY by conductor for per-criterion verification
+      success_criteria:  # TASK-LEVEL field (NOT nested under verification)
+        - "First success criterion - specific, measurable outcome"
+        - "Second success criterion - what must be true for task to pass"
+        - "Third success criterion - verifiable condition"
+      test_commands:  # TASK-LEVEL field for automated verification
+        - "go test ./path/to/package/ -v"
+        - "npm test -- --grep 'feature'"
+        # Commands that verify the success criteria are met
+
+      # IMPORTANT: SUCCESS_CRITERIA FIELD PLACEMENT
+      # =============================================
+      # Conductor's YAML parser ONLY reads success_criteria and test_commands when they
+      # are DIRECT task-level fields (at the same indentation as name, files, depends_on).
+      #
+      # WRONG - parser ignores this:
+      #   verification:
+      #     success_criteria:      # NESTED - NOT parsed by conductor
+      #       - "criterion"
+      #
+      # CORRECT - parser reads this:
+      #   success_criteria:        # TASK-LEVEL - parsed by conductor
+      #     - "criterion"
+      #   test_commands:           # TASK-LEVEL - parsed by conductor
+      #     - "go test ./..."
+      #   verification:            # Keep for human documentation
+      #     automated_tests: ...
+      #
+      # The verification section below still serves as human-readable documentation
+      # for quality gates, but the task-level fields are what conductor actually uses
+      # for per-criterion QC verification.
+
       # Agent Assignment Guidelines:
       # Based on task type and technology stack, assign appropriate agents:
       #   - Go code: golang-pro
@@ -1846,13 +1879,16 @@ plan:
             - "Throw ValidationError for invalid input"
             - "Catch and log DatabaseError, return null"
 
-      verification:  # REQUIRED - quality gates for task completion
+      verification:  # Human-readable documentation for quality gates (supplements task-level fields)
+        # NOTE: This section provides detailed documentation for engineers.
+        # The TASK-LEVEL success_criteria and test_commands fields above are what
+        # conductor's QC system actually parses for per-criterion verification.
         automated_tests:
           command: "language-specific test command (pytest, npm test, go test ./...)"
           expected_output: |
             All tests passing for this task's test file
 
-        success_criteria:
+        success_criteria:  # Duplicates task-level field for human readability
           - "All tests pass"
           - "Type checker passes (mypy, tsc, go vet)"
           - "Code compiles/runs without errors"
@@ -3412,7 +3448,9 @@ After generating the YAML plan:
 2. **Validate completeness**:
    - Every task has test-first approach defined
    - Every task has clear file paths (no placeholders)
-   - **Every task has verification section with automated_tests and success_criteria (REQUIRED)**
+   - **Every task has TASK-LEVEL success_criteria field (direct field, NOT nested under verification)**
+   - **Every task has TASK-LEVEL test_commands field (direct field for conductor QC)**
+   - **Every task has verification section with automated_tests and success_criteria (for human documentation)**
    - **Every task has code_quality section with full_quality_pipeline for the appropriate language (REQUIRED)**
    - Every task has a worktree_group assignment
    - Every task has an agent assigned (singular field, not array)
@@ -3474,7 +3512,7 @@ After generating the YAML plan:
 - **Be educational**: Explain the "why" behind decisions in description fields
 - **Be thorough**: Assume zero codebase knowledge from the engineer
 - **Be test-focused**: TDD is mandatory, explain test design clearly with examples
-- **Be quality-focused**: Every task MUST include both verification (automated_tests, success_criteria) and code_quality (full_quality_pipeline) sections - these are not optional
+- **Be quality-focused**: Every task MUST include TASK-LEVEL success_criteria and test_commands fields (for conductor QC parsing), plus verification section with automated_tests (for human documentation) and code_quality (full_quality_pipeline) sections - these are not optional
 - **Be commit-focused**: Make commit strategy explicit with clear sequence
 - **Be agent-aware**: Assign the most appropriate agent from the discovered list to each task based on the work type. Every task MUST have an agent assigned (singular field, not array).
 - **Be YAML-compliant**: Ensure proper syntax, indentation, and structure
