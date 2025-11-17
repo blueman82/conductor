@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -12,6 +13,57 @@ import (
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
+
+// domainSpecificChecks maps file extensions to domain-specific QC review criteria
+var domainSpecificChecks = map[string]string{
+	".go": `## GO-SPECIFIC REVIEW CRITERIA
+- Error handling follows if err != nil pattern
+- No nil pointer dereferences on interfaces/pointers
+- Context cancellation respected (no goroutine leaks)
+- strings.Builder used for string concatenation (not +=)
+`,
+	".sql": `## SQL-SPECIFIC REVIEW CRITERIA
+- No SQL injection vulnerabilities (parameterized queries)
+- Indexes exist for WHERE/JOIN columns
+- Foreign keys have explicit ON DELETE behavior
+- Rollback migration reverses all changes safely
+`,
+	".ts": `## TYPESCRIPT-SPECIFIC REVIEW CRITERIA
+- No 'any' types unless explicitly justified
+- Async/await properly handled (no floating promises)
+- Type narrowing used correctly
+- No unused imports or variables
+`,
+	".tsx": `## REACT-SPECIFIC REVIEW CRITERIA
+- React hooks follow rules (no conditional hooks)
+- useEffect has cleanup functions where needed
+- Props properly typed (no implicit any)
+- Event handlers properly typed
+`,
+	".py": `## PYTHON-SPECIFIC REVIEW CRITERIA
+- Type hints used for function signatures
+- Exception handling is specific (not bare except)
+- No mutable default arguments
+- Resource cleanup with context managers
+`,
+}
+
+// inferDomainChecks infers domain-specific review criteria from task file extensions
+func inferDomainChecks(files []string) string {
+	var checks []string
+	seenDomains := map[string]bool{}
+
+	for _, file := range files {
+		ext := filepath.Ext(file)
+		if !seenDomains[ext] {
+			if criteria, ok := domainSpecificChecks[ext]; ok {
+				checks = append(checks, criteria)
+				seenDomains[ext] = true
+			}
+		}
+	}
+	return strings.Join(checks, "\n")
+}
 
 // QualityController manages quality control reviews using Claude Code agents
 type QualityController struct {
@@ -118,9 +170,33 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
+	// Add expected file paths for verification
+	if len(task.Files) > 0 {
+		sb.WriteString("## EXPECTED FILE PATHS - VERIFY EXACT MATCH\n")
+		sb.WriteString("Agent output must show files_modified matching these paths:\n")
+		for _, file := range task.Files {
+			sb.WriteString(fmt.Sprintf("- [ ] %s\n", file))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Add domain-specific review criteria based on file extensions
+	if domainCriteria := inferDomainChecks(task.Files); domainCriteria != "" {
+		sb.WriteString(domainCriteria)
+		sb.WriteString("\n")
+	}
+
 	sb.WriteString("## AGENT OUTPUT\n```\n")
 	sb.WriteString(output)
 	sb.WriteString("\n```\n\n")
+
+	// Load historical context if learning enabled
+	if qc.LearningStore != nil {
+		if historicalContext, err := qc.LoadContext(ctx, task, qc.LearningStore); err == nil && historicalContext != "" {
+			sb.WriteString(historicalContext)
+			sb.WriteString("\n\n")
+		}
+	}
 
 	sb.WriteString("## RESPONSE FORMAT\nYou MUST ONLY respond with JSON including criteria_results array.\n")
 
@@ -779,6 +855,17 @@ func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult
 	verdict := models.StatusGreen
 	if !allPassed {
 		verdict = models.StatusRed
+	}
+
+	// If all criteria pass but agents returned RED, respect their verdict
+	// They likely caught issues outside explicit criteria (file paths, etc.)
+	if allPassed {
+		for _, result := range results {
+			if result != nil && result.Flag == models.StatusRed {
+				verdict = models.StatusRed
+				break
+			}
+		}
 	}
 
 	return &ReviewResult{
