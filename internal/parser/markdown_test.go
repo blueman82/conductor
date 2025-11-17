@@ -926,10 +926,10 @@ conductor:
 
 func TestParseMarkdownWithQCModeCaseNormalization(t *testing.T) {
 	tests := []struct {
-		name         string
-		modeInput    string
-		expectPass   bool
-		withList     bool
+		name       string
+		modeInput  string
+		expectPass bool
+		withList   bool
 	}{
 		{"auto lowercase", "auto", true, false},
 		{"auto uppercase", "AUTO", true, false},
@@ -990,12 +990,12 @@ conductor:
 
 func TestParseMarkdownWithQCAgentConfig(t *testing.T) {
 	tests := []struct {
-		name              string
-		markdown          string
-		expectedMode      string
-		expectedExplicit  []string
+		name               string
+		markdown           string
+		expectedMode       string
+		expectedExplicit   []string
 		expectedAdditional []string
-		expectedBlocked   []string
+		expectedBlocked    []string
 	}{
 		{
 			name: "markdown with QC auto mode",
@@ -1018,9 +1018,9 @@ conductor:
 **Depends on**: None
 **Estimated time**: 30m
 `,
-			expectedMode:      "auto",
-			expectedBlocked:   []string{"deprecated-agent"},
-			expectedExplicit:  []string{},
+			expectedMode:       "auto",
+			expectedBlocked:    []string{"deprecated-agent"},
+			expectedExplicit:   []string{},
 			expectedAdditional: []string{},
 		},
 		{
@@ -1045,10 +1045,10 @@ conductor:
 **Depends on**: None
 **Estimated time**: 30m
 `,
-			expectedMode:      "explicit",
-			expectedExplicit:  []string{"golang-pro", "code-reviewer"},
+			expectedMode:       "explicit",
+			expectedExplicit:   []string{"golang-pro", "code-reviewer"},
 			expectedAdditional: []string{},
-			expectedBlocked:   []string{},
+			expectedBlocked:    []string{},
 		},
 		{
 			name: "markdown with QC mixed mode",
@@ -1073,10 +1073,10 @@ conductor:
 **Depends on**: None
 **Estimated time**: 30m
 `,
-			expectedMode:      "mixed",
-			expectedExplicit:  []string{},
+			expectedMode:       "mixed",
+			expectedExplicit:   []string{},
 			expectedAdditional: []string{"security-auditor", "performance-reviewer"},
-			expectedBlocked:   []string{"old-agent"},
+			expectedBlocked:    []string{"old-agent"},
 		},
 		{
 			name: "markdown without agents section (backward compatibility)",
@@ -1095,10 +1095,10 @@ conductor:
 **Depends on**: None
 **Estimated time**: 30m
 `,
-			expectedMode:      "",
-			expectedExplicit:  []string{},
+			expectedMode:       "",
+			expectedExplicit:   []string{},
 			expectedAdditional: []string{},
-			expectedBlocked:   []string{},
+			expectedBlocked:    []string{},
 		},
 	}
 

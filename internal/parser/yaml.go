@@ -42,7 +42,7 @@ type yamlTask struct {
 	Description     string        `yaml:"description"`
 	SuccessCriteria []string      `yaml:"success_criteria"` // Success criteria for task verification
 	TestCommands    []string      `yaml:"test_commands"`    // Commands to run for verification
-	TestFirst     struct {
+	TestFirst       struct {
 		TestFile        string   `yaml:"test_file"`
 		Structure       []string `yaml:"structure"`
 		TestStructure   string   `yaml:"test_structure"`

@@ -718,12 +718,12 @@ plan:
 
 func TestParseYAMLWithQCAgentConfig(t *testing.T) {
 	tests := []struct {
-		name              string
-		yamlContent       string
-		expectedMode      string
-		expectedExplicit  []string
+		name               string
+		yamlContent        string
+		expectedMode       string
+		expectedExplicit   []string
 		expectedAdditional []string
-		expectedBlocked   []string
+		expectedBlocked    []string
 	}{
 		{
 			name: "QC with auto mode",
@@ -746,9 +746,9 @@ plan:
       estimated_time: "30m"
       description: "Test"
 `,
-			expectedMode:      "auto",
-			expectedBlocked:   []string{"deprecated-agent"},
-			expectedExplicit:  []string{},
+			expectedMode:       "auto",
+			expectedBlocked:    []string{"deprecated-agent"},
+			expectedExplicit:   []string{},
 			expectedAdditional: []string{},
 		},
 		{
@@ -771,10 +771,10 @@ plan:
       estimated_time: "30m"
       description: "Test"
 `,
-			expectedMode:      "explicit",
-			expectedExplicit:  []string{"golang-pro", "code-reviewer"},
+			expectedMode:       "explicit",
+			expectedExplicit:   []string{"golang-pro", "code-reviewer"},
 			expectedAdditional: []string{},
-			expectedBlocked:   []string{},
+			expectedBlocked:    []string{},
 		},
 		{
 			name: "QC with mixed mode",
@@ -796,10 +796,10 @@ plan:
       estimated_time: "30m"
       description: "Test"
 `,
-			expectedMode:      "mixed",
-			expectedExplicit:  []string{},
+			expectedMode:       "mixed",
+			expectedExplicit:   []string{},
 			expectedAdditional: []string{"security-auditor", "performance-reviewer"},
-			expectedBlocked:   []string{"old-agent"},
+			expectedBlocked:    []string{"old-agent"},
 		},
 		{
 			name: "QC without agents section (backward compatibility)",
@@ -818,10 +818,10 @@ plan:
       estimated_time: "30m"
       description: "Test"
 `,
-			expectedMode:      "",
-			expectedExplicit:  []string{},
+			expectedMode:       "",
+			expectedExplicit:   []string{},
 			expectedAdditional: []string{},
-			expectedBlocked:   []string{},
+			expectedBlocked:    []string{},
 		},
 	}
 

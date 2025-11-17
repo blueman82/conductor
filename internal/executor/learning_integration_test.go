@@ -1185,15 +1185,14 @@ Implement test functionality.
 	assert.Equal(t, models.StatusGreen, result.Status)
 }
 
-
 // TestRetryFlow_ConfigVariations tests retry behavior with different config flags
 func TestRetryFlow_ConfigVariations(t *testing.T) {
 	tests := []struct {
-		name              string
-		setupExecutor     func(*DefaultTaskExecutor)
-		expectedAgentSeq  []string
-		shouldSwap        bool
-		description       string
+		name             string
+		setupExecutor    func(*DefaultTaskExecutor)
+		expectedAgentSeq []string
+		shouldSwap       bool
+		description      string
 	}{
 		{
 			name: "SwapDuringRetries disabled prevents agent swap",

@@ -512,10 +512,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Create quality controller with learning integration
 	qc := executor.NewQualityController(invoker)
-	qc.Registry = agentRegistry           // Wire registry for agent verification
-	qc.LearningStore = learningStore      // Enable historical context loading
+	qc.Registry = agentRegistry                 // Wire registry for agent verification
+	qc.LearningStore = learningStore            // Enable historical context loading
 	qc.AgentConfig = plan.QualityControl.Agents // Apply plan-level QC agent configuration
-	qc.Logger = multiLog                  // Wire logger for QC events
+	qc.Logger = multiLog                        // Wire logger for QC events
 
 	// Create task executor config
 	taskExecCfg := executor.TaskExecutorConfig{

@@ -882,9 +882,9 @@ func TestParseQCJSON(t *testing.T) {
 
 func TestShouldUseMultiAgent(t *testing.T) {
 	tests := []struct {
-		name    string
-		config  models.QCAgentConfig
-		want    bool
+		name   string
+		config models.QCAgentConfig
+		want   bool
 	}{
 		{
 			name: "auto mode always uses multi-agent",
@@ -947,13 +947,13 @@ func TestShouldUseMultiAgent(t *testing.T) {
 
 func TestReviewMultiAgent(t *testing.T) {
 	tests := []struct {
-		name       string
-		task       models.Task
-		output     string
-		agents     []string
-		responses  map[string]*agent.InvocationResult
-		wantFlag   string
-		wantErr    bool
+		name      string
+		task      models.Task
+		output    string
+		agents    []string
+		responses map[string]*agent.InvocationResult
+		wantFlag  string
+		wantErr   bool
 	}{
 		{
 			name: "all GREEN responses",
@@ -1263,7 +1263,10 @@ func TestExtractJSONFromCodeFence(t *testing.T) {
 
 // mockQCLogger for testing QC logging calls
 type mockQCLogger struct {
-	agentSelectionCalls     []struct{ agents []string; mode string }
+	agentSelectionCalls []struct {
+		agents []string
+		mode   string
+	}
 	individualVerdictsCalls []map[string]string
 	aggregatedResultCalls   []struct{ verdict, strategy string }
 }
@@ -1281,8 +1284,8 @@ func (m *mockQCLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
 
 func (m *mockQCLogger) LogQCAggregatedResult(verdict string, strategy string) {
 	m.aggregatedResultCalls = append(m.aggregatedResultCalls, struct {
-		verdict   string
-		strategy  string
+		verdict  string
+		strategy string
 	}{verdict: verdict, strategy: strategy})
 }
 
@@ -1896,8 +1899,8 @@ func TestReview_WithStructuredCriteria(t *testing.T) {
 					"Code compiles",
 				},
 			},
-			response: `{"verdict":"GREEN","feedback":"All good","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":true,"evidence":"Compiles"}]}`,
-			wantFlag: models.StatusGreen,
+			response:     `{"verdict":"GREEN","feedback":"All good","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":true,"evidence":"Compiles"}]}`,
+			wantFlag:     models.StatusGreen,
 			wantCriteria: true,
 		},
 		{
@@ -1911,8 +1914,8 @@ func TestReview_WithStructuredCriteria(t *testing.T) {
 					"Code compiles",
 				},
 			},
-			response: `{"verdict":"GREEN","feedback":"Looks good","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":false,"fail_reason":"Does not compile"}]}`,
-			wantFlag: models.StatusRed,
+			response:     `{"verdict":"GREEN","feedback":"Looks good","criteria_results":[{"index":0,"passed":true,"evidence":"Tests pass"},{"index":1,"passed":false,"fail_reason":"Does not compile"}]}`,
+			wantFlag:     models.StatusRed,
 			wantCriteria: true,
 		},
 		{
@@ -1927,8 +1930,8 @@ func TestReview_WithStructuredCriteria(t *testing.T) {
 					"C",
 				},
 			},
-			response: `{"verdict":"YELLOW","feedback":"Minor issues","criteria_results":[{"index":0,"passed":true},{"index":1,"passed":true},{"index":2,"passed":true}]}`,
-			wantFlag: models.StatusGreen,
+			response:     `{"verdict":"YELLOW","feedback":"Minor issues","criteria_results":[{"index":0,"passed":true},{"index":1,"passed":true},{"index":2,"passed":true}]}`,
+			wantFlag:     models.StatusGreen,
 			wantCriteria: true,
 		},
 	}

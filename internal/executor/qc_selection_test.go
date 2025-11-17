@@ -105,9 +105,9 @@ func TestSelectQCAgents(t *testing.T) {
 				Files:  []string{"main.go"},
 			},
 			config: models.QCAgentConfig{
-				Mode:            "explicit",
-				ExplicitList:    []string{"golang-pro", "quality-control"},
-				BlockedAgents:   []string{"golang-pro"},
+				Mode:          "explicit",
+				ExplicitList:  []string{"golang-pro", "quality-control"},
+				BlockedAgents: []string{"golang-pro"},
 			},
 			registry:   nil,
 			wantAgents: []string{"quality-control"},
@@ -120,9 +120,9 @@ func TestSelectQCAgents(t *testing.T) {
 				Files:  []string{"main.go"},
 			},
 			config: models.QCAgentConfig{
-				Mode:            "explicit",
-				ExplicitList:    []string{"golang-pro"},
-				BlockedAgents:   []string{"golang-pro", "quality-control"},
+				Mode:          "explicit",
+				ExplicitList:  []string{"golang-pro"},
+				BlockedAgents: []string{"golang-pro", "quality-control"},
 			},
 			registry:   nil,
 			wantAgents: []string{}, // Empty - all agents blocked, caller must handle error
@@ -162,10 +162,10 @@ func TestSelectQCAgents(t *testing.T) {
 
 func TestFilterBlockedAgents(t *testing.T) {
 	tests := []struct {
-		name        string
-		agents      []string
-		blocked     []string
-		wantAgents  []string
+		name       string
+		agents     []string
+		blocked    []string
+		wantAgents []string
 	}{
 		{
 			name:       "no blocked agents",
@@ -237,10 +237,10 @@ func TestFilterBlockedAgents(t *testing.T) {
 
 func TestAppendUniqueAgents(t *testing.T) {
 	tests := []struct {
-		name        string
-		existing    []string
-		new         []string
-		wantAgents  []string
+		name       string
+		existing   []string
+		new        []string
+		wantAgents []string
 	}{
 		{
 			name:       "add new agents to empty list",
@@ -420,7 +420,7 @@ func TestAutoSelectQCAgentsWithRegistry(t *testing.T) {
 				Name:   "Test task",
 				Files:  []string{"main.go", "util.go"},
 			},
-			config: models.QCAgentConfig{Mode: "auto"},
+			config:         models.QCAgentConfig{Mode: "auto"},
 			registryAgents: []string{"golang-pro", "quality-control"},
 			wantAgents:     []string{"quality-control", "golang-pro"},
 		},
@@ -431,7 +431,7 @@ func TestAutoSelectQCAgentsWithRegistry(t *testing.T) {
 				Name:   "Test task",
 				Files:  []string{"main.go"},
 			},
-			config: models.QCAgentConfig{Mode: "auto"},
+			config:         models.QCAgentConfig{Mode: "auto"},
 			registryAgents: []string{"quality-control"}, // golang-pro NOT available
 			wantAgents:     []string{"quality-control"}, // Falls back to baseline only
 		},
@@ -442,7 +442,7 @@ func TestAutoSelectQCAgentsWithRegistry(t *testing.T) {
 				Name:   "Multi-language task",
 				Files:  []string{"main.go", "script.py", "app.ts"},
 			},
-			config: models.QCAgentConfig{Mode: "auto"},
+			config:         models.QCAgentConfig{Mode: "auto"},
 			registryAgents: []string{"golang-pro", "python-pro", "typescript-pro", "quality-control"},
 			wantAgents:     []string{"quality-control", "golang-pro", "python-pro", "typescript-pro"},
 		},
@@ -453,7 +453,7 @@ func TestAutoSelectQCAgentsWithRegistry(t *testing.T) {
 				Name:   "Multi-language task",
 				Files:  []string{"main.go", "script.py", "app.ts"},
 			},
-			config: models.QCAgentConfig{Mode: "auto"},
+			config:         models.QCAgentConfig{Mode: "auto"},
 			registryAgents: []string{"golang-pro", "quality-control"}, // Only golang-pro exists
 			wantAgents:     []string{"quality-control", "golang-pro"}, // python-pro and typescript-pro skipped
 		},
@@ -494,7 +494,7 @@ func TestAutoSelectQCAgentsWithRegistry(t *testing.T) {
 				Name:   "No files task",
 				Files:  []string{},
 			},
-			config: models.QCAgentConfig{Mode: "auto"},
+			config:         models.QCAgentConfig{Mode: "auto"},
 			registryAgents: []string{"golang-pro", "python-pro", "quality-control"},
 			wantAgents:     []string{"quality-control"},
 		},
@@ -505,7 +505,7 @@ func TestAutoSelectQCAgentsWithRegistry(t *testing.T) {
 				Name:   "Multiple Go files",
 				Files:  []string{"main.go", "handler.go", "util.go"},
 			},
-			config: models.QCAgentConfig{Mode: "auto"},
+			config:         models.QCAgentConfig{Mode: "auto"},
 			registryAgents: []string{"golang-pro", "quality-control"},
 			wantAgents:     []string{"quality-control", "golang-pro"},
 		},
@@ -694,9 +694,9 @@ func TestSelectQCAgentsWithRegistryBlocking(t *testing.T) {
 				Files:  []string{"main.go", "main.py"},
 			},
 			config: models.QCAgentConfig{
-				Mode:          "mixed",
+				Mode:             "mixed",
 				AdditionalAgents: []string{"security-expert"},
-				BlockedAgents: []string{"golang-pro", "quality-control"},
+				BlockedAgents:    []string{"golang-pro", "quality-control"},
 			},
 			registryAgents: []string{"golang-pro", "python-pro", "security-expert", "quality-control"},
 			wantAgents:     []string{"python-pro", "security-expert"},

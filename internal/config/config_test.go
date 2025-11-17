@@ -2114,9 +2114,9 @@ func TestQCAgentConfigValidationExplicitNeedsList(t *testing.T) {
 // TestQCAgentConfigValidationEmptyAgentNames tests validation rejects empty agent names
 func TestQCAgentConfigValidationEmptyAgentNames(t *testing.T) {
 	tests := []struct {
-		name     string
-		config   string
-		wantErr  bool
+		name    string
+		config  string
+		wantErr bool
 	}{
 		{
 			name: "empty explicit_list item",
@@ -2182,9 +2182,9 @@ func TestQCAgentConfigValidationEmptyAgentNames(t *testing.T) {
 // TestQCAgentConfigValidationRetryCount tests validation of retry_on_red
 func TestQCAgentConfigValidationRetryCount(t *testing.T) {
 	tests := []struct {
-		name     string
-		config   string
-		wantErr  bool
+		name    string
+		config  string
+		wantErr bool
 	}{
 		{
 			name: "valid retry count",
