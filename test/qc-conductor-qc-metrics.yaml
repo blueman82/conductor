@@ -1,0 +1,46 @@
+plan:
+  name: Conductor QC Metrics Collection
+  description: |
+    Test QC agent selection for metrics/observability task.
+    Adds QC performance metrics to executor - extends actual Conductor functionality.
+  tasks:
+    - task_number: "1"
+      name: "Add QC Agent Performance Metrics"
+      files:
+        - internal/executor/qc_metrics.go
+        - internal/executor/qc_metrics_test.go
+      depends_on: []
+      estimated_time: "12m"
+      agent: golang-pro
+      description: |
+        Track QC agent performance: response time, verdict distribution, cache hits.
+        Export metrics as JSON for analysis.
+        Integrate with existing QualityController struct.
+      success_criteria:
+        - "Tracks response time per QC agent"
+        - "Counts verdict distribution (GREEN/RED/YELLOW)"
+        - "Records cache hit/miss ratio"
+        - "Exports metrics to JSON format"
+      status: "failed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":466734,"duration_api_ms":477831,"num_turns":51,"result":"{\n  \"status\": \"success\",\n  \"summary\": \"QC agent performance metrics tracking implemented with response time, verdict distribution, cache hit tracking, and JSON export\",\n  \"output\": \"Implemented QC agent performance metrics:\\n\\n1. Created QCMetrics data structures (internal/models/metrics.go):\\n   - Per-agent metrics: invocations, response times (avg/min/max), verdict distribution (GREEN/RED/YELLOW), success rate\\n   - Global stats: total reviews, cache hits/misses\\n   - Thread-safe with sync.RWMutex\\n   - JSON serialization support\\n\\n2. Integrated metrics into QualityController (internal/executor/qc.go):\\n   - Added Metrics field to QualityController struct\\n   - Automatic initialization in NewQualityController()\\n   - Timing instrumentation in Review(), reviewSingleAgent(), invokeAgentsParallel()\\n   - Cache hit/miss tracking via IntelligentSelector\\n\\n3. Added JSON export functionality:\\n   - ExportMetricsJSON() for analysis\\n   - GetMetricsSnapshot() for safe copying\\n   - ResetMetrics() for clearing\\n   - Summary() for quick overview\\n\\n4. Comprehensive test coverage:\\n   - 12 unit tests for QCMetrics model (internal/models/metrics_test.go)\\n   - 8 integration tests for QualityController metrics (internal/executor/qc_metrics_test.go)\\n   - Thread-safety tests\\n   - Example usage test (qc_metrics_example_test.go)\\n\\nAll tests pass. Build successful.\",\n  \"errors\": [],\n  \"files_modified\": [\n    \"internal/models/metrics.go\",\n    \"internal/models/metrics_test.go\",\n    \"internal/executor/qc.go\",\n    \"internal/executor/qc_intelligent.go\",\n    \"internal/executor/qc_metrics_test.go\",\n    \"internal/executor/qc_metrics_example_test.go\"\n  ],\n  \"metadata\": {\n    \"new_tests_added\": 20,\n    \"coverage_maintained\": true,\n    \"breaking_changes\": false,\n    \"version_feature\": \"v2.5\"\n  }\n}","session_id":"93194ff3-ca97-49e4-a295-cbaf157393a4","total_cost_usd":1.7667252999999996,"usage":{"input_tokens":83,"cache_creation_input_tokens":106737,"cache_read_input_tokens":2870901,"output_tokens":28462,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":106737}},"modelUsage":{"claude-sonnet-4-5-20250929":{"inputTokens":86,"outputTokens":28529,"cacheReadInputTokens":2870901,"cacheCreationInputTokens":115084,"webSearchRequests":0,"costUSD":1.7210283000000004,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":30817,"outputTokens":892,"cacheReadInputTokens":0,"cacheCreationInputTokens":8336,"webSearchRequests":0,"costUSD":0.04569699999999999,"contextWindow":200000}},"permission_denials":[],"uuid":"3eeebc3b-f628-4cb9-ab79-b63d3bf6d4c4"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:32:44Z"
+        - attempt_number: "2"
+          agent: golang-pro
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":91381,"duration_api_ms":110470,"num_turns":20,"result":"{\n  \"status\": \"success\",\n  \"summary\": \"QC agent performance metrics already fully implemented\",\n  \"output\": \"QC metrics tracking system is complete with:\\n\\n1. Data structures (internal/models/metrics.go):\\n   - QCMetrics: thread-safe global metrics\\n   - AgentQCMetrics: per-agent stats (response time min/max/avg, verdict distribution, success rate)\\n   - Cache hit/miss tracking\\n\\n2. QualityController integration (internal/executor/qc.go):\\n   - Metrics field initialized in NewQualityController() (line 122)\\n   - RecordReview() called after every agent invocation (lines 351-394, 546-570, 611-662)\\n   - ExportMetricsJSON() exports JSON for analysis (line 977)\\n   - GetMetricsSnapshot() returns thread-safe copy (line 969)\\n   - ResetMetrics() clears all metrics (line 986)\\n\\n3. JSON export capability:\\n   - GetSnapshot() deep copies metrics\\n   - json.MarshalIndent() for pretty JSON output\\n   - Full serialization with proper JSON tags\\n\\n4. Comprehensive test coverage:\\n   - internal/models/metrics_test.go: 13 test functions\\n   - internal/executor/qc_metrics_test.go: 8 integration tests\\n   - internal/executor/qc_metrics_example_test.go: example usage\\n\\nTest results: 100% coverage for models, 84.9% for executor. All tests pass.\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"coverage_models\": \"100.0%\",\n    \"coverage_executor\": \"84.9%\",\n    \"tests_passing\": true,\n    \"features\": [\"response_time_tracking\", \"verdict_distribution\", \"cache_hits\", \"json_export\", \"thread_safe\", \"per_agent_metrics\"]\n  }\n}","session_id":"08b4e1cd-f310-4606-894c-0edbe489d0a7","total_cost_usd":0.41701014999999986,"usage":{"input_tokens":1099,"cache_creation_input_tokens":42783,"cache_read_input_tokens":590406,"output_tokens":2904,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":42783}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":17890,"outputTokens":469,"cacheReadInputTokens":8482,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.021083200000000003,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":1102,"outputTokens":3501,"cacheReadInputTokens":598899,"cacheCreationInputTokens":42783,"webSearchRequests":0,"costUSD":0.39592695,"contextWindow":200000}},"permission_denials":[],"uuid":"78973a66-b078-40f8-be75-3585a84bca22"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:34:59Z"
+        - attempt_number: "3"
+          agent: general-purpose
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":47510,"duration_api_ms":54879,"num_turns":11,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"QC Agent Performance Metrics already fully implemented\",\n  \"output\": \"Task 1 complete - metrics system already exists:\\n- internal/models/metrics.go: QCMetrics struct with response time tracking, verdict distribution (GREEN/RED/YELLOW/failed), cache hits/misses\\n- internal/executor/qc.go: RecordReview() calls at lines 351-362, 548-558, 617-662\\n- Export: ExportMetricsJSON() at qc.go:976\\n- Helper methods: GetSnapshot(), Reset(), Summary()\\n- Tests: 100% coverage in models/metrics_test.go (306 lines) and executor/qc_metrics_test.go (253 lines)\\n- All 25+ metrics tests pass\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"existing_implementation\": true,\n    \"tests_passing\": true,\n    \"coverage\": \"100% for metrics module\"\n  }\n}\n```","session_id":"0b29d883-3087-4473-a414-7472fbe40e6e","total_cost_usd":0.3724291999999999,"usage":{"input_tokens":37,"cache_creation_input_tokens":67536,"cache_read_input_tokens":284217,"output_tokens":1691,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":67536}},"modelUsage":{"claude-sonnet-4-5-20250929":{"inputTokens":40,"outputTokens":1718,"cacheReadInputTokens":292710,"cacheCreationInputTokens":67536,"webSearchRequests":0,"costUSD":0.36696299999999993,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":3298,"outputTokens":264,"cacheReadInputTokens":8482,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0054662,"contextWindow":200000}},"permission_denials":[],"uuid":"6cccd064-6766-4413-8a60-dceb3769866c"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:36:36Z"

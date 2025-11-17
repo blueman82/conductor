@@ -1,0 +1,46 @@
+plan:
+  name: Conductor Learning Database Enhancement
+  description: |
+    Test QC agent selection for SQL/database optimization task.
+    Improves SQLite learning store performance - relevant to Conductor.
+  tasks:
+    - task_number: "1"
+      name: "Optimize Learning Store Query Performance"
+      files:
+        - internal/learning/schema_v2.sql
+        - internal/learning/store_optimized.go
+      depends_on: []
+      estimated_time: "10m"
+      agent: sql-pro
+      description: |
+        Add indexes to learning.executions table for faster pattern queries.
+        Optimize GetExecutionHistory to use prepared statements.
+        Add pagination support for large result sets.
+      success_criteria:
+        - "Indexes added for task_name and timestamp columns"
+        - "Prepared statements reduce query overhead"
+        - "Pagination limits result set size"
+        - "Query performance improved measurably"
+      status: "failed"
+      execution_history:
+        - attempt_number: "1"
+          agent: sql-pro
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":185412,"duration_api_ms":204365,"num_turns":25,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Optimized Learning Store query performance with indexes, prepared statements, and pagination\",\n  \"output\": \"1. Added 4 composite indexes to schema.sql:\\n   - idx_task_executions_plan_task (plan_file, task_number, id DESC)\\n   - idx_task_executions_plan_run (plan_file, run_number DESC)\\n   - idx_task_executions_agent_success (agent, success)\\n   - idx_task_executions_qc_verdict (qc_verdict, timestamp DESC)\\n\\n2. Added prepared statement support to Store:\\n   - stmtGetHistory for GetExecutionHistory\\n   - stmtGetHistoryPage for paginated queries\\n   - stmtRecordExec for RecordExecution\\n   - Automatic cleanup on Close()\\n   - Fallback to raw queries if statements unavailable\\n\\n3. Added pagination support:\\n   - GetExecutionHistoryPaged(ctx, planFile, taskNumber, limit, offset)\\n   - GetExecutionCount(ctx, planFile, taskNumber) for total count\\n   - Default limit of 100 if not specified\\n   - Handles edge cases (negative offset, zero limit)\\n\\n4. Refactored row scanning:\\n   - Extracted scanExecutionRows() helper function\\n   - Reduced code duplication across query methods\\n\\nTest Results: 88.3% coverage, all new pagination and count tests passing\",\n  \"errors\": [],\n  \"files_modified\": [\n    \"internal/learning/schema.sql\",\n    \"internal/learning/store.go\",\n    \"internal/learning/store_test.go\"\n  ],\n  \"metadata\": {\n    \"new_indexes\": 4,\n    \"prepared_statements\": 3,\n    \"new_methods\": [\"GetExecutionHistoryPaged\", \"GetExecutionCount\", \"scanExecutionRows\", \"prepareStatements\"],\n    \"test_coverage\": \"88.3%\",\n    \"new_tests\": [\"TestGetExecutionHistoryPaged\", \"TestGetExecutionCount\"]\n  }\n}\n```","session_id":"34c8f7a0-287e-4b8f-9d93-cd401c4ab80a","total_cost_usd":0.75282665,"usage":{"input_tokens":5156,"cache_creation_input_tokens":45372,"cache_read_input_tokens":1124988,"output_tokens":11333,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":45372}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":11912,"outputTokens":520,"cacheReadInputTokens":0,"cacheCreationInputTokens":8381,"webSearchRequests":0,"costUSD":0.024988249999999997,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":5159,"outputTokens":11550,"cacheReadInputTokens":1124988,"cacheCreationInputTokens":53764,"webSearchRequests":0,"costUSD":0.7278384,"contextWindow":200000}},"permission_denials":[],"uuid":"9da09c41-af23-4f63-b309-f657413c3a6b"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:29:33Z"
+        - attempt_number: "2"
+          agent: sql-pro
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":41611,"duration_api_ms":58725,"num_turns":9,"result":"All optimizations already implemented:\n- Composite indexes (lines 40-43 in schema.sql)\n- Prepared statements (lines 56-58, 131-170 in store.go)\n- Pagination support (GetExecutionHistoryPaged, GetExecutionCount methods)\n\n```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Learning store query performance already optimized\",\n  \"output\": \"All three optimizations already implemented:\\n1. INDEXES: Composite indexes added in schema.sql (lines 40-43) for plan_file+task_number, plan_file+run_number, agent+success, qc_verdict+timestamp\\n2. PREPARED STATEMENTS: Store struct has stmtGetHistory, stmtGetHistoryPage, stmtRecordExec prepared statements (lines 56-58), initialized in prepareStatements() (lines 131-170)\\n3. PAGINATION: GetExecutionHistoryPaged() supports limit/offset with default page size of 100 (lines 383-413), GetExecutionCount() returns total for pagination UI (lines 416-424)\\n\\nTest results: 88.3% coverage, all tests passing\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"indexes_added\": [\"idx_task_executions_plan_task\", \"idx_task_executions_plan_run\", \"idx_task_executions_agent_success\", \"idx_task_executions_qc_verdict\"],\n    \"prepared_statements\": [\"stmtGetHistory\", \"stmtGetHistoryPage\", \"stmtRecordExec\"],\n    \"pagination_methods\": [\"GetExecutionHistoryPaged\", \"GetExecutionCount\"],\n    \"test_coverage\": \"88.3%\"\n  }\n}\n```","session_id":"35b97280-6170-47ed-b620-ae8b164c2a50","total_cost_usd":0.19035359999999998,"usage":{"input_tokens":30,"cache_creation_input_tokens":22098,"cache_read_input_tokens":226292,"output_tokens":1387,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":22098}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":9485,"outputTokens":346,"cacheReadInputTokens":8453,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.012060299999999998,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":33,"outputTokens":1660,"cacheReadInputTokens":234756,"cacheCreationInputTokens":22098,"webSearchRequests":0,"costUSD":0.17829330000000002,"contextWindow":200000}},"permission_denials":[],"uuid":"36208713-1e69-4d25-a5de-ef80f6416622"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:30:33Z"
+        - attempt_number: "3"
+          agent: general-purpose
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":21217,"duration_api_ms":34455,"num_turns":4,"result":"{\n  \"status\": \"success\",\n  \"summary\": \"All optimizations already implemented\",\n  \"output\": \"Learning store already optimized:\\n1. Composite indexes for pattern queries (schema.sql:40-43)\\n   - idx_task_executions_plan_task (plan_file, task_number, id DESC)\\n   - idx_task_executions_plan_run (plan_file, run_number DESC)\\n   - idx_task_executions_agent_success (agent, success)\\n   - idx_task_executions_qc_verdict (qc_verdict, timestamp DESC)\\n2. Prepared statements for GetExecutionHistory and RecordExecution (store.go:55-58)\\n3. Pagination via GetExecutionHistoryPaged(ctx, planFile, taskNumber, limit, offset)\\n4. GetExecutionCount helper for pagination metadata\\n\\nAll 5 pagination tests pass. No changes needed.\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"tests_passed\": 14,\n    \"coverage\": \"90.6%\",\n    \"indexes_added\": 4,\n    \"prepared_statements\": 3,\n    \"pagination_methods\": [\"GetExecutionHistoryPaged\", \"GetExecutionCount\"]\n  }\n}","session_id":"e0d54400-7bac-4018-96fd-489bfe218190","total_cost_usd":0.23198915000000003,"usage":{"input_tokens":16,"cache_creation_input_tokens":49269,"cache_read_input_tokens":88573,"output_tokens":634,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":49269}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":2837,"outputTokens":347,"cacheReadInputTokens":8453,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0054173,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":19,"outputTokens":843,"cacheReadInputTokens":97037,"cacheCreationInputTokens":49269,"webSearchRequests":0,"costUSD":0.22657185000000002,"contextWindow":200000}},"permission_denials":[],"uuid":"89939a53-9eaa-4153-aafa-6576611974df"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:31:29Z"
