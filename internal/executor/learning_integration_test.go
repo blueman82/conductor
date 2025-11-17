@@ -1080,24 +1080,255 @@ func TestRetryFlow_AgentSwappingAfterThreshold(t *testing.T) {
 
 // TestRetryFlow_FeedbackStorageFormats tests dual feedback storage
 func TestRetryFlow_FeedbackStorageFormats(t *testing.T) {
-	t.Skip("TODO: Implement feedback storage format test")
-	// Test structure:
-	// 1. Execute task that fails
-	// 2. QC reviews and returns structured feedback
-	// 3. Verify plain text feedback in TaskResult.QCFeedback
-	// 4. Verify JSON data in TaskResult.QCData
-	// 5. Verify both formats stored in learning DB
-	// 6. Verify both formats persisted to plan file
+	// Setup: Create plan file and task executor
+	tmpDir := t.TempDir()
+	planFile := filepath.Join(tmpDir, "plan.md")
+
+	// Write minimal plan file
+	planContent := `# Test Plan
+
+## Task 1: Test Task
+**Files**: internal/test.go
+**Agent**: backend-developer
+
+Implement test functionality.
+`
+	err := os.WriteFile(planFile, []byte(planContent), 0644)
+	require.NoError(t, err)
+
+	// Create mock invoker that simulates:
+	// 1. First attempt: fails with structured output
+	// 2. Second attempt: succeeds
+	mockInvoker := newStubInvoker(
+		&agent.InvocationResult{
+			Output:   `{"status": "failed", "errors": ["validation error"]}`,
+			ExitCode: 0,
+			Duration: 50 * time.Millisecond,
+		},
+		&agent.InvocationResult{
+			Output:   `{"status": "success", "summary": "Task completed"}`,
+			ExitCode: 0,
+			Duration: 75 * time.Millisecond,
+		},
+	)
+
+	// Create mock QC reviewer that returns structured feedback
+	mockReviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{
+				Flag:      models.StatusRed,
+				Feedback:  "Output validation failed: missing required fields",
+				AgentName: "quality-control",
+			},
+			{
+				Flag:      models.StatusGreen,
+				Feedback:  "All validation checks passed",
+				AgentName: "quality-control",
+			},
+		},
+		retryDecisions: map[int]bool{0: true, 1: false},
+	}
+
+	// Create mock updater to verify UpdateTaskFeedback calls
+	recordingUpdater := &recordingUpdater{}
+
+	// Create task executor with QC enabled
+	executor, err := NewTaskExecutor(mockInvoker, mockReviewer, recordingUpdater, TaskExecutorConfig{
+		PlanPath: planFile,
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2,
+		},
+	})
+	require.NoError(t, err)
+
+	// Create test task
+	task := models.Task{
+		Number: "1",
+		Name:   "Test Task",
+		Prompt: "Implement test functionality",
+		Agent:  "backend-developer",
+		Files:  []string{"internal/test.go"},
+	}
+
+	// Execute task
+	result, err := executor.Execute(context.Background(), task)
+
+	// Verify execution completed successfully
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, models.StatusGreen, result.Status)
+	assert.Equal(t, 1, result.RetryCount, "Should have retried once")
+
+	// Verify execution history is populated
+	assert.Len(t, result.ExecutionHistory, 2, "Should have 2 execution attempts")
+
+	// Verify first attempt
+	assert.Equal(t, 1, result.ExecutionHistory[0].Attempt)
+	assert.Equal(t, "backend-developer", result.ExecutionHistory[0].Agent)
+	assert.Equal(t, models.StatusRed, result.ExecutionHistory[0].Verdict)
+	assert.Contains(t, result.ExecutionHistory[0].QCFeedback, "validation failed", "QC feedback should be stored")
+
+	// Verify second attempt
+	assert.Equal(t, 2, result.ExecutionHistory[1].Attempt)
+	assert.Equal(t, "backend-developer", result.ExecutionHistory[1].Agent)
+	assert.Equal(t, models.StatusGreen, result.ExecutionHistory[1].Verdict)
+	assert.Contains(t, result.ExecutionHistory[1].QCFeedback, "passed", "QC feedback should be stored")
+
+	// Verify ReviewFeedback contains concatenated feedback from last attempt
+	assert.NotEmpty(t, result.ReviewFeedback, "ReviewFeedback should be populated")
+
+	// Verify updater was called to persist feedback
+	assert.Greater(t, len(recordingUpdater.calls), 0, "UpdateTaskFeedback should have been called")
+
+	// Verify final status is completed
+	assert.Equal(t, models.StatusGreen, result.Status)
 }
+
 
 // TestRetryFlow_ConfigVariations tests retry behavior with different config flags
 func TestRetryFlow_ConfigVariations(t *testing.T) {
-	t.Skip("TODO: Implement config variations test")
-	// Test structure:
-	// Test cases:
-	// - learning_enabled = false: no agent swap
-	// - auto_adapt_agent = false: no agent swap
-	// - min_failures_before_adapt = 3: swap only after 3 failures
-	// - enhance_prompts = false: no prompt enhancement
-	// Verify each config affects behavior correctly
+	tests := []struct {
+		name              string
+		setupExecutor     func(*DefaultTaskExecutor)
+		expectedAgentSeq  []string
+		shouldSwap        bool
+		description       string
+	}{
+		{
+			name: "SwapDuringRetries disabled prevents agent swap",
+			setupExecutor: func(te *DefaultTaskExecutor) {
+				te.SwapDuringRetries = false  // Disable swapping
+				te.MinFailuresBeforeAdapt = 1 // But allow threshold
+			},
+			expectedAgentSeq: []string{"backend-developer", "backend-developer"}, // No swap
+			shouldSwap:       false,
+			description:      "When SwapDuringRetries=false, agent should never swap even on RED",
+		},
+		{
+			name: "MinFailuresBeforeAdapt threshold enforced",
+			setupExecutor: func(te *DefaultTaskExecutor) {
+				te.SwapDuringRetries = true
+				te.MinFailuresBeforeAdapt = 3 // Require 3 RED verdicts before swap
+			},
+			expectedAgentSeq: []string{"backend-developer", "backend-developer"}, // No swap on first RED
+			shouldSwap:       false,
+			description:      "When MinFailuresBeforeAdapt=3, no swap on first RED verdict",
+		},
+		{
+			name: "LearningStore nil disables historical analysis fallback",
+			setupExecutor: func(te *DefaultTaskExecutor) {
+				te.LearningStore = nil // Disable learning store
+				te.SwapDuringRetries = true
+				te.MinFailuresBeforeAdapt = 1
+			},
+			expectedAgentSeq: []string{"backend-developer", "golang-pro"}, // Still swaps to QC suggestion
+			shouldSwap:       true,
+			description:      "When LearningStore=nil but QC suggests, agent still swaps to QC suggestion",
+		},
+		{
+			name: "All conditions met enables agent swap",
+			setupExecutor: func(te *DefaultTaskExecutor) {
+				// All conditions for swap are met
+				te.SwapDuringRetries = true
+				te.MinFailuresBeforeAdapt = 1
+				// LearningStore already configured
+			},
+			expectedAgentSeq: []string{"backend-developer", "golang-pro"}, // Swap to suggested agent
+			shouldSwap:       true,
+			description:      "With all conditions met, agent should swap to suggested agent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup: Create DB for learning store
+			tmpDir := t.TempDir()
+			dbPath := filepath.Join(tmpDir, "test.db")
+			store, err := learning.NewStore(dbPath)
+			require.NoError(t, err)
+			defer store.Close()
+
+			// Mock invoker that tracks agents used
+			// Returns RED result then GREEN result
+			mockInv := newStubInvoker(
+				&agent.InvocationResult{Output: `{"status": "failed", "errors": ["compilation error"]}`, ExitCode: 0},
+				&agent.InvocationResult{Output: `{"status": "success", "summary": "Fixed with new agent"}`, ExitCode: 0},
+			)
+
+			// Mock QC reviewer that returns RED with suggested agent, then GREEN
+			mockReviewer := &stubReviewer{
+				results: []*ReviewResult{
+					{
+						Flag:           models.StatusRed,
+						Feedback:       "Code has compilation errors",
+						SuggestedAgent: "golang-pro", // QC suggests better agent
+					},
+					{
+						Flag:     models.StatusGreen,
+						Feedback: "All criteria met",
+					},
+				},
+				retryDecisions: map[int]bool{0: true, 1: false},
+			}
+
+			// Mock updater
+			updater := &recordingUpdater{}
+
+			// Create executor with learning store
+			executor, err := NewTaskExecutor(mockInv, mockReviewer, updater, TaskExecutorConfig{
+				QualityControl: models.QualityControlConfig{
+					Enabled:    true,
+					RetryOnRed: 2,
+				},
+			})
+			require.NoError(t, err)
+
+			// Apply config variations
+			executor.LearningStore = store
+			tt.setupExecutor(executor)
+
+			// Execute task with initial agent
+			task := models.Task{
+				Number: "1",
+				Name:   "Test config variation",
+				Prompt: "Fix compilation error",
+				Agent:  "backend-developer",
+			}
+
+			result, err := executor.Execute(context.Background(), task)
+
+			// Verify execution completed
+			assert.NoError(t, err, tt.description)
+			assert.NotNil(t, result, tt.description)
+
+			// Verify agent sequence matches expected behavior
+			agentsUsed := []string{}
+			for _, call := range mockInv.calls {
+				agentsUsed = append(agentsUsed, call.Agent)
+			}
+
+			assert.GreaterOrEqual(t, len(agentsUsed), len(tt.expectedAgentSeq),
+				"Expected at least %d agent invocations", len(tt.expectedAgentSeq))
+
+			if len(agentsUsed) >= len(tt.expectedAgentSeq) {
+				for i, expectedAgent := range tt.expectedAgentSeq {
+					assert.Equal(t, expectedAgent, agentsUsed[i],
+						"%s: Agent at position %d should be %s", tt.description, i, expectedAgent)
+				}
+			}
+
+			// Verify final result agent state
+			if tt.shouldSwap {
+				// When swap occurs, final agent should be the suggested agent
+				assert.Equal(t, "golang-pro", result.Task.Agent,
+					"%s: Task should end with suggested agent after swap", tt.description)
+			} else {
+				// When no swap, agent should remain unchanged or be original
+				// (depends on config, but agent should not be swapped to suggestion)
+				assert.NotEqual(t, "golang-pro", result.Task.Agent,
+					"%s: Task should NOT swap to suggested agent", tt.description)
+			}
+		})
+	}
 }
