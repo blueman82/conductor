@@ -487,6 +487,27 @@ result, err := invoker.Invoke(ctx, task)
 
 Conductor v2.1.0 is production-ready with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support, adaptive learning system, inter-retry agent swapping, and auto-incrementing version management implemented and tested.
 
+**Latest coverage run (2025-11-17, `go test -cover ./...`):**
+
+| Package | Coverage |
+| --- | --- |
+| `internal/config` | 86.3% |
+| `internal/executor` | 90.0% |
+| `internal/agent` | 91.3% |
+| `internal/learning` | 90.6% |
+| `internal/logger` | 71.6% |
+| `internal/models` | 100.0% |
+| `internal/parser` | 74.6% |
+| `internal/cmd` | 76.9% |
+| `internal/filelock` | 83.1% |
+| `internal/fileutil` | 90.9% |
+| `internal/display` | 97.0% |
+| `internal/updater` | 89.8% |
+| `cmd/conductor` | 0.0% (wrapper delegates to internal packages) |
+| `test/integration` | No statements (harness package used for E2E tests) |
+
+This run also verified the newly added configuration matrix tests and end-to-end scenarios (happy/failed/mixed verdicts plus skip/resume and structured success-criteria flows).
+
 **Major Features:**
 - Multi-agent orchestration with dependency resolution
 - Quality control reviews with structured JSON responses
