@@ -88,6 +88,9 @@ Conductor automates complex multi-step implementations by:
   - Recommends domain specialists (security-auditor, database-optimizer)
   - Deterministic guardrails (max agents cap, code-reviewer baseline)
   - Caches results to minimize API calls during retries
+  - **Critical fix**: Respects agent RED verdicts even when criteria pass
+  - Domain-specific review criteria (Go/SQL/TypeScript/Python)
+  - File path verification in QC prompts
 
 [⬆ back to top](#table-of-contents)
 
@@ -107,23 +110,23 @@ Download pre-built binary from the latest release:
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux (x86_64)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.1.0/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Verify installation
 conductor --version
-# v2.1.0
+# v2.4.0
 ```
 
 #### Option 2: Build from Source
@@ -143,7 +146,7 @@ go build ./cmd/conductor
 
 # Verify installation
 conductor --version
-# v2.1.0
+# v2.4.0
 ```
 
 #### Option 3: Install Plugin for Plan Generation
@@ -762,7 +765,7 @@ See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-split
 
 ## Project Status
 
-**Current Status**: Production-ready v2.1.0
+**Current Status**: Production-ready v2.4.0
 
 Conductor is feature-complete with:
 - Complete implementation with 86%+ test coverage
@@ -799,6 +802,9 @@ Conductor is feature-complete with:
   - Claude-based agent recommendations
   - Task context + executing agent analysis
   - Deterministic guardrails and caching
+  - Critical fix: Respects agent RED verdicts even when criteria pass
+  - Domain-specific review criteria (Go/SQL/TypeScript/Python)
+  - File path verification in QC prompts
 - Comprehensive documentation
 
 ### Conductor Plugin

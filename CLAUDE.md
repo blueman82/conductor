@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.3.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection (v2.4), and auto-incrementing version management.
+**Current Status**: Production-ready v2.4.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection with critical RED verdict fix, domain-specific review criteria, and auto-incrementing version management.
 
 ## Development Commands
 
@@ -544,7 +544,7 @@ result, err := invoker.Invoke(ctx, task)
 
 ## Production Status
 
-Conductor v2.1.0 is production-ready with 86.4% test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support, adaptive learning system, inter-retry agent swapping, and auto-incrementing version management implemented and tested.
+Conductor v2.4.0 is production-ready with 86%+ test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support, adaptive learning system, inter-retry agent swapping, intelligent QC agent selection, and auto-incrementing version management implemented and tested.
 
 **Latest coverage run (2025-11-17, `go test -cover ./...`):**
 
@@ -583,6 +583,14 @@ This run also verified the newly added configuration matrix tests and end-to-end
 - Single `updateFeedback()` call eliminates duplicate history entries
 - `learning.SelectBetterAgent()` for intelligent agent swapping
 - QC loads historical context via `LoadContext()` for informed retry decisions
+
+**v2.4 Enhancements:**
+- **Critical fix**: `aggregateMultiAgentCriteria()` now respects agent RED verdicts even when criteria pass
+- Intelligent QC agent selection via Claude API (analyzes task context + executing agent)
+- Domain-specific review criteria auto-injection (Go/SQL/TypeScript/Python)
+- File path verification in QC prompts ("EXPECTED FILE PATHS" section)
+- Historical context loading in structured review prompts
+- TTL-based caching for intelligent agent selections (reduces API calls)
 
 ## Multi-File Plan Examples
 
