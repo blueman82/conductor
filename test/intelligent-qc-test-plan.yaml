@@ -1,0 +1,114 @@
+plan:
+  name: Intelligent QC Agent Selection Test Plan
+  description: |
+    Test plan designed to verify intelligent QC agent selection.
+    Each task has distinct characteristics that should trigger different agent recommendations:
+    - Task 1: Security-focused (JWT auth) → security-auditor + golang-pro
+    - Task 2: Database work (SQL migrations) → database-optimizer + sql-pro
+    - Task 3: Frontend React component → react-specialist + javascript-pro
+
+    Run with: conductor run test/intelligent-qc-test-plan.yaml --verbose --dry-run
+
+    Expected behavior:
+    - QC should call Claude to recommend agents based on task context
+    - Results should be cached to avoid duplicate API calls
+    - code-reviewer should always be included as baseline
+    - Agent selection should be logged for visibility
+  tasks:
+    - task_number: "1"
+      name: "Implement JWT Authentication Middleware"
+      files:
+        - internal/auth/jwt.go
+        - internal/auth/jwt_test.go
+      depends_on: []
+      estimated_time: "15m"
+      agent: golang-pro
+      description: |
+        Create a JWT authentication middleware for the API.
+        Requirements:
+        - Validate JWT tokens using HS256 algorithm
+        - Extract user claims from valid tokens
+        - Handle token expiration gracefully
+        - Return proper HTTP 401 errors for invalid tokens
+        - Include comprehensive unit tests
+      success_criteria:
+        - "JWT validation function implemented with HS256 support"
+        - "Proper error handling for expired and invalid tokens"
+        - "Unit tests achieve 90% code coverage"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":99452,"duration_api_ms":113783,"num_turns":16,"result":"{\n  \"status\": \"success\",\n  \"summary\": \"JWT authentication middleware implemented with HS256 validation, claim extraction, expiration handling, and HTTP 401 errors\",\n  \"output\": \"Created internal/auth/jwt.go with JWTMiddleware supporting token validation, header extraction, and HTTP middleware wrapper. All 15 tests pass with 95.9% coverage. Features: HS256 algorithm enforcement, user claim extraction (UserID, Username, Email), graceful expiration handling, proper error types (ErrInvalidToken, ErrExpiredToken, ErrMissingToken), JSON error responses.\",\n  \"errors\": [],\n  \"files_modified\": [\"internal/auth/jwt.go\", \"internal/auth/jwt_test.go\", \"go.mod\", \"go.sum\"],\n  \"metadata\": {\n    \"test_count\": 15,\n    \"coverage\": \"95.9%\",\n    \"dependency_added\": \"github.com/golang-jwt/jwt/v5\"\n  }\n}","session_id":"1978592a-dbe3-41e6-8f40-c20ac88313c5","total_cost_usd":0.4104262,"usage":{"input_tokens":45,"cache_creation_input_tokens":48811,"cache_read_input_tokens":265109,"output_tokens":6231,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":48811}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":6907,"outputTokens":431,"cacheReadInputTokens":0,"cacheCreationInputTokens":8320,"webSearchRequests":0,"costUSD":0.019461999999999997,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":48,"outputTokens":6467,"cacheReadInputTokens":265109,"cacheCreationInputTokens":57142,"webSearchRequests":0,"costUSD":0.3909642,"contextWindow":200000}},"permission_denials":[],"uuid":"d607226a-8e57-48d8-953b-365a1aff52d8"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:01:58Z"
+      completed_date: "2025-11-17"
+    - task_number: "2"
+      name: "Add Database Migration for User Roles"
+      files:
+        - db/migrations/003_user_roles.sql
+        - internal/models/user_role.go
+      depends_on: ["1"]
+      estimated_time: "10m"
+      agent: sql-pro
+      description: |
+        Create database migration for user role system.
+        Requirements:
+        - Create roles table with name and permissions JSONB column
+        - Create user_roles junction table
+        - Add foreign key constraints with ON DELETE CASCADE
+        - Include rollback migration
+        - Optimize indexes for role lookups
+      success_criteria:
+        - "Roles table created with proper schema"
+        - "Junction table with foreign key constraints"
+        - "Indexes added for performance"
+        - "Rollback migration included"
+      status: "failed"
+      execution_history:
+        - attempt_number: "1"
+          agent: sql-pro
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":30401,"duration_api_ms":45293,"num_turns":8,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Created database migrations for user role system with roles table, user_roles junction table, foreign keys, and optimized indexes\",\n  \"output\": \"Created db/migrations/ directory\\nCreated 001_user_roles_up.sql (1026 bytes):\\n- roles table with id, name, permissions JSONB, timestamps\\n- user_roles junction table with user_id, role_id, assigned_at\\n- Foreign key to roles(id) with ON DELETE CASCADE\\n- Indexes: idx_roles_name, idx_user_roles_user_id, idx_user_roles_role_id\\n- GIN index on permissions JSONB for efficient queries\\n- All wrapped in transaction\\n\\nCreated 001_user_roles_down.sql (383 bytes):\\n- Drops indexes in correct order\\n- Drops tables respecting foreign key constraints\\n- Wrapped in transaction for atomic rollback\",\n  \"errors\": [],\n  \"files_modified\": [\n    \"db/migrations/001_user_roles_up.sql\",\n    \"db/migrations/001_user_roles_down.sql\"\n  ],\n  \"metadata\": {\n    \"migration_version\": \"001\",\n    \"tables_created\": [\"roles\", \"user_roles\"],\n    \"indexes_created\": 4,\n    \"has_rollback\": true,\n    \"uses_transactions\": true\n  }\n}\n```","session_id":"3cab7c4a-feb6-46a0-9c09-ef4f742ad47f","total_cost_usd":0.13114655,"usage":{"input_tokens":30,"cache_creation_input_tokens":11829,"cache_read_input_tokens":191873,"output_tokens":1270,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":11829}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":2083,"outputTokens":382,"cacheReadInputTokens":8339,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.004826899999999999,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":33,"outputTokens":1453,"cacheReadInputTokens":200223,"cacheCreationInputTokens":11829,"webSearchRequests":0,"costUSD":0.12631965,"contextWindow":200000}},"permission_denials":[],"uuid":"eb4b478b-d182-4ccf-bebb-094e1d288c62"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:02:50Z"
+        - attempt_number: "2"
+          agent: sql-pro
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":14239,"duration_api_ms":24615,"num_turns":5,"result":"{\n  \"status\": \"success\",\n  \"summary\": \"Database migration for user roles already exists with all requirements met\",\n  \"output\": \"Migrations found at db/migrations/001_user_roles_up.sql and 001_user_roles_down.sql. Up migration creates: roles table with name (VARCHAR UNIQUE) and permissions (JSONB) columns, user_roles junction table with foreign key to roles(id) ON DELETE CASCADE, indexes on roles.name, user_roles.user_id, user_roles.role_id, and GIN index on permissions JSONB. Down migration properly drops indexes first, then tables in correct order respecting foreign key dependencies. All wrapped in transactions.\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"migration_version\": \"001\",\n    \"tables_created\": [\"roles\", \"user_roles\"],\n    \"indexes_created\": [\"idx_roles_name\", \"idx_user_roles_user_id\", \"idx_user_roles_role_id\", \"idx_roles_permissions\"],\n    \"foreign_keys\": [\"user_roles.role_id -> roles.id ON DELETE CASCADE\"]\n  }\n}","session_id":"c90b63b2-4051-4cf2-a520-8f7738fb7d12","total_cost_usd":0.19306229999999996,"usage":{"input_tokens":17,"cache_creation_input_tokens":41154,"cache_read_input_tokens":80253,"output_tokens":499,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":41154}},"modelUsage":{"claude-sonnet-4-5-20250929":{"inputTokens":20,"outputTokens":654,"cacheReadInputTokens":88608,"cacheCreationInputTokens":41154,"webSearchRequests":0,"costUSD":0.19077989999999997,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":3,"outputTokens":289,"cacheReadInputTokens":8344,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0022824,"contextWindow":200000}},"permission_denials":[],"uuid":"76a93963-22cf-4776-8430-dd9b417c801c"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:03:21Z"
+        - attempt_number: "3"
+          agent: general-purpose
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":14178,"duration_api_ms":29594,"num_turns":5,"result":"Migration already exists with all requirements met:\n\n```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Database migration for user roles already complete\",\n  \"output\": \"Migration files exist at db/migrations/001_user_roles_{up,down}.sql. Up migration creates: roles table with name VARCHAR(100) UNIQUE and permissions JSONB column, user_roles junction table with foreign key to roles(id) ON DELETE CASCADE, composite primary key (user_id, role_id), optimized indexes including GIN index for JSONB permissions queries. Down migration properly drops indexes then tables in correct order. All wrapped in transactions.\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"tables_created\": [\"roles\", \"user_roles\"],\n    \"indexes_created\": [\"idx_roles_name\", \"idx_user_roles_user_id\", \"idx_user_roles_role_id\", \"idx_roles_permissions\"],\n    \"features\": [\"JSONB permissions\", \"ON DELETE CASCADE\", \"GIN index\", \"transactional\", \"rollback support\"]\n  }\n}\n```","session_id":"fa48a57a-a1e8-411e-bb4c-492492347e27","total_cost_usd":0.19662210000000002,"usage":{"input_tokens":17,"cache_creation_input_tokens":41162,"cache_read_input_tokens":80269,"output_tokens":484,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":41162}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":3,"outputTokens":304,"cacheReadInputTokens":8344,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0023574,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":20,"outputTokens":884,"cacheReadInputTokens":88624,"cacheCreationInputTokens":41162,"webSearchRequests":0,"costUSD":0.1942647,"contextWindow":200000}},"permission_denials":[],"uuid":"a74be07e-80db-4fad-95d5-640a8f22a1a8"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-17T20:04:09Z"
+    - task_number: "3"
+      name: "Build User Dashboard React Component"
+      files:
+        - src/components/Dashboard.tsx
+        - src/components/Dashboard.test.tsx
+        - src/hooks/useDashboard.ts
+      depends_on: ["1", "2"]
+      estimated_time: "20m"
+      agent: react-specialist
+      description: |
+        Create a responsive user dashboard component.
+        Requirements:
+        - Display user profile information
+        - Show role-based permissions
+        - Include data visualization charts
+        - Handle loading and error states
+        - Responsive design for mobile and desktop
+        - React Testing Library tests
+      success_criteria:
+        - "Dashboard component renders user data"
+        - "Role permissions displayed correctly"
+        - "Loading and error states handled"
+        - "Tests cover main user interactions"
