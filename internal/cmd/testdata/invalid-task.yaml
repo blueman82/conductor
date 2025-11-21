@@ -3,11 +3,13 @@ plan:
     feature_name: "Invalid Task Test"
   tasks:
     - task_number: 1
+      type: component
       name: ""
       files: ["main.go"]
       depends_on: []
       description: "Task with empty name"
     - task_number: 2
+      type: component
       name: "Valid Task"
       files: ["other.go"]
       depends_on: [1]

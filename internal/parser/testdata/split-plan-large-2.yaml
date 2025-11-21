@@ -15,6 +15,7 @@ plan:
     retry_on_red: 2
   tasks:
     - task_number: 6
+      type: component
       name: "API Gateway"
       files: ["services/gateway/main.go"]
       depends_on: [4, 5]
@@ -22,6 +23,7 @@ plan:
       description: "Build API gateway with rate limiting and routing"
       worktree_group: "microservices"
     - task_number: 7
+      type: component
       name: "Authentication Service"
       files: ["services/auth/main.go"]
       depends_on: [3, 4]
@@ -29,6 +31,7 @@ plan:
       description: "Implement authentication microservice"
       worktree_group: "microservices"
     - task_number: 8
+      type: component
       name: "User Service"
       files: ["services/user/main.go"]
       depends_on: [7, 3]
@@ -36,6 +39,7 @@ plan:
       description: "Build user management microservice"
       worktree_group: "microservices"
     - task_number: 9
+      type: component
       name: "Product Service"
       files: ["services/product/main.go"]
       depends_on: [3, 4]
@@ -43,6 +47,7 @@ plan:
       description: "Implement product catalog microservice"
       worktree_group: "microservices"
     - task_number: 10
+      type: component
       name: "Order Service"
       files: ["services/order/main.go"]
       depends_on: [8, 9, 5]

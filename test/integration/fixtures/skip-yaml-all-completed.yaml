@@ -8,6 +8,7 @@ plan:
     estimated_tasks: 3
   tasks:
     - task_number: 1
+      type: component
       name: "Completed Task 1"
       prompt: "This task is completed"
       files: ["file1.go"]
@@ -16,6 +17,7 @@ plan:
       status: "completed"
       completed_at: "2025-11-11T10:00:00Z"
     - task_number: 2
+      type: component
       name: "Completed Task 2"
       prompt: "This task is also completed"
       files: ["file2.go"]
@@ -24,6 +26,7 @@ plan:
       status: "completed"
       completed_at: "2025-11-11T10:05:00Z"
     - task_number: 3
+      type: component
       name: "Completed Task 3"
       prompt: "And this one too"
       files: ["file3.go"]

@@ -9,6 +9,7 @@ conductor:
 plan:
   tasks:
     - task_number: 1
+      type: component
       name: "Task One"
       files: ["file1.go"]
       depends_on: []
@@ -16,6 +17,7 @@ plan:
       description: "Task without group assignment"
       # Missing worktree_group assignment!
     - task_number: 2
+      type: component
       name: "Task Two"
       files: ["file2.go"]
       depends_on: [1]

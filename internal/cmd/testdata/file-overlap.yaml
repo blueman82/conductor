@@ -3,11 +3,13 @@ plan:
     feature_name: "Plan with File Overlaps"
   tasks:
     - task_number: 1
+      type: component
       name: "Task One"
       files: ["shared.go", "file1.go"]
       depends_on: []
       description: "First task"
     - task_number: 2
+      type: component
       name: "Task Two"
       files: ["shared.go", "file2.go"]
       depends_on: []

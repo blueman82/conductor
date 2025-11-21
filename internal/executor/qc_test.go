@@ -303,7 +303,7 @@ func TestReview(t *testing.T) {
 			},
 			output: "Task completed",
 			mockResult: &agent.InvocationResult{
-				Output:   "Quality Control: GREEN\n\nExcellent work!",
+				Output:   `{"verdict":"GREEN","feedback":"Excellent work!","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 				ExitCode: 0,
 				Duration: 50 * time.Millisecond,
 			},
@@ -320,7 +320,7 @@ func TestReview(t *testing.T) {
 			},
 			output: "Bug fixed",
 			mockResult: &agent.InvocationResult{
-				Output:   "Quality Control: RED\n\nTests still failing",
+				Output:   `{"verdict":"RED","feedback":"Tests still failing","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 				ExitCode: 0,
 				Duration: 75 * time.Millisecond,
 			},
@@ -350,7 +350,7 @@ func TestReview(t *testing.T) {
 			},
 			output: "Feature added",
 			mockResult: &agent.InvocationResult{
-				Output:   "Quality Control: YELLOW\n\nMinor documentation issues",
+				Output:   `{"verdict":"YELLOW","feedback":"Minor documentation issues","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 				ExitCode: 0,
 				Duration: 60 * time.Millisecond,
 			},
@@ -377,6 +377,8 @@ func TestReview(t *testing.T) {
 			}
 
 			qc := NewQualityController(mock)
+			// Disable multi-agent mode for legacy single-agent testing
+			qc.AgentConfig.Mode = ""
 			ctx := context.Background()
 
 			result, err := qc.Review(ctx, tt.task, tt.output)
@@ -437,7 +439,7 @@ func TestReviewWithLearning(t *testing.T) {
 		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
 			capturedPrompt = task.Prompt
 			return &agent.InvocationResult{
-				Output:   "Quality Control: GREEN\n\nLooks good now!",
+				Output:   `{"verdict":"GREEN","feedback":"Looks good now!","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 				ExitCode: 0,
 				Duration: 100 * time.Millisecond,
 			}, nil
@@ -445,6 +447,8 @@ func TestReviewWithLearning(t *testing.T) {
 	}
 
 	qc := NewQualityController(mock)
+	// Disable multi-agent mode for legacy single-agent testing
+	qc.AgentConfig.Mode = ""
 	qc.LearningStore = store
 
 	ctx := context.Background()
@@ -476,7 +480,7 @@ func TestQualityControlFlow(t *testing.T) {
 		mock := &mockInvoker{
 			mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
 				return &agent.InvocationResult{
-					Output:   "Quality Control: GREEN\n\nAll requirements met",
+					Output:   `{"verdict":"GREEN","feedback":"All requirements met","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 					ExitCode: 0,
 					Duration: 100 * time.Millisecond,
 				}, nil
@@ -484,6 +488,8 @@ func TestQualityControlFlow(t *testing.T) {
 		}
 
 		qc := NewQualityController(mock)
+		// Disable multi-agent mode for legacy single-agent testing
+		qc.AgentConfig.Mode = ""
 		task := models.Task{
 			Number: "1",
 			Name:   "Implement feature",
@@ -511,7 +517,7 @@ func TestQualityControlFlow(t *testing.T) {
 		mock := &mockInvoker{
 			mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
 				return &agent.InvocationResult{
-					Output:   "Quality Control: RED\n\nTests failing, needs rework",
+					Output:   `{"verdict":"RED","feedback":"Tests failing, needs rework","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 					ExitCode: 0,
 					Duration: 100 * time.Millisecond,
 				}, nil
@@ -519,6 +525,8 @@ func TestQualityControlFlow(t *testing.T) {
 		}
 
 		qc := NewQualityController(mock)
+		// Disable multi-agent mode for legacy single-agent testing
+		qc.AgentConfig.Mode = ""
 		qc.MaxRetries = 2
 		task := models.Task{
 			Number: "1",
@@ -855,7 +863,7 @@ func TestParseQCJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := parseQCJSON(tt.output)
+			resp, err := parseQCJSON(tt.output) // No criteria expected for legacy tests
 
 			if tt.wantErr {
 				if err == nil {
@@ -2408,4 +2416,183 @@ func contains(s, substr string) bool {
 			}
 			return false
 		}())
+}
+
+// TestInvokeAndParseQCAgent_RetriesOnInvalidJSON tests JSON validation retry logic
+// This test verifies that when a QC agent returns invalid JSON (verdict in metadata),
+// the system retries with a schema reminder and validates the corrected response.
+func TestInvokeAndParseQCAgent_RetriesOnInvalidJSON(t *testing.T) {
+	callCount := 0
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			callCount++
+			if callCount == 1 {
+				// First call: return invalid JSON (verdict in metadata, not at root level)
+				return &agent.InvocationResult{
+					Output:   `{"metadata": {"verdict": "GREEN"}, "feedback": "looks good"}`,
+					Duration: 100 * time.Millisecond,
+				}, nil
+			}
+			// Second call (retry): verify schema reminder in prompt, return valid JSON
+			if !strings.Contains(task.Prompt, "PREVIOUS JSON INVALID") {
+				t.Error("Retry prompt missing schema reminder indicator")
+			}
+			if !strings.Contains(task.Prompt, "verdict must be at root level") {
+				t.Error("Retry prompt missing schema explanation")
+			}
+			return &agent.InvocationResult{
+				Output:   `{"verdict":"GREEN","feedback":"looks good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := &QualityController{
+		Invoker: mockInv,
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "original prompt",
+	}
+
+	// Test that invokeAndParseQCAgent retries on invalid JSON
+	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
+
+	if err != nil {
+		t.Fatalf("Expected success after retry, got error: %v", err)
+	}
+
+	if callCount != 2 {
+		t.Errorf("Expected 2 invocations (original + retry), got %d", callCount)
+	}
+
+	if resp.Verdict != "GREEN" {
+		t.Errorf("Expected verdict GREEN, got %s", resp.Verdict)
+	}
+
+	if resp.Feedback != "looks good" {
+		t.Errorf("Expected feedback 'looks good', got %q", resp.Feedback)
+	}
+}
+
+// TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON tests maximum retry exhaustion
+// When JSON remains invalid after retry limit, the system should return an error.
+func TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON(t *testing.T) {
+	callCount := 0
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			callCount++
+			// Always return invalid JSON (never fixes the schema)
+			return &agent.InvocationResult{
+				Output:   `{"metadata": {"verdict": "GREEN"}}`,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := &QualityController{
+		Invoker: mockInv,
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "original prompt",
+	}
+
+	// Test that invokeAndParseQCAgent fails after exhausting retries
+	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
+
+	if err == nil {
+		t.Error("Expected error on persistent invalid JSON, got nil")
+	}
+
+	if callCount == 0 {
+		t.Error("Expected at least one invocation attempt")
+	}
+
+	if resp != nil {
+		t.Error("Expected nil response on error, got non-nil response")
+	}
+}
+
+// TestInvokeAndParseQCAgent_SucceedsWithValidJSONFirstAttempt tests happy path
+// When JSON is valid on first attempt, no retry occurs.
+func TestInvokeAndParseQCAgent_SucceedsWithValidJSONFirstAttempt(t *testing.T) {
+	callCount := 0
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			callCount++
+			// Return valid JSON immediately
+			return &agent.InvocationResult{
+				Output: `{"verdict":"GREEN","feedback":"excellent work","issues":[],"recommendations":["add tests"],"should_retry":false,"suggested_agent":""}`,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := &QualityController{
+		Invoker: mockInv,
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "original prompt",
+	}
+
+	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
+
+	if err != nil {
+		t.Fatalf("Expected success on valid JSON, got error: %v", err)
+	}
+
+	if callCount != 1 {
+		t.Errorf("Expected 1 invocation (no retry), got %d", callCount)
+	}
+
+	if resp.Verdict != "GREEN" {
+		t.Errorf("Expected verdict GREEN, got %s", resp.Verdict)
+	}
+
+	if resp.Feedback != "excellent work" {
+		t.Errorf("Expected feedback 'excellent work', got %q", resp.Feedback)
+	}
+
+	if len(resp.Recommendations) != 1 || resp.Recommendations[0] != "add tests" {
+		t.Errorf("Expected recommendation 'add tests', got %v", resp.Recommendations)
+	}
+}
+
+// TestInvokeAndParseQCAgent_HandlesContextCancellation tests cancellation handling
+// When context is cancelled during invocation, the system should propagate the error.
+func TestInvokeAndParseQCAgent_HandlesContextCancellation(t *testing.T) {
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			// Simulate context cancellation
+			return nil, context.Canceled
+		},
+	}
+
+	qc := &QualityController{
+		Invoker: mockInv,
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "original prompt",
+	}
+
+	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
+
+	if err == nil {
+		t.Error("Expected error on context cancellation, got nil")
+	}
+
+	if resp != nil {
+		t.Error("Expected nil response on context cancellation, got non-nil response")
+	}
 }

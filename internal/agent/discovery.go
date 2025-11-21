@@ -14,8 +14,8 @@ import (
 type Agent struct {
 	Name        string   `yaml:"name" json:"name"`
 	Description string   `yaml:"description" json:"description"`
-	Tools       ToolList `yaml:"tools" json:"tools"`
-	FilePath    string   `yaml:"-" json:"-"` // Not parsed from YAML, not included in JSON
+	Tools       ToolList `yaml:"tools" json:"tools,omitempty"` // Omit if empty = all tools available
+	FilePath    string   `yaml:"-" json:"-"`                   // Not parsed from YAML, not included in JSON
 }
 
 // ToolList is a custom type that handles both comma-separated strings

@@ -20,6 +20,7 @@ plan:
     retry_on_red: 2
   tasks:
     - task_number: 5
+      type: component
       name: "Product Service Implementation"
       files: ["internal/service/product.go", "internal/repository/product.go"]
       depends_on: [2]
@@ -27,6 +28,7 @@ plan:
       description: "Implement product CRUD operations independently from user service"
       worktree_group: "build-chain-b"
     - task_number: 6
+      type: component
       name: "Order Service Implementation"
       files: ["internal/service/order.go", "internal/repository/order.go"]
       depends_on: [2, 5]
@@ -34,6 +36,7 @@ plan:
       description: "Implement order management that combines user and product services"
       worktree_group: "build-chain-b"
     - task_number: 7
+      type: component
       name: "Integration Tests"
       files: ["tests/integration_test.go"]
       depends_on: [4, 6]
@@ -41,6 +44,7 @@ plan:
       description: "Write comprehensive integration tests for all services"
       worktree_group: "testing"
     - task_number: 8
+      type: component
       name: "Performance Testing"
       files: ["tests/performance_test.go", "tests/load_test.go"]
       depends_on: [7]

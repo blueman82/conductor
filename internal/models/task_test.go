@@ -79,3 +79,51 @@ func TestTask_Validate_RequiresPrompt(t *testing.T) {
 		t.Error("expected error for missing prompt")
 	}
 }
+
+func TestTask_IsIntegration(t *testing.T) {
+	tests := []struct {
+		name     string
+		taskName string
+		expected bool
+	}{
+		{
+			name:     "lowercase integration",
+			taskName: "Add integration tests",
+			expected: true,
+		},
+		{
+			name:     "uppercase INTEGRATION",
+			taskName: "Add INTEGRATION tests",
+			expected: true,
+		},
+		{
+			name:     "mixed case Integration",
+			taskName: "Add Integration tests",
+			expected: true,
+		},
+		{
+			name:     "no integration keyword",
+			taskName: "Add unit tests",
+			expected: false,
+		},
+		{
+			name:     "empty name",
+			taskName: "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := Task{
+				Number: "1",
+				Name:   tt.taskName,
+				Prompt: "test prompt",
+			}
+			result := task.IsIntegration()
+			if result != tt.expected {
+				t.Errorf("IsIntegration() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}

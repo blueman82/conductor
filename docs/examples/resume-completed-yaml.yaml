@@ -12,6 +12,7 @@ plan:
   tasks:
     # Task 1: Already completed in a previous run
     - id: 1
+      type: component
       name: Database Schema
       files: [migrations/001_users.sql]
       estimated_time: 10 minutes
@@ -23,6 +24,7 @@ plan:
 
     # Task 2: Also completed
     - id: 2
+      type: component
       name: User Model
       files: [models/user.go]
       depends_on: [Task 1]
@@ -35,6 +37,7 @@ plan:
 
     # Task 3: Pending - will execute
     - id: 3
+      type: component
       name: Authentication Service
       files: [services/auth.go]
       depends_on: [Task 2]
@@ -46,6 +49,7 @@ plan:
 
     # Task 4: Pending - depends on Task 3
     - id: 4
+      type: component
       name: API Endpoints
       files: [handlers/auth_handler.go]
       depends_on: [Task 3]
@@ -57,6 +61,7 @@ plan:
 
     # Task 5: Pending - depends on Task 4
     - id: 5
+      type: component
       name: Integration Tests
       files: [tests/auth_integration_test.go]
       depends_on: [Task 4]

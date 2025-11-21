@@ -9,12 +9,14 @@ plan:
     estimated_tasks: 2
   tasks:
     - task_number: 1
+      type: component
       name: "First YAML Task"
       prompt: "This is the first task in YAML format"
       files: ["config.yaml"]
       depends_on: []
       estimated_time: "10m"
     - task_number: 2
+      type: component
       name: "Second YAML Task"
       prompt: "This is the second task, depends on first"
       files: ["output.yaml"]

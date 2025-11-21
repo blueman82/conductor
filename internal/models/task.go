@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -22,8 +23,10 @@ type Task struct {
 	Metadata      map[string]interface{} // Additional metadata for hooks and extensions
 
 	// Structured verification (v2.3+)
-	SuccessCriteria []string `yaml:"success_criteria,omitempty" json:"success_criteria,omitempty"`
-	TestCommands    []string `yaml:"test_commands,omitempty" json:"test_commands,omitempty"`
+	SuccessCriteria     []string `yaml:"success_criteria,omitempty" json:"success_criteria,omitempty"`
+	TestCommands        []string `yaml:"test_commands,omitempty" json:"test_commands,omitempty"`
+	Type                string   `yaml:"type,omitempty" json:"type,omitempty"`                               // Task type: regular or integration
+	IntegrationCriteria []string `yaml:"integration_criteria,omitempty" json:"integration_criteria,omitempty"` // Criteria for integration tasks
 
 	// Execution metadata for enhanced console output
 	ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`
@@ -93,6 +96,11 @@ func (t *Task) TotalFileOperations() int {
 // GetFormattedDuration returns the ExecutionDuration in human-readable format
 func (t *Task) GetFormattedDuration() string {
 	return t.ExecutionDuration.String()
+}
+
+// IsIntegration returns true if the task name contains "integration" (case-insensitive)
+func (t *Task) IsIntegration() bool {
+	return strings.Contains(strings.ToLower(t.Name), "integration")
 }
 
 // HasCyclicDependencies detects circular dependencies in a list of tasks

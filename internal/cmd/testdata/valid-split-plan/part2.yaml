@@ -9,6 +9,7 @@ conductor:
 plan:
   tasks:
     - task_number: 3
+      type: component
       name: "Testing Phase"
       files: ["tests.go"]
       depends_on: [2]
@@ -16,6 +17,7 @@ plan:
       description: "Run tests for deployed services"
       worktree_group: "group-b"
     - task_number: 4
+      type: component
       name: "Documentation"
       files: ["docs.md"]
       depends_on: [3]

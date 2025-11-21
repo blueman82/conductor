@@ -338,47 +338,35 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 		Agent:  qc.ReviewAgent,
 	}
 
-	// Invoke the QC agent
-	result, err := qc.Invoker.Invoke(ctx, reviewTask)
-	if err != nil {
-		return nil, fmt.Errorf("QC review failed: %w", err)
+	// Invoke the QC agent and parse response with automatic retry on JSON validation failure
+	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, qc.ReviewAgent)
+	if jsonErr != nil {
+		// Invocation failed (not just JSON parsing)
+		return nil, fmt.Errorf("QC review failed: %w", jsonErr)
 	}
 
-	// Try parsing as JSON first
-	qcResp, jsonErr := parseQCJSON(result.Output)
-	if jsonErr == nil {
-		// Success: use JSON response
-		reviewResult := &ReviewResult{
-			Flag:            qcResp.Verdict,
-			Feedback:        qcResp.Feedback,
-			SuggestedAgent:  qcResp.SuggestedAgent,
-			AgentName:       qc.ReviewAgent,
-			CriteriaResults: qcResp.CriteriaResults,
-		}
-
-		// Apply criteria aggregation if task has success criteria
-		if len(task.SuccessCriteria) > 0 {
-			if len(qcResp.CriteriaResults) == 0 {
-				// Agent didn't follow schema - treat as YELLOW (AI Counsel consensus)
-				reviewResult.Flag = models.StatusYellow
-				reviewResult.Feedback += " (Warning: Agent did not return criteria_results)"
-			} else {
-				// Override verdict based on criteria aggregation
-				reviewResult.Flag = qc.aggregateCriteriaResults(qcResp, task)
-			}
-		}
-
-		return reviewResult, nil
+	// Success: use JSON response
+	reviewResult := &ReviewResult{
+		Flag:            qcResp.Verdict,
+		Feedback:        qcResp.Feedback,
+		SuggestedAgent:  qcResp.SuggestedAgent,
+		AgentName:       qc.ReviewAgent,
+		CriteriaResults: qcResp.CriteriaResults,
 	}
 
-	// Fallback: use legacy parsing
-	flag, feedback := ParseReviewResponse(result.Output)
+	// Apply criteria aggregation if task has success criteria
+	if len(task.SuccessCriteria) > 0 {
+		if len(qcResp.CriteriaResults) == 0 {
+			// Agent didn't follow schema - treat as YELLOW (AI Counsel consensus)
+			reviewResult.Flag = models.StatusYellow
+			reviewResult.Feedback += " (Warning: Agent did not return criteria_results)"
+		} else {
+			// Override verdict based on criteria aggregation
+			reviewResult.Flag = qc.aggregateCriteriaResults(qcResp, task)
+		}
+	}
 
-	return &ReviewResult{
-		Flag:      flag,
-		Feedback:  feedback,
-		AgentName: qc.ReviewAgent,
-	}, nil
+	return reviewResult, nil
 }
 
 // shouldUseMultiAgent determines if multi-agent QC should be used
@@ -516,27 +504,18 @@ func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.
 		Agent:  agentName,
 	}
 
-	result, err := qc.Invoker.Invoke(ctx, reviewTask)
-	if err != nil {
-		return nil, fmt.Errorf("QC review failed: %w", err)
+	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, agentName)
+	if jsonErr != nil {
+		// Invocation or JSON parsing failed - return error
+		return nil, fmt.Errorf("QC review failed: %w", jsonErr)
 	}
 
-	qcResp, jsonErr := parseQCJSON(result.Output)
-	if jsonErr == nil {
-		return &ReviewResult{
-			Flag:            qcResp.Verdict,
-			Feedback:        qcResp.Feedback,
-			SuggestedAgent:  qcResp.SuggestedAgent,
-			AgentName:       agentName,
-			CriteriaResults: qcResp.CriteriaResults,
-		}, nil
-	}
-
-	flag, feedback := ParseReviewResponse(result.Output)
 	return &ReviewResult{
-		Flag:      flag,
-		Feedback:  feedback,
-		AgentName: agentName,
+		Flag:            qcResp.Verdict,
+		Feedback:        qcResp.Feedback,
+		SuggestedAgent:  qcResp.SuggestedAgent,
+		AgentName:       agentName,
+		CriteriaResults: qcResp.CriteriaResults,
 	}, nil
 }
 
@@ -569,44 +548,31 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 				Agent:  agent,
 			}
 
-			// Invoke the agent
-			result, err := qc.Invoker.Invoke(ctx, reviewTask)
-			if err != nil {
+			// Invoke agent and parse response
+			qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, agent)
+			if jsonErr != nil {
 				mu.Lock()
 				results[idx] = &ReviewResult{
 					Flag:      "",
-					Feedback:  fmt.Sprintf("Agent %s failed: %v", agent, err),
+					Feedback:  fmt.Sprintf("Agent %s failed: %v", agent, jsonErr),
 					AgentName: agent,
 				}
 				mu.Unlock()
 				return
 			}
 
-			// Parse response
+			// Parse successful
 			var reviewResult *ReviewResult
-			qcResp, jsonErr := parseQCJSON(result.Output)
-			if jsonErr == nil {
-				reviewResult = &ReviewResult{
-					Flag:            qcResp.Verdict,
-					Feedback:        qcResp.Feedback,
-					SuggestedAgent:  qcResp.SuggestedAgent,
-					AgentName:       agent,
-					CriteriaResults: qcResp.CriteriaResults,
-				}
-				// Log criteria results if available
-				if qc.Logger != nil && len(qcResp.CriteriaResults) > 0 {
-					qc.Logger.LogQCCriteriaResults(agent, qcResp.CriteriaResults)
-				}
-			} else {
-				// DEBUG: Log parse failure
-				fmt.Printf("[DEBUG] %s JSON parse error: %v\n", agent, jsonErr)
-				fmt.Printf("[DEBUG] %s output: %s\n", agent, result.Output)
-				flag, feedback := ParseReviewResponse(result.Output)
-				reviewResult = &ReviewResult{
-					Flag:      flag,
-					Feedback:  feedback,
-					AgentName: agent,
-				}
+			reviewResult = &ReviewResult{
+				Flag:            qcResp.Verdict,
+				Feedback:        qcResp.Feedback,
+				SuggestedAgent:  qcResp.SuggestedAgent,
+				AgentName:       agent,
+				CriteriaResults: qcResp.CriteriaResults,
+			}
+			// Log criteria results if available
+			if qc.Logger != nil && len(qcResp.CriteriaResults) > 0 {
+				qc.Logger.LogQCCriteriaResults(agent, qcResp.CriteriaResults)
 			}
 
 			mu.Lock()
@@ -759,6 +725,53 @@ func extractJSONFromCodeFence(content string) string {
 	}
 
 	return content
+}
+
+// invokeAndParseQCAgent invokes a QC agent and parses the response, with automatic retry on JSON validation failure.
+// This method implements a robust JSON validation retry mechanism:
+// 1. First invocation attempts JSON parsing
+// 2. If parsing fails, retries with a schema reminder injected into the prompt
+// 3. Returns parsed response on success, error on persistent failure
+func (qc *QualityController) invokeAndParseQCAgent(ctx context.Context, task models.Task, agentName string) (*models.QCResponse, error) {
+	// First attempt: invoke agent and parse response
+	result, err := qc.Invoker.Invoke(ctx, task)
+	if err != nil {
+		return nil, fmt.Errorf("QC review failed: %w", err)
+	}
+
+	// Try to parse JSON response
+	qcResp, parseErr := parseQCJSON(result.Output)
+	if parseErr == nil {
+		return qcResp, nil // Success on first try
+	}
+
+	// JSON parsing failed - prepare retry with schema reminder
+	retryTask := task
+	retryTask.Prompt = task.Prompt + fmt.Sprintf(`
+
+PREVIOUS JSON INVALID
+
+Your previous response had invalid JSON.
+Error: %s
+
+You MUST respond with this exact JSON schema (verdict must be at root level, NOT nested):
+{
+  "verdict": "GREEN|RED|YELLOW",
+  "feedback": "detailed review feedback",
+  "issues": [{"severity": "critical|warning|info", "description": "...", "location": "..."}],
+  "recommendations": ["suggestion"],
+  "should_retry": false,
+  "suggested_agent": "agent-name"
+}`, parseErr.Error())
+
+	// Retry invocation
+	retryResult, err := qc.Invoker.Invoke(ctx, retryTask)
+	if err != nil {
+		return nil, fmt.Errorf("QC review retry failed: %w", err)
+	}
+
+	// Parse retry response - return error if still invalid
+	return parseQCJSON(retryResult.Output)
 }
 
 // aggregateCriteriaResults combines per-criterion verdicts using unanimous consensus.

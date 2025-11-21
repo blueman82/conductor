@@ -503,15 +503,15 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		loggers: []executor.Logger{consoleLog, fileLog},
 	}
 
-	// Create invoker for Claude CLI calls
-	invoker := agent.NewInvoker()
-
-	// Create agent registry for QC agent auto-selection
+	// Create agent registry for agent discovery
 	agentRegistry := agent.NewRegistry("")
 	if _, err := agentRegistry.Discover(); err != nil {
 		// Log warning but don't fail - auto-selection will still work with fallback
 		fmt.Fprintf(cmd.OutOrStderr(), "Warning: agent discovery failed, QC auto-selection may be limited: %v\n", err)
 	}
+
+	// Create invoker for Claude CLI calls WITH registry
+	invoker := agent.NewInvokerWithRegistry(agentRegistry)
 
 	// Create quality controller with learning integration
 	qc := executor.NewQualityController(invoker)

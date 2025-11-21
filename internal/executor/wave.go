@@ -58,6 +58,11 @@ func (w *WaveExecutor) ExecutePlan(ctx context.Context, plan *models.Plan) ([]mo
 		return nil, fmt.Errorf("task executor is required")
 	}
 
+	// Wire plan reference into task executor for integration prompt builder
+	if te, ok := w.taskExecutor.(*DefaultTaskExecutor); ok {
+		te.Plan = plan
+	}
+
 	taskMap := make(map[string]models.Task, len(plan.Tasks))
 	for _, task := range plan.Tasks {
 		taskMap[task.Number] = task

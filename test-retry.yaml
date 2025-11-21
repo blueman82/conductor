@@ -1,0 +1,34 @@
+plan:
+  title: "Test JSON Retry Mechanism"
+  quality_control:
+    enabled: true
+    agents:
+      mode: explicit
+      explicit: ["test-invalid-json-agent"]
+  tasks:
+    - task_number: 1
+      type: regular
+      name: "Simple test task"
+      agent: "golang-pro"
+      files: ["test_output.txt"]
+      description: |
+        Create a simple test file to trigger QC review with invalid JSON agent.
+      success_criteria:
+        - "test_output.txt created"
+        - "File contains 'test' text"
+      status: "in-progress"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":10574,"duration_api_ms":23016,"num_turns":2,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Created test file test-simple.txt\",\n  \"output\": \"File created at /Users/harrison/Github/conductor/test-simple.txt with test content for QC review validation\",\n  \"errors\": [],\n  \"files_modified\": [\"test-simple.txt\"],\n  \"metadata\": {\n    \"file_path\": \"/Users/harrison/Github/conductor/test-simple.txt\",\n    \"purpose\": \"QC review trigger validation\"\n  }\n}\n```","session_id":"adb32887-4886-48ca-8473-f9fb1c1e7dc0","total_cost_usd":0.22063130000000003,"usage":{"input_tokens":9,"cache_creation_input_tokens":41343,"cache_read_input_tokens":41216,"output_tokens":227,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":41343}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":3,"outputTokens":294,"cacheReadInputTokens":0,"cacheCreationInputTokens":8971,"webSearchRequests":0,"costUSD":0.01268675,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":12,"outputTokens":455,"cacheReadInputTokens":41216,"cacheCreationInputTokens":50325,"webSearchRequests":0,"costUSD":0.20794455,"contextWindow":200000}},"permission_denials":[],"uuid":"50d2fe35-a17b-4a09-a472-9bccf4854a92"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-21T15:42:33Z"
+        - attempt_number: "2"
+          agent: golang-pro
+          verdict: RED
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":10399,"duration_api_ms":14317,"num_turns":2,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Created simple test Go file\",\n  \"output\": \"Created test_simple.go with basic main function that prints a message\",\n  \"errors\": [],\n  \"files_modified\": [\"test_simple.go\"],\n  \"metadata\": {}\n}\n```","session_id":"f69aa32a-ec00-4166-9290-dd47ee8b912b","total_cost_usd":0.058149049999999994,"usage":{"input_tokens":9,"cache_creation_input_tokens":8181,"cache_read_input_tokens":74408,"output_tokens":190,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":8181}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":3,"outputTokens":274,"cacheReadInputTokens":8979,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0022708999999999997,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":9,"outputTokens":190,"cacheReadInputTokens":74408,"cacheCreationInputTokens":8181,"webSearchRequests":0,"costUSD":0.055878149999999994,"contextWindow":200000}},"permission_denials":[],"uuid":"8244f743-78af-4117-adce-c4bf2e101c7e"}
+          qc_feedback: Multi-agent criteria consensus
+          timestamp: "2025-11-21T15:42:57Z"

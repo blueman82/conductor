@@ -2,6 +2,7 @@ plan:
   name: Structured Success Criteria Demo
   tasks:
     - task_number: 1
+      type: component
       name: "Implement data layer"
       files: ["data/storage.go"]
       success_criteria:
@@ -12,6 +13,7 @@ plan:
       test_commands:
         - "go test ./internal/data/..."
     - task_number: 2
+      type: component
       name: "Wire API"
       files: ["api/server.go"]
       depends_on: ["1"]

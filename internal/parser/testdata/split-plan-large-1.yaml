@@ -15,6 +15,7 @@ plan:
     retry_on_red: 2
   tasks:
     - task_number: 1
+      type: component
       name: "Core Platform Setup"
       files: ["infrastructure/main.tf"]
       depends_on: []
@@ -22,6 +23,7 @@ plan:
       description: "Initialize core infrastructure"
       worktree_group: "infrastructure"
     - task_number: 2
+      type: component
       name: "Networking Layer"
       files: ["infrastructure/network.tf"]
       depends_on: [1]

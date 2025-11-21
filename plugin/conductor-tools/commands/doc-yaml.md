@@ -132,7 +132,189 @@ After breaking down the feature into tasks, analyze task dependencies to determi
 
 This analysis produces the `worktree_groups` section in the YAML output, enabling engineers to work on multiple task groups in parallel while respecting dependencies.
 
-## Phase 1D: Streaming Generation Strategy
+## Phase 1D: Integration Task Generation
+
+**CRITICAL: Detect Integration Points**
+
+When generating implementation plans, you MUST detect integration points and generate explicit integration tasks to wire components together. Conductor automatically enhances integration task prompts with dependency file context to help agents understand implementation requirements.
+
+### When to Generate Integration Tasks
+
+Integration tasks are explicit, focused tasks that wire together previously completed components. Generate them when:
+
+1. **Multi-component plans** (3+ independent modules/features)
+   - Auth system connects to API router
+   - Database client integrates with service layer
+   - Cache wrapper integrates with data access layer
+   - Multiple microservices need coordination
+
+2. **After component boundaries are clear**
+   - All component tasks in one group are defined
+   - Component interfaces and APIs are specified
+   - Integration points are documented
+
+3. **Between dependent worktree groups**
+   - Group 1: Component A implementation
+   - Group 2: Component B implementation
+   - **Integration task**: Wire A to B (depends on both groups)
+
+4. **For cross-cutting concerns**
+   - Security: Wire authentication to all endpoints
+   - Logging: Inject logging into existing components
+   - Monitoring: Add instrumentation to service layer
+
+### When NOT to Generate Integration Tasks
+
+- Single-component tasks (simple feature within one module)
+- Tasks that are inherently part of component implementation
+- Greenfield projects with sequential feature-based tasks
+- When wiring is explicitly included in component task descriptions
+
+### Integration Task Structure
+
+Integration tasks include special metadata that Conductor uses to enhance prompts with dependency context:
+
+```yaml
+- task_number: 5
+  name: "Wire auth module to router"
+  type: integration  # REQUIRED - marks this as integration task
+  agent: "fullstack-developer"
+  files:
+    - internal/auth/jwt.go
+    - internal/api/router.go
+    - cmd/main.go
+  depends_on: [1, 2, 3, 4]  # Dependencies - all components being wired
+  estimated_time: "45m"
+
+  # Integration criteria instead of success_criteria
+  integration_criteria:
+    - "Router imports internal/auth package"
+    - "auth.Middleware() registered in router.Use()"
+    - "main.go initializes auth before router"
+    - "Integration test passes"
+
+  description: |
+    Wire the JWT auth module to the API router.
+
+    This task takes the completed auth module and connects it
+    to the API router, ensuring all authentication middleware
+    is properly integrated before route handling.
+
+    ## What You Need to Know Before Starting
+
+    You have access to completed components:
+    - Task 1: JWT auth implementation (internal/auth/jwt.go)
+    - Task 2: API router setup (internal/api/router.go)
+    - Task 3: Server bootstrap (cmd/main.go)
+
+    ## Integration Steps
+    1. Read completed auth module interfaces
+    2. Read router initialization patterns
+    3. Import auth package in router.go
+    4. Register middleware in router initialization
+    5. Update main.go initialization order
+    6. Add integration test verifying wired components work together
+```
+
+### Conductor's Automatic Prompt Enhancement
+
+When Conductor executes an integration task (type: "integration" or with dependencies), it automatically enhances the prompt with dependency file context:
+
+**Automatically added to task prompt:**
+```
+# INTEGRATION TASK CONTEXT
+
+Before implementing, you MUST read these dependency files:
+
+## Dependency: Task 1 - JWT Auth Implementation
+**Files to read**:
+- internal/auth/jwt.go
+
+**WHY YOU MUST READ THESE**:
+You need to understand the implementation of JWT Auth Implementation
+to properly integrate it. Read these files to see:
+- Exported functions and their signatures
+- Data structures and types
+- Error handling patterns
+- Integration interfaces
+```
+
+This automatic enhancement ensures agents understand:
+- What components they're integrating
+- Which files contain the implementations
+- Why understanding those files is critical
+- How to discover integration interfaces
+
+**The enhanced prompt is transparent** - agents see the full context including the original task description, so you don't need to repeat dependency details in the description.
+
+### Integration Task Patterns
+
+**Pattern 1: Component Wiring**
+```yaml
+- task_number: 8
+  name: "Wire database layer to repository"
+  type: integration
+  depends_on: [5, 6, 7]  # DB client, transaction manager, connection pool
+  files: [internal/repository/user.go, internal/db/connection.go]
+  description: |
+    Connect the database client to the repository layer,
+    ensuring transactions and connection pooling are properly integrated.
+```
+
+**Pattern 2: Security Integration**
+```yaml
+- task_number: 12
+  name: "Integrate auth middleware into API handlers"
+  type: integration
+  depends_on: [1, 3, 7, 9, 11]  # Auth, router, handlers
+  files: [internal/api/middleware.go, internal/api/handlers.go]
+  description: |
+    Add authentication middleware to all protected API endpoints,
+    ensuring proper token validation and authorization checks.
+```
+
+**Pattern 3: Multi-Service Coordination**
+```yaml
+- task_number: 20
+  name: "Configure service mesh and inter-service communication"
+  type: integration
+  depends_on: [14, 15, 16, 17, 18, 19]  # All microservices
+  files: [config/service-mesh.yaml, internal/discovery/resolver.go]
+  description: |
+    Set up service discovery and configure inter-service communication,
+    enabling all microservices to locate and communicate with each other.
+```
+
+### Decision Tree: Should This Be an Integration Task?
+
+```
+Is this task wiring multiple components together?
+├─ NO (single module, feature, or implementation)
+│  └─ Use regular task
+└─ YES (connecting multiple previously-completed components)
+   ├─ Does the task require understanding completed implementations?
+   │  └─ YES → Integration task (Conductor adds context automatically)
+   └─ Is it truly independent work (no dependencies)?
+      └─ YES → Regular task
+      └─ NO (has dependencies) → Integration task
+```
+
+### Integration vs Regular Tasks: Quick Reference
+
+| Aspect | Regular Task | Integration Task |
+|--------|--------------|------------------|
+| **Scope** | Implement one feature/module | Wire multiple features together |
+| **Dependencies** | May have 0-2 | Typically 3+ |
+| **Type field** | (not set) | "integration" |
+| **Criteria field** | success_criteria | integration_criteria |
+| **Prompt enhancement** | None | Automatic (Conductor adds dependency context) |
+| **Agent capability** | Feature-focused | Full-stack/architecture-aware preferred |
+| **File focus** | New files mostly | Mix of new + existing files |
+| **Example** | "Implement JWT auth" | "Wire auth module to router" |
+
+**IMPORTANT:** If you lack sufficient context to identify integration points, ASK THE USER for clarification before proceeding. Do not guess integration task boundaries.
+
+## Phase 1E: Streaming Generation Strategy
 
 **CRITICAL: You will generate this YAML plan INCREMENTALLY, not all at once.**
 
