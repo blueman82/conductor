@@ -1,2 +1,0 @@
-Test file for QC review trigger.
-Simple content to validate JSON agent response.
