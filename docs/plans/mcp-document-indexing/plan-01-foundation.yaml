@@ -1,0 +1,1002 @@
+plan:
+  # Metadata about the implementation plan
+  metadata:
+    project: "MCP Document Indexing"
+    phase: "Foundation"
+    phase_number: 1
+    created: "2025-11-22"
+    target_python: "3.14"
+    package_manager: "uv"
+    worktree_group: "chain-1"
+    estimated_tasks: 6
+
+  # Context for the engineer implementing this
+  context:
+    overview: |
+      Foundation phase establishing core infrastructure for MCP document indexing system.
+      Implements token counting, document chunking, embedding generation, vector storage,
+      and content deduplication. All components tested with TDD approach using pytest.
+
+    key_architectural_principles:
+      - "Test-first development (TDD) for all implementations"
+      - "Google-style docstrings with type hints"
+      - "Mypy strict mode type checking"
+      - "Black code formatting (88 char line length)"
+      - "Comprehensive error handling and retry logic"
+      - "Zero external API calls in unit tests (mocking)"
+
+    framework: "Python 3.14+"
+    test_framework: "pytest"
+    code_quality_tools:
+      - "mypy (strict mode)"
+      - "black (88 char line length)"
+      - "ruff (linting)"
+
+    expectations:
+      - "Write tests BEFORE implementation (TDD)"
+      - "Commit frequently (after each completed task)"
+      - "Keep changes minimal (YAGNI - You Aren't Gonna Need It)"
+      - "Handle edge cases comprehensively"
+      - "100% code coverage for foundation phase"
+
+  # Detailed task breakdown
+  tasks:
+    - task_number: 1
+      name: "Project Setup and Configuration"
+      agent: "python-pro"
+      files:
+        - "pyproject.toml"
+        - "src/claude_graph/config.py"
+        - "tests/conftest.py"
+        - "src/claude_graph/__init__.py"
+        - "tests/test_project_setup.py"
+        - "tests/test_config.py"
+      depends_on: []
+      estimated_time: "2h"
+
+      description: |
+        Initialize Python project structure with pyproject.toml, configuration management,
+        and development environment setup. Establish foundation for all subsequent tasks.
+
+      priority: "critical"
+      worktree_group: "chain-1"
+
+      deliverables:
+        - "pyproject.toml with all dependencies"
+        - "src/claude_graph/config.py configuration module"
+        - "Development environment documentation"
+        - "Initial .gitignore configuration"
+
+      blocks: [2, 3, 4, 5, 6]
+
+      subtasks:
+        - name: "Create pyproject.toml"
+          description: |
+            Configure project metadata, dependencies, and development tools.
+
+            Dependencies:
+            - Core: Python 3.14+, uv (package manager)
+            - LLM/ML: ollama (embedding service), chromadb (vector DB)
+            - Utilities: pydantic (config), python-dotenv (env vars)
+            - Dev: pytest, pytest-cov (testing), mypy (type checking)
+            - Code Quality: black, ruff (linting)
+
+            Configuration:
+            - Build backend: hatch
+            - Python version: >=3.14
+            - Entry point for MCP server
+
+          test_spec:
+            file: "tests/test_project_setup.py"
+            tests:
+              - "test_pyproject_toml_exists"
+              - "test_all_dependencies_listed"
+              - "test_python_version_constraint"
+              - "test_entry_points_configured"
+
+          implementation_file: "pyproject.toml"
+          test_file: "tests/test_project_setup.py"
+
+        - name: "Create config.py module"
+          description: |
+            Implement configuration management using Pydantic BaseModel.
+
+            Configuration classes:
+            - AppConfig: Main application configuration
+              - debug: bool = False
+              - log_level: str = "INFO"
+              - data_dir: Path (from env or default ~/.claude_graph)
+              - db_path: Path (resolved from data_dir)
+
+            - OllamaConfig: Embedding service configuration
+              - base_url: str = "http://localhost:11434"
+              - model_name: str = "mxbai-embed-large"
+              - timeout_seconds: int = 30
+              - max_retries: int = 3
+              - retry_delay_ms: int = 100
+
+            - ChromaDBConfig: Vector storage configuration
+              - persist_directory: Path
+              - collection_name: str = "documents"
+              - embedding_dimension: int = 384 (mxbai-embed-large)
+
+            Features:
+            - Load from environment variables with defaults
+            - Validate paths exist or create them
+            - Support for .env file via python-dotenv
+            - Logging configuration
+
+          test_spec:
+            file: "tests/test_config.py"
+            tests:
+              - "test_app_config_defaults"
+              - "test_app_config_from_env"
+              - "test_ollama_config_defaults"
+              - "test_ollama_config_override"
+              - "test_chromadb_config_paths"
+              - "test_config_path_creation"
+              - "test_invalid_config_raises"
+
+          implementation_file: "src/claude_graph/config.py"
+          test_file: "tests/test_config.py"
+
+        - name: "Setup testing infrastructure"
+          description: |
+            Configure pytest with fixtures, coverage reporting, and test organization.
+
+            Pytest configuration:
+            - conftest.py with shared fixtures
+            - pytest.ini with test discovery rules
+            - 100% coverage target for foundation phase
+            - Fixtures for temporary directories, mock config
+
+          test_spec:
+            file: "tests/conftest.py"
+            tests:
+              - "test_pytest_configuration"
+              - "test_coverage_threshold_met"
+
+          implementation_file: "tests/conftest.py"
+          test_file: "tests/conftest.py"
+
+        - name: "Initialize source structure"
+          description: |
+            Create package structure and __init__.py files.
+
+            Directory structure:
+            src/claude_graph/
+            - __init__.py
+            - config.py (from subtask 2)
+            - token_counter.py (Task 2)
+            - markdown_chunker.py (Task 3)
+            - ollama_client.py (Task 4)
+            - chromadb_storage.py (Task 5)
+            - document_hash.py (Task 6)
+            - mcp_server.py (Integration)
+
+            tests/
+            - conftest.py
+            - test_project_setup.py
+            - test_config.py
+            - test_token_counter.py
+            - test_markdown_chunker.py
+            - test_ollama_client.py
+            - test_chromadb_storage.py
+            - test_document_hash.py
+
+          test_spec:
+            file: "tests/test_project_setup.py"
+            tests:
+              - "test_source_package_structure"
+              - "test_all_modules_importable"
+
+          implementation_file: "src/claude_graph/__init__.py"
+          test_file: "tests/test_project_setup.py"
+
+      code_quality_checklist:
+        - "pyproject.toml is valid TOML syntax"
+        - "All dependencies have pinned versions"
+        - "Python 3.14+ requirement enforced"
+        - "Type checking enabled in pyproject.toml"
+        - "Code coverage configured to 100% target"
+        - "config.py passes mypy --strict"
+        - "All config classes documented with Google docstrings"
+        - "No hardcoded paths in config"
+        - "Environment variable loading tested"
+        - "pytest discovers and runs all tests"
+
+    - task_number: 2
+      name: "Token Counter Implementation"
+      agent: "python-pro"
+      files:
+        - "src/claude_graph/token_counter.py"
+        - "tests/test_token_counter.py"
+      depends_on: [1]
+      estimated_time: "3h"
+
+      description: |
+        Implement token counting using OpenAI's tiktoken library. Provides accurate
+        token count for text chunks to enforce chunking constraints and cost estimation.
+
+      priority: "critical"
+      worktree_group: "chain-1"
+
+      deliverables:
+        - "src/claude_graph/token_counter.py module"
+        - "Comprehensive test suite with 100% coverage"
+        - "Documentation with usage examples"
+
+      blocks: [3]
+
+      subtasks:
+        - name: "Implement TokenCounter class"
+          description: |
+            Create TokenCounter class for accurate token counting.
+
+            Class: TokenCounter
+            - Attributes:
+              - encoding_name: str = "cl100k_base" (GPT-3.5/4 encoding)
+              - _encoding: tiktoken.Encoding (lazy loaded)
+
+            - Methods:
+              - __init__(encoding_name: str = "cl100k_base") -> None
+                Validates encoding name, lazy loads tiktoken encoding
+
+              - count_tokens(text: str) -> int
+                Returns token count, raises ValueError if text is empty or None
+                Handles edge cases (empty strings, special chars)
+
+              - count_tokens_batch(texts: list[str]) -> list[int]
+                Returns token counts per text, optimized for batch operations
+
+              - estimate_tokens_batch(texts: list[str]) -> int
+                Returns total token count, more efficient than summing
+
+            Google docstrings with:
+            - Type hints in signature
+            - Args section with types and descriptions
+            - Returns section with type and description
+            - Raises section with exception types
+            - Examples section with usage code
+
+          test_spec:
+            file: "tests/test_token_counter.py"
+            tests:
+              - "test_token_counter_initialization"
+              - "test_count_single_token"
+              - "test_count_multiple_tokens"
+              - "test_count_empty_string_raises"
+              - "test_count_none_raises"
+              - "test_count_unicode_text"
+              - "test_count_special_characters"
+              - "test_count_tokens_batch_single"
+              - "test_count_tokens_batch_multiple"
+              - "test_estimate_tokens_batch"
+              - "test_estimate_tokens_accuracy"
+
+          implementation_file: "src/claude_graph/token_counter.py"
+          test_file: "tests/test_token_counter.py"
+
+        - name: "Add TokenCounter constants"
+          description: |
+            Define common token limits and conversion constants.
+
+            Constants:
+            - DEFAULT_ENCODING: str = "cl100k_base"
+            - TOKENS_PER_CHAR_APPROX: float = 0.25 (quick estimate)
+            - COMMON_ENCODINGS: dict with gpt-3.5, gpt-4, gpt-4o encodings
+
+          test_spec:
+            file: "tests/test_token_counter.py"
+            tests:
+              - "test_constants_defined"
+              - "test_default_encoding_value"
+
+          implementation_file: "src/claude_graph/token_counter.py"
+          test_file: "tests/test_token_counter.py"
+
+        - name: "Implement token counting utilities"
+          description: |
+            Add utility functions for common token counting operations.
+
+            Functions:
+            - get_token_counter(encoding: str = "cl100k_base") -> TokenCounter
+              Factory function with caching
+
+            - approximate_token_count(text: str) -> int
+              Quick estimation without loading encoding
+
+          test_spec:
+            file: "tests/test_token_counter.py"
+            tests:
+              - "test_get_token_counter_caching"
+              - "test_approximate_token_count"
+              - "test_approximate_vs_actual_tokens"
+
+          implementation_file: "src/claude_graph/token_counter.py"
+          test_file: "tests/test_token_counter.py"
+
+      code_quality_checklist:
+        - "token_counter.py passes mypy --strict"
+        - "All public methods have Google docstrings"
+        - "100% test coverage achieved"
+        - "No external API calls in unit tests (mock tiktoken)"
+        - "All edge cases tested"
+        - "Error messages are descriptive"
+        - "Type hints complete and accurate"
+        - "Black formatting applied (88 char lines)"
+        - "Constants properly defined and typed"
+        - "Docstring examples are executable"
+
+    - task_number: 3
+      name: "Markdown Chunker Implementation"
+      agent: "python-pro"
+      files:
+        - "src/claude_graph/markdown_chunker.py"
+        - "tests/test_markdown_chunker.py"
+      depends_on: [1, 2]
+      estimated_time: "4h"
+
+      description: |
+        Implement markdown document chunking with header-based boundaries,
+        token limit enforcement (512 tokens max), and overlap preservation (50 tokens).
+        Critical for managing document size in embedding pipeline.
+
+      priority: "critical"
+      worktree_group: "chain-1"
+
+      deliverables:
+        - "src/claude_graph/markdown_chunker.py module"
+        - "Comprehensive test suite with 100% coverage"
+        - "Documentation with chunking strategy explanation"
+
+      blocks: [4, 5, 6]
+
+      subtasks:
+        - name: "Implement MarkdownChunk dataclass"
+          description: |
+            Define data structure for individual chunks.
+
+            Class: MarkdownChunk (dataclass)
+            - content: str - The chunk text
+            - chunk_id: int - Sequential ID within document
+            - token_count: int - Token count of content
+            - header_path: list[str] - Hierarchy of headers
+            - start_line: int - Line number in original document
+            - end_line: int - Line number in original document
+            - metadata: dict[str, Any] - Additional metadata
+
+            Methods:
+            - as_dict() -> dict[str, Any] - Convert to dictionary for storage
+
+          test_spec:
+            file: "tests/test_markdown_chunker.py"
+            tests:
+              - "test_chunk_creation"
+              - "test_chunk_as_dict"
+              - "test_chunk_metadata"
+
+          implementation_file: "src/claude_graph/markdown_chunker.py"
+          test_file: "tests/test_markdown_chunker.py"
+
+        - name: "Implement MarkdownChunker class"
+          description: |
+            Implement core markdown chunking logic.
+
+            Class: MarkdownChunker
+            - Attributes:
+              - max_tokens: int = 512 - Maximum tokens per chunk
+              - overlap_tokens: int = 50 - Token overlap between chunks
+              - token_counter: TokenCounter - Token counting instance
+
+            - Methods:
+              - __init__(max_tokens: int = 512, overlap_tokens: int = 50, token_counter: TokenCounter | None = None) -> None
+                Validates constraints, initializes or creates TokenCounter
+
+              - chunk(markdown_text: str) -> list[MarkdownChunk]
+                Returns chunked content, raises ValueError if text invalid
+                Algorithm: Parse headers, split at boundaries, add overlap, track metadata
+
+              - Private methods for header parsing, path tracking, and splitting
+
+          test_spec:
+            file: "tests/test_markdown_chunker.py"
+            tests:
+              - "test_chunker_initialization"
+              - "test_chunker_invalid_token_config"
+              - "test_chunk_simple_markdown"
+              - "test_chunk_with_headers"
+              - "test_chunk_with_multiple_header_levels"
+              - "test_chunk_respects_max_tokens"
+              - "test_chunk_overlap_preserved"
+              - "test_chunk_empty_document_raises"
+              - "test_chunk_header_path_tracking"
+              - "test_chunk_ids_sequential"
+              - "test_chunk_line_numbers_tracked"
+
+          implementation_file: "src/claude_graph/markdown_chunker.py"
+          test_file: "tests/test_markdown_chunker.py"
+
+        - name: "Add chunking edge cases and optimization"
+          description: |
+            Handle edge cases: no headers, long header names, code blocks,
+            nested headers, inline code, YAML frontmatter, special characters.
+            Optimizations: cache header parsing, reuse TokenCounter, lazy token counting.
+
+          test_spec:
+            file: "tests/test_markdown_chunker.py"
+            tests:
+              - "test_chunk_no_headers"
+              - "test_chunk_code_blocks_preserved"
+              - "test_chunk_nested_headers"
+              - "test_chunk_inline_code"
+              - "test_chunk_yaml_frontmatter"
+              - "test_chunk_special_characters"
+              - "test_chunk_very_long_document"
+              - "test_chunk_single_paragraph_too_long"
+
+          implementation_file: "src/claude_graph/markdown_chunker.py"
+          test_file: "tests/test_markdown_chunker.py"
+
+        - name: "Implement chunk merging utility"
+          description: |
+            Add utility for intelligently merging chunks post-generation.
+
+            Function: merge_chunks_by_size(
+              chunks: list[MarkdownChunk],
+              target_tokens: int = 512,
+              overlap_tokens: int = 50
+            ) -> list[MarkdownChunk]
+            Merges adjacent chunks intelligently, preserves hierarchy, recalculates IDs.
+
+          test_spec:
+            file: "tests/test_markdown_chunker.py"
+            tests:
+              - "test_merge_chunks_basic"
+              - "test_merge_chunks_respects_max_tokens"
+              - "test_merge_chunks_preserves_headers"
+              - "test_merge_chunks_single_chunk"
+
+          implementation_file: "src/claude_graph/markdown_chunker.py"
+          test_file: "tests/test_markdown_chunker.py"
+
+      code_quality_checklist:
+        - "markdown_chunker.py passes mypy --strict"
+        - "All public methods have Google docstrings"
+        - "100% test coverage achieved"
+        - "MarkdownChunk dataclass properly defined"
+        - "Header parsing handles all markdown levels"
+        - "Chunking respects max_tokens constraint"
+        - "Overlap is preserved accurately"
+        - "All edge cases tested"
+        - "Black formatting applied"
+        - "No regex patterns except where necessary"
+        - "Token counting is mocked in tests"
+
+    - task_number: 4
+      name: "Ollama Embedding Client"
+      agent: "python-pro"
+      files:
+        - "src/claude_graph/ollama_client.py"
+        - "tests/test_ollama_client.py"
+      depends_on: [1, 2]
+      estimated_time: "4h"
+
+      description: |
+        Implement HTTP client for Ollama embeddings service. Provides interface to
+        mxbai-embed-large model with automatic retry logic, error handling, and
+        connection pooling. Critical for generating document embeddings.
+
+      priority: "critical"
+      worktree_group: "chain-1"
+
+      deliverables:
+        - "src/claude_graph/ollama_client.py module"
+        - "Comprehensive test suite with 100% coverage"
+        - "Documentation with retry strategy explanation"
+
+      blocks: [5, 6]
+
+      subtasks:
+        - name: "Implement OllamaConfig integration"
+          description: |
+            Extend config.py OllamaConfig for client usage.
+            Add as_client() -> OllamaClient factory method.
+
+          test_spec:
+            file: "tests/test_ollama_client.py"
+            tests:
+              - "test_ollama_config_from_config"
+
+          implementation_file: "src/claude_graph/config.py"
+          test_file: "tests/test_ollama_client.py"
+
+        - name: "Implement EmbeddingResponse dataclass"
+          description: |
+            Define response structure from Ollama embeddings endpoint.
+
+            Class: EmbeddingResponse (dataclass)
+            - embedding: list[float] - Vector representation
+            - model: str - Model name
+            - prompt_eval_count: int - Input tokens
+            - eval_count: int - Output tokens
+
+          test_spec:
+            file: "tests/test_ollama_client.py"
+            tests:
+              - "test_embedding_response_creation"
+              - "test_embedding_response_vector_shape"
+
+          implementation_file: "src/claude_graph/ollama_client.py"
+          test_file: "tests/test_ollama_client.py"
+
+        - name: "Implement OllamaClient class"
+          description: |
+            HTTP client for Ollama embeddings API with full async support,
+            retry logic, and error handling.
+
+            Class: OllamaClient
+            - Full context manager support
+            - embed(text: str) -> list[float] single text embedding
+            - embed_batch(texts: list[str], parallel: bool = False) batch embedding
+            - get_embedding_dimension() -> int with caching
+            - Exponential backoff retry: 100ms * (2 ^ attempt)
+            - Max retries: 3, retry delay: 100ms by default
+
+            Error handling:
+            - OllamaConnectionError - Connection failed
+            - OllamaAPIError - API returned error
+            - OllamaTimeoutError - Request timeout
+
+          test_spec:
+            file: "tests/test_ollama_client.py"
+            tests:
+              - "test_ollama_client_initialization"
+              - "test_ollama_client_invalid_url_raises"
+              - "test_embed_single_text_success"
+              - "test_embed_empty_text_raises"
+              - "test_embed_batch_sequential"
+              - "test_embed_batch_order_preserved"
+              - "test_embed_connection_error_retries"
+              - "test_embed_connection_error_max_retries"
+              - "test_embed_timeout_error_retries"
+              - "test_embed_api_error_not_retried"
+              - "test_embed_exponential_backoff"
+              - "test_get_embedding_dimension_caching"
+              - "test_context_manager_cleanup"
+              - "test_embed_batch_parallel_flag"
+
+          implementation_file: "src/claude_graph/ollama_client.py"
+          test_file: "tests/test_ollama_client.py"
+
+        - name: "Add retry and error handling"
+          description: |
+            Implement retry logic and custom exception classes.
+
+            Custom Exceptions:
+            - OllamaError(Exception) - Base exception
+            - OllamaConnectionError(OllamaError) - Connection issues
+            - OllamaAPIError(OllamaError) - API errors
+            - OllamaTimeoutError(OllamaError) - Timeout errors
+
+            Retry Strategy: exponential backoff, max 10 seconds, retry on
+            connection errors, timeouts, 5xx errors. Don't retry 4xx except 408, 429.
+
+          test_spec:
+            file: "tests/test_ollama_client.py"
+            tests:
+              - "test_ollama_error_inheritance"
+              - "test_connection_error_raised"
+              - "test_api_error_raised"
+              - "test_timeout_error_raised"
+              - "test_retry_logic_basic"
+              - "test_retry_exponential_backoff"
+              - "test_retry_max_attempts"
+              - "test_no_retry_on_client_errors"
+              - "test_retry_on_server_errors"
+
+          implementation_file: "src/claude_graph/ollama_client.py"
+          test_file: "tests/test_ollama_client.py"
+
+        - name: "Add Ollama service health check"
+          description: |
+            Implement health check to verify Ollama service availability.
+
+            Function: async check_ollama_health(
+              base_url: str,
+              timeout: float = 5.0
+            ) -> bool
+            Attempts connection to /api/tags endpoint, returns bool status.
+
+          test_spec:
+            file: "tests/test_ollama_client.py"
+            tests:
+              - "test_check_ollama_health_success"
+              - "test_check_ollama_health_failure"
+              - "test_check_ollama_health_timeout"
+
+          implementation_file: "src/claude_graph/ollama_client.py"
+          test_file: "tests/test_ollama_client.py"
+
+      code_quality_checklist:
+        - "ollama_client.py passes mypy --strict"
+        - "All public methods have Google docstrings"
+        - "100% test coverage achieved"
+        - "Custom exception classes properly defined"
+        - "Retry logic tested with mocked HTTP responses"
+        - "Exponential backoff calculations verified"
+        - "No real HTTP calls in unit tests"
+        - "Error messages are descriptive"
+        - "Context manager properly implemented"
+        - "Black formatting applied"
+        - "Type hints complete for all parameters"
+
+    - task_number: 5
+      name: "ChromaDB Storage Layer"
+      agent: "python-pro"
+      files:
+        - "src/claude_graph/chromadb_storage.py"
+        - "tests/test_chromadb_storage.py"
+      depends_on: [1, 2, 4]
+      estimated_time: "4h"
+
+      description: |
+        Implement vector storage abstraction layer using ChromaDB. Handles document
+        storage, retrieval, similarity search, and metadata filtering. Provides
+        interface for embedding operations and document management.
+
+      priority: "critical"
+      worktree_group: "chain-1"
+
+      deliverables:
+        - "src/claude_graph/chromadb_storage.py module"
+        - "Comprehensive test suite with 100% coverage"
+        - "Documentation with query examples"
+
+      blocks: [6]
+
+      subtasks:
+        - name: "Implement ChromaDB client wrapper"
+          description: |
+            Create abstraction layer over ChromaDB client.
+
+            Class: ChromaDBStorage
+            - __init__(config: ChromaDBConfig, embedding_dim: int = 384)
+            - add_documents(documents, embeddings, doc_ids, metadatas)
+            - search(query_embedding, n_results, where) -> results with id, text, distance
+            - get_document(doc_id) -> document dict or None
+            - update_document(doc_id, text, embedding, metadata)
+            - delete_document(doc_id) -> bool
+            - count_documents() -> int
+            - clear_collection() -> None
+            - get_collection_info() -> dict with name, count, dimension
+
+          test_spec:
+            file: "tests/test_chromadb_storage.py"
+            tests:
+              - "test_chromadb_initialization"
+              - "test_add_single_document"
+              - "test_add_multiple_documents"
+              - "test_add_with_metadata"
+              - "test_add_mismatched_lengths_raises"
+              - "test_search_basic"
+              - "test_search_with_metadata_filter"
+              - "test_search_returns_sorted_results"
+              - "test_get_document_existing"
+              - "test_get_document_missing"
+              - "test_update_document"
+              - "test_update_nonexistent_raises"
+              - "test_delete_document"
+              - "test_delete_nonexistent"
+              - "test_count_documents"
+              - "test_clear_collection"
+              - "test_get_collection_info"
+
+          implementation_file: "src/claude_graph/chromadb_storage.py"
+          test_file: "tests/test_chromadb_storage.py"
+
+        - name: "Implement batch operations"
+          description: |
+            Add optimized batch operation methods for large document sets.
+
+            Methods:
+            - batch_add(documents: list[dict], batch_size: int = 100)
+            - batch_search(query_embeddings: list[list[float]], n_results: int = 10)
+            - batch_delete(doc_ids: list[str]) -> count
+
+          test_spec:
+            file: "tests/test_chromadb_storage.py"
+            tests:
+              - "test_batch_add_large_set"
+              - "test_batch_add_batching_respected"
+              - "test_batch_search"
+              - "test_batch_delete"
+              - "test_batch_delete_count_accurate"
+
+          implementation_file: "src/claude_graph/chromadb_storage.py"
+          test_file: "tests/test_chromadb_storage.py"
+
+        - name: "Implement metadata filtering"
+          description: |
+            Support rich metadata filtering in queries using ChromaDB where clause.
+
+            Filter format: equality, comparison, logical operators, in operator.
+            Helper: build_where_clause(**kwargs) -> dict for filter construction.
+
+          test_spec:
+            file: "tests/test_chromadb_storage.py"
+            tests:
+              - "test_filter_by_string_field"
+              - "test_filter_by_numeric_comparison"
+              - "test_filter_by_in_operator"
+              - "test_filter_logical_and"
+              - "test_filter_logical_or"
+              - "test_complex_filter"
+              - "test_build_where_clause"
+
+          implementation_file: "src/claude_graph/chromadb_storage.py"
+          test_file: "tests/test_chromadb_storage.py"
+
+        - name: "Add persistence and recovery"
+          description: |
+            Implement data persistence and recovery features.
+
+            Methods:
+            - persist() explicit persist to disk
+            - export_collection(filepath: Path) to JSON
+            - import_collection(filepath: Path) from JSON
+            - validate_consistency() -> bool check collection
+
+          test_spec:
+            file: "tests/test_chromadb_storage.py"
+            tests:
+              - "test_persist_explicit_call"
+              - "test_export_collection"
+              - "test_import_collection"
+              - "test_import_invalid_format_raises"
+              - "test_validate_consistency_valid"
+              - "test_validate_consistency_after_manual_edit"
+
+          implementation_file: "src/claude_graph/chromadb_storage.py"
+          test_file: "tests/test_chromadb_storage.py"
+
+      code_quality_checklist:
+        - "chromadb_storage.py passes mypy --strict"
+        - "All public methods have Google docstrings"
+        - "100% test coverage achieved"
+        - "Batch operations tested"
+        - "Metadata filtering thoroughly tested"
+        - "ChromaDB client mocked in tests"
+        - "No real database files in tests (use temp dirs)"
+        - "Error messages are descriptive"
+        - "Black formatting applied"
+        - "Type hints complete for all parameters"
+
+    - task_number: 6
+      name: "Document Hash Calculator"
+      agent: "python-pro"
+      files:
+        - "src/claude_graph/document_hash.py"
+        - "tests/test_document_hash.py"
+      depends_on: [1]
+      estimated_time: "2h"
+
+      description: |
+        Implement SHA-256 based document hashing for deduplication. Calculates
+        content hashes to identify duplicate documents and enable change detection.
+        Essential for avoiding redundant embedding generation.
+
+      priority: "critical"
+      worktree_group: "chain-1"
+
+      deliverables:
+        - "src/claude_graph/document_hash.py module"
+        - "Comprehensive test suite with 100% coverage"
+        - "Documentation with hash format explanation"
+
+      blocks: []
+
+      subtasks:
+        - name: "Implement DocumentHash class"
+          description: |
+            Create hash calculation and comparison utilities.
+
+            Class: DocumentHash
+            - __init__(algorithm: str = "sha256") validates and initializes
+            - hash_content(content: str) -> str hex hash
+            - hash_file(filepath: Path) -> str streaming hash
+            - hash_document(doc_id, content, metadata) combined hash
+            - verify_hash(content, hash_value) -> bool verification
+
+            Supported algorithms: sha256, sha512, md5.
+            Returns lowercase hex strings.
+
+          test_spec:
+            file: "tests/test_document_hash.py"
+            tests:
+              - "test_document_hash_initialization"
+              - "test_hash_content_simple"
+              - "test_hash_content_empty_raises"
+              - "test_hash_content_none_raises"
+              - "test_hash_content_unicode"
+              - "test_hash_content_deterministic"
+              - "test_hash_content_different_for_different_inputs"
+              - "test_hash_file_simple"
+              - "test_hash_file_nonexistent_raises"
+              - "test_hash_file_large"
+              - "test_hash_document_with_metadata"
+              - "test_hash_document_deterministic"
+              - "test_hash_document_different_metadata"
+              - "test_verify_hash_matching"
+              - "test_verify_hash_nonmatching"
+
+          implementation_file: "src/claude_graph/document_hash.py"
+          test_file: "tests/test_document_hash.py"
+
+        - name: "Implement hash storage and comparison"
+          description: |
+            Add utilities for hash storage and deduplication.
+
+            Class: HashCache
+            - add_hash(doc_id, hash_value), get_hash(doc_id)
+            - has_changed(doc_id, current_hash) -> bool
+            - remove_hash(doc_id), clear(), export_hashes()
+
+            Function: identify_duplicates(documents, hash_calculator)
+            Returns dict mapping hash -> list[doc_ids].
+
+          test_spec:
+            file: "tests/test_document_hash.py"
+            tests:
+              - "test_hash_cache_add"
+              - "test_hash_cache_get"
+              - "test_hash_cache_has_changed"
+              - "test_hash_cache_remove"
+              - "test_hash_cache_clear"
+              - "test_hash_cache_export"
+              - "test_identify_duplicates_none"
+              - "test_identify_duplicates_some"
+              - "test_identify_duplicates_all"
+
+          implementation_file: "src/claude_graph/document_hash.py"
+          test_file: "tests/test_document_hash.py"
+
+        - name: "Add hash-based deduplication workflow"
+          description: |
+            Implement workflow for document deduplication.
+
+            Function: deduplicate_documents(
+              documents, hash_calculator, hash_cache,
+              keep_first: bool = True
+            ) -> (deduplicated, mapping)
+            Returns deduplicated list and removed_id -> kept_id mapping.
+
+          test_spec:
+            file: "tests/test_document_hash.py"
+            tests:
+              - "test_deduplicate_no_duplicates"
+              - "test_deduplicate_exact_duplicates"
+              - "test_deduplicate_keep_first"
+              - "test_deduplicate_keep_last"
+              - "test_deduplicate_preserves_order"
+              - "test_deduplicate_updates_cache"
+
+          implementation_file: "src/claude_graph/document_hash.py"
+          test_file: "tests/test_document_hash.py"
+
+      code_quality_checklist:
+        - "document_hash.py passes mypy --strict"
+        - "All public methods have Google docstrings"
+        - "100% test coverage achieved"
+        - "Hash values are deterministic"
+        - "File hashing tested with various sizes"
+        - "Unicode and special characters handled"
+        - "Error messages are descriptive"
+        - "Black formatting applied"
+        - "Type hints complete for all parameters"
+        - "Deduplication logic thoroughly tested"
+
+  # Integration requirements
+  integration:
+    title: "Cross-Task Integration"
+    requirements: |
+      All tasks must integrate seamlessly:
+
+      1. Token Counting (Task 2) -> Markdown Chunker (Task 3)
+         TokenCounter validates chunk sizes, enforces 512 token max
+
+      2. Markdown Chunker (Task 3) -> ChromaDB Storage (Task 5)
+         MarkdownChunk objects stored with metadata, header path preserved
+
+      3. Ollama Client (Task 4) -> ChromaDB Storage (Task 5)
+         Embeddings generated per chunk, stored in vector database
+
+      4. Document Hash (Task 6) -> Deduplication
+         Hash calculated before embedding, prevents duplicates
+
+      5. Configuration (Task 1) -> All Tasks
+         Unified config, consistent paths, logging configuration
+
+    integration_tests:
+      file: "tests/test_integration.py"
+      tests:
+        - "test_full_document_ingestion_pipeline"
+        - "test_duplicate_document_skipped"
+        - "test_search_and_retrieve_workflow"
+        - "test_config_integration"
+
+  # Quality assurance requirements
+  quality_assurance:
+    type_checking:
+      - "All files pass mypy --strict"
+      - "No type: ignore comments without justification"
+      - "All parameters have type hints"
+      - "All returns have type hints"
+      - "No Any without justification"
+
+    testing:
+      - "100% code coverage for all tasks"
+      - "Minimum 10 test cases per task"
+      - "All tests named descriptively"
+      - "Tests isolated, no shared state"
+      - "No external API calls in tests"
+      - "Test fixtures in conftest.py"
+
+    code_quality:
+      - "All files pass black --check"
+      - "All files pass ruff check"
+      - "No unused imports"
+      - "No hardcoded values (use constants)"
+      - "Maximum line length: 88 characters"
+
+    documentation:
+      - "All public classes have docstrings"
+      - "All public methods have docstrings"
+      - "Google style docstrings"
+      - "Docstrings include Args, Returns, Raises"
+      - "Complex algorithms have comments"
+      - "Examples are valid Python"
+
+    error_handling:
+      - "All custom exception types"
+      - "Descriptive error messages"
+      - "No bare except clauses"
+      - "Proper exception chaining"
+      - "Timeout handling for network ops"
+
+    edge_cases:
+      - "Empty inputs handled"
+      - "None values rejected or handled"
+      - "Unicode/special characters tested"
+      - "Large input sizes tested"
+      - "Boundary conditions tested"
+
+  # Submission requirements
+  submission:
+    completion_criteria:
+      - "All 6 tasks implemented with passing tests"
+      - "Code coverage >= 100% for foundation modules"
+      - "All files pass mypy --strict"
+      - "All code formatted with black"
+      - "All linting issues resolved"
+      - "Integration tests demonstrate interaction"
+      - "Git history shows atomic commits"
+      - "Documentation complete and accurate"
+      - "No security issues identified"
+      - "Performance benchmarks baseline established"
+
+    estimated_timeline:
+      task_1: "2 hours"
+      task_2: "3 hours"
+      task_3: "4 hours"
+      task_4: "4 hours"
+      task_5: "4 hours"
+      task_6: "2 hours"
+      integration_testing: "2 hours"
+      total: "21 hours"
+
+    worktree_information: |
+      Worktree Group: chain-1
+      All tasks work in the same worktree: /Users/harrison/Github/claude_graph
+      Branch: feature/mcp-implementation
+      Strategy: Sequential task completion with parallel testing

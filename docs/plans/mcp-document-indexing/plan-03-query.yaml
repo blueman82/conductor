@@ -1,0 +1,1107 @@
+# MCP Document Indexing - Query Phase Implementation Plan
+# Chain 3: Query & Retrieval Layer (Tasks 10-11)
+#
+# Context: Implements semantic search functionality by embedding queries,
+# searching ChromaDB vector database, ranking results with similarity scores,
+# and formatting comprehensive result sets with source references and metadata.
+#
+# Execution: Sequential worktree chain-3 with python-pro agent
+# Estimated Duration: ~1.5 hours total (Task 10: 1h, Task 11: 30m)
+
+conductor:
+  default_agent: python-pro
+  max_concurrency: 1
+  worktree_group: chain-3
+  execution_model: sequential
+
+  quality_control:
+    enabled: true
+    review_agent: quality-control
+    retry_on_red: 2
+
+    code_standards:
+      python:
+        formatter: black
+        type_checker: mypy
+        test_framework: pytest
+        coverage_target: 80%
+        style_guide: "PEP 8"
+        docstring_style: "Google-style"
+
+  dependencies:
+    phase: "Query & Retrieval Layer"
+    depends_on_tasks: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    depends_on_phases:
+      - phase_1_foundation: "Project setup, token counting, chunking"
+      - phase_2_embeddings: "Embedding generation and ChromaDB storage"
+      - phase_3_indexing: "Document indexing and deduplication"
+    blocker_resolution: "Ensure chain-1 and chain-2 are merged to main before starting"
+
+  worktree_setup:
+    base_branch: main
+    new_branch: feature/mcp-document-indexing/chain-3
+    setup_steps: |
+      git checkout main
+      git pull origin main
+      git worktree add ../claude_graph-chain-3 -b feature/mcp-document-indexing/chain-3
+      cd ../claude_graph-chain-3
+      python -m pip install -e ".[dev]"
+      python -m pytest tests/unit/test_embeddings.py -v  # Verify dependencies
+    cleanup_steps: |
+      cd /Users/harrison/Github/claude_graph
+      git worktree remove ../claude_graph-chain-3
+      git branch -D feature/mcp-document-indexing/chain-3
+
+plan:
+  metadata:
+    project: "MCP Document Indexing System"
+    context: "Building a complete semantic search pipeline with vector database integration"
+    output: "Production-ready query engine with comprehensive test coverage"
+    feature_name: "Query & Retrieval Layer"
+    created: "2025-11-22"
+    estimated_tasks: 2
+
+  tasks:
+    - task_number: 10
+      name: "Semantic Query Engine"
+      description: |
+        Implement the semantic search engine that queries ChromaDB and retrieves
+        relevant document chunks. This task covers:
+
+        1. Query Embedding: Convert natural language queries to embeddings using
+           the same Ollama embeddings endpoint as document indexing
+        2. ChromaDB Search: Query the ChromaDB collection with embedding vectors
+        3. Result Retrieval: Extract and structure search results with similarity scores
+        4. Score Normalization: Convert ChromaDB similarity distances to 0-1 score range
+        5. Result Limiting: Respect max_results and max_tokens constraints
+
+        The query engine is the core component that bridges user questions with
+        indexed document chunks. It must handle:
+        - Embedding generation consistency with indexing phase
+        - Efficient vector similarity search
+        - Proper score interpretation (ChromaDB distance to relevance score)
+        - Memory-efficient result handling for large result sets
+
+      type: "component"
+      agent: python-pro
+      worktree_group: chain-3
+      branch: feature/mcp-document-indexing/chain-3
+      estimated_time: 60
+
+      files:
+        - src/query/__init__.py
+        - src/query/query_engine.py
+        - tests/unit/test_query_engine.py
+
+      file_details:
+        src/query/__init__.py:
+          purpose: "Package initialization and public API exports"
+          responsibility: "Export QueryEngine class for external usage"
+
+        src/query/query_engine.py:
+          purpose: "Semantic query engine implementation"
+          responsibility: |
+            Implement QueryEngine class with:
+            - __init__(embeddings_client, chroma_collection, logger)
+            - search(query_text, max_results, max_tokens) -> list[QueryResult]
+            - _embed_query(query_text) -> np.ndarray
+            - _normalize_distances(distances) -> list[float]
+            - _estimate_tokens(text) -> int
+            - _filter_by_tokens(results, max_tokens) -> list[QueryResult]
+
+        tests/unit/test_query_engine.py:
+          purpose: "Unit tests for query engine"
+          test_classes:
+              - TestQueryEngineInitialization:
+                  focus: "Proper initialization with dependencies"
+                  tests:
+                    - test_init_with_valid_clients
+                    - test_init_with_none_logger_uses_default
+                    - test_properties_accessible
+
+              - TestQueryEmbedding:
+                  focus: "Query text embedding functionality"
+                  tests:
+                    - test_embed_query_returns_valid_embedding
+                    - test_embed_query_consistent_across_calls
+                    - test_embed_query_error_handling_with_unavailable_ollama
+                    - test_embed_query_with_empty_string
+                    - test_embed_query_with_special_characters
+                    - test_embed_query_embedding_dimension_matches_indexing
+
+              - TestChromeDBSearch:
+                  focus: "ChromaDB vector search"
+                  tests:
+                    - test_search_returns_results_ordered_by_relevance
+                    - test_search_respects_max_results_limit
+                    - test_search_with_no_matching_documents
+                    - test_search_distance_to_score_normalization
+                    - test_search_with_empty_collection
+                    - test_search_distance_values_in_valid_range
+
+              - TestResultFiltering:
+                  focus: "Result filtering by token limits"
+                  tests:
+                    - test_filter_results_by_max_tokens
+                    - test_filter_respects_partial_chunk_inclusion
+                    - test_filter_with_single_very_large_chunk
+                    - test_filter_returns_unmodified_when_under_limit
+                    - test_token_estimation_accuracy
+
+              - TestSearchIntegration:
+                  focus: "End-to-end search functionality"
+                  tests:
+                    - test_search_with_realistic_query
+                    - test_search_with_max_results_boundary
+                    - test_search_with_max_tokens_boundary
+                    - test_search_error_handling_chroma_unavailable
+                    - test_search_with_concurrent_queries
+                    - test_search_performance_with_large_collection
+
+      dependencies:
+        requires_completion:
+          - task_number: 5
+            name: "Embeddings and ChromaDB"
+            files: ["src/embeddings/embeddings.py", "src/storage/chroma_client.py"]
+          - task_number: 6
+            name: "Models and Document Storage"
+            files: ["src/models/document.py", "src/models/query_result.py"]
+
+        requires_existing:
+          - path: src/models/query_result.py
+            from_task: 6
+            required_fields: [id, chunk_text, file_path, similarity_score, token_count, metadata]
+
+          - path: src/storage/chroma_client.py
+            from_task: 5
+            required_methods: [query(), get_by_ids()]
+
+          - path: src/embeddings/embeddings.py
+            from_task: 5
+            required_methods: [embed_text()]
+
+      implementation_approach:
+        methodology: "Test-Driven Development (TDD)"
+        order:
+          step_1: |
+            Define QueryResult dataclass structure in src/models/query_result.py
+            (should already exist from Task 6, but verify):
+            - id: str
+            - chunk_text: str
+            - file_path: str
+            - similarity_score: float (0.0-1.0)
+            - token_count: int
+            - metadata: Dict[str, Any]
+
+          step_2: |
+            Write unit tests first in tests/unit/test_query_engine.py:
+            1. TestQueryEngineInitialization - 3 tests
+            2. TestQueryEmbedding - 6 tests
+            3. TestChromeDBSearch - 6 tests
+            4. TestResultFiltering - 5 tests
+            5. TestSearchIntegration - 6 tests
+            Total: 26 unit tests
+
+          step_3: |
+            Implement QueryEngine class:
+            - Start with __init__ and basic structure
+            - Implement _embed_query() using embeddings client
+            - Implement ChromaDB search wrapper
+            - Implement distance normalization
+            - Implement token estimation and filtering
+            - Implement main search() orchestration method
+
+          step_4: |
+            Run tests iteratively:
+            - Run test suite after each method implementation
+            - Verify all 26 tests pass
+            - Check coverage (target: 85%+ for query engine module)
+            - Address any type errors from mypy
+
+          step_5: |
+            Code quality:
+            - Format with Black
+            - Type check with Mypy (strict mode)
+            - Add Google-style docstrings
+            - Ensure no type: ignore comments unless justified
+
+      code_structure:
+        package: src/query
+        module: query_engine.py
+        class_name: QueryEngine
+        methods:
+          public:
+            - signature: "search(query_text: str, max_results: int = 10, max_tokens: int = 4096) -> list[QueryResult]"
+              docstring: |
+                Execute semantic search query against indexed documents.
+
+                Performs vector similarity search using query embeddings to find
+                the most relevant document chunks, ranked by similarity score.
+
+                Args:
+                    query_text: Natural language search query
+                    max_results: Maximum number of results to return (default: 10)
+                    max_tokens: Maximum total tokens in results (default: 4096)
+
+                Returns:
+                    List of QueryResult objects sorted by similarity_score descending
+
+                Raises:
+                    EmbeddingError: If query embedding generation fails
+                    ChromaDBError: If ChromaDB query fails
+                    ValueError: If query_text is empty or max_results < 1
+
+                Example:
+                    >>> engine = QueryEngine(embeddings_client, chroma_collection)
+                    >>> results = engine.search("How do I use embeddings?", max_results=5)
+                    >>> for result in results:
+                    ...     print(f"{result.file_path}: {result.similarity_score:.2f}")
+
+            - signature: "_embed_query(query_text: str) -> np.ndarray"
+              docstring: |
+                Generate embedding vector for query text.
+
+                Uses the Ollama embeddings endpoint (same model as indexing)
+                to create a vector representation of the query.
+
+                Args:
+                    query_text: Text to embed
+
+                Returns:
+                    1D numpy array of embedding values
+
+                Raises:
+                    EmbeddingError: If Ollama embeddings endpoint unavailable
+                    ValueError: If query_text is empty or whitespace-only
+
+            - signature: "_normalize_distances(distances: list[float]) -> list[float]"
+              docstring: |
+                Convert ChromaDB distance values to similarity scores (0-1).
+
+                ChromaDB returns distances (higher = less similar), so we convert
+                to similarity scores where 1.0 = perfect match, 0.0 = no match.
+
+                Conversion formula: score = 1 / (1 + distance)
+
+                Args:
+                    distances: List of raw ChromaDB distance values
+
+                Returns:
+                    List of normalized similarity scores (0.0-1.0)
+
+            - signature: "_estimate_tokens(text: str) -> int"
+              docstring: |
+                Estimate token count for text using tiktoken.
+
+                Provides fast token estimation for result filtering logic.
+                Uses same logic as TokenCounter for consistency.
+
+                Args:
+                    text: Text to estimate tokens for
+
+                Returns:
+                    Approximate token count
+
+            - signature: "_filter_by_tokens(results: list[QueryResult], max_tokens: int) -> list[QueryResult]"
+              docstring: |
+                Filter results to respect max_tokens constraint.
+
+                Iterates through results in order, including results until
+                total tokens would exceed max_tokens. Always returns at least
+                one result if available.
+
+                Args:
+                    results: Ordered list of QueryResult objects
+                    max_tokens: Maximum total tokens to include
+
+                Returns:
+                    Filtered list of results within token budget
+
+      docstring_format: "Google-style with Args, Returns, Raises, Example sections"
+      type_annotations: "Full strict typing - no Any types without justification"
+
+      test_structure:
+        location: tests/unit/test_query_engine.py
+        pattern: "Arrange-Act-Assert (AAA)"
+        fixtures:
+          - fixture_name: embeddings_client_mock
+            provides: "Mock EmbeddingsClient with embed_text() method"
+            returns: "MagicMock configured to return 768-dim embeddings"
+
+          - fixture_name: chroma_collection_mock
+            provides: "Mock ChromaDB collection with query() method"
+            returns: "MagicMock configured to return ChromaDB format results"
+
+          - fixture_name: query_engine
+            provides: "Real QueryEngine instance with mocked dependencies"
+            returns: "QueryEngine(embeddings_client_mock, chroma_collection_mock)"
+
+          - fixture_name: sample_query_results
+            provides: "Realistic query result data from ChromaDB"
+            returns: |
+              {
+                'ids': [['doc1', 'doc2', 'doc3']],
+                'metadatas': [[{...}, {...}, {...}]],
+                'documents': [['chunk1', 'chunk2', 'chunk3']],
+                'distances': [[0.15, 0.28, 0.42]]
+              }
+
+        mocking_strategy: |
+          - Mock Ollama embeddings API (external service)
+          - Mock ChromaDB collection (use in-memory SQLite for integration tests)
+          - Real TokenCounter from tiktoken (critical path)
+          - Real UUID generation for result IDs
+          - Real QueryResult dataclass instantiation
+
+        test_data:
+          queries:
+            - "How do I use Python with Ollama?"
+            - "What is semantic search?"
+            - "Explain embeddings"
+            - ""  # Edge case: empty query
+            - "!!!###$$$%%%"  # Edge case: special characters
+
+          mock_results:
+            - id: "chunk_abc123"
+              text: "Document chunks returned by ChromaDB..."
+              file_path: "/path/to/document.md"
+              distance: 0.15  # ChromaDB distance (lower = better)
+
+      code_quality:
+        python:
+          formatter:
+            tool: black
+            command: python -m black src/query/ tests/unit/test_query_engine.py
+            config: "Line length 88 (black default)"
+            check_command: python -m black --check src/query/
+
+          type_checker:
+            tool: mypy
+            command: python -m mypy src/query/ --strict
+            enabled: true
+            mode: strict
+            ignore_errors: false
+            options:
+              disallow_untyped_defs: true
+              disallow_incomplete_defs: true
+              check_untyped_defs: true
+              no_implicit_optional: true
+              warn_redundant_casts: true
+              warn_unused_ignores: true
+
+          linter:
+            tool: pylint
+            optional: true
+            command: python -m pylint src/query/
+
+          test_coverage:
+            tool: pytest-cov
+            target: "85% for src/query module"
+            target_overall: "80% for all code"
+            command: |
+              python -m pytest tests/unit/test_query_engine.py \
+                --cov=src/query \
+                --cov-report=term-missing \
+                --cov-report=html \
+                -v
+            report_location: htmlcov/index.html
+
+          test_execution:
+            unit_tests:
+              command: python -m pytest tests/unit/test_query_engine.py -v
+              exit_on_failure: true
+              parallel: false
+              timeout: 30
+
+            full_quality_pipeline:
+              command: |
+                python -m black src/query/ tests/unit/test_query_engine.py &&
+                python -m mypy src/query/ --strict &&
+                python -m pytest tests/unit/test_query_engine.py -v --cov=src/query --cov-report=term-missing
+              exit_on_failure: true
+              description: "Format, type-check, and test"
+
+        documentation:
+          docstrings:
+            style: Google
+            required_sections: [Args, Returns, Raises, Example]
+            check_command: "Manual review (not auto-checked)"
+
+          comments:
+            - Type: Algorithm explanation
+              example: "# Distance to score: 1/(1+distance) formula"
+            - Type: Non-obvious logic
+              example: "# Always return at least one result if available"
+
+          inline_docs:
+            code_clarity: "Self-documenting code with clear variable names"
+            complex_sections: "Explain algorithm and why approach chosen"
+
+      success_criteria:
+        - "search() returns list of QueryResult objects sorted by similarity_score descending"
+        - "Similarity scores are in valid range (0.0-1.0)"
+        - "max_results parameter limits results to specified number"
+        - "max_tokens soft limit respected (or at least 1 result returned)"
+        - "Query embedding uses consistent model with document indexing"
+        - "26 unit tests pass with no failures"
+        - "85%+ code coverage for src/query/query_engine.py"
+        - "Black formatting: zero violations"
+        - "Mypy strict mode: zero errors"
+        - "Google-style docstrings on all public/private methods"
+
+      validation_checklist:
+        - item: "Unit test file exists at correct path"
+          command: "test -f tests/unit/test_query_engine.py"
+          expected: "File exists"
+
+        - item: "All 26 unit tests pass"
+          command: "python -m pytest tests/unit/test_query_engine.py -v --tb=short"
+          expected: "26 passed"
+
+        - item: "Code coverage >= 85%"
+          command: "python -m pytest tests/unit/test_query_engine.py --cov=src/query --cov-report=term-missing | grep -i 'src/query'"
+          expected: "85% or higher"
+
+        - item: "Black formatting passes"
+          command: "python -m black --check src/query/"
+          expected: "All done!"
+
+        - item: "Mypy strict mode passes"
+          command: "python -m mypy src/query/ --strict"
+          expected: "Success: no issues found"
+
+        - item: "Query engine imports correctly"
+          command: "python -c 'from src.query.query_engine import QueryEngine; print(QueryEngine)'"
+          expected: "<class 'src.query.query_engine.QueryEngine'>"
+
+        - item: "QueryResult model accessible"
+          command: "python -c 'from src.models.query_result import QueryResult; print(QueryResult)'"
+          expected: "<class 'src.models.query_result.QueryResult'>"
+
+      commit:
+        type: feat
+        message: "feat: implement semantic query engine with ChromaDB integration"
+        description: |
+          Add QueryEngine class for semantic search functionality:
+          - Embed query text using Ollama embeddings endpoint
+          - Search ChromaDB collection with vector similarity
+          - Normalize ChromaDB distances to 0-1 similarity scores
+          - Filter results by max_results and max_tokens constraints
+          - 26 unit tests with 85%+ coverage
+          - Full type annotations and Google-style docstrings
+        files:
+          - src/query/__init__.py
+          - src/query/query_engine.py
+          - tests/unit/test_query_engine.py
+
+    - task_number: 11
+      name: "Query Result Formatter"
+      description: |
+        Implement result formatting and ranking to transform raw ChromaDB results
+        into user-friendly, structured responses. This task covers:
+
+        1. Result Ranking: Organize results by relevance (similarity score)
+        2. Metadata Enhancement: Enrich results with document metadata
+        3. Source References: Generate clear file path and chunk position info
+        4. Score Formatting: Present similarity scores as percentages
+        5. Pagination: Support limit/offset for large result sets
+        6. Filtering: Apply optional score thresholds and file filters
+
+        The result formatter bridges the query engine and MCP tools, ensuring
+        results are presentation-ready with context information. It must handle:
+        - Consistent metadata structure across different document sources
+        - Clear source attribution for compliance and transparency
+        - Efficient pagination for large result sets
+        - Optional filtering criteria from user requests
+
+      type: "component"
+      agent: python-pro
+      worktree_group: chain-3
+      branch: feature/mcp-document-indexing/chain-3
+      estimated_time: 30
+      depends_on: [10]
+
+      files:
+        - src/query/__init__.py
+        - src/query/result_formatter.py
+        - tests/unit/test_result_formatter.py
+
+      file_details:
+        src/query/__init__.py:
+          purpose: "Package initialization with all query exports"
+          responsibility: "Update to export ResultFormatter and QueryResult"
+
+        src/query/result_formatter.py:
+          purpose: "Result formatting and ranking implementation"
+          responsibility: |
+            Implement ResultFormatter class with:
+            - __init__(logger)
+            - format_results(results, options) -> FormattedResults
+            - _rank_by_score(results) -> list[QueryResult]
+            - _apply_score_threshold(results, threshold) -> list[QueryResult]
+            - _apply_file_filter(results, allowed_files) -> list[QueryResult]
+            - _paginate_results(results, limit, offset) -> list[QueryResult]
+            - _enrich_metadata(results) -> list[QueryResult]
+            - format_for_display(results) -> str (human-readable format)
+
+        tests/unit/test_result_formatter.py:
+          purpose: "Unit tests for result formatter"
+          test_classes:
+              - TestResultFormatterInitialization:
+                  focus: "Proper initialization"
+                  tests:
+                    - test_init_with_custom_logger
+                    - test_init_with_none_logger_uses_default
+                    - test_formatter_is_stateless
+
+              - TestResultRanking:
+                  focus: "Ranking and sorting"
+                  tests:
+                    - test_rank_by_score_descending_order
+                    - test_rank_handles_equal_scores
+                    - test_rank_with_single_result
+                    - test_rank_with_empty_list
+
+              - TestScoreThresholding:
+                  focus: "Score-based filtering"
+                  tests:
+                    - test_apply_threshold_filters_low_scores
+                    - test_apply_threshold_0_returns_all
+                    - test_apply_threshold_1_0_returns_none
+                    - test_apply_threshold_preserves_order
+
+              - TestFileFiltering:
+                  focus: "File path filtering"
+                  tests:
+                    - test_filter_by_allowed_files
+                    - test_filter_with_empty_allowed_list_returns_all
+                    - test_filter_with_no_matching_files_returns_empty
+                    - test_filter_preserves_score_order
+
+              - TestPagination:
+                  focus: "Result pagination"
+                  tests:
+                    - test_paginate_first_page
+                    - test_paginate_middle_page
+                    - test_paginate_last_page
+                    - test_paginate_offset_exceeds_length
+                    - test_paginate_limit_exceeds_remaining
+                    - test_paginate_zero_limit_returns_empty
+
+              - TestMetadataEnrichment:
+                  focus: "Adding context to results"
+                  tests:
+                    - test_enrich_adds_rank_position
+                    - test_enrich_preserves_existing_metadata
+                    - test_enrich_formats_similarity_percentage
+                    - test_enrich_with_empty_metadata
+
+              - TestDisplayFormatting:
+                  focus: "Human-readable output"
+                  tests:
+                    - test_format_for_display_includes_rank
+                    - test_format_for_display_includes_file_path
+                    - test_format_for_display_includes_score
+                    - test_format_for_display_includes_chunk_text
+                    - test_format_for_display_with_empty_results
+                    - test_format_for_display_multiline_chunks
+
+              - TestFormattedResultsIntegration:
+                  focus: "End-to-end formatting"
+                  tests:
+                    - test_format_results_with_all_options
+                    - test_format_results_score_threshold_with_limit
+                    - test_format_results_file_filter_with_pagination
+                    - test_format_results_complex_scenario
+
+      dependencies:
+        requires_completion:
+          - task_number: 10
+            name: "Semantic Query Engine"
+            files: ["src/query/query_engine.py"]
+
+        requires_existing:
+          - path: src/models/query_result.py
+            from_task: 6
+            required_fields: [id, chunk_text, file_path, similarity_score, token_count, metadata]
+
+          - path: src/query/query_engine.py
+            from_task: 10
+            required_output: "List[QueryResult] objects with populated similarity_score"
+
+      implementation_approach:
+        methodology: "Test-Driven Development (TDD)"
+        order:
+          step_1: |
+            Define FormattedResults dataclass:
+            - results: List[QueryResult] (with rank and percentage added)
+            - total_count: int
+            - displayed_count: int
+            - pagination: Dict[str, int]  # {limit, offset, total_pages}
+            - filters_applied: Dict[str, Any]
+
+          step_2: |
+            Write unit tests first in tests/unit/test_result_formatter.py:
+            1. TestResultFormatterInitialization - 3 tests
+            2. TestResultRanking - 4 tests
+            3. TestScoreThresholding - 4 tests
+            4. TestFileFiltering - 4 tests
+            5. TestPagination - 6 tests
+            6. TestMetadataEnrichment - 4 tests
+            7. TestDisplayFormatting - 6 tests
+            8. TestFormattedResultsIntegration - 4 tests
+            Total: 35 unit tests
+
+          step_3: |
+            Implement ResultFormatter class:
+            - Start with __init__ and basic structure
+            - Implement ranking (_rank_by_score)
+            - Implement filtering (_apply_score_threshold, _apply_file_filter)
+            - Implement pagination (_paginate_results)
+            - Implement metadata enrichment (_enrich_metadata)
+            - Implement display formatting (format_for_display)
+            - Implement main format_results orchestration
+
+          step_4: |
+            Run tests iteratively:
+            - Run test suite after each method implementation
+            - Verify all 35 tests pass
+            - Check coverage (target: 85%+ for result formatter module)
+            - Address any type errors from mypy
+
+          step_5: |
+            Code quality:
+            - Format with Black
+            - Type check with Mypy (strict mode)
+            - Add Google-style docstrings
+            - Ensure no type: ignore comments unless justified
+
+      code_structure:
+        package: src/query
+        module: result_formatter.py
+        class_name: ResultFormatter
+        supporting_classes:
+          - name: FormattedResults
+            type: dataclass
+            fields:
+              - results: list[QueryResult]
+              - total_count: int
+              - displayed_count: int
+              - pagination: dict[str, int]
+              - filters_applied: dict[str, Any]
+
+        methods:
+          public:
+            - signature: |
+                format_results(
+                  results: list[QueryResult],
+                  options: dict[str, Any] | None = None
+                ) -> FormattedResults
+              docstring: |
+                Format and filter query results for presentation.
+
+                Applies ranking, filtering, pagination, and enrichment to raw
+                QueryResult objects, returning a structured FormattedResults
+                object ready for display or MCP tool response.
+
+                Args:
+                    results: List of QueryResult objects from query engine
+                    options: Optional formatting options dict with keys:
+                        - 'score_threshold': float (0.0-1.0, default: 0.0)
+                        - 'allowed_files': list[str] (file paths to include)
+                        - 'limit': int (max results to return, default: 10)
+                        - 'offset': int (pagination offset, default: 0)
+                        - 'add_rank': bool (add rank numbers, default: True)
+
+                Returns:
+                    FormattedResults object containing filtered, ranked results
+
+                Raises:
+                    ValueError: If options invalid (negative limit, threshold > 1.0)
+
+                Example:
+                    >>> formatter = ResultFormatter()
+                    >>> formatted = formatter.format_results(
+                    ...     raw_results,
+                    ...     options={'score_threshold': 0.5, 'limit': 5}
+                    ... )
+                    >>> print(f"Found {formatted.total_count} results")
+
+            - signature: "format_for_display(results: list[QueryResult]) -> str"
+              docstring: |
+                Create human-readable text representation of results.
+
+                Formats results as a multi-line string suitable for display,
+                including rank, score, file path, and chunk preview.
+
+                Args:
+                    results: List of QueryResult objects with rank in metadata
+
+                Returns:
+                    Multi-line string with formatted results
+
+                Example:
+                    >>> display_text = formatter.format_for_display(results)
+                    >>> print(display_text)
+                    1. [95%] /docs/embeddings.md
+                       How embeddings work in semantic search...
+
+            - signature: "_rank_by_score(results: list[QueryResult]) -> list[QueryResult]"
+              docstring: |
+                Sort results by similarity score in descending order.
+
+                Args:
+                    results: Unsorted QueryResult list
+
+                Returns:
+                    Sorted list with highest scores first
+
+            - signature: "_apply_score_threshold(results: list[QueryResult], threshold: float) -> list[QueryResult]"
+              docstring: |
+                Filter results below similarity score threshold.
+
+                Args:
+                    results: List of QueryResult objects
+                    threshold: Minimum similarity score (0.0-1.0)
+
+                Returns:
+                    Filtered list with only results >= threshold
+
+            - signature: "_apply_file_filter(results: list[QueryResult], allowed_files: list[str]) -> list[QueryResult]"
+              docstring: |
+                Filter results to only include specified files.
+
+                Args:
+                    results: List of QueryResult objects
+                    allowed_files: List of file paths to include
+
+                Returns:
+                    Filtered list with only matching file paths
+
+            - signature: "_paginate_results(results: list[QueryResult], limit: int, offset: int) -> list[QueryResult]"
+              docstring: |
+                Apply pagination to results.
+
+                Args:
+                    results: Ordered list of QueryResult objects
+                    limit: Maximum results to return
+                    offset: Number of results to skip from start
+
+                Returns:
+                    Sliced list: results[offset:offset+limit]
+
+            - signature: "_enrich_metadata(results: list[QueryResult], rank_start: int = 1) -> list[QueryResult]"
+              docstring: |
+                Add ranking and percentage formatting to metadata.
+
+                Args:
+                    results: List of QueryResult objects
+                    rank_start: Starting rank number (default: 1)
+
+                Returns:
+                    Results with updated metadata containing rank and score%
+
+      docstring_format: "Google-style with Args, Returns, Raises, Example sections"
+      type_annotations: "Full strict typing - no Any types without justification"
+
+      test_structure:
+        location: tests/unit/test_result_formatter.py
+        pattern: "Arrange-Act-Assert (AAA)"
+        fixtures:
+          - fixture_name: result_formatter
+            provides: "ResultFormatter instance with test logger"
+            returns: "ResultFormatter(logger=logging.getLogger('test'))"
+
+          - fixture_name: sample_query_results
+            provides: "List of QueryResult with various scores"
+            returns: |
+              [
+                QueryResult(id="1", similarity_score=0.95, file_path="/docs/a.md", ...),
+                QueryResult(id="2", similarity_score=0.72, file_path="/docs/b.md", ...),
+                QueryResult(id="3", similarity_score=0.45, file_path="/docs/c.md", ...),
+                QueryResult(id="4", similarity_score=0.38, file_path="/docs/a.md", ...),
+              ]
+
+          - fixture_name: multi_file_results
+            provides: "Results from different source files"
+            returns: |
+              Results with file_path varying:
+              - /docs/api/endpoints.md
+              - /docs/guides/setup.md
+              - /docs/api/authentication.md
+              - /docs/guides/examples.md
+
+        mocking_strategy: |
+          - Use real QueryResult instances (not mocked)
+          - Use real logger instances
+          - No external API calls
+          - Test with realistic data structures
+
+        test_data:
+          score_ranges:
+            - high_scores: [0.95, 0.92, 0.88]
+            - medium_scores: [0.65, 0.58, 0.52]
+            - low_scores: [0.35, 0.28, 0.15]
+
+          file_paths:
+            - "/path/to/embeddings.md"
+            - "/path/to/search.md"
+            - "/path/to/models/query.md"
+            - "/other/section/reference.md"
+
+      code_quality:
+        python:
+          formatter:
+            tool: black
+            command: python -m black src/query/ tests/unit/test_result_formatter.py
+            config: "Line length 88 (black default)"
+            check_command: python -m black --check src/query/
+
+          type_checker:
+            tool: mypy
+            command: python -m mypy src/query/ --strict
+            enabled: true
+            mode: strict
+            ignore_errors: false
+            options:
+              disallow_untyped_defs: true
+              disallow_incomplete_defs: true
+              check_untyped_defs: true
+              no_implicit_optional: true
+              warn_redundant_casts: true
+              warn_unused_ignores: true
+
+          test_coverage:
+            tool: pytest-cov
+            target: "85% for src/query module"
+            target_overall: "80% for all code"
+            command: |
+              python -m pytest tests/unit/test_result_formatter.py \
+                --cov=src/query \
+                --cov-report=term-missing \
+                --cov-report=html \
+                -v
+            report_location: htmlcov/index.html
+
+          test_execution:
+            unit_tests:
+              command: python -m pytest tests/unit/test_result_formatter.py -v
+              exit_on_failure: true
+              parallel: false
+              timeout: 30
+
+            full_quality_pipeline:
+              command: |
+                python -m black src/query/ tests/unit/test_result_formatter.py &&
+                python -m mypy src/query/ --strict &&
+                python -m pytest tests/unit/test_result_formatter.py -v --cov=src/query --cov-report=term-missing
+              exit_on_failure: true
+              description: "Format, type-check, and test"
+
+        documentation:
+          docstrings:
+            style: Google
+            required_sections: [Args, Returns, Raises, Example]
+            check_command: "Manual review (not auto-checked)"
+
+          comments:
+            - Type: Ranking algorithm explanation
+              example: "# Sort descending by similarity_score (highest first)"
+            - Type: Filter logic
+              example: "# Include result only if all active filters pass"
+
+      success_criteria:
+        - "Results are ranked by similarity_score in descending order"
+        - "Score threshold filtering works correctly (0.0-1.0 range)"
+        - "File path filtering reduces results appropriately"
+        - "Pagination correctly limits and offsets results"
+        - "Metadata enrichment adds rank numbers and score percentages"
+        - "format_for_display produces readable multi-line output"
+        - "35 unit tests pass with no failures"
+        - "85%+ code coverage for src/query/result_formatter.py"
+        - "Black formatting: zero violations"
+        - "Mypy strict mode: zero errors"
+
+      validation_checklist:
+        - item: "Unit test file exists at correct path"
+          command: "test -f tests/unit/test_result_formatter.py"
+          expected: "File exists"
+
+        - item: "All 35 unit tests pass"
+          command: "python -m pytest tests/unit/test_result_formatter.py -v --tb=short"
+          expected: "35 passed"
+
+        - item: "Code coverage >= 85%"
+          command: "python -m pytest tests/unit/test_result_formatter.py --cov=src/query --cov-report=term-missing | grep -i 'src/query'"
+          expected: "85% or higher"
+
+        - item: "Black formatting passes"
+          command: "python -m black --check src/query/"
+          expected: "All done!"
+
+        - item: "Mypy strict mode passes"
+          command: "python -m mypy src/query/ --strict"
+          expected: "Success: no issues found"
+
+        - item: "Result formatter imports correctly"
+          command: "python -c 'from src.query.result_formatter import ResultFormatter; print(ResultFormatter)'"
+          expected: "<class 'src.query.result_formatter.ResultFormatter'>"
+
+        - item: "FormattedResults model accessible"
+          command: "python -c 'from src.query.result_formatter import FormattedResults; print(FormattedResults)'"
+          expected: "<class 'src.query.result_formatter.FormattedResults'>"
+
+      commit:
+        type: feat
+        message: "feat: add query result formatting, ranking, and filtering"
+        description: |
+          Implement ResultFormatter class for query result presentation:
+          - Rank results by similarity score (descending)
+          - Apply score threshold filtering (0.0-1.0)
+          - Filter results by file path patterns
+          - Paginate results with limit and offset
+          - Enrich metadata with rank numbers and percentages
+          - Format results for human-readable display
+          - 35 unit tests with 85%+ coverage
+          - Full type annotations and Google-style docstrings
+        files:
+          - src/query/result_formatter.py
+          - tests/unit/test_result_formatter.py
+          - src/query/__init__.py (updated exports)
+
+execution_summary:
+  phase_name: "Query & Retrieval Layer (Chain 3)"
+  total_tasks: 2
+  total_estimated_time: 90
+  tasks:
+    - task_10_query_engine: "60 minutes + code quality"
+    - task_11_result_formatter: "30 minutes + code quality"
+
+  sequential_execution: |
+    1. Task 10: Semantic Query Engine (1 hour)
+       - 26 unit tests
+       - 85%+ coverage
+       - TDD approach
+       - All code quality checks
+
+    2. Task 11: Query Result Formatter (30 minutes)
+       - 35 unit tests
+       - 85%+ coverage
+       - Depends on Task 10 completion
+       - All code quality checks
+
+  quality_gates:
+    pre_task_10: |
+      Verify chain-1 and chain-2 merged to main
+      - Tasks 1-6 (embeddings, models, storage)
+      - Tasks 7-9 (indexing, deduplication)
+
+    between_tasks: |
+      Task 11 cannot start until Task 10 is complete:
+      - All 26 tests in test_query_engine.py passing
+      - Black and mypy validation complete
+      - Code merged to feature/mcp-document-indexing/chain-3
+
+    post_phase: |
+      Chain 3 merge to main requires:
+      - All 61 tests passing (26 + 35)
+      - 85%+ code coverage for src/query/
+      - No mypy errors in strict mode
+      - Ready for chain-4 (MCP Server Integration)
+
+integration_notes:
+  with_previous_chains: |
+    Chain 3 builds on:
+    - Chain 1: EmbeddingsClient from src/embeddings/
+    - Chain 1: ChromaDB storage from src/storage/
+    - Chain 1: Models (TokenCounter) from src/models/
+    - Chain 2: Document indexing completed
+
+  with_next_chain: |
+    Chain 3 feeds into Chain 4 (MCP Server):
+    - QueryEngine.search() method
+    - ResultFormatter.format_results() method
+    - Both exported from src/query/__init__.py
+    - Used by MCP tools: search_semantic, rank_results
+
+  shared_patterns: |
+    Consistent with entire project:
+    - Google-style docstrings
+    - Strict mypy typing
+    - Black formatting (88 char lines)
+    - AAA test pattern
+    - 80%+ code coverage target
+    - No hardcoded paths
+    - Proper logging/logger injection
+
+dependencies_external:
+  libraries:
+    - chromadb: "Vector database client (Task 5 installs)"
+    - numpy: "Array operations (Task 5 installs)"
+    - ollama: "Embeddings API client (Task 5 installs)"
+    - tiktoken: "Token counting (Task 1 installs)"
+
+  services:
+    - ollama_service: "Must be running on localhost:11434"
+      task_providing: Task 5
+      required_for: Query embedding generation
+      fallback: "Error handling with clear message"
+
+  databases:
+    - chroma_db: "Vector database collection"
+      created_by: Task 6
+      required_contents: "Indexed documents from Tasks 7-9"
+      location: "Configurable (default: .chroma/)"
+
+data_flow:
+  input:
+    source: "User query text (natural language)"
+    example: "How do I use Python with embeddings?"
+
+  processing_task_10:
+    - step_1: "Convert query text to embedding vector (Ollama)"
+    - step_2: "Search ChromaDB with vector (similarity search)"
+    - step_3: "Normalize ChromaDB distances to 0-1 scores"
+    - step_4: "Filter results by max_results and max_tokens"
+    - step_5: "Return List[QueryResult] sorted by score"
+
+  processing_task_11:
+    - step_1: "Rank results by similarity_score (descending)"
+    - step_2: "Apply optional score threshold filter"
+    - step_3: "Apply optional file path filter"
+    - step_4: "Apply pagination (limit and offset)"
+    - step_5: "Enrich metadata with rank and percentage"
+    - step_6: "Format for display (human-readable output)"
+
+  output:
+    task_10: "List[QueryResult] with scores"
+    task_11: "FormattedResults with ranked, filtered, paginated results"
+    final_consumer: "MCP tools (search_semantic, rank_results)"
+
+performance_targets:
+  query_latency: "<500ms for typical 10-result query"
+  embedding_generation: "<200ms (Ollama inference)"
+  chroma_search: "<100ms for collection < 100k documents"
+  result_formatting: "<50ms"
+
+  memory_efficiency:
+    - "Handle result sets up to 1000 results"
+    - "Paginate to avoid loading all results in memory"
+    - "No duplicate QueryResult objects in memory"
+
+  scalability:
+    - "Tested with ChromaDB collections up to 100k documents"
+    - "Handles queries with 10,000+ max_tokens results"
+    - "Efficient pagination for large result sets"
+
+documentation_links:
+  external:
+    - "ChromaDB Query API: https://docs.trychroma.com/reference/py-client#query"
+    - "Ollama API Docs: https://github.com/ollama/ollama/blob/main/docs/api.md"
+    - "Tiktoken Docs: https://github.com/openai/tiktoken"
+
+  internal:
+    - "Plan 01: Foundation (embeddings, models): docs/plans/mcp-document-indexing/plan-01-foundation.yaml"
+    - "Plan 02: Indexing (document handling): docs/plans/mcp-document-indexing/plan-02-indexing.yaml"
+    - "Implementation: src/query/ directory"
+    - "Tests: tests/unit/test_query_engine.py, test_result_formatter.py"

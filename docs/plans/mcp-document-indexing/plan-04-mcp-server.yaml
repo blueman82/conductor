@@ -1,0 +1,1215 @@
+doc_yaml: true
+
+plan:
+  metadata:
+    project: "MCP Document Indexing"
+    phase: "Phase 04 - MCP Server Integration"
+    description: "Wraps the core indexing and query functionality in an MCP server interface, exposing tools that Claude Code can invoke from any directory"
+    version: "1.0"
+    created: "2025-11-22"
+    worktree_group: "chain-4"
+    branch: "feature/mcp-document-indexing/chain-4"
+    execution_model: "sequential"
+    isolation: "separate-worktree"
+
+  dependencies:
+    previous_phases:
+      - phase: "Phase 01"
+        tasks: [1, 2, 3, 4, 5, 6]
+        description: "Foundation & Core Infrastructure"
+        components:
+          - "Project setup and configuration"
+          - "Token counting and chunking"
+          - "Embedding generation"
+          - "Vector storage setup"
+          - "Document models"
+      - phase: "Phase 02"
+        tasks: [7, 8, 9]
+        description: "Indexing & Deduplication Layer"
+        components:
+          - "DocumentIndexer (Task 8)"
+          - "Hash-based deduplication (Task 9)"
+      - phase: "Phase 03"
+        tasks: [10, 11]
+        description: "Query & Retrieval Layer"
+        components:
+          - "QueryEngine (Task 10)"
+          - "Semantic search capability (Task 11)"
+
+  overview:
+    purpose: "Expose document indexing and semantic search via MCP server tools"
+    key_features:
+      - "MCP Protocol compliance (JSON-RPC 2.0)"
+      - "Tool-based interface for Claude Code integration"
+      - "Management operations (list, remove)"
+      - "Production-ready error handling and logging"
+      - "Type-safe implementation with Mypy strict mode"
+
+  quality_standards:
+    - "Mypy strict typing with 100% type coverage"
+    - "Black code formatting"
+    - "Test-driven development (TDD) with 80%+ coverage"
+    - "Google-style docstrings"
+    - "Protocol compliance verification"
+    - "Security and input validation"
+
+  tasks:
+
+    - task_number: 12
+      type: "component"
+      name: "MCP Server Scaffold"
+      agent: "mcp-developer"
+      worktree_group: "chain-4"
+      estimated_time: "45m"
+
+      context: |
+        Create the foundational MCP server structure using the MCP SDK.
+        This establishes the server framework that will host all MCP tools.
+
+        Key responsibility: Build a compliant MCP server that can:
+        - Accept and process MCP protocol messages
+        - Manage tool lifecycle
+        - Handle server configuration
+        - Implement health checks
+        - Provide proper error handling
+
+      dependencies:
+        - task: 1
+          reason: "Needs project configuration setup"
+
+      files:
+        - "src/mcp_server/__init__.py"
+        - "src/mcp_server/server.py"
+        - "tests/unit/test_mcp_server.py"
+
+      file_details:
+        implementation_files:
+          - path: "src/mcp_server/__init__.py"
+            type: "module"
+            purpose: "Package initialization"
+            code_blocks:
+              - name: "version"
+                content: "__version__ = '0.1.0'"
+              - name: "imports"
+                content: "from .server import MCPDocumentIndexingServer\n\n__all__ = ['MCPDocumentIndexingServer']"
+
+          - path: "src/mcp_server/server.py"
+            type: "implementation"
+            purpose: "Core MCP server class"
+            docstring_style: "google"
+            mypy_mode: "strict"
+            code_requirements:
+              - "Class MCPDocumentIndexingServer(Server)"
+              - "Methods: __init__, initialize, shutdown, handle_request"
+              - "Tool registry management"
+              - "Proper resource and tool list endpoints"
+              - "JSON-RPC 2.0 message handling"
+
+            implementation_notes: |
+              The server class should:
+
+              1. Inherit from mcp.server.Server
+              2. Implement __init__ with proper initialization
+              3. Register tool handlers via @self.tool decorator
+              4. Implement server lifecycle methods
+              5. Handle JSON-RPC message validation
+              6. Provide debugging/logging support
+
+              Example structure:
+              ```python
+              from mcp import Server
+              from mcp.tools import Tool
+              from typing import Any
+
+              class MCPDocumentIndexingServer(Server):
+                  """MCP server for document indexing and semantic search.
+
+                  Exposes tools for indexing documents and querying the
+                  indexed knowledge base.
+                  """
+
+                  def __init__(self) -> None:
+                      """Initialize the MCP server."""
+                      super().__init__()
+                      self._tools: dict[str, Tool] = {}
+                      self._initialized = False
+
+                  async def initialize(self) -> None:
+                      """Initialize server resources.
+
+                      Sets up the server for operation and registers
+                      all available tools.
+                      """
+                      self._initialized = True
+
+                  async def shutdown(self) -> None:
+                      """Shutdown server and cleanup resources."""
+                      self._initialized = False
+              ```
+
+            key_patterns:
+              - "JSON-RPC 2.0 message format compliance"
+              - "Proper error response handling with error codes"
+              - "Tool schema validation"
+              - "Request/response logging"
+
+        test_files:
+          - path: "tests/unit/test_mcp_server.py"
+            type: "unit_test"
+            purpose: "Unit tests for MCP server skeleton"
+            docstring_style: "google"
+            test_approach: "TDD - write tests first, then implementation"
+
+            test_cases:
+              - name: "test_server_initializes"
+                description: "Server should initialize without errors"
+                arrange: "Create MCPDocumentIndexingServer instance"
+                act: "Call initialize() method"
+                assert: "Server is in initialized state"
+
+              - name: "test_server_has_empty_tools_on_init"
+                description: "New server should have no tools registered"
+                arrange: "Create MCPDocumentIndexingServer instance"
+                act: "Get tool list"
+                assert: "Tool list is empty"
+
+              - name: "test_health_check_endpoint"
+                description: "Server should provide health check"
+                arrange: "Initialize server"
+                act: "Call health check method"
+                assert: "Returns status dict with 'healthy' = True"
+
+              - name: "test_server_shutdown"
+                description: "Server should shutdown cleanly"
+                arrange: "Initialize server"
+                act: "Call shutdown() method"
+                assert: "Server cleanup completes without errors"
+
+              - name: "test_server_logging_configured"
+                description: "Logging should be properly configured"
+                arrange: "Create server instance"
+                act: "Check logger setup"
+                assert: "Logger is configured with proper handlers"
+
+              - name: "test_json_rpc_message_format"
+                description: "Server should validate JSON-RPC 2.0 format"
+                arrange: "Create server with mock message handler"
+                act: "Send invalid JSON-RPC message"
+                assert: "Returns proper error response with error code"
+
+            fixtures:
+              - name: "server"
+                scope: "function"
+                implementation: "Returns initialized MCPDocumentIndexingServer instance"
+
+              - name: "mock_logging"
+                scope: "function"
+                implementation: "Mocks logging to prevent log output in tests"
+
+            imports:
+              - "import pytest"
+              - "from mcp_server.server import MCPDocumentIndexingServer"
+              - "from unittest.mock import Mock, patch, AsyncMock"
+              - "import logging"
+
+      success_criteria:
+        - "Server initializes without errors"
+        - "Tool list endpoint responds correctly"
+        - "Health check endpoint returns proper status"
+        - "Server can shutdown cleanly"
+        - "All tests pass with 80%+ coverage"
+        - "Type checking passes with Mypy strict mode"
+        - "Code formatted with Black"
+
+      implementation_checklist:
+        - title: "Code Quality Setup"
+          items:
+            - item: "Add Mypy configuration to pyproject.toml for strict mode"
+            - item: "Add Black formatting configuration"
+            - item: "Setup pytest configuration"
+
+        - title: "Server Implementation"
+          items:
+            - item: "Create MCPDocumentIndexingServer class"
+            - item: "Implement __init__ method with proper initialization"
+            - item: "Implement initialize() async method"
+            - item: "Implement shutdown() async method"
+            - item: "Add logger configuration"
+            - item: "Implement health check method"
+            - item: "Add JSON-RPC message validation"
+
+        - title: "Testing"
+          items:
+            - item: "Write test file structure"
+            - item: "Write all test cases with proper fixtures"
+            - item: "Run tests and verify 80%+ coverage"
+            - item: "Run Mypy type checking"
+            - item: "Run Black formatting check"
+
+        - title: "Documentation"
+          items:
+            - item: "Add module-level docstring"
+            - item: "Add class docstrings (Google style)"
+            - item: "Add method docstrings with Args/Returns/Raises"
+            - item: "Add inline comments for complex logic"
+
+      code_quality:
+        mypy_strict:
+          enabled: true
+          command: "python -m mypy src/mcp_server/server.py --strict"
+          exit_on_failure: true
+          notes: "All code must be fully type annotated"
+
+        black_formatting:
+          enabled: true
+          command: "python -m black src/mcp_server/ tests/unit/test_mcp_server.py"
+          exit_on_failure: true
+          line_length: 100
+
+        pytest_unit_tests:
+          enabled: true
+          command: "python -m pytest tests/unit/test_mcp_server.py -v --cov=src/mcp_server --cov-report=term-missing"
+          exit_on_failure: true
+          coverage_target: 80
+
+        full_quality_pipeline:
+          command: |
+            python -m black src/mcp_server/ tests/unit/test_mcp_server.py &&
+            python -m mypy src/mcp_server/server.py --strict &&
+            python -m pytest tests/unit/test_mcp_server.py -v --cov=src/mcp_server
+          exit_on_failure: true
+
+      commit:
+        type: "feat"
+        message: "create MCP server scaffold with protocol compliance"
+        files:
+          - "src/mcp_server/__init__.py"
+          - "src/mcp_server/server.py"
+          - "tests/unit/test_mcp_server.py"
+
+      validation_checklist:
+        - command: "python -m pytest tests/unit/test_mcp_server.py -v"
+          expected: "All 6 tests pass"
+        - command: "python -m mypy src/mcp_server/server.py --strict"
+          expected: "No type errors"
+        - command: "python -m black --check src/mcp_server/"
+          expected: "Code is properly formatted"
+        - command: "python -m pytest tests/unit/test_mcp_server.py --cov=src/mcp_server"
+          expected: "Coverage >= 80%"
+
+    - task_number: 13
+      type: "integration"
+      name: "MCP Tool: index_document and batch_index"
+      agent: "mcp-developer"
+      worktree_group: "chain-4"
+      estimated_time: "1h"
+      depends_on: [8, 9, 12]
+
+      context: |
+        Implement MCP tools that expose the document indexing functionality
+        created in Task 8 (DocumentIndexer) through the MCP interface.
+
+        This integration task wires together:
+        - DocumentIndexer (Task 8) for document indexing
+        - Deduplication (Task 9) for duplicate detection
+        - MCP Server Scaffold (Task 12) for tool hosting
+
+        Key responsibility: Create tools that:
+        - Accept documents and metadata via MCP protocol
+        - Call DocumentIndexer to index documents
+        - Handle errors gracefully
+        - Return tool results in MCP format
+        - Support both single and batch operations
+
+      files:
+        - "src/mcp_server/tools.py"
+        - "tests/unit/test_mcp_tools.py"
+
+      file_details:
+        implementation_files:
+          - path: "src/mcp_server/tools.py"
+            type: "implementation"
+            purpose: "MCP tool implementations"
+            docstring_style: "google"
+            mypy_mode: "strict"
+
+            code_requirements:
+              - "Function tool_index_document() -> ToolHandler"
+              - "Function tool_batch_index() -> ToolHandler"
+              - "Proper error handling with MCP error codes"
+              - "Input validation for file paths and metadata"
+              - "Type annotations for all parameters and returns"
+
+            implementation_notes: |
+              MCP tools should:
+
+              1. Define tool schema with proper JSON Schema
+              2. Accept input_data from MCP protocol
+              3. Call DocumentIndexer from Task 8
+              4. Return TextContent with results
+              5. Handle errors with proper error messages
+              6. Support progress reporting if needed
+
+              Example structure:
+              ```python
+              from mcp import Tool, TextContent
+              from mcp.types import ToolCall, ToolResult
+              from typing import Any
+
+              async def tool_index_document(
+                  server: 'MCPDocumentIndexingServer'
+              ) -> Tool:
+                  """Create index_document MCP tool.
+
+                  Args:
+                      server: The MCP server instance
+
+                  Returns:
+                      Configured Tool instance
+                  """
+                  async def handler(input_data: dict[str, Any]) -> ToolResult:
+                      file_path = input_data.get('file_path')
+                      metadata = input_data.get('metadata', {})
+
+                      indexer = server.indexer
+                      result = await indexer.index_document(file_path, metadata)
+
+                      return ToolResult(
+                          content=[TextContent(type='text', text=str(result))]
+                      )
+
+                  return Tool(
+                      name='index_document',
+                      description='Index a single document',
+                      inputSchema={
+                          'type': 'object',
+                          'properties': {
+                              'file_path': {'type': 'string'},
+                              'metadata': {'type': 'object'}
+                          },
+                          'required': ['file_path']
+                      },
+                      handler=handler
+                  )
+              ```
+
+            key_patterns:
+              - "Input validation before processing"
+              - "Proper error messages with context"
+              - "Support for optional metadata"
+              - "Async/await for I/O operations"
+              - "Tool schema validation"
+
+        test_files:
+          - path: "tests/unit/test_mcp_tools.py"
+            type: "unit_test"
+            purpose: "Unit tests for MCP tools"
+            docstring_style: "google"
+            test_approach: "TDD - write tests first, then implementation"
+
+            test_cases:
+              - name: "test_index_document_tool_schema"
+                description: "Tool should have proper schema"
+                arrange: "Get index_document tool"
+                act: "Check tool schema"
+                assert: "Schema has required properties: file_path, optional metadata"
+
+              - name: "test_index_document_indexes_single_file"
+                description: "Tool should index a single document"
+                arrange: "Create test document file, setup mock DocumentIndexer"
+                act: "Call index_document tool with file path"
+                assert: "DocumentIndexer.index_document was called with correct args"
+
+              - name: "test_index_document_returns_result"
+                description: "Tool should return proper MCP result"
+                arrange: "Setup mock indexer with result"
+                act: "Call index_document tool"
+                assert: "Returns ToolResult with TextContent"
+
+              - name: "test_index_document_handles_invalid_path"
+                description: "Tool should handle missing files gracefully"
+                arrange: "Setup mock indexer to raise FileNotFoundError"
+                act: "Call index_document with non-existent path"
+                assert: "Returns error result with proper message"
+
+              - name: "test_batch_index_tool_schema"
+                description: "batch_index tool should accept file list"
+                arrange: "Get batch_index tool"
+                act: "Check tool schema"
+                assert: "Schema accepts array of file paths"
+
+              - name: "test_batch_index_processes_multiple_files"
+                description: "Tool should batch index multiple documents"
+                arrange: "Create multiple test files, setup mock DocumentIndexer"
+                act: "Call batch_index with file list"
+                assert: "DocumentIndexer called for each file"
+
+              - name: "test_batch_index_reports_results"
+                description: "Tool should report results for all files"
+                arrange: "Setup mock indexer returning different results"
+                act: "Call batch_index with 3 files"
+                assert: "Returns results for all 3 files with success/error status"
+
+              - name: "test_batch_index_continues_on_error"
+                description: "Tool should process remaining files if one fails"
+                arrange: "Setup mock where file 2 fails, files 1 and 3 succeed"
+                act: "Call batch_index with 3 files"
+                assert: "Returns results for all files, indicates which failed"
+
+              - name: "test_tool_integration_with_server"
+                description: "Tools should be registered with server"
+                arrange: "Initialize MCP server"
+                act: "Get server's tool list"
+                assert: "Tools are present in server's tool registry"
+
+            fixtures:
+              - name: "indexer_mock"
+                scope: "function"
+                implementation: "AsyncMock of DocumentIndexer"
+
+              - name: "server_with_tools"
+                scope: "function"
+                implementation: "MCPDocumentIndexingServer with tools registered"
+
+              - name: "test_file"
+                scope: "function"
+                implementation: "Temporary test document file (tmp_path fixture)"
+
+            imports:
+              - "import pytest"
+              - "from mcp_server.tools import tool_index_document, tool_batch_index"
+              - "from unittest.mock import AsyncMock, patch"
+              - "from pathlib import Path"
+
+      success_criteria:
+        - "index_document tool properly indexes single documents"
+        - "batch_index tool processes multiple files correctly"
+        - "Tools handle errors gracefully with proper messages"
+        - "Tools are integrated with server tool registry"
+        - "All tests pass with 80%+ coverage"
+        - "Type checking passes with Mypy strict mode"
+        - "Code formatted with Black"
+        - "DocumentIndexer integration is correct"
+
+      implementation_checklist:
+        - title: "Tool Implementation"
+          items:
+            - item: "Create tool schemas for both tools"
+            - item: "Implement input validation logic"
+            - item: "Create tool handler functions"
+            - item: "Add error handling with proper messages"
+            - item: "Register tools with server"
+
+        - title: "DocumentIndexer Integration"
+          items:
+            - item: "Import DocumentIndexer from Task 8"
+            - item: "Initialize indexer in server"
+            - item: "Call indexer methods from tool handlers"
+            - item: "Handle indexer errors appropriately"
+
+        - title: "Testing"
+          items:
+            - item: "Write all test cases"
+            - item: "Setup mocks for DocumentIndexer"
+            - item: "Test tool schemas"
+            - item: "Test error handling"
+            - item: "Verify 80%+ coverage"
+
+        - title: "Code Quality"
+          items:
+            - item: "Add Google-style docstrings"
+            - item: "Add type annotations"
+            - item: "Run Mypy strict mode check"
+            - item: "Run Black formatter"
+
+      code_quality:
+        mypy_strict:
+          enabled: true
+          command: "python -m mypy src/mcp_server/tools.py --strict"
+          exit_on_failure: true
+
+        black_formatting:
+          enabled: true
+          command: "python -m black src/mcp_server/ tests/unit/test_mcp_tools.py"
+          exit_on_failure: true
+
+        pytest_unit_tests:
+          enabled: true
+          command: "python -m pytest tests/unit/test_mcp_tools.py -v --cov=src/mcp_server --cov-report=term-missing"
+          exit_on_failure: true
+          coverage_target: 80
+
+        full_quality_pipeline:
+          command: |
+            python -m black src/mcp_server/ tests/unit/test_mcp_tools.py &&
+            python -m mypy src/mcp_server/tools.py --strict &&
+            python -m pytest tests/unit/test_mcp_tools.py -v --cov=src/mcp_server
+          exit_on_failure: true
+
+      commit:
+        type: "feat"
+        message: "implement MCP tools for document indexing and batch operations"
+        files:
+          - "src/mcp_server/tools.py"
+          - "tests/unit/test_mcp_tools.py"
+
+      validation_checklist:
+        - command: "python -m pytest tests/unit/test_mcp_tools.py -v"
+          expected: "All tests pass"
+        - command: "python -m mypy src/mcp_server/tools.py --strict"
+          expected: "No type errors"
+        - command: "python -m pytest tests/unit/test_mcp_tools.py --cov=src/mcp_server"
+          expected: "Coverage >= 80%"
+
+    - task_number: 14
+      type: "integration"
+      name: "MCP Tools: query_knowledge, Management, Configuration, and Entry Point"
+      agent: "mcp-developer"
+      worktree_group: "chain-4"
+      estimated_time: "1.5h"
+      depends_on: [10, 11, 13]
+
+      context: |
+        Implement the final MCP tools for semantic search and document management,
+        plus configure the server for deployment and create the entry point.
+
+        This integration task wires together:
+        - QueryEngine (Task 10) for semantic search
+        - Semantic search (Task 11) for similarity queries
+        - Indexing tools (Task 13) for complete tool interface
+
+        This completes the tool interface by adding query capabilities,
+        management operations (list, remove), and makes the server production-ready.
+
+        Key responsibilities:
+        1. Create tools for querying indexed documents semantically
+        2. Implement document listing and removal operations
+        3. Configure server with environment variables and settings
+        4. Create entry point for deployment and CLI invocation
+
+      files:
+        - "src/mcp_server/query_tools.py"
+        - "src/mcp_server/config.py"
+        - "src/mcp_server/__main__.py"
+        - "tests/unit/test_query_tools.py"
+        - "tests/unit/test_mcp_config.py"
+
+      file_details:
+        implementation_files:
+          - path: "src/mcp_server/query_tools.py"
+            type: "implementation"
+            purpose: "Query and management MCP tools"
+            docstring_style: "google"
+            mypy_mode: "strict"
+
+            code_requirements:
+              - "Function tool_query_knowledge() -> ToolHandler"
+              - "Function tool_list_documents() -> ToolHandler"
+              - "Function tool_remove_document() -> ToolHandler"
+              - "Input validation for queries and filters"
+              - "Type annotations for all functions"
+
+            implementation_notes: |
+              Query tools should:
+
+              1. Accept query string and optional filters
+              2. Call QueryEngine from Task 10
+              3. Format results with metadata
+              4. Support optional parameters:
+                 - k: number of results (default 5)
+                 - score_threshold: minimum similarity (default 0.0)
+                 - filters: metadata filters
+              5. Return results with scores and source
+
+              Management tools should:
+
+              1. list_documents: enumerate indexed documents
+                 - Support pagination
+                 - Return document IDs and metadata
+              2. remove_document: delete from index
+                 - Accept document ID or path
+                 - Return confirmation
+
+              Example structure:
+              ```python
+              async def tool_query_knowledge(
+                  server: 'MCPDocumentIndexingServer'
+              ) -> Tool:
+                  """Create query_knowledge MCP tool."""
+                  async def handler(input_data: dict[str, Any]) -> ToolResult:
+                      query = input_data.get('query', '')
+                      k = input_data.get('k', 5)
+                      threshold = input_data.get('score_threshold', 0.0)
+                      filters = input_data.get('filters')
+
+                      engine = server.query_engine
+                      results = await engine.query(
+                          query=query,
+                          k=k,
+                          score_threshold=threshold,
+                          filters=filters
+                      )
+
+                      return ToolResult(
+                          content=[TextContent(type='text', text=format_results(results))]
+                      )
+
+                  return Tool(
+                      name='query_knowledge',
+                      description='Query indexed documents semantically',
+                      inputSchema={
+                          'type': 'object',
+                          'properties': {
+                              'query': {'type': 'string'},
+                              'k': {'type': 'integer', 'default': 5},
+                              'score_threshold': {'type': 'number', 'default': 0.0},
+                              'filters': {'type': 'object'}
+                          },
+                          'required': ['query']
+                      },
+                      handler=handler
+                  )
+              ```
+
+            key_patterns:
+              - "Query parameter validation"
+              - "Result formatting with metadata"
+              - "Pagination support"
+              - "Metadata filtering"
+              - "Error handling for empty results"
+
+          - path: "src/mcp_server/config.py"
+            type: "implementation"
+            purpose: "Server configuration and settings"
+            docstring_style: "google"
+            mypy_mode: "strict"
+
+            code_requirements:
+              - "Class ServerConfig with environment-based settings"
+              - "Function load_config() -> ServerConfig"
+              - "Type annotations for all configuration"
+              - "Proper default values for all settings"
+
+            implementation_notes: |
+              Configuration should include:
+
+              1. Database settings
+                 - ChromaDB path
+                 - Persistence mode
+              2. Embedding settings
+                 - Ollama URL
+                 - Model name
+                 - Embedding dimension
+              3. Server settings
+                 - Host and port
+                 - Debug mode
+                 - Logging level
+              4. Paths
+                 - Data directory
+                 - Log directory
+                 - Cache directory
+
+              Example structure:
+              ```python
+              from dataclasses import dataclass
+              from pathlib import Path
+              import os
+
+              @dataclass
+              class ServerConfig:
+                  """MCP server configuration."""
+
+                  # Database
+                  db_path: Path = Path.home() / ".claude" / "mcp_index"
+
+                  # Embeddings
+                  ollama_url: str = "http://localhost:11434"
+                  ollama_model: str = "nomic-embed-text"
+
+                  # Server
+                  host: str = "127.0.0.1"
+                  port: int = 5555
+                  debug: bool = False
+                  log_level: str = "INFO"
+
+                  def __post_init__(self) -> None:
+                      """Ensure paths exist."""
+                      self.db_path.mkdir(parents=True, exist_ok=True)
+
+              def load_config() -> ServerConfig:
+                  """Load configuration from environment."""
+                  return ServerConfig(
+                      db_path=Path(os.getenv('MCP_DB_PATH', str(Path.home() / ".claude" / "mcp_index"))),
+                      ollama_url=os.getenv('OLLAMA_URL', 'http://localhost:11434'),
+                      # ... other settings
+                  )
+              ```
+
+            key_patterns:
+              - "Environment variable loading"
+              - "Path creation and validation"
+              - "Default value fallbacks"
+              - "Type safety with dataclasses"
+
+          - path: "src/mcp_server/__main__.py"
+            type: "implementation"
+            purpose: "Server entry point"
+            docstring_style: "google"
+            mypy_mode: "strict"
+
+            code_requirements:
+              - "Function main() with proper entry point"
+              - "Async server initialization and run"
+              - "Graceful shutdown handling"
+              - "Error handling and logging"
+
+            implementation_notes: |
+              Entry point should:
+
+              1. Load configuration from environment
+              2. Initialize logging
+              3. Create server instance
+              4. Initialize all components
+              5. Run the server
+              6. Handle graceful shutdown
+
+              Example structure:
+              ```python
+              import asyncio
+              import logging
+              from .config import load_config
+              from .server import MCPDocumentIndexingServer
+
+              async def main() -> None:
+                  """Run the MCP server."""
+                  config = load_config()
+
+                  logging.basicConfig(
+                      level=getattr(logging, config.log_level),
+                      format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                  )
+
+                  server = MCPDocumentIndexingServer(config)
+                  await server.initialize()
+
+                  try:
+                      await server.run()
+                  finally:
+                      await server.shutdown()
+
+              if __name__ == '__main__':
+                  asyncio.run(main())
+              ```
+
+            key_patterns:
+              - "Async context management"
+              - "Signal handling for graceful shutdown"
+              - "Proper logging configuration"
+              - "Error propagation"
+
+        test_files:
+          - path: "tests/unit/test_query_tools.py"
+            type: "unit_test"
+            purpose: "Unit tests for query and management tools"
+            docstring_style: "google"
+            test_approach: "TDD - write tests first, then implementation"
+
+            test_cases:
+              - name: "test_query_knowledge_tool_schema"
+                description: "Tool should have proper query schema"
+                arrange: "Get query_knowledge tool"
+                act: "Check tool schema"
+                assert: "Schema has required 'query' property, optional k and filters"
+
+              - name: "test_query_knowledge_performs_search"
+                description: "Tool should call QueryEngine with proper parameters"
+                arrange: "Setup mock QueryEngine with results"
+                act: "Call query_knowledge with query string"
+                assert: "QueryEngine.query was called with correct args"
+
+              - name: "test_query_knowledge_returns_formatted_results"
+                description: "Tool should return results with metadata and scores"
+                arrange: "Setup mock QueryEngine to return 3 results"
+                act: "Call query_knowledge"
+                assert: "Returns results with document info and similarity scores"
+
+              - name: "test_query_knowledge_respects_k_parameter"
+                description: "Tool should limit results to k value"
+                arrange: "Setup mock QueryEngine"
+                act: "Call query_knowledge with k=3"
+                assert: "QueryEngine called with k=3"
+
+              - name: "test_query_knowledge_applies_score_threshold"
+                description: "Tool should pass score threshold to engine"
+                arrange: "Setup mock QueryEngine"
+                act: "Call query_knowledge with score_threshold=0.7"
+                assert: "QueryEngine called with score_threshold=0.7"
+
+              - name: "test_query_knowledge_handles_empty_results"
+                description: "Tool should handle no matching documents"
+                arrange: "Setup mock QueryEngine to return empty results"
+                act: "Call query_knowledge"
+                assert: "Returns informative message about no results"
+
+              - name: "test_query_knowledge_applies_metadata_filters"
+                description: "Tool should pass filters to engine"
+                arrange: "Setup mock QueryEngine"
+                act: "Call query_knowledge with metadata filters"
+                assert: "QueryEngine called with filters parameter"
+
+              - name: "test_list_documents_tool_schema"
+                description: "list_documents tool should have proper schema"
+                arrange: "Get list_documents tool"
+                act: "Check tool schema"
+                assert: "Schema supports optional pagination parameters"
+
+              - name: "test_list_documents_returns_documents"
+                description: "Tool should list all indexed documents"
+                arrange: "Setup mock with 5 documents"
+                act: "Call list_documents"
+                assert: "Returns list with all document metadata"
+
+              - name: "test_list_documents_supports_pagination"
+                description: "Tool should support limit and offset"
+                arrange: "Setup mock with many documents"
+                act: "Call list_documents with limit=10 offset=20"
+                assert: "Returns paginated results"
+
+              - name: "test_list_documents_shows_document_stats"
+                description: "Tool should include document statistics"
+                arrange: "Setup mock with document metadata"
+                act: "Call list_documents"
+                assert: "Returns count, size, and other stats"
+
+              - name: "test_remove_document_tool_schema"
+                description: "Tool should accept document identifier"
+                arrange: "Get remove_document tool"
+                act: "Check tool schema"
+                assert: "Schema has required document_id or path parameter"
+
+              - name: "test_remove_document_deletes_from_index"
+                description: "Tool should remove document from index"
+                arrange: "Setup mock index with document"
+                act: "Call remove_document with document ID"
+                assert: "Document removed from index"
+
+              - name: "test_remove_document_returns_confirmation"
+                description: "Tool should confirm deletion"
+                arrange: "Setup mock to remove document"
+                act: "Call remove_document"
+                assert: "Returns success message with removal count"
+
+              - name: "test_remove_document_handles_missing_document"
+                description: "Tool should handle document not found"
+                arrange: "Setup mock to raise document not found"
+                act: "Call remove_document with non-existent ID"
+                assert: "Returns error message"
+
+              - name: "test_all_tools_registered_with_server"
+                description: "All query tools should be registered"
+                arrange: "Initialize server with all tools"
+                act: "Get server's tool list"
+                assert: "All 3 tools present: query_knowledge, list_documents, remove_document"
+
+            fixtures:
+              - name: "query_engine_mock"
+                scope: "function"
+                implementation: "AsyncMock of QueryEngine"
+
+              - name: "server_with_query_tools"
+                scope: "function"
+                implementation: "MCPDocumentIndexingServer with query tools registered"
+
+            imports:
+              - "import pytest"
+              - "from mcp_server.query_tools import ("
+              - "    tool_query_knowledge,"
+              - "    tool_list_documents,"
+              - "    tool_remove_document"
+              - ")"
+              - "from unittest.mock import AsyncMock, patch"
+
+          - path: "tests/unit/test_mcp_config.py"
+            type: "unit_test"
+            purpose: "Unit tests for configuration"
+            docstring_style: "google"
+            test_approach: "TDD - write tests first, then implementation"
+
+            test_cases:
+              - name: "test_default_config_values"
+                description: "Default configuration should be valid"
+                arrange: "Create ServerConfig with defaults"
+                act: "Check configuration values"
+                assert: "All values are valid and sensible defaults"
+
+              - name: "test_config_from_environment"
+                description: "Configuration should load from environment"
+                arrange: "Set environment variables"
+                act: "Call load_config()"
+                assert: "Configuration values match environment"
+
+              - name: "test_config_creates_directories"
+                description: "Configuration should ensure paths exist"
+                arrange: "Create config with non-existent paths"
+                act: "Configuration post-init runs"
+                assert: "Directories are created"
+
+              - name: "test_config_path_validation"
+                description: "Configuration should validate paths"
+                arrange: "Create config"
+                act: "Check path properties"
+                assert: "Paths are valid Path objects"
+
+              - name: "test_config_logging_level"
+                description: "Logging level should be configurable"
+                arrange: "Set LOG_LEVEL environment variable"
+                act: "Load configuration"
+                assert: "log_level matches environment"
+
+              - name: "test_main_initializes_server"
+                description: "Main should initialize server"
+                arrange: "Mock server initialization"
+                act: "Call main()"
+                assert: "Server is initialized"
+
+              - name: "test_main_handles_shutdown"
+                description: "Main should handle shutdown gracefully"
+                arrange: "Setup mock server"
+                act: "Send shutdown signal"
+                assert: "Server shuts down cleanly"
+
+            fixtures:
+              - name: "env_vars"
+                scope: "function"
+                implementation: "Fixture to set and restore environment variables"
+
+              - name: "mock_server"
+                scope: "function"
+                implementation: "AsyncMock of MCPDocumentIndexingServer"
+
+            imports:
+              - "import pytest"
+              - "from mcp_server.config import load_config, ServerConfig"
+              - "from unittest.mock import patch, AsyncMock"
+              - "import os"
+              - "from pathlib import Path"
+
+      success_criteria:
+        - "query_knowledge tool performs semantic search correctly"
+        - "Tool supports k and score_threshold parameters"
+        - "Results include document metadata and similarity scores"
+        - "list_documents tool returns all indexed documents"
+        - "list_documents supports pagination"
+        - "remove_document tool removes documents from index"
+        - "ServerConfig loads from environment variables"
+        - "Default configuration values are sensible"
+        - "Paths are created automatically"
+        - "Entry point initializes server correctly"
+        - "Server can be run with python -m mcp_server"
+        - "Graceful shutdown is implemented"
+        - "All tests pass with 80%+ coverage"
+        - "Type checking passes with Mypy strict mode"
+        - "Code formatted with Black"
+
+      implementation_checklist:
+        - title: "Query Tool Implementation"
+          items:
+            - item: "Define query_knowledge tool schema"
+            - item: "Implement query handler with parameter validation"
+            - item: "Format search results with scores and metadata"
+            - item: "Handle empty result set"
+            - item: "Support filtering and pagination"
+
+        - title: "Management Tools Implementation"
+          items:
+            - item: "Implement list_documents tool with pagination"
+            - item: "Implement remove_document tool"
+            - item: "Add document statistics collection"
+            - item: "Handle edge cases (empty index, missing documents)"
+
+        - title: "QueryEngine Integration"
+          items:
+            - item: "Import QueryEngine from Task 10"
+            - item: "Initialize query engine in server"
+            - item: "Call query engine methods from tool handlers"
+            - item: "Handle query engine errors"
+
+        - title: "Configuration"
+          items:
+            - item: "Create ServerConfig dataclass"
+            - item: "Add all required configuration fields"
+            - item: "Implement environment variable loading"
+            - item: "Add path creation logic"
+            - item: "Set reasonable defaults"
+
+        - title: "Entry Point"
+          items:
+            - item: "Create __main__.py module"
+            - item: "Implement async main() function"
+            - item: "Add logging configuration"
+            - item: "Implement server initialization"
+            - item: "Add graceful shutdown handling"
+
+        - title: "Testing"
+          items:
+            - item: "Write all test cases for query tools"
+            - item: "Write all test cases for configuration"
+            - item: "Setup comprehensive mocks"
+            - item: "Test all parameter combinations"
+            - item: "Test error handling"
+            - item: "Verify 80%+ coverage"
+
+        - title: "Code Quality"
+          items:
+            - item: "Add Google-style docstrings"
+            - item: "Add complete type annotations"
+            - item: "Run Mypy strict mode check"
+            - item: "Run Black formatter"
+
+      code_quality:
+        mypy_strict:
+          enabled: true
+          command: "python -m mypy src/mcp_server/query_tools.py src/mcp_server/config.py src/mcp_server/__main__.py --strict"
+          exit_on_failure: true
+
+        black_formatting:
+          enabled: true
+          command: "python -m black src/mcp_server/ tests/unit/test_query_tools.py tests/unit/test_mcp_config.py"
+          exit_on_failure: true
+
+        pytest_unit_tests:
+          enabled: true
+          command: "python -m pytest tests/unit/test_query_tools.py tests/unit/test_mcp_config.py -v --cov=src/mcp_server --cov-report=term-missing"
+          exit_on_failure: true
+          coverage_target: 80
+
+        full_quality_pipeline:
+          command: |
+            python -m black src/mcp_server/ tests/unit/test_query_tools.py tests/unit/test_mcp_config.py &&
+            python -m mypy src/mcp_server/query_tools.py src/mcp_server/config.py src/mcp_server/__main__.py --strict &&
+            python -m pytest tests/unit/test_query_tools.py tests/unit/test_mcp_config.py -v --cov=src/mcp_server
+          exit_on_failure: true
+
+      commit:
+        type: "feat"
+        message: "implement query tools, management tools, configuration, and entry point"
+        files:
+          - "src/mcp_server/query_tools.py"
+          - "src/mcp_server/config.py"
+          - "src/mcp_server/__main__.py"
+          - "tests/unit/test_query_tools.py"
+          - "tests/unit/test_mcp_config.py"
+
+      validation_checklist:
+        - command: "python -m pytest tests/unit/test_query_tools.py tests/unit/test_mcp_config.py -v"
+          expected: "All tests pass"
+        - command: "python -m mypy src/mcp_server/query_tools.py src/mcp_server/config.py src/mcp_server/__main__.py --strict"
+          expected: "No type errors"
+        - command: "python -m pytest tests/unit/test_query_tools.py tests/unit/test_mcp_config.py --cov=src/mcp_server"
+          expected: "Coverage >= 80%"
+
+  overall_summary:
+    phase_objective: "Expose document indexing and semantic search via MCP server tools"
+
+    deliverables:
+      - "MCP server scaffold (Task 12)"
+      - "Document indexing tools (Task 13)"
+      - "Semantic search, management tools, configuration, and entry point (Task 14)"
+
+    total_estimated_time: "3h"
+
+    key_milestones:
+      - milestone: "MCP Server Skeleton Complete"
+        task: 12
+        criteria: "Server initializes, tools can be registered, health check works"
+
+      - milestone: "Indexing Interface Complete"
+        task: 13
+        criteria: "index_document and batch_index tools work with DocumentIndexer"
+
+      - milestone: "Production Ready"
+        task: 14
+        criteria: "All tools functional, server configured, entry point working"
+
+    success_metrics:
+      - "100% protocol compliance (JSON-RPC 2.0)"
+      - "All 3 tasks deliver working MCP tools"
+      - "80%+ test coverage across all components"
+      - "Type safety: Mypy strict mode with zero errors"
+      - "Code quality: Black formatting applied"
+      - "Documentation: Google-style docstrings throughout"
+      - "Integration: All components work with Task 8, 10, 11 outputs"
+
+    quality_gates:
+      - gate: "Unit Test Coverage"
+        requirement: "80%+ coverage"
+        command: "python -m pytest --cov=src/mcp_server"
+
+      - gate: "Type Checking"
+        requirement: "Mypy strict mode passes"
+        command: "python -m mypy src/mcp_server/ --strict"
+
+      - gate: "Code Formatting"
+        requirement: "Black formatting"
+        command: "python -m black --check src/mcp_server/"
+
+      - gate: "Integration"
+        requirement: "All tools integrated with core components"
+        command: "python -m pytest tests/unit/ -v"
+
+    integration_points:
+      - component: "DocumentIndexer (Task 8)"
+        usage: "Called by index_document and batch_index tools"
+        validation: "Mock in unit tests, real integration in Task 15"
+
+      - component: "QueryEngine (Task 10)"
+        usage: "Called by query_knowledge tool"
+        validation: "Mock in unit tests, real integration in Task 15"
+
+      - component: "ChromaDB (Task 6)"
+        usage: "Storage backend, accessed through QueryEngine"
+        validation: "Integration test in Task 15"
+
+      - component: "Embeddings (Task 4)"
+        usage: "Via QueryEngine and DocumentIndexer"
+        validation: "Integration test in Task 15"
+
+    next_steps_after_phase:
+      - "Task 15: Integration Tests (runs independently)"
+      - "Task 16: Documentation"
+      - "Task 17: MCP Deployment Configuration"
+      - "Task 18: Initial AI Docs Indexing"
+
+  references:
+    protocol_docs:
+      - name: "MCP Protocol Specification"
+        url: "https://modelcontextprotocol.io/"
+        relevance: "JSON-RPC 2.0 compliance, tool schema definition"
+
+      - name: "MCP Python SDK"
+        url: "https://github.com/anthropics/anthropic-sdk-python"
+        relevance: "Server implementation patterns, tool registration"
+
+    related_tasks:
+      - task: 8
+        name: "DocumentIndexer Implementation"
+        dependency_type: "strong"
+
+      - task: 10
+        name: "QueryEngine Implementation"
+        dependency_type: "strong"
+
+      - task: 15
+        name: "Integration Tests"
+        dependency_type: "depends_on_us"
+
+    testing_resources:
+      - resource: "pytest fixtures"
+        location: "tests/conftest.py"
+        purpose: "Shared test fixtures and mocks"
+
+      - resource: "Mock Ollama client"
+        usage: "For testing without real Ollama service"
+
+      - resource: "Temporary ChromaDB"
+        usage: "For unit test isolation"
