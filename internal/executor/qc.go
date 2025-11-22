@@ -911,9 +911,26 @@ func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult
 		}
 	}
 
+	// Preserve individual agent feedback instead of generic message
+	var feedbackBuilder strings.Builder
+	for _, result := range results {
+		if result != nil && result.Feedback != "" {
+			if result.AgentName != "" {
+				feedbackBuilder.WriteString(fmt.Sprintf("[%s] %s\n", result.AgentName, result.Feedback))
+			} else {
+				feedbackBuilder.WriteString(fmt.Sprintf("%s\n", result.Feedback))
+			}
+		}
+	}
+
+	feedback := strings.TrimSpace(feedbackBuilder.String())
+	if feedback == "" {
+		feedback = "Multi-agent criteria consensus" // Fallback if no feedback
+	}
+
 	return &ReviewResult{
 		Flag:     verdict,
-		Feedback: "Multi-agent criteria consensus",
+		Feedback: feedback,
 	}
 }
 

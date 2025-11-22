@@ -273,14 +273,6 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// Build command args
 	args := inv.BuildCommandArgs(task)
 
-	// DEBUG: Log the actual --agents JSON being sent
-	for i, arg := range args {
-		if arg == "--agents" && i+1 < len(args) {
-			fmt.Fprintf(os.Stderr, "\n[DEBUG] --agents JSON:\n%s\n\n", args[i+1][:500])
-			break
-		}
-	}
-
 	// Pretty log the agent invocation
 	inv.logInvocation(task, args)
 
