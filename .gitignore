@@ -83,3 +83,4 @@ PATTERN_EXTRACTION_REFERENCE.md
 docs/
 !docs/plans/
 !docs/plans/integration-tasks-enhancement.yaml
+INTEGRATION_TASKS_ARCHITECTURE_REVIEW.md
