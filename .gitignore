@@ -74,9 +74,12 @@ transcripts/
 conductor
 
 # Deployment strategies (local planning docs)
-docs/
-!docs/conductor.md
 
 # Orphaned documentation (removed from repo)
 IMPLEMENTATION_SUMMARY.md
 PATTERN_EXTRACTION_REFERENCE.md
+\!docs/plans/integration-tasks-enhancement.yaml
+# To un-ignore a file in an ignored directory, need to:
+docs/
+!docs/plans/
+!docs/plans/integration-tasks-enhancement.yaml

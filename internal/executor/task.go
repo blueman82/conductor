@@ -147,6 +147,7 @@ type DefaultTaskExecutor struct {
 	AutoAdaptAgent         bool                     // Enable automatic agent adaptation
 	MinFailuresBeforeAdapt int                      // Minimum failures before adapting agent
 	SwapDuringRetries      bool                     // Enable inter-retry agent swapping
+	Plan                   *models.Plan             // Plan reference for integration prompt builder
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -508,6 +509,13 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	if err := te.preTaskHook(ctx, &task); err != nil {
 		// Hook errors are non-fatal but should be logged
 		// For now, continue without learning adaptation
+	}
+
+	// Apply integration context to integration tasks AND any task with dependencies
+	// This helps all dependent tasks understand their dependencies, not just explicit integration tasks
+	// Must be done BEFORE agent invocation to inject file context
+	if te.Plan != nil && (task.Type == "integration" || len(task.DependsOn) > 0) {
+		task.Prompt = buildIntegrationPrompt(task, te.Plan)
 	}
 
 	// Apply default agent if provided and task still has no agent.

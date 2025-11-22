@@ -20,6 +20,7 @@ plan:
     retry_on_red: 2
   tasks:
     - task_number: 1
+      type: component
       name: "Database Setup"
       files: ["db/schema.sql", "db/init.go"]
       depends_on: []
@@ -27,6 +28,7 @@ plan:
       description: "Initialize database schema and connection pool"
       worktree_group: "setup"
     - task_number: 2
+      type: component
       name: "API Server Setup"
       files: ["cmd/server/main.go", "internal/api/router.go"]
       depends_on: [1]
@@ -34,6 +36,7 @@ plan:
       description: "Set up HTTP server with routing framework"
       worktree_group: "setup"
     - task_number: 3
+      type: component
       name: "User Service Implementation"
       files: ["internal/service/user.go", "internal/repository/user.go"]
       depends_on: [2]
@@ -41,6 +44,7 @@ plan:
       description: "Implement user CRUD operations and persistence layer"
       worktree_group: "build-chain-a"
     - task_number: 4
+      type: component
       name: "Authentication Service"
       files: ["internal/service/auth.go", "internal/auth/jwt.go"]
       depends_on: [3]

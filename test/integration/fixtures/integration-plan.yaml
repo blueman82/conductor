@@ -1,0 +1,25 @@
+plan:
+  name: Integration Task Test Plan
+  tasks:
+    - task_number: "1"
+      name: "Implement base service"
+      files:
+        - internal/base.go
+      prompt: "Create base service implementation"
+      success_criteria:
+        - "Base service has Start method"
+        - "Base service has Stop method"
+
+    - task_number: "2"
+      name: "Integrate service with API"
+      type: "integration"
+      files:
+        - internal/service.go
+      depends_on:
+        - "1"
+      prompt: "Integrate base service into API layer"
+      success_criteria:
+        - "API uses base service methods"
+      integration_criteria:
+        - "Service properly integrated with base layer"
+        - "All dependency files from Task 1 were read"

@@ -14,6 +14,7 @@ plan:
 
   tasks:
     - task_number: 1
+      type: component
       name: "Initialize Project Structure"
       files:
         - "go.mod"
@@ -66,6 +67,7 @@ plan:
         automated_tests: "go test ./..."
 
     - task_number: 2
+      type: component
       name: "Add Cobra CLI Framework"
       files:
         - "go.mod"
@@ -93,6 +95,7 @@ plan:
           - Update main.go to call cmd.Execute()
 
     - task_number: 3
+      type: component
       name: "Define Core Data Models"
       files:
         - "internal/models/plan.go"

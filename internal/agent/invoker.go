@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/harrison/conductor/internal/models"
@@ -177,7 +179,7 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	args = append(args, "-p", prompt)
 
 	// Skip permissions for automation (allow file creation)
-	args = append(args, "--dangerously-skip-permissions")
+	args = append(args, "--permission-mode", "bypassPermissions")
 
 	// Disable hooks for automation
 	args = append(args, "--settings", `{"disableAllHooks": true}`)
@@ -188,12 +190,81 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	return args
 }
 
+// logInvocation prints a pretty summary of the agent invocation with colors
+func (inv *Invoker) logInvocation(task models.Task, args []string) {
+	// ANSI color codes
+	cyan := "\033[36m"
+	green := "\033[32m"
+	yellow := "\033[33m"
+	magenta := "\033[35m"
+	blue := "\033[34m"
+	reset := "\033[0m"
+	bold := "\033[1m"
+
+	fmt.Fprintf(os.Stderr, "\n%s┌────────────────────────────────────────────────────────────────┐%s\n", cyan, reset)
+	fmt.Fprintf(os.Stderr, "%s│ %s🤖 Agent Invocation%s                                            │%s\n", cyan, bold, reset, cyan+reset)
+	fmt.Fprintf(os.Stderr, "%s├────────────────────────────────────────────────────────────────┤%s\n", cyan, reset)
+
+	// Helper to pad and colorize a line
+	// Box width: 64 chars total
+	// Format: "│ Label:  value                                      │"
+	// Available for "Label:  value" = 62 chars (64 - 2 for borders)
+	printLine := func(label, value, valueColor string) {
+		// Truncate value if too long
+		labelLen := len(label) + 3 // "Label:  " = label + colon + 2 spaces
+		maxValueLen := 62 - labelLen
+		if len(value) > maxValueLen {
+			value = value[:maxValueLen-3] + "..."
+		}
+
+		// Calculate padding needed (62 - labelLen - valueLen)
+		padding := 62 - labelLen - len(value)
+		spacer := strings.Repeat(" ", padding)
+
+		fmt.Fprintf(os.Stderr, "%s│%s %s%s:%s  %s%s%s%s %s│%s\n",
+			cyan, reset, yellow, label, reset, valueColor, value, reset, spacer, cyan, reset)
+	}
+
+	// Agent info
+	if task.Agent != "" {
+		printLine("Agent", task.Agent, green+bold)
+
+		// Get agent details if available
+		if inv.Registry != nil {
+			if agent, exists := inv.Registry.Get(task.Agent); exists {
+				// Show tools
+				toolsStr := strings.Join(agent.Tools, ", ")
+				printLine("Tools", toolsStr, blue)
+			}
+		}
+	} else {
+		printLine("Agent", "(base model - no tools)", magenta)
+	}
+
+	// Task info
+	printLine("Task", task.Name, bold)
+
+	// Files being modified
+	if len(task.Files) > 0 {
+		filesStr := fmt.Sprintf("%d files", len(task.Files))
+		if len(task.Files) <= 3 {
+			filesStr = strings.Join(task.Files, ", ")
+		}
+		printLine("Files", filesStr, green)
+	}
+
+	fmt.Fprintf(os.Stderr, "%s└────────────────────────────────────────────────────────────────┘%s\n\n", cyan, reset)
+}
+
 // Invoke executes the claude CLI command with the given context
 func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationResult, error) {
 	startTime := time.Now()
 
 	// Build command args
 	args := inv.BuildCommandArgs(task)
+
+	// Pretty log the agent invocation
+	inv.logInvocation(task, args)
 
 	// Create command with context (for timeout)
 	cmd := exec.CommandContext(ctx, inv.ClaudePath, args...)

@@ -20,6 +20,7 @@ plan:
     retry_on_red: 2
   tasks:
     - task_number: 11
+      type: component
       name: "Search Service"
       files: ["services/search/main.go"]
       depends_on: [9, 4]
@@ -27,6 +28,7 @@ plan:
       description: "Implement Elasticsearch-based search service"
       worktree_group: "services"
     - task_number: 12
+      type: component
       name: "Notification Service"
       files: ["services/notification/main.go"]
       depends_on: [5, 8]
@@ -34,6 +36,7 @@ plan:
       description: "Build notification delivery system"
       worktree_group: "services"
     - task_number: 13
+      type: component
       name: "Integration Tests"
       files: ["tests/integration/all_test.go"]
       depends_on: [6, 7, 10, 11, 12]
@@ -41,6 +44,7 @@ plan:
       description: "Write comprehensive end-to-end tests"
       worktree_group: "testing"
     - task_number: 14
+      type: component
       name: "Performance Testing"
       files: ["tests/performance/load_test.go"]
       depends_on: [13]
@@ -48,6 +52,7 @@ plan:
       description: "Run load testing and benchmarks"
       worktree_group: "testing"
     - task_number: 15
+      type: component
       name: "Documentation & Deployment"
       files: ["docs/deployment.md", "Dockerfile"]
       depends_on: [14]

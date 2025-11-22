@@ -9,6 +9,7 @@ conductor:
 plan:
   tasks:
     - task_number: 1
+      type: component
       name: "Initialize"
       files: ["init.go"]
       depends_on: []

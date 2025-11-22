@@ -9,6 +9,7 @@ conductor:
 plan:
   tasks:
     - task_number: 2
+      type: component
       name: "Process Data"
       files: ["process.go"]
       depends_on: [999]

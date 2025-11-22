@@ -110,6 +110,12 @@ func (is *IntelligentSelector) buildSelectionPrompt(
 		}
 	}
 
+	// Add integration task context
+	integrationStr := ""
+	if task.Type == "integration" || task.IsIntegration() {
+		integrationStr = "\n\nThis is an INTEGRATION task verifying cross-component interactions and wiring."
+	}
+
 	prompt := fmt.Sprintf(`You are selecting QC (Quality Control) reviewer agents for a completed task.
 
 TASK CONTEXT:
@@ -117,7 +123,7 @@ TASK CONTEXT:
 - Task Name: %s
 - Files Modified: [%s]
 - Executing Agent: %s
-- Task Description: %s%s
+- Task Description: %s%s%s
 
 AVAILABLE QC AGENTS (from registry):
 %s
@@ -129,6 +135,7 @@ Analyze the task context and recommend the best QC agents to review this work. C
 3. The executing agent's strengths and potential blind spots
 4. Complementary perspectives for thorough review
 5. Success criteria requirements (if provided)
+6. Cross-component expertise for integration tasks (if applicable)
 
 Return a JSON object with:
 - "agents": array of %d or fewer agent names (from the available list)
@@ -138,6 +145,7 @@ IMPORTANT:
 - Only select agents from the AVAILABLE QC AGENTS list
 - Prioritize domain specialists (security-auditor, database-optimizer, etc.) for relevant tasks
 - Include language experts for stack-specific review
+- For integration tasks, recommend architects and fullstack developers for cross-component review
 - Maximum %d agents total
 - Order by priority (most important first)
 
@@ -152,6 +160,7 @@ RESPONSE FORMAT (JSON only):
 		executingAgent,
 		task.Prompt,
 		criteriaStr,
+		integrationStr,
 		agentsStr,
 		maxAgents,
 		maxAgents,

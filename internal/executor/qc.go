@@ -144,6 +144,17 @@ Agent Output:
 	return agent.PrepareAgentPrompt(basePrompt)
 }
 
+// getCombinedCriteria merges success_criteria and integration_criteria into single array
+// for structured review prompts. Integration criteria appended after success criteria.
+func getCombinedCriteria(task models.Task) []string {
+	criteria := make([]string, 0, len(task.SuccessCriteria)+len(task.IntegrationCriteria))
+	criteria = append(criteria, task.SuccessCriteria...)
+	if task.Type == "integration" {
+		criteria = append(criteria, task.IntegrationCriteria...)
+	}
+	return criteria
+}
+
 // BuildStructuredReviewPrompt creates a QC prompt with numbered success criteria for verification.
 // Falls back to legacy prompt structure for tasks without explicit criteria.
 func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, task models.Task, output string) string {
@@ -154,12 +165,25 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 	sb.WriteString(task.Prompt)
 	sb.WriteString("\n\n")
 
-	if len(task.SuccessCriteria) > 0 {
+	// Get combined criteria (success + integration)
+	allCriteria := getCombinedCriteria(task)
+
+	if len(allCriteria) > 0 {
 		sb.WriteString("## SUCCESS CRITERIA - VERIFY EACH ONE\n\n")
-		for i, criterion := range task.SuccessCriteria {
+		for i, criterion := range allCriteria {
 			sb.WriteString(fmt.Sprintf("%d. [ ] %s\n", i, criterion))
 		}
 		sb.WriteString("\n")
+
+		// Add integration note if this is an integration task with integration criteria
+		if task.Type == "integration" && len(task.IntegrationCriteria) > 0 {
+			sb.WriteString("## INTEGRATION CRITERIA - VERIFY EACH ONE\n\n")
+			startIdx := len(task.SuccessCriteria)
+			for i, criterion := range task.IntegrationCriteria {
+				sb.WriteString(fmt.Sprintf("%d. [ ] %s\n", startIdx+i, criterion))
+			}
+			sb.WriteString("\n")
+		}
 	}
 
 	if len(task.TestCommands) > 0 {
@@ -320,7 +344,8 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 
 	// Single agent review (legacy behavior)
 	var basePrompt string
-	hasSuccessCriteria := len(task.SuccessCriteria) > 0
+	allCriteria := getCombinedCriteria(task)
+	hasSuccessCriteria := len(allCriteria) > 0
 	if hasSuccessCriteria {
 		// Use structured prompt for tasks with explicit success criteria
 		basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
@@ -338,47 +363,35 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 		Agent:  qc.ReviewAgent,
 	}
 
-	// Invoke the QC agent
-	result, err := qc.Invoker.Invoke(ctx, reviewTask)
-	if err != nil {
-		return nil, fmt.Errorf("QC review failed: %w", err)
+	// Invoke the QC agent and parse response with automatic retry on JSON validation failure
+	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, qc.ReviewAgent)
+	if jsonErr != nil {
+		// Invocation failed (not just JSON parsing)
+		return nil, fmt.Errorf("QC review failed: %w", jsonErr)
 	}
 
-	// Try parsing as JSON first
-	qcResp, jsonErr := parseQCJSON(result.Output)
-	if jsonErr == nil {
-		// Success: use JSON response
-		reviewResult := &ReviewResult{
-			Flag:            qcResp.Verdict,
-			Feedback:        qcResp.Feedback,
-			SuggestedAgent:  qcResp.SuggestedAgent,
-			AgentName:       qc.ReviewAgent,
-			CriteriaResults: qcResp.CriteriaResults,
-		}
-
-		// Apply criteria aggregation if task has success criteria
-		if len(task.SuccessCriteria) > 0 {
-			if len(qcResp.CriteriaResults) == 0 {
-				// Agent didn't follow schema - treat as YELLOW (AI Counsel consensus)
-				reviewResult.Flag = models.StatusYellow
-				reviewResult.Feedback += " (Warning: Agent did not return criteria_results)"
-			} else {
-				// Override verdict based on criteria aggregation
-				reviewResult.Flag = qc.aggregateCriteriaResults(qcResp, task)
-			}
-		}
-
-		return reviewResult, nil
+	// Success: use JSON response
+	reviewResult := &ReviewResult{
+		Flag:            qcResp.Verdict,
+		Feedback:        qcResp.Feedback,
+		SuggestedAgent:  qcResp.SuggestedAgent,
+		AgentName:       qc.ReviewAgent,
+		CriteriaResults: qcResp.CriteriaResults,
 	}
 
-	// Fallback: use legacy parsing
-	flag, feedback := ParseReviewResponse(result.Output)
+	// Apply criteria aggregation if task has success criteria or integration criteria
+	if len(allCriteria) > 0 {
+		if len(qcResp.CriteriaResults) == 0 {
+			// Agent didn't follow schema - treat as YELLOW (AI Counsel consensus)
+			reviewResult.Flag = models.StatusYellow
+			reviewResult.Feedback += " (Warning: Agent did not return criteria_results)"
+		} else {
+			// Override verdict based on criteria aggregation
+			reviewResult.Flag = qc.aggregateCriteriaResults(qcResp, task, len(allCriteria))
+		}
+	}
 
-	return &ReviewResult{
-		Flag:      flag,
-		Feedback:  feedback,
-		AgentName: qc.ReviewAgent,
-	}, nil
+	return reviewResult, nil
 }
 
 // shouldUseMultiAgent determines if multi-agent QC should be used
@@ -473,12 +486,13 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 		qc.Logger.LogQCIndividualVerdicts(verdictMap)
 	}
 
-	// Aggregate results: use per-criterion consensus for tasks with success criteria,
+	// Aggregate results: use per-criterion consensus for tasks with success or integration criteria,
 	// otherwise use strictest-wins for legacy tasks
 	var final *ReviewResult
-	if len(task.SuccessCriteria) > 0 {
+	allCriteria := getCombinedCriteria(task)
+	if len(allCriteria) > 0 {
 		// Use multi-agent criteria aggregation (unanimous consensus)
-		final = qc.aggregateMultiAgentCriteria(results, task)
+		final = qc.aggregateMultiAgentCriteria(results, task, len(allCriteria))
 		final.AgentName = fmt.Sprintf("multi-agent(%s)", strings.Join(agents, ","))
 
 		// Log aggregated result
@@ -501,7 +515,8 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 // reviewSingleAgent performs QC review with a single specified agent
 func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.Task, output string, agentName string) (*ReviewResult, error) {
 	var basePrompt string
-	hasSuccessCriteria := len(task.SuccessCriteria) > 0
+	allCriteria := getCombinedCriteria(task)
+	hasSuccessCriteria := len(allCriteria) > 0
 	if hasSuccessCriteria {
 		basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
 	} else {
@@ -516,27 +531,18 @@ func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.
 		Agent:  agentName,
 	}
 
-	result, err := qc.Invoker.Invoke(ctx, reviewTask)
-	if err != nil {
-		return nil, fmt.Errorf("QC review failed: %w", err)
+	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, agentName)
+	if jsonErr != nil {
+		// Invocation or JSON parsing failed - return error
+		return nil, fmt.Errorf("QC review failed: %w", jsonErr)
 	}
 
-	qcResp, jsonErr := parseQCJSON(result.Output)
-	if jsonErr == nil {
-		return &ReviewResult{
-			Flag:            qcResp.Verdict,
-			Feedback:        qcResp.Feedback,
-			SuggestedAgent:  qcResp.SuggestedAgent,
-			AgentName:       agentName,
-			CriteriaResults: qcResp.CriteriaResults,
-		}, nil
-	}
-
-	flag, feedback := ParseReviewResponse(result.Output)
 	return &ReviewResult{
-		Flag:      flag,
-		Feedback:  feedback,
-		AgentName: agentName,
+		Flag:            qcResp.Verdict,
+		Feedback:        qcResp.Feedback,
+		SuggestedAgent:  qcResp.SuggestedAgent,
+		AgentName:       agentName,
+		CriteriaResults: qcResp.CriteriaResults,
 	}, nil
 }
 
@@ -546,6 +552,10 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 	results := make([]*ReviewResult, len(agents))
 	var mu sync.Mutex
 
+	// Get combined criteria once (same for all agents)
+	allCriteria := getCombinedCriteria(task)
+	hasSuccessCriteria := len(allCriteria) > 0
+
 	for i, agentName := range agents {
 		wg.Add(1)
 		go func(idx int, agent string) {
@@ -553,7 +563,6 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 
 			// Build review prompt
 			var basePrompt string
-			hasSuccessCriteria := len(task.SuccessCriteria) > 0
 			if hasSuccessCriteria {
 				basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
 			} else {
@@ -569,44 +578,31 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 				Agent:  agent,
 			}
 
-			// Invoke the agent
-			result, err := qc.Invoker.Invoke(ctx, reviewTask)
-			if err != nil {
+			// Invoke agent and parse response
+			qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, agent)
+			if jsonErr != nil {
 				mu.Lock()
 				results[idx] = &ReviewResult{
 					Flag:      "",
-					Feedback:  fmt.Sprintf("Agent %s failed: %v", agent, err),
+					Feedback:  fmt.Sprintf("Agent %s failed: %v", agent, jsonErr),
 					AgentName: agent,
 				}
 				mu.Unlock()
 				return
 			}
 
-			// Parse response
+			// Parse successful
 			var reviewResult *ReviewResult
-			qcResp, jsonErr := parseQCJSON(result.Output)
-			if jsonErr == nil {
-				reviewResult = &ReviewResult{
-					Flag:            qcResp.Verdict,
-					Feedback:        qcResp.Feedback,
-					SuggestedAgent:  qcResp.SuggestedAgent,
-					AgentName:       agent,
-					CriteriaResults: qcResp.CriteriaResults,
-				}
-				// Log criteria results if available
-				if qc.Logger != nil && len(qcResp.CriteriaResults) > 0 {
-					qc.Logger.LogQCCriteriaResults(agent, qcResp.CriteriaResults)
-				}
-			} else {
-				// DEBUG: Log parse failure
-				fmt.Printf("[DEBUG] %s JSON parse error: %v\n", agent, jsonErr)
-				fmt.Printf("[DEBUG] %s output: %s\n", agent, result.Output)
-				flag, feedback := ParseReviewResponse(result.Output)
-				reviewResult = &ReviewResult{
-					Flag:      flag,
-					Feedback:  feedback,
-					AgentName: agent,
-				}
+			reviewResult = &ReviewResult{
+				Flag:            qcResp.Verdict,
+				Feedback:        qcResp.Feedback,
+				SuggestedAgent:  qcResp.SuggestedAgent,
+				AgentName:       agent,
+				CriteriaResults: qcResp.CriteriaResults,
+			}
+			// Log criteria results if available
+			if qc.Logger != nil && len(qcResp.CriteriaResults) > 0 {
+				qc.Logger.LogQCCriteriaResults(agent, qcResp.CriteriaResults)
 			}
 
 			mu.Lock()
@@ -761,9 +757,56 @@ func extractJSONFromCodeFence(content string) string {
 	return content
 }
 
+// invokeAndParseQCAgent invokes a QC agent and parses the response, with automatic retry on JSON validation failure.
+// This method implements a robust JSON validation retry mechanism:
+// 1. First invocation attempts JSON parsing
+// 2. If parsing fails, retries with a schema reminder injected into the prompt
+// 3. Returns parsed response on success, error on persistent failure
+func (qc *QualityController) invokeAndParseQCAgent(ctx context.Context, task models.Task, agentName string) (*models.QCResponse, error) {
+	// First attempt: invoke agent and parse response
+	result, err := qc.Invoker.Invoke(ctx, task)
+	if err != nil {
+		return nil, fmt.Errorf("QC review failed: %w", err)
+	}
+
+	// Try to parse JSON response
+	qcResp, parseErr := parseQCJSON(result.Output)
+	if parseErr == nil {
+		return qcResp, nil // Success on first try
+	}
+
+	// JSON parsing failed - prepare retry with schema reminder
+	retryTask := task
+	retryTask.Prompt = task.Prompt + fmt.Sprintf(`
+
+PREVIOUS JSON INVALID
+
+Your previous response had invalid JSON.
+Error: %s
+
+You MUST respond with this exact JSON schema (verdict must be at root level, NOT nested):
+{
+  "verdict": "GREEN|RED|YELLOW",
+  "feedback": "detailed review feedback",
+  "issues": [{"severity": "critical|warning|info", "description": "...", "location": "..."}],
+  "recommendations": ["suggestion"],
+  "should_retry": false,
+  "suggested_agent": "agent-name"
+}`, parseErr.Error())
+
+	// Retry invocation
+	retryResult, err := qc.Invoker.Invoke(ctx, retryTask)
+	if err != nil {
+		return nil, fmt.Errorf("QC review retry failed: %w", err)
+	}
+
+	// Parse retry response - return error if still invalid
+	return parseQCJSON(retryResult.Output)
+}
+
 // aggregateCriteriaResults combines per-criterion verdicts using unanimous consensus.
 // If ANY criterion fails, returns RED. Empty CriteriaResults returns agent's original verdict for backward compatibility.
-func (qc *QualityController) aggregateCriteriaResults(resp *models.QCResponse, task models.Task) string {
+func (qc *QualityController) aggregateCriteriaResults(resp *models.QCResponse, task models.Task, expectedCriteriaCount int) string {
 	if len(resp.CriteriaResults) == 0 {
 		return resp.Verdict // Backward compatible
 	}
@@ -779,16 +822,16 @@ func (qc *QualityController) aggregateCriteriaResults(resp *models.QCResponse, t
 
 // aggregateMultiAgentCriteria combines per-criterion verdicts across multiple agents using unanimous consensus.
 // A criterion passes only if ALL agents unanimously agree it passes.
-// Falls back to aggregateVerdicts for tasks without success criteria.
-func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult, task models.Task) *ReviewResult {
-	// Fall back to standard aggregation if no success criteria defined
-	if len(task.SuccessCriteria) == 0 {
+// Falls back to aggregateVerdicts for tasks without success or integration criteria.
+func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult, task models.Task, expectedCriteriaCount int) *ReviewResult {
+	// Fall back to standard aggregation if no criteria defined
+	if expectedCriteriaCount == 0 {
 		return qc.aggregateVerdicts(results, []string{})
 	}
 
 	// Collect votes per criterion from all agents
 	criterionVotes := make(map[int][]bool)
-	for i := range task.SuccessCriteria {
+	for i := 0; i < expectedCriteriaCount; i++ {
 		criterionVotes[i] = []bool{}
 	}
 
@@ -807,7 +850,7 @@ func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult
 	// Check unanimous consensus per criterion and log results
 	allPassed := true
 	var consensusResults []string
-	for idx := 0; idx < len(task.SuccessCriteria); idx++ {
+	for idx := 0; idx < expectedCriteriaCount; idx++ {
 		votes := criterionVotes[idx]
 		if len(votes) == 0 {
 			allPassed = false // No votes = fail (no consensus possible)

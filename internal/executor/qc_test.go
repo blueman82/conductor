@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -303,7 +304,7 @@ func TestReview(t *testing.T) {
 			},
 			output: "Task completed",
 			mockResult: &agent.InvocationResult{
-				Output:   "Quality Control: GREEN\n\nExcellent work!",
+				Output:   `{"verdict":"GREEN","feedback":"Excellent work!","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 				ExitCode: 0,
 				Duration: 50 * time.Millisecond,
 			},
@@ -320,7 +321,7 @@ func TestReview(t *testing.T) {
 			},
 			output: "Bug fixed",
 			mockResult: &agent.InvocationResult{
-				Output:   "Quality Control: RED\n\nTests still failing",
+				Output:   `{"verdict":"RED","feedback":"Tests still failing","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 				ExitCode: 0,
 				Duration: 75 * time.Millisecond,
 			},
@@ -350,7 +351,7 @@ func TestReview(t *testing.T) {
 			},
 			output: "Feature added",
 			mockResult: &agent.InvocationResult{
-				Output:   "Quality Control: YELLOW\n\nMinor documentation issues",
+				Output:   `{"verdict":"YELLOW","feedback":"Minor documentation issues","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 				ExitCode: 0,
 				Duration: 60 * time.Millisecond,
 			},
@@ -377,6 +378,8 @@ func TestReview(t *testing.T) {
 			}
 
 			qc := NewQualityController(mock)
+			// Disable multi-agent mode for legacy single-agent testing
+			qc.AgentConfig.Mode = ""
 			ctx := context.Background()
 
 			result, err := qc.Review(ctx, tt.task, tt.output)
@@ -437,7 +440,7 @@ func TestReviewWithLearning(t *testing.T) {
 		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
 			capturedPrompt = task.Prompt
 			return &agent.InvocationResult{
-				Output:   "Quality Control: GREEN\n\nLooks good now!",
+				Output:   `{"verdict":"GREEN","feedback":"Looks good now!","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 				ExitCode: 0,
 				Duration: 100 * time.Millisecond,
 			}, nil
@@ -445,6 +448,8 @@ func TestReviewWithLearning(t *testing.T) {
 	}
 
 	qc := NewQualityController(mock)
+	// Disable multi-agent mode for legacy single-agent testing
+	qc.AgentConfig.Mode = ""
 	qc.LearningStore = store
 
 	ctx := context.Background()
@@ -476,7 +481,7 @@ func TestQualityControlFlow(t *testing.T) {
 		mock := &mockInvoker{
 			mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
 				return &agent.InvocationResult{
-					Output:   "Quality Control: GREEN\n\nAll requirements met",
+					Output:   `{"verdict":"GREEN","feedback":"All requirements met","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 					ExitCode: 0,
 					Duration: 100 * time.Millisecond,
 				}, nil
@@ -484,6 +489,8 @@ func TestQualityControlFlow(t *testing.T) {
 		}
 
 		qc := NewQualityController(mock)
+		// Disable multi-agent mode for legacy single-agent testing
+		qc.AgentConfig.Mode = ""
 		task := models.Task{
 			Number: "1",
 			Name:   "Implement feature",
@@ -511,7 +518,7 @@ func TestQualityControlFlow(t *testing.T) {
 		mock := &mockInvoker{
 			mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
 				return &agent.InvocationResult{
-					Output:   "Quality Control: RED\n\nTests failing, needs rework",
+					Output:   `{"verdict":"RED","feedback":"Tests failing, needs rework","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
 					ExitCode: 0,
 					Duration: 100 * time.Millisecond,
 				}, nil
@@ -519,6 +526,8 @@ func TestQualityControlFlow(t *testing.T) {
 		}
 
 		qc := NewQualityController(mock)
+		// Disable multi-agent mode for legacy single-agent testing
+		qc.AgentConfig.Mode = ""
 		qc.MaxRetries = 2
 		task := models.Task{
 			Number: "1",
@@ -855,7 +864,7 @@ func TestParseQCJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := parseQCJSON(tt.output)
+			resp, err := parseQCJSON(tt.output) // No criteria expected for legacy tests
 
 			if tt.wantErr {
 				if err == nil {
@@ -1590,6 +1599,138 @@ func TestBuildStructuredReviewPrompt_CriteriaIndexing(t *testing.T) {
 	}
 }
 
+func TestBuildStructuredReviewPrompt_WithIntegrationCriteria(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Name:   "Integration Test",
+		Prompt: "Test integration",
+		Type:   "integration",
+		SuccessCriteria: []string{
+			"Feature A works",
+			"Feature B works",
+		},
+		IntegrationCriteria: []string{
+			"A integrates with B",
+			"No regression in C",
+			"Performance acceptable",
+		},
+		TestCommands: []string{},
+	}
+
+	prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "output")
+
+	// Verify success criteria (0-1)
+	if !contains(prompt, "0. [ ] Feature A works") {
+		t.Error("success criterion 0 not found")
+	}
+	if !contains(prompt, "1. [ ] Feature B works") {
+		t.Error("success criterion 1 not found")
+	}
+
+	// Verify integration criteria start at index 2
+	if !contains(prompt, "2. [ ] A integrates with B") {
+		t.Error("integration criterion 0 (index 2) not found")
+	}
+	if !contains(prompt, "3. [ ] No regression in C") {
+		t.Error("integration criterion 1 (index 3) not found")
+	}
+	if !contains(prompt, "4. [ ] Performance acceptable") {
+		t.Error("integration criterion 2 (index 4) not found")
+	}
+
+	// Verify INTEGRATION CRITERIA section header
+	if !contains(prompt, "## INTEGRATION CRITERIA") {
+		t.Error("INTEGRATION CRITERIA section header not found")
+	}
+}
+
+func TestBuildStructuredReviewPrompt_IntegrationWithoutSuccessCriteria(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Name:   "Integration Only",
+		Prompt: "Integration test",
+		Type:   "integration",
+		SuccessCriteria: []string{}, // No success criteria
+		IntegrationCriteria: []string{
+			"Service A calls Service B",
+			"Data consistency maintained",
+		},
+		TestCommands: []string{},
+	}
+
+	prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "output")
+
+	// Verify integration criteria start at index 0 when no success criteria
+	if !contains(prompt, "0. [ ] Service A calls Service B") {
+		t.Error("integration criterion 0 (index 0) not found")
+	}
+	if !contains(prompt, "1. [ ] Data consistency maintained") {
+		t.Error("integration criterion 1 (index 1) not found")
+	}
+
+	// Verify INTEGRATION CRITERIA section header
+	if !contains(prompt, "## INTEGRATION CRITERIA") {
+		t.Error("INTEGRATION CRITERIA section header not found")
+	}
+}
+
+func TestGetCombinedCriteria_SuccessOnly(t *testing.T) {
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	combined := getCombinedCriteria(task)
+	if len(combined) != 2 {
+		t.Errorf("expected 2 criteria, got %d", len(combined))
+	}
+	if combined[0] != "A" || combined[1] != "B" {
+		t.Errorf("unexpected combined criteria: %v", combined)
+	}
+}
+
+func TestGetCombinedCriteria_IntegrationOnly(t *testing.T) {
+	task := models.Task{
+		Type:                "integration",
+		IntegrationCriteria: []string{"X", "Y", "Z"},
+	}
+	combined := getCombinedCriteria(task)
+	if len(combined) != 3 {
+		t.Errorf("expected 3 criteria, got %d", len(combined))
+	}
+	if combined[0] != "X" || combined[1] != "Y" || combined[2] != "Z" {
+		t.Errorf("unexpected combined criteria: %v", combined)
+	}
+}
+
+func TestGetCombinedCriteria_Both(t *testing.T) {
+	task := models.Task{
+		Type:                "integration",
+		SuccessCriteria:     []string{"A", "B"},
+		IntegrationCriteria: []string{"X", "Y"},
+	}
+	combined := getCombinedCriteria(task)
+	if len(combined) != 4 {
+		t.Errorf("expected 4 criteria, got %d", len(combined))
+	}
+	if combined[0] != "A" || combined[1] != "B" || combined[2] != "X" || combined[3] != "Y" {
+		t.Errorf("unexpected combined criteria: %v", combined)
+	}
+}
+
+func TestGetCombinedCriteria_NonIntegrationIgnoresIntegrationCriteria(t *testing.T) {
+	task := models.Task{
+		Type:                "regular", // Not integration
+		SuccessCriteria:     []string{"A"},
+		IntegrationCriteria: []string{"X", "Y"}, // Should be ignored
+	}
+	combined := getCombinedCriteria(task)
+	if len(combined) != 1 {
+		t.Errorf("expected 1 criterion (non-integration should ignore integration criteria), got %d", len(combined))
+	}
+	if combined[0] != "A" {
+		t.Errorf("unexpected combined criteria: %v", combined)
+	}
+}
+
 func TestAggregateCriteriaResults_AllPass(t *testing.T) {
 	qc := NewQualityController(nil)
 	task := models.Task{
@@ -1603,7 +1744,7 @@ func TestAggregateCriteriaResults_AllPass(t *testing.T) {
 		},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 2)
 	if verdict != models.StatusGreen {
 		t.Errorf("expected GREEN, got %s", verdict)
 	}
@@ -1621,7 +1762,7 @@ func TestAggregateCriteriaResults_OneFails_ReturnsRed(t *testing.T) {
 		},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 2)
 	if verdict != models.StatusRed {
 		t.Errorf("expected RED when criterion fails, got %s", verdict)
 	}
@@ -1637,7 +1778,7 @@ func TestAggregateCriteriaResults_NoCriteria_UsesAgentVerdict(t *testing.T) {
 		CriteriaResults: []models.CriterionResult{},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 0)
 	if verdict != "YELLOW" {
 		t.Errorf("expected YELLOW (agent verdict), got %s", verdict)
 	}
@@ -1657,7 +1798,7 @@ func TestAggregateCriteriaResults_AllFail(t *testing.T) {
 		},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 3)
 	if verdict != models.StatusRed {
 		t.Errorf("expected RED when all criteria fail, got %s", verdict)
 	}
@@ -1676,7 +1817,7 @@ func TestAggregateCriteriaResults_FirstFails(t *testing.T) {
 		},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 2)
 	if verdict != models.StatusRed {
 		t.Errorf("expected RED when first criterion fails, got %s", verdict)
 	}
@@ -1704,7 +1845,7 @@ func TestMultiAgentCriteriaConsensus_Unanimous(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 2)
 	if final.Flag != models.StatusGreen {
 		t.Errorf("expected GREEN (all unanimous), got %s", final.Flag)
 	}
@@ -1732,7 +1873,7 @@ func TestMultiAgentCriteriaConsensus_OneAgentFails(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 2)
 	if final.Flag != models.StatusRed {
 		t.Errorf("expected RED (not unanimous on B), got %s", final.Flag)
 	}
@@ -1770,7 +1911,7 @@ func TestMultiAgentCriteriaConsensus_MixedResults(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 3)
 	if final.Flag != models.StatusRed {
 		t.Errorf("expected RED (mixed failures), got %s", final.Flag)
 	}
@@ -1802,7 +1943,7 @@ func TestMultiAgentCriteriaConsensus_SkipsAgentsWithoutCriteria(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 2)
 	// Should be GREEN as agent2 is skipped (non-compliant)
 	if final.Flag != models.StatusGreen {
 		t.Errorf("expected GREEN (skips non-compliant agent), got %s", final.Flag)
@@ -1827,7 +1968,7 @@ func TestMultiAgentCriteriaConsensus_NoCriteria_FallsBackToAggregateVerdicts(t *
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 0)
 	// Should fall back to aggregateVerdicts (strictest-wins)
 	if final.Flag != models.StatusYellow {
 		t.Errorf("expected YELLOW (fallback to aggregateVerdicts), got %s", final.Flag)
@@ -1855,7 +1996,7 @@ func TestMultiAgentCriteriaConsensus_NilResult(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 1)
 	if final.Flag != models.StatusGreen {
 		t.Errorf("expected GREEN (skips nil result), got %s", final.Flag)
 	}
@@ -1877,7 +2018,7 @@ func TestMultiAgentCriteriaConsensus_AllAgentsNonCompliant(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 2)
 	// No votes means fail (no consensus possible)
 	if final.Flag != models.StatusRed {
 		t.Errorf("expected RED (no compliant agents), got %s", final.Flag)
@@ -2408,4 +2549,476 @@ func contains(s, substr string) bool {
 			}
 			return false
 		}())
+}
+
+// TestInvokeAndParseQCAgent_RetriesOnInvalidJSON tests JSON validation retry logic
+// This test verifies that when a QC agent returns invalid JSON (verdict in metadata),
+// the system retries with a schema reminder and validates the corrected response.
+func TestInvokeAndParseQCAgent_RetriesOnInvalidJSON(t *testing.T) {
+	callCount := 0
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			callCount++
+			if callCount == 1 {
+				// First call: return invalid JSON (verdict in metadata, not at root level)
+				return &agent.InvocationResult{
+					Output:   `{"metadata": {"verdict": "GREEN"}, "feedback": "looks good"}`,
+					Duration: 100 * time.Millisecond,
+				}, nil
+			}
+			// Second call (retry): verify schema reminder in prompt, return valid JSON
+			if !strings.Contains(task.Prompt, "PREVIOUS JSON INVALID") {
+				t.Error("Retry prompt missing schema reminder indicator")
+			}
+			if !strings.Contains(task.Prompt, "verdict must be at root level") {
+				t.Error("Retry prompt missing schema explanation")
+			}
+			return &agent.InvocationResult{
+				Output:   `{"verdict":"GREEN","feedback":"looks good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := &QualityController{
+		Invoker: mockInv,
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "original prompt",
+	}
+
+	// Test that invokeAndParseQCAgent retries on invalid JSON
+	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
+
+	if err != nil {
+		t.Fatalf("Expected success after retry, got error: %v", err)
+	}
+
+	if callCount != 2 {
+		t.Errorf("Expected 2 invocations (original + retry), got %d", callCount)
+	}
+
+	if resp.Verdict != "GREEN" {
+		t.Errorf("Expected verdict GREEN, got %s", resp.Verdict)
+	}
+
+	if resp.Feedback != "looks good" {
+		t.Errorf("Expected feedback 'looks good', got %q", resp.Feedback)
+	}
+}
+
+// TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON tests maximum retry exhaustion
+// When JSON remains invalid after retry limit, the system should return an error.
+func TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON(t *testing.T) {
+	callCount := 0
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			callCount++
+			// Always return invalid JSON (never fixes the schema)
+			return &agent.InvocationResult{
+				Output:   `{"metadata": {"verdict": "GREEN"}}`,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := &QualityController{
+		Invoker: mockInv,
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "original prompt",
+	}
+
+	// Test that invokeAndParseQCAgent fails after exhausting retries
+	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
+
+	if err == nil {
+		t.Error("Expected error on persistent invalid JSON, got nil")
+	}
+
+	if callCount == 0 {
+		t.Error("Expected at least one invocation attempt")
+	}
+
+	if resp != nil {
+		t.Error("Expected nil response on error, got non-nil response")
+	}
+}
+
+// TestInvokeAndParseQCAgent_SucceedsWithValidJSONFirstAttempt tests happy path
+// When JSON is valid on first attempt, no retry occurs.
+func TestInvokeAndParseQCAgent_SucceedsWithValidJSONFirstAttempt(t *testing.T) {
+	callCount := 0
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			callCount++
+			// Return valid JSON immediately
+			return &agent.InvocationResult{
+				Output: `{"verdict":"GREEN","feedback":"excellent work","issues":[],"recommendations":["add tests"],"should_retry":false,"suggested_agent":""}`,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	qc := &QualityController{
+		Invoker: mockInv,
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "original prompt",
+	}
+
+	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
+
+	if err != nil {
+		t.Fatalf("Expected success on valid JSON, got error: %v", err)
+	}
+
+	if callCount != 1 {
+		t.Errorf("Expected 1 invocation (no retry), got %d", callCount)
+	}
+
+	if resp.Verdict != "GREEN" {
+		t.Errorf("Expected verdict GREEN, got %s", resp.Verdict)
+	}
+
+	if resp.Feedback != "excellent work" {
+		t.Errorf("Expected feedback 'excellent work', got %q", resp.Feedback)
+	}
+
+	if len(resp.Recommendations) != 1 || resp.Recommendations[0] != "add tests" {
+		t.Errorf("Expected recommendation 'add tests', got %v", resp.Recommendations)
+	}
+}
+
+// TestInvokeAndParseQCAgent_HandlesContextCancellation tests cancellation handling
+// When context is cancelled during invocation, the system should propagate the error.
+func TestInvokeAndParseQCAgent_HandlesContextCancellation(t *testing.T) {
+	mockInv := &mockInvoker{
+		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			// Simulate context cancellation
+			return nil, context.Canceled
+		},
+	}
+
+	qc := &QualityController{
+		Invoker: mockInv,
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "original prompt",
+	}
+
+	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
+
+	if err == nil {
+		t.Error("Expected error on context cancellation, got nil")
+	}
+
+	if resp != nil {
+		t.Error("Expected nil response on context cancellation, got non-nil response")
+	}
+}
+
+// TestBuildStructuredReviewPrompt_DualCriteria tests structured review prompts with both
+// success criteria and integration criteria for integration tasks.
+// Verifies that criteria are properly indexed sequentially and sections are clearly
+// separated with appropriate headers.
+func TestBuildStructuredReviewPrompt_DualCriteria(t *testing.T) {
+	tests := []struct {
+		name                  string
+		taskType              string
+		successCriteria       []string
+		integrationCriteria   []string
+		wantSuccessCriteria   bool
+		wantIntegrationCriteria bool
+		wantExactCriteria     []struct {
+			index int
+			text  string
+		}
+	}{
+		{
+			name:     "success and integration criteria both present",
+			taskType: "integration",
+			successCriteria: []string{
+				"Component works",
+				"Unit tests pass",
+			},
+			integrationCriteria: []string{
+				"Integrates properly",
+				"No regression",
+			},
+			wantSuccessCriteria:     true,
+			wantIntegrationCriteria: true,
+			wantExactCriteria: []struct {
+				index int
+				text  string
+			}{
+				{0, "Component works"},
+				{1, "Unit tests pass"},
+				{2, "Integrates properly"},
+				{3, "No regression"},
+			},
+		},
+		{
+			name:                    "only success criteria (non-integration task)",
+			taskType:                "regular",
+			successCriteria:         []string{"Feature implemented"},
+			integrationCriteria:     []string{},  // No integration criteria for regular tasks
+			wantSuccessCriteria:     true,
+			wantIntegrationCriteria: false,
+			wantExactCriteria: []struct {
+				index int
+				text  string
+			}{
+				{0, "Feature implemented"},
+			},
+		},
+		{
+			name:                    "only integration criteria",
+			taskType:                "integration",
+			successCriteria:         []string{},
+			integrationCriteria:     []string{"Services communicate"},
+			wantSuccessCriteria:     true, // SUCCESS CRITERIA header still shown
+			wantIntegrationCriteria: true,
+			wantExactCriteria: []struct {
+				index int
+				text  string
+			}{
+				{0, "Services communicate"},
+			},
+		},
+		{
+			name:                    "multiple criteria with special characters",
+			taskType:                "integration",
+			successCriteria:         []string{"API returns HTTP 200"},
+			integrationCriteria:     []string{"Response contains required fields: id, name, email"},
+			wantSuccessCriteria:     true,
+			wantIntegrationCriteria: true,
+			wantExactCriteria: []struct {
+				index int
+				text  string
+			}{
+				{0, "API returns HTTP 200"},
+				{1, "Response contains required fields: id, name, email"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qc := NewQualityController(nil)
+			task := models.Task{
+				Number:              "5",
+				Name:                "Test Integration Task",
+				Prompt:              "Implement integration",
+				Type:                tt.taskType,
+				SuccessCriteria:     tt.successCriteria,
+				IntegrationCriteria: tt.integrationCriteria,
+				Files:               []string{"internal/integration/service.go"},
+			}
+
+			ctx := context.Background()
+			prompt := qc.BuildStructuredReviewPrompt(ctx, task, "agent output")
+
+			// Verify SUCCESS CRITERIA section is present if there are any criteria
+			if (tt.successCriteria != nil && len(tt.successCriteria) > 0) || (tt.integrationCriteria != nil && len(tt.integrationCriteria) > 0) {
+				if !contains(prompt, "## SUCCESS CRITERIA") {
+					t.Error("SUCCESS CRITERIA section header missing")
+				}
+			}
+
+			// Verify INTEGRATION CRITERIA section presence
+			if tt.wantIntegrationCriteria && tt.taskType == "integration" && len(tt.integrationCriteria) > 0 {
+				if !contains(prompt, "## INTEGRATION CRITERIA") {
+					t.Error("INTEGRATION CRITERIA section header missing")
+				}
+			} else if tt.wantIntegrationCriteria && tt.taskType == "integration" && len(tt.integrationCriteria) == 0 {
+				// Integration type but no integration criteria - should NOT have the header
+				if contains(prompt, "## INTEGRATION CRITERIA - VERIFY EACH ONE") {
+					t.Error("INTEGRATION CRITERIA section header should not be present when no integration criteria")
+				}
+			}
+
+			// Verify exact criterion indices and text
+			for _, criterion := range tt.wantExactCriteria {
+				expectedLine := fmt.Sprintf("%d. [ ] %s", criterion.index, criterion.text)
+				if !contains(prompt, expectedLine) {
+					t.Errorf("Criterion not found: %q\nFull prompt:\n%s", expectedLine, prompt)
+				}
+			}
+
+			// Verify criteria are numbered sequentially
+			allCriteria := append(tt.successCriteria, tt.integrationCriteria...)
+			if len(allCriteria) > 0 {
+				for i, criterion := range allCriteria {
+					if !contains(prompt, fmt.Sprintf("%d. [ ] %s", i, criterion)) {
+						t.Errorf("Criterion %d (%q) not found with correct index", i, criterion)
+					}
+				}
+			}
+
+			// Verify task name is in the prompt
+			if !contains(prompt, task.Name) {
+				t.Error("Task name not found in prompt")
+			}
+
+			// Verify agent output section
+			if !contains(prompt, "## AGENT OUTPUT") {
+				t.Error("AGENT OUTPUT section missing")
+			}
+			if !contains(prompt, "agent output") {
+				t.Error("Agent output content missing")
+			}
+		})
+	}
+}
+
+// TestBuildStructuredReviewPrompt_DualCriteria_Ordering verifies that success criteria
+// and integration criteria are properly ordered with correct sequential indices.
+func TestBuildStructuredReviewPrompt_DualCriteria_Ordering(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Number: "7",
+		Name:   "Complex Integration",
+		Prompt: "Implement complex integration system",
+		Type:   "integration",
+		SuccessCriteria: []string{
+			"Database schema created",
+			"Migrations work forward and backward",
+			"Indexes created on foreign keys",
+		},
+		IntegrationCriteria: []string{
+			"API server starts without errors",
+			"Connections to database established",
+			"Health check endpoint responds",
+			"Metrics exported correctly",
+		},
+		Files: []string{
+			"internal/db/schema.go",
+			"internal/api/server.go",
+			"internal/metrics/exporter.go",
+		},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "implementation output")
+
+	// Verify SUCCESS CRITERIA section
+	if !contains(prompt, "## SUCCESS CRITERIA") {
+		t.Error("SUCCESS CRITERIA header missing")
+	}
+
+	// Verify INTEGRATION CRITERIA section
+	if !contains(prompt, "## INTEGRATION CRITERIA") {
+		t.Error("INTEGRATION CRITERIA header missing")
+	}
+
+	// Verify success criteria indices (0-2)
+	successTests := []struct {
+		index int
+		text  string
+	}{
+		{0, "Database schema created"},
+		{1, "Migrations work forward and backward"},
+		{2, "Indexes created on foreign keys"},
+	}
+
+	for _, st := range successTests {
+		expectedLine := fmt.Sprintf("%d. [ ] %s", st.index, st.text)
+		if !contains(prompt, expectedLine) {
+			t.Errorf("Success criterion %d not found: %q", st.index, expectedLine)
+		}
+	}
+
+	// Verify integration criteria indices (3-6)
+	integrationTests := []struct {
+		index int
+		text  string
+	}{
+		{3, "API server starts without errors"},
+		{4, "Connections to database established"},
+		{5, "Health check endpoint responds"},
+		{6, "Metrics exported correctly"},
+	}
+
+	for _, it := range integrationTests {
+		expectedLine := fmt.Sprintf("%d. [ ] %s", it.index, it.text)
+		if !contains(prompt, expectedLine) {
+			t.Errorf("Integration criterion %d not found: %q", it.index, expectedLine)
+		}
+	}
+
+	// Verify SUCCESS CRITERIA comes before INTEGRATION CRITERIA
+	successIdx := strings.Index(prompt, "## SUCCESS CRITERIA")
+	integrationIdx := strings.Index(prompt, "## INTEGRATION CRITERIA")
+	if successIdx < 0 {
+		t.Fatal("SUCCESS CRITERIA section not found")
+	}
+	if integrationIdx < 0 {
+		t.Fatal("INTEGRATION CRITERIA section not found")
+	}
+	if successIdx >= integrationIdx {
+		t.Error("SUCCESS CRITERIA section should appear before INTEGRATION CRITERIA section")
+	}
+}
+
+// TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegration
+// verifies that integration criteria are not included for non-integration task types.
+func TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegration(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Number: "3",
+		Name:   "Regular Task",
+		Prompt: "Implement feature",
+		Type:   "regular", // Not integration
+		SuccessCriteria: []string{
+			"Feature works",
+			"Tests pass",
+		},
+		IntegrationCriteria: []string{
+			"Should be ignored",
+			"This should not appear",
+		},
+		Files: []string{"internal/feature/impl.go"},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+	// Verify SUCCESS CRITERIA is present
+	if !contains(prompt, "## SUCCESS CRITERIA") {
+		t.Error("SUCCESS CRITERIA header should be present")
+	}
+
+	// Verify success criteria are indexed
+	if !contains(prompt, "0. [ ] Feature works") {
+		t.Error("Success criterion 0 not found")
+	}
+	if !contains(prompt, "1. [ ] Tests pass") {
+		t.Error("Success criterion 1 not found")
+	}
+
+	// Verify INTEGRATION CRITERIA section is NOT present
+	if contains(prompt, "## INTEGRATION CRITERIA - VERIFY EACH ONE") {
+		t.Error("INTEGRATION CRITERIA section should NOT be present for non-integration tasks")
+	}
+
+	// Verify integration criteria text does not appear
+	if contains(prompt, "Should be ignored") {
+		t.Error("Integration criteria should not be included in non-integration task prompts")
+	}
+	if contains(prompt, "This should not appear") {
+		t.Error("Integration criteria should not be included in non-integration task prompts")
+	}
 }

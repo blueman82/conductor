@@ -14,8 +14,8 @@ import (
 type Agent struct {
 	Name        string   `yaml:"name" json:"name"`
 	Description string   `yaml:"description" json:"description"`
-	Tools       ToolList `yaml:"tools" json:"tools"`
-	FilePath    string   `yaml:"-" json:"-"` // Not parsed from YAML, not included in JSON
+	Tools       ToolList `yaml:"tools" json:"tools,omitempty"` // Omit if empty = all tools available
+	FilePath    string   `yaml:"-" json:"-"`                   // Not parsed from YAML, not included in JSON
 }
 
 // ToolList is a custom type that handles both comma-separated strings
@@ -53,9 +53,14 @@ func (t *ToolList) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // MarshalJSON implements custom marshaling for ToolList
-// Always serializes as a JSON array for consistency with claude CLI --agents flag
+// Empty ToolList marshals as null (triggering omitempty) = all tools available
+// Non-empty marshals as array for claude CLI --agents flag
 // Example: ["Read", "Write", "Edit"]
 func (t ToolList) MarshalJSON() ([]byte, error) {
+	// If empty, marshal as null so omitempty omits field
+	if len(t) == 0 {
+		return []byte("null"), nil
+	}
 	// Convert ToolList to []string and marshal as array
 	return json.Marshal([]string(t))
 }

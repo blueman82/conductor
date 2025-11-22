@@ -91,6 +91,12 @@ Conductor automates complex multi-step implementations by:
   - **Critical fix**: Respects agent RED verdicts even when criteria pass
   - Domain-specific review criteria (Go/SQL/TypeScript/Python)
   - File path verification in QC prompts
+- **Integration Tasks with Dual Criteria** (v2.5+): Component and cross-component validation
+  - Define component tasks (`type: "component"`) vs integration tasks (`type: "integration"`)
+  - Dual-level validation: `success_criteria` for component checks, `integration_criteria` for cross-component
+  - QC system verifies both criteria types for comprehensive quality control
+  - Automatic dependency context injection for tasks with dependencies
+  - Better task organization and clearer separation of concerns
 
 [⬆ back to top](#table-of-contents)
 
@@ -551,7 +557,53 @@ plan:
       description: Implement JWT authentication with proper validation.
 ```
 
-QC agents verify each criterion individually and require unanimous consensus across all agents. Tasks without `success_criteria` use legacy blob review.
+### YAML Format with Integration Tasks (v2.5+)
+
+```yaml
+plan:
+  name: Plan Title
+  tasks:
+    # Component task: single responsibility with focused success criteria
+    - id: 1
+      name: Implement JWT Module
+      type: component
+      files: [internal/auth/jwt.go, internal/auth/jwt_test.go]
+      depends_on: []
+      estimated_time: 10 minutes
+      agent: golang-pro
+      success_criteria:
+        - "JWT validation function implemented"
+        - "Supports HS256 and RS256 algorithms"
+        - "Unit tests achieve 95% coverage"
+      description: Implement JWT authentication module.
+
+    # Integration task: verifies cross-component interactions
+    - id: 2
+      name: Integrate JWT with API Server
+      type: integration
+      files: [internal/api/middleware.go, internal/api/server.go]
+      depends_on: [1]
+      estimated_time: 5 minutes
+      agent: golang-pro
+      success_criteria:
+        - "JWT middleware correctly applied to protected routes"
+        - "API routes properly configured"
+      integration_criteria:
+        - "JWT module integrates seamlessly with API server"
+        - "Protected routes reject invalid tokens"
+        - "Token validation happens before handler execution"
+        - "Cross-component error handling works end-to-end"
+      test_commands:
+        - "go test ./internal/api/ -v"
+        - "go test ./internal/integration/ -v"
+      description: Integrate JWT authentication into the API server.
+```
+
+**Key differences:**
+- **Component tasks** (`type: "component"`): Single module responsibility with focused `success_criteria`
+- **Integration tasks** (`type: "integration"`): Verify cross-component interactions using both `success_criteria` and `integration_criteria`
+- QC agents verify each criterion individually and require unanimous consensus. Integration criteria validate component interactions end-to-end.
+- Tasks without explicit types default to component behavior.
 
 For complete format specifications, see [Plan Format Guide](docs/conductor.md#plan-format).
 
@@ -765,7 +817,7 @@ See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-split
 
 ## Project Status
 
-**Current Status**: Production-ready v2.4.0
+**Current Status**: Production-ready v2.5.0
 
 Conductor is feature-complete with:
 - Complete implementation with 86%+ test coverage
@@ -805,6 +857,12 @@ Conductor is feature-complete with:
   - Critical fix: Respects agent RED verdicts even when criteria pass
   - Domain-specific review criteria (Go/SQL/TypeScript/Python)
   - File path verification in QC prompts
+- **Integration tasks with dual criteria** (v2.5)
+  - Component vs integration task type distinction
+  - Dual-level validation (success_criteria + integration_criteria)
+  - Automatic dependency context injection
+  - Comprehensive cross-component validation
+  - Clearer task organization and separation of concerns
 - Comprehensive documentation
 
 ### Conductor Plugin

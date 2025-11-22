@@ -29,19 +29,21 @@ type yamlPlan struct {
 
 // yamlTask represents a single task in the YAML plan
 type yamlTask struct {
-	TaskNumber      interface{}   `yaml:"task_number"` // Accepts int, float, or string
-	Name            string        `yaml:"name"`
-	Files           []string      `yaml:"files"`
-	DependsOn       []interface{} `yaml:"depends_on"` // Accepts int, float, or string
-	EstimatedTime   string        `yaml:"estimated_time"`
-	Agent           string        `yaml:"agent"`
-	WorktreeGroup   string        `yaml:"worktree_group"` // Worktree group for task organization
-	Status          string        `yaml:"status"`
-	CompletedDate   string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
-	CompletedAt     string        `yaml:"completed_at"`   // Timestamp format: RFC3339
-	Description     string        `yaml:"description"`
-	SuccessCriteria []string      `yaml:"success_criteria"` // Success criteria for task verification
-	TestCommands    []string      `yaml:"test_commands"`    // Commands to run for verification
+	TaskNumber         interface{}   `yaml:"task_number"` // Accepts int, float, or string
+	Name               string        `yaml:"name"`
+	Files              []string      `yaml:"files"`
+	DependsOn          []interface{} `yaml:"depends_on"` // Accepts int, float, or string
+	EstimatedTime      string        `yaml:"estimated_time"`
+	Agent              string        `yaml:"agent"`
+	WorktreeGroup      string        `yaml:"worktree_group"` // Worktree group for task organization
+	Status             string        `yaml:"status"`
+	CompletedDate      string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
+	CompletedAt        string        `yaml:"completed_at"`   // Timestamp format: RFC3339
+	Description        string        `yaml:"description"`
+	SuccessCriteria    []string      `yaml:"success_criteria"`    // Success criteria for task verification
+	TestCommands       []string      `yaml:"test_commands"`       // Commands to run for verification
+	Type               string        `yaml:"type"`                // Task type: regular or integration
+	IntegrationCriteria []string     `yaml:"integration_criteria"` // Criteria for integration tasks
 	TestFirst       struct {
 		TestFile        string   `yaml:"test_file"`
 		Structure       []string `yaml:"structure"`
@@ -158,15 +160,17 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 		}
 
 		task := models.Task{
-			Number:          taskNum,
-			Name:            yt.Name,
-			Files:           yt.Files,
-			DependsOn:       dependsOn,
-			Agent:           yt.Agent,
-			WorktreeGroup:   yt.WorktreeGroup,
-			Status:          yt.Status,
-			SuccessCriteria: yt.SuccessCriteria,
-			TestCommands:    yt.TestCommands,
+			Number:              taskNum,
+			Name:                yt.Name,
+			Files:               yt.Files,
+			DependsOn:           dependsOn,
+			Agent:               yt.Agent,
+			WorktreeGroup:       yt.WorktreeGroup,
+			Status:              yt.Status,
+			SuccessCriteria:     yt.SuccessCriteria,
+			TestCommands:        yt.TestCommands,
+			Type:                yt.Type,
+			IntegrationCriteria: yt.IntegrationCriteria,
 		}
 
 		// Parse estimated time
@@ -185,6 +189,16 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 			if t, err := parseCompletionDate(yt.CompletedDate); err == nil {
 				task.CompletedAt = &t
 			}
+		}
+
+		// Validate task type
+		if err := ValidateTaskType(&task); err != nil {
+			return nil, fmt.Errorf("task %s: %w", taskNum, err)
+		}
+
+		// Validate integration task requirements
+		if err := ValidateIntegrationTask(&task); err != nil {
+			return nil, fmt.Errorf("task %s: %w", taskNum, err)
 		}
 
 		// Build comprehensive prompt from all sections
