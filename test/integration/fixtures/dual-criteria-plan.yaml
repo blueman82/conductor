@@ -1,0 +1,29 @@
+plan:
+  metadata:
+    feature_name: "Dual Criteria Integration Test"
+    description: "Tests integration tasks with both success and integration criteria"
+  tasks:
+    - task_number: "1"
+      name: "Implement base component"
+      files:
+        - internal/base.go
+      prompt: "Create a base component with Start and Stop methods"
+      success_criteria:
+        - "File internal/base.go exists"
+        - "Base struct is exported"
+
+    - task_number: "2"
+      name: "Integration task with dual criteria"
+      type: "integration"
+      files:
+        - internal/service.go
+      depends_on:
+        - "1"
+      prompt: "Integrate the base component into the service layer and ensure all dependency files are referenced"
+      success_criteria:
+        - "Service file exists at internal/service.go"
+        - "Service imports base component"
+      integration_criteria:
+        - "Properly integrated with base component from Task 1"
+        - "All dependency files were read and referenced"
+        - "No breaking changes to base interface"
