@@ -12,6 +12,7 @@ plan:
 
     - task_number: "2"
       name: "Integrate service with API"
+      type: "integration"
       files:
         - internal/service.go
       depends_on:
@@ -19,3 +20,6 @@ plan:
       prompt: "Integrate base service into API layer"
       success_criteria:
         - "API uses base service methods"
+      integration_criteria:
+        - "Service properly integrated with base layer"
+        - "All dependency files from Task 1 were read"

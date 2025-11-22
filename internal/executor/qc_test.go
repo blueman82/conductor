@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -2726,5 +2727,298 @@ func TestInvokeAndParseQCAgent_HandlesContextCancellation(t *testing.T) {
 
 	if resp != nil {
 		t.Error("Expected nil response on context cancellation, got non-nil response")
+	}
+}
+
+// TestBuildStructuredReviewPrompt_DualCriteria tests structured review prompts with both
+// success criteria and integration criteria for integration tasks.
+// Verifies that criteria are properly indexed sequentially and sections are clearly
+// separated with appropriate headers.
+func TestBuildStructuredReviewPrompt_DualCriteria(t *testing.T) {
+	tests := []struct {
+		name                  string
+		taskType              string
+		successCriteria       []string
+		integrationCriteria   []string
+		wantSuccessCriteria   bool
+		wantIntegrationCriteria bool
+		wantExactCriteria     []struct {
+			index int
+			text  string
+		}
+	}{
+		{
+			name:     "success and integration criteria both present",
+			taskType: "integration",
+			successCriteria: []string{
+				"Component works",
+				"Unit tests pass",
+			},
+			integrationCriteria: []string{
+				"Integrates properly",
+				"No regression",
+			},
+			wantSuccessCriteria:     true,
+			wantIntegrationCriteria: true,
+			wantExactCriteria: []struct {
+				index int
+				text  string
+			}{
+				{0, "Component works"},
+				{1, "Unit tests pass"},
+				{2, "Integrates properly"},
+				{3, "No regression"},
+			},
+		},
+		{
+			name:                    "only success criteria (non-integration task)",
+			taskType:                "regular",
+			successCriteria:         []string{"Feature implemented"},
+			integrationCriteria:     []string{},  // No integration criteria for regular tasks
+			wantSuccessCriteria:     true,
+			wantIntegrationCriteria: false,
+			wantExactCriteria: []struct {
+				index int
+				text  string
+			}{
+				{0, "Feature implemented"},
+			},
+		},
+		{
+			name:                    "only integration criteria",
+			taskType:                "integration",
+			successCriteria:         []string{},
+			integrationCriteria:     []string{"Services communicate"},
+			wantSuccessCriteria:     true, // SUCCESS CRITERIA header still shown
+			wantIntegrationCriteria: true,
+			wantExactCriteria: []struct {
+				index int
+				text  string
+			}{
+				{0, "Services communicate"},
+			},
+		},
+		{
+			name:                    "multiple criteria with special characters",
+			taskType:                "integration",
+			successCriteria:         []string{"API returns HTTP 200"},
+			integrationCriteria:     []string{"Response contains required fields: id, name, email"},
+			wantSuccessCriteria:     true,
+			wantIntegrationCriteria: true,
+			wantExactCriteria: []struct {
+				index int
+				text  string
+			}{
+				{0, "API returns HTTP 200"},
+				{1, "Response contains required fields: id, name, email"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qc := NewQualityController(nil)
+			task := models.Task{
+				Number:              "5",
+				Name:                "Test Integration Task",
+				Prompt:              "Implement integration",
+				Type:                tt.taskType,
+				SuccessCriteria:     tt.successCriteria,
+				IntegrationCriteria: tt.integrationCriteria,
+				Files:               []string{"internal/integration/service.go"},
+			}
+
+			ctx := context.Background()
+			prompt := qc.BuildStructuredReviewPrompt(ctx, task, "agent output")
+
+			// Verify SUCCESS CRITERIA section is present if there are any criteria
+			if (tt.successCriteria != nil && len(tt.successCriteria) > 0) || (tt.integrationCriteria != nil && len(tt.integrationCriteria) > 0) {
+				if !contains(prompt, "## SUCCESS CRITERIA") {
+					t.Error("SUCCESS CRITERIA section header missing")
+				}
+			}
+
+			// Verify INTEGRATION CRITERIA section presence
+			if tt.wantIntegrationCriteria && tt.taskType == "integration" && len(tt.integrationCriteria) > 0 {
+				if !contains(prompt, "## INTEGRATION CRITERIA") {
+					t.Error("INTEGRATION CRITERIA section header missing")
+				}
+			} else if tt.wantIntegrationCriteria && tt.taskType == "integration" && len(tt.integrationCriteria) == 0 {
+				// Integration type but no integration criteria - should NOT have the header
+				if contains(prompt, "## INTEGRATION CRITERIA - VERIFY EACH ONE") {
+					t.Error("INTEGRATION CRITERIA section header should not be present when no integration criteria")
+				}
+			}
+
+			// Verify exact criterion indices and text
+			for _, criterion := range tt.wantExactCriteria {
+				expectedLine := fmt.Sprintf("%d. [ ] %s", criterion.index, criterion.text)
+				if !contains(prompt, expectedLine) {
+					t.Errorf("Criterion not found: %q\nFull prompt:\n%s", expectedLine, prompt)
+				}
+			}
+
+			// Verify criteria are numbered sequentially
+			allCriteria := append(tt.successCriteria, tt.integrationCriteria...)
+			if len(allCriteria) > 0 {
+				for i, criterion := range allCriteria {
+					if !contains(prompt, fmt.Sprintf("%d. [ ] %s", i, criterion)) {
+						t.Errorf("Criterion %d (%q) not found with correct index", i, criterion)
+					}
+				}
+			}
+
+			// Verify task name is in the prompt
+			if !contains(prompt, task.Name) {
+				t.Error("Task name not found in prompt")
+			}
+
+			// Verify agent output section
+			if !contains(prompt, "## AGENT OUTPUT") {
+				t.Error("AGENT OUTPUT section missing")
+			}
+			if !contains(prompt, "agent output") {
+				t.Error("Agent output content missing")
+			}
+		})
+	}
+}
+
+// TestBuildStructuredReviewPrompt_DualCriteria_Ordering verifies that success criteria
+// and integration criteria are properly ordered with correct sequential indices.
+func TestBuildStructuredReviewPrompt_DualCriteria_Ordering(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Number: "7",
+		Name:   "Complex Integration",
+		Prompt: "Implement complex integration system",
+		Type:   "integration",
+		SuccessCriteria: []string{
+			"Database schema created",
+			"Migrations work forward and backward",
+			"Indexes created on foreign keys",
+		},
+		IntegrationCriteria: []string{
+			"API server starts without errors",
+			"Connections to database established",
+			"Health check endpoint responds",
+			"Metrics exported correctly",
+		},
+		Files: []string{
+			"internal/db/schema.go",
+			"internal/api/server.go",
+			"internal/metrics/exporter.go",
+		},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "implementation output")
+
+	// Verify SUCCESS CRITERIA section
+	if !contains(prompt, "## SUCCESS CRITERIA") {
+		t.Error("SUCCESS CRITERIA header missing")
+	}
+
+	// Verify INTEGRATION CRITERIA section
+	if !contains(prompt, "## INTEGRATION CRITERIA") {
+		t.Error("INTEGRATION CRITERIA header missing")
+	}
+
+	// Verify success criteria indices (0-2)
+	successTests := []struct {
+		index int
+		text  string
+	}{
+		{0, "Database schema created"},
+		{1, "Migrations work forward and backward"},
+		{2, "Indexes created on foreign keys"},
+	}
+
+	for _, st := range successTests {
+		expectedLine := fmt.Sprintf("%d. [ ] %s", st.index, st.text)
+		if !contains(prompt, expectedLine) {
+			t.Errorf("Success criterion %d not found: %q", st.index, expectedLine)
+		}
+	}
+
+	// Verify integration criteria indices (3-6)
+	integrationTests := []struct {
+		index int
+		text  string
+	}{
+		{3, "API server starts without errors"},
+		{4, "Connections to database established"},
+		{5, "Health check endpoint responds"},
+		{6, "Metrics exported correctly"},
+	}
+
+	for _, it := range integrationTests {
+		expectedLine := fmt.Sprintf("%d. [ ] %s", it.index, it.text)
+		if !contains(prompt, expectedLine) {
+			t.Errorf("Integration criterion %d not found: %q", it.index, expectedLine)
+		}
+	}
+
+	// Verify SUCCESS CRITERIA comes before INTEGRATION CRITERIA
+	successIdx := strings.Index(prompt, "## SUCCESS CRITERIA")
+	integrationIdx := strings.Index(prompt, "## INTEGRATION CRITERIA")
+	if successIdx < 0 {
+		t.Fatal("SUCCESS CRITERIA section not found")
+	}
+	if integrationIdx < 0 {
+		t.Fatal("INTEGRATION CRITERIA section not found")
+	}
+	if successIdx >= integrationIdx {
+		t.Error("SUCCESS CRITERIA section should appear before INTEGRATION CRITERIA section")
+	}
+}
+
+// TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegration
+// verifies that integration criteria are not included for non-integration task types.
+func TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegration(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Number: "3",
+		Name:   "Regular Task",
+		Prompt: "Implement feature",
+		Type:   "regular", // Not integration
+		SuccessCriteria: []string{
+			"Feature works",
+			"Tests pass",
+		},
+		IntegrationCriteria: []string{
+			"Should be ignored",
+			"This should not appear",
+		},
+		Files: []string{"internal/feature/impl.go"},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+	// Verify SUCCESS CRITERIA is present
+	if !contains(prompt, "## SUCCESS CRITERIA") {
+		t.Error("SUCCESS CRITERIA header should be present")
+	}
+
+	// Verify success criteria are indexed
+	if !contains(prompt, "0. [ ] Feature works") {
+		t.Error("Success criterion 0 not found")
+	}
+	if !contains(prompt, "1. [ ] Tests pass") {
+		t.Error("Success criterion 1 not found")
+	}
+
+	// Verify INTEGRATION CRITERIA section is NOT present
+	if contains(prompt, "## INTEGRATION CRITERIA - VERIFY EACH ONE") {
+		t.Error("INTEGRATION CRITERIA section should NOT be present for non-integration tasks")
+	}
+
+	// Verify integration criteria text does not appear
+	if contains(prompt, "Should be ignored") {
+		t.Error("Integration criteria should not be included in non-integration task prompts")
+	}
+	if contains(prompt, "This should not appear") {
+		t.Error("Integration criteria should not be included in non-integration task prompts")
 	}
 }

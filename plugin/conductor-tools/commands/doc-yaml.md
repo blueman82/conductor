@@ -186,7 +186,9 @@ Integration tasks include special metadata that Conductor uses to enhance prompt
   depends_on: [1, 2, 3, 4]  # Dependencies - all components being wired
   estimated_time: "45m"
 
-  # Integration criteria instead of success_criteria
+  # Integration tasks have BOTH success_criteria AND integration_criteria
+  success_criteria:
+    - "Component-level check"
   integration_criteria:
     - "Router imports internal/auth package"
     - "auth.Middleware() registered in router.Use()"
@@ -306,7 +308,7 @@ Is this task wiring multiple components together?
 | **Scope** | Implement one feature/module | Wire multiple features together |
 | **Dependencies** | May have 0-2 | Typically 3+ |
 | **Type field** | (not set) | "integration" |
-| **Criteria field** | success_criteria | integration_criteria |
+| **Criteria fields** | success_criteria only | success_criteria + integration_criteria |
 | **Prompt enhancement** | None | Automatic (Conductor adds dependency context) |
 | **Agent capability** | Feature-focused | Full-stack/architecture-aware preferred |
 | **File focus** | New files mostly | Mix of new + existing files |
@@ -1406,6 +1408,15 @@ plan:
       # The verification section below still serves as human-readable documentation
       # for quality gates, but the task-level fields are what conductor actually uses
       # for per-criterion QC verification.
+
+      # FOR INTEGRATION TASKS: Add BOTH criteria types
+      # Component tasks (no deps) → success_criteria only
+      # Integration tasks (type: "integration") → BOTH
+      #
+      #   success_criteria:        # Component works standalone
+      #     - "Function returns correct value"
+      #   integration_criteria:    # Component integrates correctly
+      #     - "Calls auth middleware"
 
       # Agent Assignment Guidelines:
       # Based on task type and technology stack, assign appropriate agents:
@@ -3634,6 +3645,7 @@ After generating the YAML plan:
    - **Every task has TASK-LEVEL test_commands field (direct field for conductor QC)**
    - **Every task has verification section with automated_tests and success_criteria (for human documentation)**
    - **Every task has code_quality section with full_quality_pipeline for the appropriate language (REQUIRED)**
+   - **Integration tasks must have BOTH success_criteria AND integration_criteria fields**
    - Every task has a worktree_group assignment
    - Every task has an agent assigned (singular field, not array)
    - All assigned agents exist in the discovered agent list
