@@ -175,12 +175,9 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 		}
 	}
 
-	// Build prompt with agent reference if specified
+	// Build prompt - NO agent prefix needed when using --agents with prompt field
+	// The agent definition already includes its system prompt via the "prompt" field
 	prompt := task.Prompt
-	if task.Agent != "" && inv.Registry != nil && inv.Registry.Exists(task.Agent) {
-		// Reference agent in prompt (still needed with Method 1)
-		prompt = fmt.Sprintf("use the %s subagent to: %s", task.Agent, task.Prompt)
-	}
 
 	// Add formatting instructions to the prompt
 	prompt = PrepareAgentPrompt(prompt)
@@ -275,6 +272,14 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 
 	// Build command args
 	args := inv.BuildCommandArgs(task)
+
+	// DEBUG: Log the actual --agents JSON being sent
+	for i, arg := range args {
+		if arg == "--agents" && i+1 < len(args) {
+			fmt.Fprintf(os.Stderr, "\n[DEBUG] --agents JSON:\n%s\n\n", args[i+1][:500])
+			break
+		}
+	}
 
 	// Pretty log the agent invocation
 	inv.logInvocation(task, args)
