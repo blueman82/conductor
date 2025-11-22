@@ -53,9 +53,14 @@ func (t *ToolList) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // MarshalJSON implements custom marshaling for ToolList
-// Always serializes as a JSON array for consistency with claude CLI --agents flag
+// Empty ToolList marshals as null (triggering omitempty) = all tools available
+// Non-empty marshals as array for claude CLI --agents flag
 // Example: ["Read", "Write", "Edit"]
 func (t ToolList) MarshalJSON() ([]byte, error) {
+	// If empty, marshal as null so omitempty omits field
+	if len(t) == 0 {
+		return []byte("null"), nil
+	}
 	// Convert ToolList to []string and marshal as array
 	return json.Marshal([]string(t))
 }

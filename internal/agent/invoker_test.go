@@ -89,16 +89,18 @@ func TestBuildCommandArgs(t *testing.T) {
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Check for --dangerously-skip-permissions flag
-					hasSkipPerms := false
-					for _, arg := range args {
-						if arg == "--dangerously-skip-permissions" {
-							hasSkipPerms = true
-							break
+					// Check for --permission-mode bypassPermissions flag
+					hasPermissionMode := false
+					for i, arg := range args {
+						if arg == "--permission-mode" && i+1 < len(args) {
+							if args[i+1] == "bypassPermissions" {
+								hasPermissionMode = true
+								break
+							}
 						}
 					}
-					if !hasSkipPerms {
-						t.Error("Command should have --dangerously-skip-permissions flag")
+					if !hasPermissionMode {
+						t.Error("Command should have --permission-mode bypassPermissions flag")
 					}
 				},
 				func(t *testing.T, args []string) {
