@@ -144,6 +144,17 @@ Agent Output:
 	return agent.PrepareAgentPrompt(basePrompt)
 }
 
+// getCombinedCriteria merges success_criteria and integration_criteria into single array
+// for structured review prompts. Integration criteria appended after success criteria.
+func getCombinedCriteria(task models.Task) []string {
+	criteria := make([]string, 0, len(task.SuccessCriteria)+len(task.IntegrationCriteria))
+	criteria = append(criteria, task.SuccessCriteria...)
+	if task.Type == "integration" {
+		criteria = append(criteria, task.IntegrationCriteria...)
+	}
+	return criteria
+}
+
 // BuildStructuredReviewPrompt creates a QC prompt with numbered success criteria for verification.
 // Falls back to legacy prompt structure for tasks without explicit criteria.
 func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, task models.Task, output string) string {
@@ -154,12 +165,25 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 	sb.WriteString(task.Prompt)
 	sb.WriteString("\n\n")
 
-	if len(task.SuccessCriteria) > 0 {
+	// Get combined criteria (success + integration)
+	allCriteria := getCombinedCriteria(task)
+
+	if len(allCriteria) > 0 {
 		sb.WriteString("## SUCCESS CRITERIA - VERIFY EACH ONE\n\n")
-		for i, criterion := range task.SuccessCriteria {
+		for i, criterion := range allCriteria {
 			sb.WriteString(fmt.Sprintf("%d. [ ] %s\n", i, criterion))
 		}
 		sb.WriteString("\n")
+
+		// Add integration note if this is an integration task with integration criteria
+		if task.Type == "integration" && len(task.IntegrationCriteria) > 0 {
+			sb.WriteString("## INTEGRATION CRITERIA - VERIFY EACH ONE\n\n")
+			startIdx := len(task.SuccessCriteria)
+			for i, criterion := range task.IntegrationCriteria {
+				sb.WriteString(fmt.Sprintf("%d. [ ] %s\n", startIdx+i, criterion))
+			}
+			sb.WriteString("\n")
+		}
 	}
 
 	if len(task.TestCommands) > 0 {
@@ -320,7 +344,8 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 
 	// Single agent review (legacy behavior)
 	var basePrompt string
-	hasSuccessCriteria := len(task.SuccessCriteria) > 0
+	allCriteria := getCombinedCriteria(task)
+	hasSuccessCriteria := len(allCriteria) > 0
 	if hasSuccessCriteria {
 		// Use structured prompt for tasks with explicit success criteria
 		basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
@@ -354,15 +379,15 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 		CriteriaResults: qcResp.CriteriaResults,
 	}
 
-	// Apply criteria aggregation if task has success criteria
-	if len(task.SuccessCriteria) > 0 {
+	// Apply criteria aggregation if task has success criteria or integration criteria
+	if len(allCriteria) > 0 {
 		if len(qcResp.CriteriaResults) == 0 {
 			// Agent didn't follow schema - treat as YELLOW (AI Counsel consensus)
 			reviewResult.Flag = models.StatusYellow
 			reviewResult.Feedback += " (Warning: Agent did not return criteria_results)"
 		} else {
 			// Override verdict based on criteria aggregation
-			reviewResult.Flag = qc.aggregateCriteriaResults(qcResp, task)
+			reviewResult.Flag = qc.aggregateCriteriaResults(qcResp, task, len(allCriteria))
 		}
 	}
 
@@ -461,12 +486,13 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 		qc.Logger.LogQCIndividualVerdicts(verdictMap)
 	}
 
-	// Aggregate results: use per-criterion consensus for tasks with success criteria,
+	// Aggregate results: use per-criterion consensus for tasks with success or integration criteria,
 	// otherwise use strictest-wins for legacy tasks
 	var final *ReviewResult
-	if len(task.SuccessCriteria) > 0 {
+	allCriteria := getCombinedCriteria(task)
+	if len(allCriteria) > 0 {
 		// Use multi-agent criteria aggregation (unanimous consensus)
-		final = qc.aggregateMultiAgentCriteria(results, task)
+		final = qc.aggregateMultiAgentCriteria(results, task, len(allCriteria))
 		final.AgentName = fmt.Sprintf("multi-agent(%s)", strings.Join(agents, ","))
 
 		// Log aggregated result
@@ -489,7 +515,8 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 // reviewSingleAgent performs QC review with a single specified agent
 func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.Task, output string, agentName string) (*ReviewResult, error) {
 	var basePrompt string
-	hasSuccessCriteria := len(task.SuccessCriteria) > 0
+	allCriteria := getCombinedCriteria(task)
+	hasSuccessCriteria := len(allCriteria) > 0
 	if hasSuccessCriteria {
 		basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
 	} else {
@@ -525,6 +552,10 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 	results := make([]*ReviewResult, len(agents))
 	var mu sync.Mutex
 
+	// Get combined criteria once (same for all agents)
+	allCriteria := getCombinedCriteria(task)
+	hasSuccessCriteria := len(allCriteria) > 0
+
 	for i, agentName := range agents {
 		wg.Add(1)
 		go func(idx int, agent string) {
@@ -532,7 +563,6 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 
 			// Build review prompt
 			var basePrompt string
-			hasSuccessCriteria := len(task.SuccessCriteria) > 0
 			if hasSuccessCriteria {
 				basePrompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
 			} else {
@@ -776,7 +806,7 @@ You MUST respond with this exact JSON schema (verdict must be at root level, NOT
 
 // aggregateCriteriaResults combines per-criterion verdicts using unanimous consensus.
 // If ANY criterion fails, returns RED. Empty CriteriaResults returns agent's original verdict for backward compatibility.
-func (qc *QualityController) aggregateCriteriaResults(resp *models.QCResponse, task models.Task) string {
+func (qc *QualityController) aggregateCriteriaResults(resp *models.QCResponse, task models.Task, expectedCriteriaCount int) string {
 	if len(resp.CriteriaResults) == 0 {
 		return resp.Verdict // Backward compatible
 	}
@@ -792,16 +822,16 @@ func (qc *QualityController) aggregateCriteriaResults(resp *models.QCResponse, t
 
 // aggregateMultiAgentCriteria combines per-criterion verdicts across multiple agents using unanimous consensus.
 // A criterion passes only if ALL agents unanimously agree it passes.
-// Falls back to aggregateVerdicts for tasks without success criteria.
-func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult, task models.Task) *ReviewResult {
-	// Fall back to standard aggregation if no success criteria defined
-	if len(task.SuccessCriteria) == 0 {
+// Falls back to aggregateVerdicts for tasks without success or integration criteria.
+func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult, task models.Task, expectedCriteriaCount int) *ReviewResult {
+	// Fall back to standard aggregation if no criteria defined
+	if expectedCriteriaCount == 0 {
 		return qc.aggregateVerdicts(results, []string{})
 	}
 
 	// Collect votes per criterion from all agents
 	criterionVotes := make(map[int][]bool)
-	for i := range task.SuccessCriteria {
+	for i := 0; i < expectedCriteriaCount; i++ {
 		criterionVotes[i] = []bool{}
 	}
 
@@ -820,7 +850,7 @@ func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult
 	// Check unanimous consensus per criterion and log results
 	allPassed := true
 	var consensusResults []string
-	for idx := 0; idx < len(task.SuccessCriteria); idx++ {
+	for idx := 0; idx < expectedCriteriaCount; idx++ {
 		votes := criterionVotes[idx]
 		if len(votes) == 0 {
 			allPassed = false // No votes = fail (no consensus possible)

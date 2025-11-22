@@ -1598,6 +1598,138 @@ func TestBuildStructuredReviewPrompt_CriteriaIndexing(t *testing.T) {
 	}
 }
 
+func TestBuildStructuredReviewPrompt_WithIntegrationCriteria(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Name:   "Integration Test",
+		Prompt: "Test integration",
+		Type:   "integration",
+		SuccessCriteria: []string{
+			"Feature A works",
+			"Feature B works",
+		},
+		IntegrationCriteria: []string{
+			"A integrates with B",
+			"No regression in C",
+			"Performance acceptable",
+		},
+		TestCommands: []string{},
+	}
+
+	prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "output")
+
+	// Verify success criteria (0-1)
+	if !contains(prompt, "0. [ ] Feature A works") {
+		t.Error("success criterion 0 not found")
+	}
+	if !contains(prompt, "1. [ ] Feature B works") {
+		t.Error("success criterion 1 not found")
+	}
+
+	// Verify integration criteria start at index 2
+	if !contains(prompt, "2. [ ] A integrates with B") {
+		t.Error("integration criterion 0 (index 2) not found")
+	}
+	if !contains(prompt, "3. [ ] No regression in C") {
+		t.Error("integration criterion 1 (index 3) not found")
+	}
+	if !contains(prompt, "4. [ ] Performance acceptable") {
+		t.Error("integration criterion 2 (index 4) not found")
+	}
+
+	// Verify INTEGRATION CRITERIA section header
+	if !contains(prompt, "## INTEGRATION CRITERIA") {
+		t.Error("INTEGRATION CRITERIA section header not found")
+	}
+}
+
+func TestBuildStructuredReviewPrompt_IntegrationWithoutSuccessCriteria(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Name:   "Integration Only",
+		Prompt: "Integration test",
+		Type:   "integration",
+		SuccessCriteria: []string{}, // No success criteria
+		IntegrationCriteria: []string{
+			"Service A calls Service B",
+			"Data consistency maintained",
+		},
+		TestCommands: []string{},
+	}
+
+	prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "output")
+
+	// Verify integration criteria start at index 0 when no success criteria
+	if !contains(prompt, "0. [ ] Service A calls Service B") {
+		t.Error("integration criterion 0 (index 0) not found")
+	}
+	if !contains(prompt, "1. [ ] Data consistency maintained") {
+		t.Error("integration criterion 1 (index 1) not found")
+	}
+
+	// Verify INTEGRATION CRITERIA section header
+	if !contains(prompt, "## INTEGRATION CRITERIA") {
+		t.Error("INTEGRATION CRITERIA section header not found")
+	}
+}
+
+func TestGetCombinedCriteria_SuccessOnly(t *testing.T) {
+	task := models.Task{
+		SuccessCriteria: []string{"A", "B"},
+	}
+	combined := getCombinedCriteria(task)
+	if len(combined) != 2 {
+		t.Errorf("expected 2 criteria, got %d", len(combined))
+	}
+	if combined[0] != "A" || combined[1] != "B" {
+		t.Errorf("unexpected combined criteria: %v", combined)
+	}
+}
+
+func TestGetCombinedCriteria_IntegrationOnly(t *testing.T) {
+	task := models.Task{
+		Type:                "integration",
+		IntegrationCriteria: []string{"X", "Y", "Z"},
+	}
+	combined := getCombinedCriteria(task)
+	if len(combined) != 3 {
+		t.Errorf("expected 3 criteria, got %d", len(combined))
+	}
+	if combined[0] != "X" || combined[1] != "Y" || combined[2] != "Z" {
+		t.Errorf("unexpected combined criteria: %v", combined)
+	}
+}
+
+func TestGetCombinedCriteria_Both(t *testing.T) {
+	task := models.Task{
+		Type:                "integration",
+		SuccessCriteria:     []string{"A", "B"},
+		IntegrationCriteria: []string{"X", "Y"},
+	}
+	combined := getCombinedCriteria(task)
+	if len(combined) != 4 {
+		t.Errorf("expected 4 criteria, got %d", len(combined))
+	}
+	if combined[0] != "A" || combined[1] != "B" || combined[2] != "X" || combined[3] != "Y" {
+		t.Errorf("unexpected combined criteria: %v", combined)
+	}
+}
+
+func TestGetCombinedCriteria_NonIntegrationIgnoresIntegrationCriteria(t *testing.T) {
+	task := models.Task{
+		Type:                "regular", // Not integration
+		SuccessCriteria:     []string{"A"},
+		IntegrationCriteria: []string{"X", "Y"}, // Should be ignored
+	}
+	combined := getCombinedCriteria(task)
+	if len(combined) != 1 {
+		t.Errorf("expected 1 criterion (non-integration should ignore integration criteria), got %d", len(combined))
+	}
+	if combined[0] != "A" {
+		t.Errorf("unexpected combined criteria: %v", combined)
+	}
+}
+
 func TestAggregateCriteriaResults_AllPass(t *testing.T) {
 	qc := NewQualityController(nil)
 	task := models.Task{
@@ -1611,7 +1743,7 @@ func TestAggregateCriteriaResults_AllPass(t *testing.T) {
 		},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 2)
 	if verdict != models.StatusGreen {
 		t.Errorf("expected GREEN, got %s", verdict)
 	}
@@ -1629,7 +1761,7 @@ func TestAggregateCriteriaResults_OneFails_ReturnsRed(t *testing.T) {
 		},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 2)
 	if verdict != models.StatusRed {
 		t.Errorf("expected RED when criterion fails, got %s", verdict)
 	}
@@ -1645,7 +1777,7 @@ func TestAggregateCriteriaResults_NoCriteria_UsesAgentVerdict(t *testing.T) {
 		CriteriaResults: []models.CriterionResult{},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 0)
 	if verdict != "YELLOW" {
 		t.Errorf("expected YELLOW (agent verdict), got %s", verdict)
 	}
@@ -1665,7 +1797,7 @@ func TestAggregateCriteriaResults_AllFail(t *testing.T) {
 		},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 3)
 	if verdict != models.StatusRed {
 		t.Errorf("expected RED when all criteria fail, got %s", verdict)
 	}
@@ -1684,7 +1816,7 @@ func TestAggregateCriteriaResults_FirstFails(t *testing.T) {
 		},
 	}
 
-	verdict := qc.aggregateCriteriaResults(resp, task)
+	verdict := qc.aggregateCriteriaResults(resp, task, 2)
 	if verdict != models.StatusRed {
 		t.Errorf("expected RED when first criterion fails, got %s", verdict)
 	}
@@ -1712,7 +1844,7 @@ func TestMultiAgentCriteriaConsensus_Unanimous(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 2)
 	if final.Flag != models.StatusGreen {
 		t.Errorf("expected GREEN (all unanimous), got %s", final.Flag)
 	}
@@ -1740,7 +1872,7 @@ func TestMultiAgentCriteriaConsensus_OneAgentFails(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 2)
 	if final.Flag != models.StatusRed {
 		t.Errorf("expected RED (not unanimous on B), got %s", final.Flag)
 	}
@@ -1778,7 +1910,7 @@ func TestMultiAgentCriteriaConsensus_MixedResults(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 3)
 	if final.Flag != models.StatusRed {
 		t.Errorf("expected RED (mixed failures), got %s", final.Flag)
 	}
@@ -1810,7 +1942,7 @@ func TestMultiAgentCriteriaConsensus_SkipsAgentsWithoutCriteria(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 2)
 	// Should be GREEN as agent2 is skipped (non-compliant)
 	if final.Flag != models.StatusGreen {
 		t.Errorf("expected GREEN (skips non-compliant agent), got %s", final.Flag)
@@ -1835,7 +1967,7 @@ func TestMultiAgentCriteriaConsensus_NoCriteria_FallsBackToAggregateVerdicts(t *
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 0)
 	// Should fall back to aggregateVerdicts (strictest-wins)
 	if final.Flag != models.StatusYellow {
 		t.Errorf("expected YELLOW (fallback to aggregateVerdicts), got %s", final.Flag)
@@ -1863,7 +1995,7 @@ func TestMultiAgentCriteriaConsensus_NilResult(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 1)
 	if final.Flag != models.StatusGreen {
 		t.Errorf("expected GREEN (skips nil result), got %s", final.Flag)
 	}
@@ -1885,7 +2017,7 @@ func TestMultiAgentCriteriaConsensus_AllAgentsNonCompliant(t *testing.T) {
 		},
 	}
 
-	final := qc.aggregateMultiAgentCriteria(results, task)
+	final := qc.aggregateMultiAgentCriteria(results, task, 2)
 	// No votes means fail (no consensus possible)
 	if final.Flag != models.StatusRed {
 		t.Errorf("expected RED (no compliant agents), got %s", final.Flag)
