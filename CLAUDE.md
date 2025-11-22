@@ -592,6 +592,249 @@ This run also verified the newly added configuration matrix tests and end-to-end
 - Historical context loading in structured review prompts
 - TTL-based caching for intelligent agent selections (reduces API calls)
 
+## Integration Tasks Architecture
+
+Conductor supports explicit integration tasks with dual criteria validation to coordinate complex implementations across multiple components:
+
+### Overview
+
+Integration tasks wire together multiple components that were implemented separately. They differ from regular component tasks by requiring validation at two levels:
+- **Component Level**: Verifies each integrated component works correctly (`success_criteria`)
+- **Integration Level**: Verifies components work together correctly (`integration_criteria`)
+
+### Task Types
+
+**Component Tasks**:
+- Single-purpose feature implementation
+- Uses `success_criteria` only
+- Minimal or no dependencies
+- Example: "Implement JWT validation function"
+- Verified by: QC reviews component-level criteria only
+
+**Integration Tasks**:
+- Wires multiple components together
+- Uses BOTH `success_criteria` AND `integration_criteria`
+- Marked with `type: "integration"`
+- Typically has 3+ dependencies
+- Example: "Wire auth module to API router"
+- Verified by: QC reviews both criteria types, all must pass
+
+### Dual Criteria System
+
+Integration tasks define two levels of success criteria:
+
+**1. success_criteria** - Component-level checks:
+```yaml
+success_criteria:
+  - "Endpoint returns 200 status code"
+  - "Authentication function has correct signature"
+  - "Error handling returns proper HTTP status"
+```
+
+**2. integration_criteria** - Cross-component interaction checks:
+```yaml
+integration_criteria:
+  - "Auth middleware executes before route handlers"
+  - "Database transaction commits atomically"
+  - "Error from auth module propagates to client"
+  - "User context flows through entire request pipeline"
+```
+
+### Quality Control Validation
+
+For integration tasks, QC agents validate both criteria types:
+
+1. All `success_criteria` must pass (component-level validation)
+2. All `integration_criteria` must pass (integration-level validation)
+3. Any failed criterion = RED verdict (unanimous consensus)
+4. Detailed per-criterion feedback helps pinpoint integration issues
+
+QC Response includes:
+```go
+type QCResponse struct {
+    Verdict              string             // "GREEN", "RED", "YELLOW"
+    Feedback             string             // Overall feedback
+    CriteriaResults      []CriterionResult  // success_criteria verdicts
+    IntegrationResults   []CriterionResult  // integration_criteria verdicts
+    Issues               []Issue            // Specific problems found
+    Recommendations      []string           // Suggested fixes
+    ShouldRetry          bool               // Whether to retry
+    SuggestedAgent       string             // Alternative agent suggestion
+}
+```
+
+### Integration Prompt Enhancement
+
+Tasks with dependencies automatically receive integration context in their prompts:
+
+```
+# INTEGRATION TASK CONTEXT
+
+Before implementing, you MUST read these dependency files to understand
+the integration points you need to wire together:
+
+## Dependency: Task 1 - Database Setup
+**Files to read**: internal/db/connection.go
+**Integration point**: Database connection pool and transaction API
+**WHY YOU MUST READ THIS**: Your task needs to use the connection pool
+exported by this task and ensure transactions complete properly.
+
+## Dependency: Task 2 - Auth Module
+**Files to read**: internal/auth/middleware.go
+**Integration point**: Middleware that runs before route handlers
+**WHY YOU MUST READ THIS**: Your task needs to call auth middleware at
+the correct point in the request pipeline.
+
+---
+
+# YOUR INTEGRATION TASK
+
+**Task Name**: Wire Auth to API Router
+**Type**: integration
+
+Integrate the auth module (Task 2) and database (Task 1) into the API router...
+
+## Success Criteria (Component Level)
+1. Route handlers execute and return responses
+2. Auth checks credentials correctly
+...
+
+## Integration Criteria (Cross-Component)
+1. Auth middleware executes BEFORE route logic
+2. Database transaction completes before response sent
+...
+```
+
+This context injection happens for:
+- Explicit integration tasks (`type: "integration"`)
+- Any task with dependencies (`depends_on` is not empty)
+
+Context includes:
+- Task number, name, and files to read
+- Integration point description
+- Explanation of why the dependency matters
+- Suggestion to verify the integration point works correctly
+
+### YAML Format Examples
+
+**Component Task** (simple, no integration):
+```yaml
+tasks:
+  - id: 1
+    name: "Implement JWT Validation Function"
+    type: "component"
+    files:
+      - internal/auth/jwt.go
+    agent: golang-pro
+    success_criteria:
+      - "ValidateJWT function implemented"
+      - "Supports HS256 algorithm"
+      - "Rejects invalid signatures with error"
+      - "Unit tests achieve 80% coverage"
+```
+
+**Integration Task** (wires components together):
+```yaml
+tasks:
+  - id: 4
+    name: "Wire Auth Middleware to API Router"
+    type: "integration"
+    files:
+      - cmd/api/router.go
+      - internal/middleware/auth.go
+    depends_on: [1, 2, 3]
+    agent: golang-pro
+    success_criteria:
+      - "Router accepts GET /api/users request"
+      - "Response returns user data as JSON"
+      - "Error responses include proper HTTP status codes"
+    integration_criteria:
+      - "Auth middleware executes before route handlers"
+      - "Unauthenticated requests receive 401 Unauthorized"
+      - "Authenticated requests proceed to route handler"
+      - "Database connection from Task 2 is used in handler"
+      - "Transaction commits after response sent"
+    test_commands:
+      - "go test ./cmd/api -v"
+      - "curl -X GET http://localhost:8080/api/users -H 'Authorization: Bearer token'"
+```
+
+**Markdown Format Example**:
+```markdown
+## Task 4: Wire Auth Middleware to API Router
+
+**Type**: integration
+**Files**: cmd/api/router.go, internal/middleware/auth.go
+**Depends on**: Task 1, Task 2, Task 3
+**Agent**: golang-pro
+
+### Success Criteria
+- Router accepts GET /api/users request
+- Response returns user data as JSON
+- Error responses include proper HTTP status codes
+
+### Integration Criteria
+- Auth middleware executes before route handlers
+- Unauthenticated requests receive 401 Unauthorized
+- Authenticated requests proceed to route handler
+- Database connection from Task 2 is used in handler
+- Transaction commits after response sent
+
+Implement the auth middleware integration into the API router...
+```
+
+### Implementation Details
+
+**Task Model Extensions** (`internal/models/task.go`):
+- `Type` field: "component", "integration", or "" (defaults to regular)
+- `SuccessCriteria` field: List of component-level criteria
+- `IntegrationCriteria` field: List of cross-component criteria (integration tasks only)
+
+**Parser Support** (`internal/parser/`):
+- Markdown parser extracts `**Type**: integration` field
+- Markdown parser extracts `### Integration Criteria` section
+- YAML parser reads `type` and `integration_criteria` fields
+- Backward compatible: tasks without `type` treated as regular
+
+**QC Processing** (`internal/executor/qc.go`):
+- `buildQCPrompt()` includes both criteria types for integration tasks
+- `parseQCJSON()` extracts both `criteria_results` and `integration_results`
+- `MergeQCResponses()` uses unanimous consensus for all criteria
+- Detailed per-criterion feedback helps identify which integration points failed
+
+**Prompt Builder** (`internal/executor/task.go`):
+- `PreTaskHook()` injects integration context for tasks with dependencies
+- Context includes dependency files to read and integration point descriptions
+- Applies to both explicit integration tasks and any task with dependencies
+
+### Best Practices for Integration Tasks
+
+**When to Use Integration Tasks:**
+1. Task wires 2+ components together
+2. Success depends on correct inter-component communication
+3. You want explicit validation of integration points
+4. QC feedback should distinguish component vs integration issues
+
+**When to Use Regular Component Tasks:**
+1. Task implements a single, self-contained feature
+2. Task has no dependencies or minimal dependencies
+3. Success criteria are all component-level checks
+4. No cross-component validation needed
+
+**Defining Integration Criteria:**
+1. Focus on data/control flow between components
+2. Include visibility/sequencing constraints ("X happens before Y")
+3. Verify error propagation between components
+4. Check resource lifecycle (transactions, connections, locks)
+5. Validate assumptions about component APIs
+
+**Integration Context Reading:**
+1. Always read files from dependencies before implementing
+2. Understand the exported APIs and their contracts
+3. Verify integration points match the documented behavior
+4. Check for any assumptions or constraints in dependency code
+5. Confirm error handling expectations
+
 ## Multi-File Plan Examples
 
 ### Example 1: Split Backend Plan
