@@ -14,6 +14,8 @@ import (
 type Agent struct {
 	Name        string   `yaml:"name" json:"name"`
 	Description string   `yaml:"description" json:"description"`
+	Prompt      string   `yaml:"-" json:"prompt"`              // Agent system prompt from .md body
+	Model       string   `yaml:"model" json:"model,omitempty"` // Model to use (sonnet/haiku/opus)
 	Tools       ToolList `yaml:"tools" json:"tools,omitempty"` // Omit if empty = all tools available
 	FilePath    string   `yaml:"-" json:"-"`                   // Not parsed from YAML, not included in JSON
 }
@@ -197,7 +199,7 @@ func parseAgentFile(path string) (*Agent, error) {
 	}
 
 	// Extract YAML frontmatter between --- markers
-	frontmatter, _ := extractFrontmatter(content)
+	frontmatter, body := extractFrontmatter(content)
 	if frontmatter == nil {
 		return nil, fmt.Errorf("no frontmatter found in %s", path)
 	}
@@ -208,6 +210,7 @@ func parseAgentFile(path string) (*Agent, error) {
 	}
 
 	agent.FilePath = path
+	agent.Prompt = strings.TrimSpace(string(body))
 
 	if agent.Name == "" {
 		return nil, fmt.Errorf("agent name is required")

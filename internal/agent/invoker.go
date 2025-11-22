@@ -49,17 +49,30 @@ func NewInvokerWithRegistry(registry *Registry) *Invoker {
 }
 
 // serializeAgentToJSON serializes an agent to JSON format for --agents flag (Method 1)
-// Returns JSON string in the format: {"agent-name": {"name": "...", "description": "...", "tools": [...]}}
+// Returns JSON string in the format: {"agent-name": {"description": "...", "prompt": "...", "model": "...", "tools": [...]}}
 //
 // Example output:
 //
-//	{"golang-pro": {"name": "golang-pro", "description": "Go expert", "tools": ["Read", "Write", "Edit"]}}
+//	{"golang-pro": {"description": "Go expert", "prompt": "You are...", "model": "haiku", "tools": ["Read", "Write", "Edit"]}}
 //
 // This allows claude CLI to use the agent definition without requiring discovery.
+// Note: "name" field is omitted since it's redundant with the map key.
 func serializeAgentToJSON(agent *Agent) (string, error) {
-	// Create a map with the agent name as key and agent struct as value
-	agentMap := map[string]*Agent{
-		agent.Name: agent,
+	// Create agent config without redundant name field
+	agentConfig := map[string]interface{}{
+		"description": agent.Description,
+		"prompt":      agent.Prompt,
+		"tools":       agent.Tools,
+	}
+
+	// Add model if specified
+	if agent.Model != "" {
+		agentConfig["model"] = agent.Model
+	}
+
+	// Create map with agent name as key
+	agentMap := map[string]interface{}{
+		agent.Name: agentConfig,
 	}
 
 	// Marshal to JSON
