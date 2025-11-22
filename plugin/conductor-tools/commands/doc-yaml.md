@@ -1370,9 +1370,16 @@ plan:
       name: "Descriptive Task Name"
       agent: "agent-name"  # REQUIRED: Reference to agent from ~/.claude/agents/
       worktree_group: "chain-1"
-      files:
+      files:  # REQUIRED: Flat list of file paths (simple strings only)
         - "path/to/file1.ext"
         - "path/to/file2.ext"
+      # IMPORTANT: files MUST be a simple flat list of strings
+      # WRONG (nested structure):
+      #   files:
+      #     source: ["file1.go"]
+      #     test: ["file1_test.go"]
+      # CORRECT (flat list):
+      #   files: ["file1.go", "file1_test.go"]
       depends_on: []  # Empty if no dependencies, otherwise [2, 3] for tasks 2 and 3
       estimated_time: "30m"  # Options: 5m, 15m, 30m, 1h, 2h
 
