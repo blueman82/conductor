@@ -102,9 +102,9 @@ func TestIntegrationTask_DualCriteriaVerification(t *testing.T) {
 	integrationTask := plan.Tasks[1]
 
 	tests := []struct {
-		name      string
-		response  string
-		wantFlag  string
+		name         string
+		response     string
+		wantFlag     string
 		wantCriteria int
 	}{
 		{
@@ -389,4 +389,3 @@ func TestIntegrationTask_CriteriaOrdering(t *testing.T) {
 		t.Errorf("fifth criterion should be index 4, got %s", criteriaLines[4])
 	}
 }
-

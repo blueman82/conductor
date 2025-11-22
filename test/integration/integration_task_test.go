@@ -59,7 +59,7 @@ func TestIntegrationTask_QCValidatesIntegrationCriteria(t *testing.T) {
 
 	te, err := executor.NewTaskExecutor(inv, nil, nil, executor.TaskExecutorConfig{
 		QualityControl: models.QualityControlConfig{
-			Enabled:  true,
+			Enabled:    true,
 			RetryOnRed: 2,
 		},
 	})
@@ -88,7 +88,7 @@ func TestIntegrationTask_FailsWhenDependencyFilesNotModified(t *testing.T) {
 
 	te, err := executor.NewTaskExecutor(inv, nil, nil, executor.TaskExecutorConfig{
 		QualityControl: models.QualityControlConfig{
-			Enabled:  true,
+			Enabled:    true,
 			RetryOnRed: 0,
 		},
 	})

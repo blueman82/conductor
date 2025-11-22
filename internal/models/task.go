@@ -24,7 +24,7 @@ type Task struct {
 	// Structured verification (v2.3+)
 	SuccessCriteria     []string `yaml:"success_criteria,omitempty" json:"success_criteria,omitempty"`
 	TestCommands        []string `yaml:"test_commands,omitempty" json:"test_commands,omitempty"`
-	Type                string   `yaml:"type,omitempty" json:"type,omitempty"`                               // Task type: regular or integration
+	Type                string   `yaml:"type,omitempty" json:"type,omitempty"`                                 // Task type: regular or integration
 	IntegrationCriteria []string `yaml:"integration_criteria,omitempty" json:"integration_criteria,omitempty"` // Criteria for integration tasks
 
 	// Execution metadata for enhanced console output

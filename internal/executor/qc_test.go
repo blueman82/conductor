@@ -1647,9 +1647,9 @@ func TestBuildStructuredReviewPrompt_WithIntegrationCriteria(t *testing.T) {
 func TestBuildStructuredReviewPrompt_IntegrationWithoutSuccessCriteria(t *testing.T) {
 	qc := NewQualityController(nil)
 	task := models.Task{
-		Name:   "Integration Only",
-		Prompt: "Integration test",
-		Type:   "integration",
+		Name:            "Integration Only",
+		Prompt:          "Integration test",
+		Type:            "integration",
 		SuccessCriteria: []string{}, // No success criteria
 		IntegrationCriteria: []string{
 			"Service A calls Service B",
@@ -2660,7 +2660,7 @@ func TestInvokeAndParseQCAgent_SucceedsWithValidJSONFirstAttempt(t *testing.T) {
 			callCount++
 			// Return valid JSON immediately
 			return &agent.InvocationResult{
-				Output: `{"verdict":"GREEN","feedback":"excellent work","issues":[],"recommendations":["add tests"],"should_retry":false,"suggested_agent":""}`,
+				Output:   `{"verdict":"GREEN","feedback":"excellent work","issues":[],"recommendations":["add tests"],"should_retry":false,"suggested_agent":""}`,
 				Duration: 100 * time.Millisecond,
 			}, nil
 		},
@@ -2736,13 +2736,13 @@ func TestInvokeAndParseQCAgent_HandlesContextCancellation(t *testing.T) {
 // separated with appropriate headers.
 func TestBuildStructuredReviewPrompt_DualCriteria(t *testing.T) {
 	tests := []struct {
-		name                  string
-		taskType              string
-		successCriteria       []string
-		integrationCriteria   []string
-		wantSuccessCriteria   bool
+		name                    string
+		taskType                string
+		successCriteria         []string
+		integrationCriteria     []string
+		wantSuccessCriteria     bool
 		wantIntegrationCriteria bool
-		wantExactCriteria     []struct {
+		wantExactCriteria       []struct {
 			index int
 			text  string
 		}
@@ -2774,7 +2774,7 @@ func TestBuildStructuredReviewPrompt_DualCriteria(t *testing.T) {
 			name:                    "only success criteria (non-integration task)",
 			taskType:                "regular",
 			successCriteria:         []string{"Feature implemented"},
-			integrationCriteria:     []string{},  // No integration criteria for regular tasks
+			integrationCriteria:     []string{}, // No integration criteria for regular tasks
 			wantSuccessCriteria:     true,
 			wantIntegrationCriteria: false,
 			wantExactCriteria: []struct {

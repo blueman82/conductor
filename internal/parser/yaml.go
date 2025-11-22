@@ -29,22 +29,22 @@ type yamlPlan struct {
 
 // yamlTask represents a single task in the YAML plan
 type yamlTask struct {
-	TaskNumber         interface{}   `yaml:"task_number"` // Accepts int, float, or string
-	Name               string        `yaml:"name"`
-	Files              []string      `yaml:"files"`
-	DependsOn          []interface{} `yaml:"depends_on"` // Accepts int, float, or string
-	EstimatedTime      string        `yaml:"estimated_time"`
-	Agent              string        `yaml:"agent"`
-	WorktreeGroup      string        `yaml:"worktree_group"` // Worktree group for task organization
-	Status             string        `yaml:"status"`
-	CompletedDate      string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
-	CompletedAt        string        `yaml:"completed_at"`   // Timestamp format: RFC3339
-	Description        string        `yaml:"description"`
-	SuccessCriteria    []string      `yaml:"success_criteria"`    // Success criteria for task verification
-	TestCommands       []string      `yaml:"test_commands"`       // Commands to run for verification
-	Type               string        `yaml:"type"`                // Task type: regular or integration
-	IntegrationCriteria []string     `yaml:"integration_criteria"` // Criteria for integration tasks
-	TestFirst       struct {
+	TaskNumber          interface{}   `yaml:"task_number"` // Accepts int, float, or string
+	Name                string        `yaml:"name"`
+	Files               []string      `yaml:"files"`
+	DependsOn           []interface{} `yaml:"depends_on"` // Accepts int, float, or string
+	EstimatedTime       string        `yaml:"estimated_time"`
+	Agent               string        `yaml:"agent"`
+	WorktreeGroup       string        `yaml:"worktree_group"` // Worktree group for task organization
+	Status              string        `yaml:"status"`
+	CompletedDate       string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
+	CompletedAt         string        `yaml:"completed_at"`   // Timestamp format: RFC3339
+	Description         string        `yaml:"description"`
+	SuccessCriteria     []string      `yaml:"success_criteria"`     // Success criteria for task verification
+	TestCommands        []string      `yaml:"test_commands"`        // Commands to run for verification
+	Type                string        `yaml:"type"`                 // Task type: regular or integration
+	IntegrationCriteria []string      `yaml:"integration_criteria"` // Criteria for integration tasks
+	TestFirst           struct {
 		TestFile        string   `yaml:"test_file"`
 		Structure       []string `yaml:"structure"`
 		TestStructure   string   `yaml:"test_structure"`
