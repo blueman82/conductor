@@ -19,6 +19,7 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [Quality Control Settings](#quality-control)
   - [Feedback Storage Settings](#dual-feedback-storage-v210)
   - [Learning Settings](#configuration-learning)
+  - [Integration Tasks](#integration-tasks-v250)
 - [Multi-File Plans & Objective Splitting](#multi-file-plans--objective-splitting)
   - [Core Concepts](#core-concepts)
   - [Usage Examples](#multi-file-usage-examples)
@@ -1200,6 +1201,413 @@ Quality control agents return structured JSON responses for richer analysis:
 - Detailed issue tracking for pattern analysis
 - Clear retry decisions with reasoning
 - Enhanced debugging with structured feedback
+
+### Integration Tasks (v2.5.0)
+
+Integration tasks enable cross-component validation when implementations depend on multiple other tasks. Use this feature for tasks that integrate functionality from different modules or services.
+
+#### What are Integration Tasks?
+
+Integration tasks are regular tasks that explicitly define cross-component validation criteria alongside component-level success criteria.
+
+**Purpose:**
+- Validate that an implementation correctly integrates with other components
+- Ensure cross-module interfaces work properly
+- Verify data flow between services
+- Check that dependent modules are utilized correctly
+
+**When to Use Integration Tasks:**
+- Task depends on 2+ other tasks
+- Task requires validation of interactions between components
+- Task tests interfaces or integration points
+- Need both component-level AND cross-component validation
+
+**Example Use Cases:**
+- Task 4: Create API endpoints that use auth service from Task 2 and database from Task 1
+- Task 6: Implement webhook that integrates with message queue and external service
+- Task 8: Build admin dashboard that pulls data from multiple APIs
+
+#### Task Type Field
+
+The `type` field categorizes tasks for execution behavior:
+
+**Valid Values:**
+- `"component"` - Standalone implementation (no cross-component dependencies)
+- `"integration"` - Requires cross-component validation
+- `"regular"` - Default type (backward compatible)
+
+**Setting Task Type:**
+
+In YAML format:
+```yaml
+- id: 4
+  name: API Endpoints
+  type: integration              # Marks as integration task
+  depends_on: [Task 1, Task 2]
+  success_criteria:
+    - "All endpoints implemented"
+  integration_criteria:
+    - "Uses auth service correctly"
+    - "Queries database properly"
+```
+
+In Markdown format:
+```markdown
+## Task 4: API Endpoints
+**Type**: integration
+**Depends on**: Task 1, Task 2
+**File(s)**: internal/api/endpoints.go
+
+Implement REST endpoints.
+```
+
+**Type Field Rules:**
+- Optional field (defaults to "regular")
+- Must be: "component", "integration", or "regular"
+- Affects QC behavior and agent selection
+- Validated at parse time
+
+#### Dual Criteria System
+
+Integration tasks support two independent criteria types:
+
+**1. success_criteria** - Component-level validation
+- Validates the task implementation itself
+- No dependencies on other components
+- Example: "All error cases handled", "Code follows best practices"
+
+**2. integration_criteria** - Cross-component validation
+- Validates interaction with dependent components
+- Checks interfaces, data flow, contracts
+- Example: "Correctly uses auth service methods", "Data matches expected format"
+
+**How QC Processes Both:**
+
+```
+QC Agent Receives:
+  ├─ Component-Level Criteria (success_criteria)
+  │  └─ Verify implementation quality
+  ├─ Integration-Level Criteria (integration_criteria)
+  │  └─ Verify cross-component interaction
+  └─ Dependency Context
+     └─ Code from dependent tasks
+
+QC Validation:
+  ├─ Step 1: Verify each success criterion
+  ├─ Step 2: Verify each integration criterion
+  └─ Step 3: Return unified GREEN/RED/YELLOW verdict
+```
+
+**Criterion Numbering:**
+
+Criteria are numbered continuously across both types:
+
+```yaml
+success_criteria:
+  - "Criterion 0: Auth endpoints implemented"    # 0
+  - "Criterion 1: Error handling complete"        # 1
+
+integration_criteria:
+  - "Criterion 2: Uses JWT module correctly"      # 2
+  - "Criterion 3: Stores tokens in database"      # 3
+```
+
+QC prompt shows: "0. Auth endpoints implemented ... 3. Stores tokens in database"
+
+#### Integration Prompt Enhancement
+
+When a task is marked as integration or has dependencies, the agent prompt is automatically enhanced with dependency context.
+
+**Automatic Context Injection:**
+
+Before agent execution, conductor builds integration context including:
+- List of all dependent tasks
+- Key files modified by each dependency
+- Explanation of integration points
+
+**Example Original Prompt:**
+```
+Implement REST API endpoints for user management.
+```
+
+**Enhanced with Integration Context:**
+```
+# INTEGRATION TASK CONTEXT
+
+Before implementing, you MUST read and understand these dependent tasks:
+
+## Task 1: Database Schema
+- Key files: internal/db/schema.sql, internal/db/models.go
+This task created the database schema and models.
+
+## Task 2: Authentication Service
+- Key files: internal/auth/jwt.go, internal/auth/tokens.go
+This task implemented JWT authentication.
+
+---
+
+Implement REST API endpoints for user management.
+```
+
+**When Enhancement Applies:**
+- Task type is "integration" AND/OR
+- Task has entries in `depends_on` field
+- Task is part of multi-task plan
+
+**What Gets Included:**
+1. Each dependency task's name and number
+2. Files modified by dependent task
+3. Brief context about that task
+4. Original task prompt unchanged
+
+#### YAML Examples
+
+**Component Task Example:**
+
+```yaml
+- id: 1
+  name: Database Schema
+  type: component
+  files: [internal/db/schema.sql]
+  depends_on: []
+  description: Create database schema and models.
+  success_criteria:
+    - "All tables defined with proper constraints"
+    - "Foreign keys reference correct tables"
+```
+
+**Integration Task Example:**
+
+```yaml
+- id: 4
+  name: REST API Endpoints
+  type: integration
+  files: [internal/api/endpoints.go]
+  depends_on: [Task 1, Task 2, Task 3]
+  description: |
+    Implement REST endpoints that integrate with:
+    - Database (Task 1)
+    - Authentication (Task 2)
+    - Validation (Task 3)
+  success_criteria:
+    - "All endpoints implemented with proper HTTP methods"
+    - "Request/response validation complete"
+    - "Error handling for all failure cases"
+  integration_criteria:
+    - "Uses JWT validation from auth service"
+    - "Queries correctly use database models"
+    - "Input validation uses validator service"
+    - "Endpoint returns expected data format"
+```
+
+**Multi-File Plan with Integration:**
+
+File 1: `database.md`
+```markdown
+## Task 1: Database Schema
+**Type**: component
+**Files**: schema.sql
+
+Create PostgreSQL schema.
+```
+
+File 2: `backend.md`
+```markdown
+## Task 2: API Implementation
+**Type**: integration
+**Depends on**: Task 1
+**Files**: routes.go
+
+Implement API endpoints.
+
+**Success Criteria**:
+- All endpoints implemented
+
+**Integration Criteria**:
+- Correctly queries database
+```
+
+Execute together:
+```bash
+conductor run database.md backend.md
+```
+
+#### Best Practices
+
+**Task Type Selection:**
+
+| Scenario | Type | Reason |
+|----------|------|--------|
+| Initial setup (DB, config) | component | No dependencies on other tasks |
+| Single-module feature | component | Only affects one module |
+| Endpoints using multiple services | integration | Depends on auth + database |
+| Service that integrates external API | integration | Needs cross-system validation |
+| Tests for integration | integration | Validates component interactions |
+
+**Writing Good Criteria:**
+
+**Component Criteria (success_criteria):**
+- ✅ "All error cases handled with proper error messages"
+- ✅ "Unit tests cover 90%+ of code"
+- ✅ "Code follows Go naming conventions"
+- ❌ "Works with authentication" (this is integration)
+
+**Integration Criteria (integration_criteria):**
+- ✅ "Correctly calls authentication service methods"
+- ✅ "Returns data in format expected by frontend"
+- ✅ "Respects rate limits from queue service"
+- ❌ "Code is well-documented" (this is component-level)
+
+**Dependency Structure:**
+
+**Good Pattern - Layered Dependencies:**
+```
+Layer 1 (No deps):   [Task 1: Database]
+                         ↓
+Layer 2 (Depends 1): [Task 2: Auth] [Task 3: Cache]
+                         ↓
+Layer 3 (Depends 1-2): [Task 4: API] (type: integration)
+```
+
+**Avoid - Complex Cross-Layer Dependencies:**
+```
+Task 1 → Task 3
+↓        ↑
+Task 2 ← (tangled, hard to validate)
+```
+
+**Markdown Format with Criteria:**
+
+```markdown
+## Task 4: REST API
+**Type**: integration
+**Depends on**: Task 1, Task 2
+**Files**: api.go
+
+Implement REST endpoints.
+
+### Success Criteria
+- All CRUD endpoints implemented
+- Comprehensive error handling
+- Input validation on all endpoints
+
+### Integration Criteria
+- Uses database models from Task 1
+- Calls auth verification from Task 2
+- Returns proper HTTP status codes
+```
+
+#### QC Behavior with Integration Tasks
+
+**Multi-Agent Consensus:**
+
+When task has integration criteria:
+1. Multiple QC agents review the task (if intelligent selection enabled)
+2. Each agent verifies all criteria (both success and integration)
+3. Agent must agree on verdict for each criterion
+4. Unanimous consensus required: all agents must pass criterion for GREEN
+
+**Per-Criterion Verification:**
+
+QC response includes results for each criterion:
+```json
+{
+  "verdict": "RED",
+  "criteria_results": [
+    {
+      "index": 0,
+      "passed": true,
+      "evidence": "All endpoints implemented with correct methods"
+    },
+    {
+      "index": 1,
+      "passed": true,
+      "evidence": "Comprehensive error handling in place"
+    },
+    {
+      "index": 2,
+      "passed": false,
+      "evidence": "Uses deprecated database methods instead of models from Task 1"
+    }
+  ]
+}
+```
+
+**Verdict Aggregation Rules:**
+
+- **GREEN**: All criteria (success AND integration) verified by all agents
+- **RED**: Any criterion failed OR agents disagree on any criterion
+- **YELLOW**: Minor issues detected, but fundamental requirements met
+
+**Agent Selection for Integration Tasks:**
+
+With intelligent agent selection enabled, conductor:
+1. Detects task is integration type
+2. Requests agents specialized in cross-component review
+3. May recommend: code-reviewer, architecture-validator, integration-tester
+4. These agents understand dependency relationships
+
+#### Configuration
+
+Enable intelligent agent selection for better integration task validation:
+
+```yaml
+# .conductor/config.yaml
+
+quality_control:
+  enabled: true
+  agents:
+    mode: intelligent      # Enable smart agent selection
+    max_agents: 4
+    require_code_review: true
+
+  # Integration-aware configuration
+  retry_on_red: 2         # Allow retries for integration issues
+```
+
+#### When Integration Tasks Make Sense
+
+**Use integration tasks when:**
+- Feature requires combining multiple components
+- Cross-module interfaces need validation
+- Data flows between systems must be verified
+- Multiple agents should review for different aspects
+
+**Use regular tasks when:**
+- Task is self-contained within single module
+- No cross-module dependencies
+- Single agent can verify quality
+- Simpler component-level validation sufficient
+
+#### Troubleshooting Integration Tasks
+
+**Integration Criteria Not Validated:**
+
+```bash
+# Check that criteria are in plan
+$ grep -A5 "integration_criteria" plan.yaml
+
+# Check QC response includes integration criteria verification
+$ cat .conductor/logs/qc-*.log | grep "integration"
+```
+
+**Task Type Not Recognized:**
+
+```bash
+# Validate plan
+$ conductor validate plan.md
+
+# Should show task type in validation output
+```
+
+**Integration Context Not Appearing:**
+
+```bash
+# Check task dependencies
+$ grep "depends_on" plan.yaml
+
+# Context only injected if task has dependencies or type=integration
+```
 
 ### Output & Logs
 
