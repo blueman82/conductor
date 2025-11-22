@@ -179,17 +179,16 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify agent reference in prompt and formatting instruction prefix
-					hasAgentRef := false
+					// Verify formatting instruction prefix (agent reference removed in e431bfd)
+					hasFormatting := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis") &&
-							strings.Contains(arg, "use the swiftdev subagent to:") {
-							hasAgentRef = true
+						if strings.Contains(arg, "Do not use markdown formatting or emojis") {
+							hasFormatting = true
 							break
 						}
 					}
-					if !hasAgentRef {
-						t.Error("Prompt should include formatting instructions and reference agent with 'use the swiftdev subagent to:'")
+					if !hasFormatting {
+						t.Error("Prompt should include formatting instructions")
 					}
 				},
 			},
@@ -319,16 +318,18 @@ Go development content
 
 	args := inv.BuildCommandArgs(task)
 
-	// Verify agent reference is added to prompt
+	// Verify --agents flag includes golang-pro agent (agent reference prefix removed in e431bfd)
 	found := false
-	for _, arg := range args {
-		if strings.Contains(arg, "use the golang-pro subagent to:") {
-			found = true
-			break
+	for i, arg := range args {
+		if arg == "--agents" && i+1 < len(args) {
+			if strings.Contains(args[i+1], "golang-pro") {
+				found = true
+				break
+			}
 		}
 	}
 	if !found {
-		t.Error("Expected prompt to include agent reference")
+		t.Error("Expected --agents flag to include golang-pro agent definition")
 	}
 }
 
@@ -858,19 +859,8 @@ Go development content
 						}
 					}
 				},
-				// Check 7: Prompt should still include "use the X subagent to:" prefix
-				func(t *testing.T, args []string) {
-					hasAgentRef := false
-					for _, arg := range args {
-						if strings.Contains(arg, "use the golang-pro subagent to:") {
-							hasAgentRef = true
-							break
-						}
-					}
-					if !hasAgentRef {
-						t.Error("Prompt should still include 'use the golang-pro subagent to:' prefix")
-					}
-				},
+				// Check 7: Agent reference prefix removed in e431bfd - no longer needed
+				// Previous checks already verify --agents flag structure
 			},
 		},
 		{
