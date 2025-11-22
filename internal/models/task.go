@@ -2,7 +2,6 @@ package models
 
 import (
 	"errors"
-	"strings"
 	"time"
 )
 
@@ -98,9 +97,9 @@ func (t *Task) GetFormattedDuration() string {
 	return t.ExecutionDuration.String()
 }
 
-// IsIntegration returns true if the task name contains "integration" (case-insensitive)
+// IsIntegration returns true if the task type is "integration"
 func (t *Task) IsIntegration() bool {
-	return strings.Contains(strings.ToLower(t.Name), "integration")
+	return t.Type == "integration"
 }
 
 // HasCyclicDependencies detects circular dependencies in a list of tasks

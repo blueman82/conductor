@@ -83,32 +83,27 @@ func TestTask_Validate_RequiresPrompt(t *testing.T) {
 func TestTask_IsIntegration(t *testing.T) {
 	tests := []struct {
 		name     string
-		taskName string
+		taskType string
 		expected bool
 	}{
 		{
-			name:     "lowercase integration",
-			taskName: "Add integration tests",
+			name:     "integration type",
+			taskType: "integration",
 			expected: true,
 		},
 		{
-			name:     "uppercase INTEGRATION",
-			taskName: "Add INTEGRATION tests",
-			expected: true,
-		},
-		{
-			name:     "mixed case Integration",
-			taskName: "Add Integration tests",
-			expected: true,
-		},
-		{
-			name:     "no integration keyword",
-			taskName: "Add unit tests",
+			name:     "regular type",
+			taskType: "regular",
 			expected: false,
 		},
 		{
-			name:     "empty name",
-			taskName: "",
+			name:     "empty type",
+			taskType: "",
+			expected: false,
+		},
+		{
+			name:     "other type",
+			taskType: "setup",
 			expected: false,
 		},
 	}
@@ -117,8 +112,9 @@ func TestTask_IsIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			task := Task{
 				Number: "1",
-				Name:   tt.taskName,
+				Name:   "Task Name",
 				Prompt: "test prompt",
+				Type:   tt.taskType,
 			}
 			result := task.IsIntegration()
 			if result != tt.expected {

@@ -511,9 +511,10 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		// For now, continue without learning adaptation
 	}
 
-	// Enhance prompt for integration tasks (if dependencies present and plan available)
+	// Apply integration context to integration tasks AND any task with dependencies
+	// This helps all dependent tasks understand their dependencies, not just explicit integration tasks
 	// Must be done BEFORE agent invocation to inject file context
-	if te.Plan != nil {
+	if te.Plan != nil && (task.Type == "integration" || len(task.DependsOn) > 0) {
 		task.Prompt = buildIntegrationPrompt(task, te.Plan)
 	}
 
