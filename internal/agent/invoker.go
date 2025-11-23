@@ -94,7 +94,8 @@ func PrepareAgentPrompt(prompt string) string {
 func (inv *Invoker) buildJSONPrompt(originalPrompt string) string {
 	jsonInstruction := `
 
-IMPORTANT: Respond ONLY with valid JSON in this format:
+After completing all implementation work using the appropriate tools (Write, Edit, Bash, etc.),
+summarize your work with a JSON response in this format:
 {
   "status": "success|failed",
   "summary": "Brief description",

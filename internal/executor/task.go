@@ -380,6 +380,27 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 		return
 	}
 
+	// Determine which file to query for deduplication
+	fileToQuery := te.PlanFile
+	if task.SourceFile != "" {
+		fileToQuery = task.SourceFile
+	} else if te.SourceFile != "" {
+		fileToQuery = te.SourceFile
+	}
+
+	// Check if this final outcome was already recorded during retry loop
+	// Query most recent execution for this task
+	history, err := te.LearningStore.GetExecutionHistory(ctx, fileToQuery, task.Number)
+	if err == nil && len(history) > 0 {
+		lastExec := history[0]
+		// Check if last execution matches this final state (same verdict + run number)
+		// If so, it was already recorded during retry - skip duplicate
+		if lastExec.QCVerdict == verdict && lastExec.RunNumber == te.RunNumber {
+			// Already recorded during retry loop - skip to avoid duplicate
+			return
+		}
+	}
+
 	// Extract failure patterns from metadata if present
 	var failurePatterns []string
 	if task.Metadata != nil {
@@ -417,7 +438,7 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 
 	// Build TaskExecution record
 	exec := &learning.TaskExecution{
-		PlanFile:        te.PlanFile,
+		PlanFile:        fileToQuery,
 		RunNumber:       te.RunNumber,
 		TaskNumber:      task.Number,
 		TaskName:        task.Name,
@@ -667,6 +688,52 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			te.qcReviewHook(ctx, &task, review.Flag, review.Feedback, output)
 			// Update result task to include metadata
 			result.Task = task
+
+			// Record attempt to database immediately for next retry's QC context
+			// This enables QC agents to see previous attempt feedback during retries
+			if te.LearningStore != nil && review != nil {
+				// Determine which file to use (multi-file plan support)
+				fileToRecord := te.PlanFile
+				if task.SourceFile != "" {
+					fileToRecord = task.SourceFile
+				} else if te.SourceFile != "" {
+					fileToRecord = te.SourceFile
+				}
+
+				// Extract failure patterns from metadata (populated by qcReviewHook)
+				var failurePatterns []string
+				if task.Metadata != nil {
+					if patterns, ok := task.Metadata["failure_patterns"].([]string); ok {
+						failurePatterns = patterns
+					}
+				}
+
+				// Determine success based on verdict
+				attemptSuccess := review.Flag == models.StatusGreen || review.Flag == models.StatusYellow
+
+				// Build execution record for this attempt
+				attemptExec := &learning.TaskExecution{
+					PlanFile:        fileToRecord,
+					RunNumber:       te.RunNumber,
+					TaskNumber:      task.Number,
+					TaskName:        task.Name,
+					Agent:           task.Agent,
+					Prompt:          task.Prompt,
+					Success:         attemptSuccess,
+					Output:          invocation.Output,
+					ErrorMessage:    "", // No error if we reached QC
+					DurationSecs:    int64(invocation.Duration.Seconds()),
+					QCVerdict:       review.Flag,
+					QCFeedback:      review.Feedback,
+					FailurePatterns: failurePatterns,
+				}
+
+				// Record to database (graceful degradation on error)
+				if err := te.LearningStore.RecordExecution(ctx, attemptExec); err != nil {
+					// Log warning but don't fail task execution
+					// In production: log.Warn("failed to record attempt to DB: %v", err)
+				}
+			}
 		}
 
 		// Append attempt to history

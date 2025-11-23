@@ -214,7 +214,7 @@ Swift agent content
 					for _, arg := range args {
 						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
 							strings.Contains(arg, "Do work") &&
-							strings.Contains(arg, "IMPORTANT: Respond ONLY with valid JSON") {
+							strings.Contains(arg, "After completing all implementation work") {
 							hasPrompt = true
 							break
 						}
@@ -242,7 +242,7 @@ Swift agent content
 					for _, arg := range args {
 						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
 							strings.Contains(arg, "Create something") &&
-							strings.Contains(arg, "IMPORTANT: Respond ONLY with valid JSON") {
+							strings.Contains(arg, "After completing all implementation work") {
 							hasPrompt = true
 							break
 						}
@@ -561,7 +561,7 @@ func TestInvoker_BuildJSONPrompt(t *testing.T) {
 			originalPrompt: "Implement authentication",
 			wantContains: []string{
 				"Implement authentication",
-				"IMPORTANT: Respond ONLY with valid JSON",
+				"After completing all implementation work",
 				`"status": "success|failed"`,
 				`"summary"`,
 				`"output"`,
@@ -575,14 +575,14 @@ func TestInvoker_BuildJSONPrompt(t *testing.T) {
 			originalPrompt: "Build iOS app with SwiftUI",
 			wantContains: []string{
 				"Build iOS app with SwiftUI",
-				"IMPORTANT: Respond ONLY with valid JSON",
+				"After completing all implementation work",
 			},
 		},
 		{
 			name:           "handles empty prompt",
 			originalPrompt: "",
 			wantContains: []string{
-				"IMPORTANT: Respond ONLY with valid JSON",
+				"After completing all implementation work",
 			},
 		},
 	}
