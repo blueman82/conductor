@@ -1,0 +1,32 @@
+conductor:
+  default_agent: godev
+
+plan:
+  metadata:
+    feature_name: "Services Phase"
+    created: "2025-11-23"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 2
+      name: "Auth Service"
+      files:
+        - internal/auth/auth.go
+        - internal/auth/jwt.go
+      depends_on:
+        - file: "plan-01-foundation.yaml"
+          task: 1
+      estimated_time: "1h"
+      agent: godev
+      description: "Authentication service using database from foundation"
+
+    - task_number: 3
+      name: "API Service"
+      files:
+        - internal/api/api.go
+        - internal/api/routes.go
+      depends_on:
+        - file: "plan-01-foundation.yaml"
+          task: 1
+      estimated_time: "1h"
+      agent: godev
+      description: "REST API service using database from foundation"

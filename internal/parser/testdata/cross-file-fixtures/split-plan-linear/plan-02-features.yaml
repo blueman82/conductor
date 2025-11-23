@@ -1,0 +1,31 @@
+conductor:
+  default_agent: godev
+  quality_control:
+    enabled: true
+    review_agent: code-reviewer
+
+plan:
+  metadata:
+    feature_name: "Features Phase"
+    created: "2025-11-23"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 3
+      name: "Implement Core Feature"
+      files:
+        - internal/feature/feature.go
+      depends_on:
+        - file: "plan-01-setup.yaml"
+          task: 2
+      estimated_time: "1h"
+      agent: godev
+      description: "Core feature implementation that depends on CLI setup"
+
+    - task_number: 4
+      name: "Add Tests"
+      files:
+        - internal/feature/feature_test.go
+      depends_on: [3]
+      estimated_time: "45m"
+      agent: testdev
+      description: "Test suite for the core feature"

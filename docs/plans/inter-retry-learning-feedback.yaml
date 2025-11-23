@@ -1,0 +1,1813 @@
+conductor:
+  # Worktree groups for parallel execution while respecting dependencies
+  worktree_groups:
+    - group_id: "chain-1-json-core"
+      description: "Tasks 1→2→3 (JSON schema and parsing infrastructure)"
+      tasks: [1, 2, 3]
+      branch: "feature/inter-retry-learning/chain-1-json-core"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Core JSON schemas must be defined before invoker/QC can be modified. Sequential execution ensures consistency."
+      setup_commands: |
+        # Create worktree for JSON core implementation
+        git worktree add ../wt-chain-1-json-core -b feature/inter-retry-learning/chain-1-json-core
+        cd ../wt-chain-1-json-core
+
+        # Task 1: Define JSON schemas (test-first)
+        # [Implement tests, then schemas]
+        git add .
+        git commit -m "test: add JSON schema validation tests"
+        git add .
+        git commit -m "feat: define agent and QC JSON response schemas"
+
+        # Task 2: Modify agent invoker
+        git add .
+        git commit -m "test: add agent invoker JSON parsing tests"
+        git add .
+        git commit -m "feat: modify agent invoker to request and parse JSON"
+
+        # Task 3: Modify QC for JSON
+        git add .
+        git commit -m "test: add QC JSON parsing tests"
+        git add .
+        git commit -m "feat: modify QC to request and parse JSON responses"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/inter-retry-learning/chain-1-json-core
+        git push origin main
+    - group_id: "chain-2-storage"
+      description: "Tasks 4→5 (Plan file updater enhancements for feedback storage)"
+      tasks: [4, 5]
+      branch: "feature/inter-retry-learning/chain-2-storage"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Markdown updater must be complete before YAML to maintain consistent patterns. Can run in parallel with chain-1."
+      setup_commands: |
+        # Create worktree for storage enhancement
+        git worktree add ../wt-chain-2-storage -b feature/inter-retry-learning/chain-2-storage
+        cd ../wt-chain-2-storage
+
+        # Task 4: Markdown feedback storage
+        git add .
+        git commit -m "test: add Markdown feedback storage tests"
+        git add .
+        git commit -m "feat: enhance Markdown updater with execution history"
+
+        # Task 5: YAML feedback storage
+        git add .
+        git commit -m "test: add YAML feedback storage tests"
+        git add .
+        git commit -m "feat: enhance YAML updater with execution history"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/inter-retry-learning/chain-2-storage
+        git push origin main
+    - group_id: "chain-3-learning"
+      description: "Tasks 6→7 (QC context loading and agent selection)"
+      tasks: [6, 7]
+      branch: "feature/inter-retry-learning/chain-3-learning"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Context loader needed before agent selector can use historical data. Can run in parallel with chains 1 and 2."
+      setup_commands: |
+        # Create worktree for learning components
+        git worktree add ../wt-chain-3-learning -b feature/inter-retry-learning/chain-3-learning
+        cd ../wt-chain-3-learning
+
+        # Task 6: QC context loader
+        git add .
+        git commit -m "test: add QC context loader tests"
+        git add .
+        git commit -m "feat: implement QC context loading from plan and DB"
+
+        # Task 7: Agent selection algorithm
+        git add .
+        git commit -m "test: add agent selection algorithm tests"
+        git add .
+        git commit -m "feat: implement agent selection for retry swapping"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/inter-retry-learning/chain-3-learning
+        git push origin main
+    - group_id: "chain-4-integration"
+      description: "Tasks 8→9 (Retry loop integration and config updates)"
+      tasks: [8, 9]
+      branch: "feature/inter-retry-learning/chain-4-integration"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Depends on chains 1, 2, and 3. Must wait for all prerequisite branches to merge before starting."
+      setup_commands: |
+        # Wait for chains 1, 2, 3 to complete and merge to main
+        git checkout main
+        git pull origin main
+
+        # Create worktree for integration
+        git worktree add ../wt-chain-4-integration -b feature/inter-retry-learning/chain-4-integration
+        cd ../wt-chain-4-integration
+
+        # Task 8: Retry loop integration
+        git add .
+        git commit -m "test: add retry loop agent swapping tests"
+        git add .
+        git commit -m "feat: integrate agent swapping into retry loop"
+
+        # Task 9: Config struct updates
+        git add .
+        git commit -m "test: add config validation tests for new fields"
+        git add .
+        git commit -m "feat: add feedback and learning config fields"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/inter-retry-learning/chain-4-integration
+        git push origin main
+    - group_id: "chain-5-testing"
+      description: "Tasks 10→11→12→13→14→15 (Comprehensive test suite)"
+      tasks: [10, 11, 12, 13, 14, 15]
+      branch: "feature/inter-retry-learning/chain-5-testing"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Depends on chain 4. All tests build on each other, starting with unit tests, then integration, then E2E."
+      setup_commands: |
+        # Wait for chain 4 to complete and merge
+        git checkout main
+        git pull origin main
+
+        # Create worktree for testing
+        git worktree add ../wt-chain-5-testing -b feature/inter-retry-learning/chain-5-testing
+        cd ../wt-chain-5-testing
+
+        # Tasks 10-15 executed sequentially
+        # Each test layer builds on the previous
+        git add .
+        git commit -m "test: comprehensive unit tests for JSON parsing"
+        git add .
+        git commit -m "test: comprehensive unit tests for plan updater feedback"
+        # ... (continue for all test tasks)
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/inter-retry-learning/chain-5-testing
+        git push origin main
+    - group_id: "independent-docs"
+      description: "Tasks 16→17 (Documentation updates - independent)"
+      tasks: [16, 17]
+      branch: "feature/inter-retry-learning/independent-docs"
+      execution_model: "parallel"
+      isolation: "separate-worktree"
+      rationale: "Documentation updates are independent and can run in parallel with all other work."
+      setup_commands: |
+        # Can start immediately
+        git worktree add ../wt-independent-docs -b feature/inter-retry-learning/independent-docs
+        cd ../wt-independent-docs
+
+        # Task 16: Config example
+        git add .
+        git commit -m "docs: update config example with new feedback fields"
+
+        # Task 17: Documentation
+        git add .
+        git commit -m "docs: update CLAUDE.md and README for inter-retry learning"
+
+        # When ready, merge to main
+        git checkout main
+        git merge feature/inter-retry-learning/independent-docs
+        git push origin main
+plan:
+  # Metadata about the implementation plan
+  metadata:
+    feature_name: "Inter-Retry Learning with Dual Feedback Storage"
+    created: "2025-11-15"
+    target: "Enhanced learning system with structured JSON output, dual storage (plan+DB), QC context loading, and intra-run agent swapping"
+    estimated_tasks: 17
+    estimated_time: "24-32 hours"
+  # Context for the engineer implementing this
+  context:
+    framework: "Go 1.21+"
+    architecture: "Clean Architecture with dependency injection"
+    test_framework: "Go standard testing package (testing)"
+    other_context:
+      - "Conductor uses Kahn's algorithm for dependency graph"
+      - "SQLite database for learning data (.conductor/learning/executions.db)"
+      - "File locking via internal/filelock for concurrent safety"
+      - "Existing codebase has 86%+ test coverage - maintain this standard"
+      - "TDD is mandatory - tests written before implementation"
+    expectations:
+      - "Write tests BEFORE implementation (TDD)"
+      - "Commit frequently (after each completed task)"
+      - "Follow existing code patterns in internal/"
+      - "Keep changes minimal (YAGNI - You Aren't Gonna Need It)"
+      - "Avoid duplication (DRY - Don't Repeat Yourself)"
+      - "Use worktrees for parallel development when tasks are independent"
+      - "Maintain 85%+ test coverage for new code"
+      - "Run go fmt, go vet, and tests before each commit"
+  # Prerequisites checklist
+  prerequisites:
+    - item: "Go 1.21+ installed"
+      details: "Verify with: go version"
+      verified: false
+    - item: "Git worktree support"
+      details: "Verify with: git worktree list"
+      verified: false
+    - item: "golangci-lint installed (optional but recommended)"
+      details: "Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+      verified: false
+    - item: "Branch created from main"
+      details: "Ensure working from latest main branch"
+      verified: false
+    - item: "Task 0: Development environment validation (BLOCKING)"
+      details: |
+        MUST be completed before any implementation tasks begin.
+
+        Validation steps:
+        1. Verify Go module: go list -m
+           Expected: github.com/harrison/conductor
+
+        2. Verify tests compile: go test -run=^$ ./...
+           Expected: No compilation errors
+
+        3. Verify existing tests pass: go test ./...
+           Expected: All tests pass
+
+        4. Verify formatting: gofmt -l . | wc -l
+           Expected: 0 (all files formatted)
+
+        5. Verify go vet: go vet ./...
+           Expected: No issues
+
+        6. Verify database schema: cat internal/learning/schema.sql
+           Expected: task_executions table with qc_verdict, qc_feedback fields
+      blocking: true
+      commands:
+        - "go version"
+        - "go list -m"
+        - "go test -run=^$ ./..."
+        - "go test ./..."
+        - "gofmt -l . | wc -l"
+        - "go vet ./..."
+        - "cat internal/learning/schema.sql | grep -A 10 task_executions"
+      verified: false
+  # Common pitfalls reference (review BEFORE starting tasks)
+  common_pitfalls_reference:
+    purpose: |
+      Document common mistakes specific to Conductor codebase and Go development.
+      Review this section BEFORE starting any tasks to avoid repeating these errors.
+    go_conductor_pitfalls:
+      - pitfall: "Not using file locking for plan updates"
+        error_example: |
+          // WRONG - concurrent updates corrupt plan file
+          func updatePlan(planPath string, task Task) error {
+              content, _ := os.ReadFile(planPath)
+              updated := modifyContent(content, task)
+              return os.WriteFile(planPath, updated, 0644)
+          }
+
+          // RIGHT - use file locking
+          func updatePlan(planPath string, task Task) error {
+              lockPath := planPath + ".lock"
+              lock := filelock.NewFileLock(lockPath)
+              if err := lock.Lock(); err != nil {
+                  return err
+              }
+              defer lock.Unlock()
+
+              content, _ := os.ReadFile(planPath)
+              updated := modifyContent(content, task)
+              return filelock.AtomicWrite(planPath, updated)
+          }
+        why: "Multiple agents updating plan file simultaneously causes corruption"
+        detection: "Check if internal/filelock is used for all plan updates"
+        fix: "Wrap all plan updates with file locking (see internal/updater/updater.go:123-138)"
+      - pitfall: "Not handling both Markdown and YAML formats"
+        error_example: |
+          // WRONG - assumes only one format
+          func updateTask(planPath string, task Task) error {
+              return updateMarkdownTask(planPath, task)
+          }
+
+          // RIGHT - auto-detect format
+          func updateTask(planPath string, task Task) error {
+              format := parser.DetectFormat(planPath)
+              switch format {
+              case parser.FormatMarkdown:
+                  return updateMarkdownTask(planPath, task)
+              case parser.FormatYAML:
+                  return updateYAMLTask(planPath, task)
+              default:
+                  return fmt.Errorf("unknown format")
+              }
+          }
+        why: "Conductor supports both Markdown and YAML plan formats"
+        detection: "grep -r 'DetectFormat' internal/updater/"
+        fix: "Always use parser.DetectFormat() before processing plan files"
+      - pitfall: "Not preserving YAML structure when updating"
+        error_example: |
+          // WRONG - overwrites entire YAML
+          func updateYAML(planPath string, task Task) error {
+              newYAML := generateFullYAML(task)
+              return os.WriteFile(planPath, newYAML, 0644)
+          }
+
+          // RIGHT - preserve structure, update specific fields
+          func updateYAML(planPath string, task Task) error {
+              data, _ := os.ReadFile(planPath)
+              var plan Plan
+              yaml.Unmarshal(data, &plan)
+
+              // Update specific task
+              for i, t := range plan.Tasks {
+                  if t.Number == task.Number {
+                      plan.Tasks[i] = task
+                      break
+                  }
+              }
+
+              updated, _ := yaml.Marshal(plan)
+              return filelock.AtomicWrite(planPath, updated)
+          }
+        why: "Overwriting loses comments, formatting, and other tasks"
+        detection: "Check if yaml.Unmarshal and targeted updates are used"
+        fix: "Load existing YAML, update specific fields, marshal back (see internal/updater/updater.go:236-252)"
+      - pitfall: "Ignoring context.Context in long-running operations"
+        error_example: |
+          // WRONG - no context handling
+          func executeTasks(tasks []Task) error {
+              for _, task := range tasks {
+                  if err := executeTask(task); err != nil {
+                      return err
+                  }
+              }
+              return nil
+          }
+
+          // RIGHT - respect context cancellation
+          func executeTasks(ctx context.Context, tasks []Task) error {
+              for _, task := range tasks {
+                  select {
+                  case <-ctx.Done():
+                      return ctx.Err()
+                  default:
+                      if err := executeTask(ctx, task); err != nil {
+                          return err
+                      }
+                  }
+              }
+              return nil
+          }
+        why: "Operations can't be cancelled, leading to resource leaks"
+        detection: "grep -r 'func.*Task' internal/executor/ | grep -v 'context.Context'"
+        fix: "All long-running functions should accept and check ctx.Done()"
+      - pitfall: "Not testing with table-driven tests"
+        error_example: |
+          // WRONG - separate test functions
+          func TestParseJSON_Success(t *testing.T) { ... }
+          func TestParseJSON_Failure(t *testing.T) { ... }
+          func TestParseJSON_Empty(t *testing.T) { ... }
+
+          // RIGHT - table-driven tests
+          func TestParseJSON(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  input   string
+                  want    Response
+                  wantErr bool
+              }{
+                  {"success", `{"status":"ok"}`, Response{Status:"ok"}, false},
+                  {"failure", `invalid`, Response{}, true},
+                  {"empty", `{}`, Response{}, true},
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      got, err := ParseJSON(tt.input)
+                      if (err != nil) != tt.wantErr {
+                          t.Errorf("ParseJSON() error = %v, wantErr %v", err, tt.wantErr)
+                      }
+                      if !reflect.DeepEqual(got, tt.want) {
+                          t.Errorf("ParseJSON() = %v, want %v", got, tt.want)
+                      }
+                  })
+              }
+          }
+        why: "Conductor codebase uses table-driven tests for consistency and coverage"
+        detection: "Check if tests use []struct pattern with t.Run()"
+        fix: "Use table-driven test pattern (see internal/parser/parser_test.go for examples)"
+  # Detailed task breakdown
+  tasks:
+    - task_number: 1
+      name: "Define JSON response schemas"
+      agent: "golang-pro"
+      worktree_group: "chain-1-json-core"
+      files:
+        - "internal/models/response.go"
+        - "internal/models/response_test.go"
+      depends_on: []
+      estimated_time: "2h"
+      description: |
+        Define structured JSON schemas for agent and QC responses. These schemas
+        will be the foundation for all subsequent JSON parsing and validation.
+
+        Creates two new types: AgentResponse and QCResponse with JSON tags and
+        validation methods.
+      test_first:
+        test_file: "internal/models/response_test.go"
+        structure:
+          - "Test AgentResponse JSON marshaling/unmarshaling"
+          - "Test QCResponse JSON marshaling/unmarshaling"
+          - "Test validation methods for required fields"
+          - "Test handling of optional fields"
+        mocks: []
+        fixtures:
+          - "Valid agent response JSON"
+          - "Valid QC response JSON"
+          - "Invalid/malformed JSON examples"
+        assertions:
+          - "JSON marshals to expected format"
+          - "JSON unmarshals correctly"
+          - "Required fields validated"
+          - "Optional fields handled gracefully"
+        edge_cases:
+          - "Empty JSON object"
+          - "Missing required fields"
+          - "Extra unknown fields (should be ignored)"
+          - "Nested metadata objects"
+        example_skeleton: |
+          // internal/models/response_test.go
+          package models
+
+          import (
+              "encoding/json"
+              "testing"
+          )
+
+          func TestAgentResponse_Marshal(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  resp    AgentResponse
+                  want    string
+              }{
+                  {
+                      name: "complete response",
+                      resp: AgentResponse{
+                          Status:   "success",
+                          Summary:  "Task completed",
+                          Output:   "Full output",
+                          Errors:   []string{},
+                          Files:    []string{"file1.go"},
+                          Metadata: map[string]interface{}{"duration_ms": 1000},
+                      },
+                      want: `{"status":"success","summary":"Task completed"...}`,
+                  },
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      got, err := json.Marshal(tt.resp)
+                      if err != nil {
+                          t.Errorf("Marshal() error = %v", err)
+                          return
+                      }
+                      // Compare JSON strings
+                      if string(got) != tt.want {
+                          t.Errorf("Marshal() = %v, want %v", string(got), tt.want)
+                      }
+                  })
+              }
+          }
+
+          func TestAgentResponse_Unmarshal(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  input   string
+                  want    AgentResponse
+                  wantErr bool
+              }{
+                  {
+                      name:  "valid JSON",
+                      input: `{"status":"success","summary":"Done","output":"result","errors":[],"files_modified":["test.go"],"metadata":{}}`,
+                      want: AgentResponse{
+                          Status:  "success",
+                          Summary: "Done",
+                          Output:  "result",
+                          Errors:  []string{},
+                          Files:   []string{"test.go"},
+                          Metadata: map[string]interface{}{},
+                      },
+                      wantErr: false,
+                  },
+                  {
+                      name:    "invalid JSON",
+                      input:   `{invalid}`,
+                      want:    AgentResponse{},
+                      wantErr: true,
+                  },
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      var got AgentResponse
+                      err := json.Unmarshal([]byte(tt.input), &got)
+                      if (err != nil) != tt.wantErr {
+                          t.Errorf("Unmarshal() error = %v, wantErr %v", err, tt.wantErr)
+                          return
+                      }
+                      if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+                          t.Errorf("Unmarshal() = %v, want %v", got, tt.want)
+                      }
+                  })
+              }
+          }
+
+          func TestQCResponse_Unmarshal(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  input   string
+                  want    QCResponse
+                  wantErr bool
+              }{
+                  {
+                      name:  "valid QC response",
+                      input: `{"verdict":"GREEN","feedback":"All tests pass","issues":[],"recommendations":["Good work"],"should_retry":false,"suggested_agent":""}`,
+                      want: QCResponse{
+                          Verdict:        "GREEN",
+                          Feedback:       "All tests pass",
+                          Issues:         []Issue{},
+                          Recommendations: []string{"Good work"},
+                          ShouldRetry:    false,
+                          SuggestedAgent: "",
+                      },
+                      wantErr: false,
+                  },
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      var got QCResponse
+                      err := json.Unmarshal([]byte(tt.input), &got)
+                      if (err != nil) != tt.wantErr {
+                          t.Errorf("Unmarshal() error = %v, wantErr %v", err, tt.wantErr)
+                          return
+                      }
+                      if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+                          t.Errorf("Unmarshal() = %v, want %v", got, tt.want)
+                      }
+                  })
+              }
+          }
+
+          func TestAgentResponse_Validate(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  resp    AgentResponse
+                  wantErr bool
+              }{
+                  {
+                      name: "valid response",
+                      resp: AgentResponse{
+                          Status:  "success",
+                          Summary: "Done",
+                          Output:  "result",
+                      },
+                      wantErr: false,
+                  },
+                  {
+                      name: "missing status",
+                      resp: AgentResponse{
+                          Summary: "Done",
+                          Output:  "result",
+                      },
+                      wantErr: true,
+                  },
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      err := tt.resp.Validate()
+                      if (err != nil) != tt.wantErr {
+                          t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+                      }
+                  })
+              }
+          }
+      implementation:
+        approach: |
+          Create new file internal/models/response.go with two struct types:
+
+          1. AgentResponse: Represents agent execution output
+          2. QCResponse: Represents quality control review output
+
+          Both types include JSON tags for marshaling/unmarshaling and validation
+          methods to ensure required fields are present.
+
+          Follow the schema designs from the architecture section:
+          - AgentResponse: status, summary, output, errors, files_modified, metadata
+          - QCResponse: verdict, feedback, issues, recommendations, should_retry, suggested_agent
+        code_structure: |
+          // internal/models/response.go
+          package models
+
+          import "encoding/json"
+
+          // AgentResponse represents structured JSON output from an agent execution
+          type AgentResponse struct {
+              Status   string                 `json:"status"`            // "success" or "failed"
+              Summary  string                 `json:"summary"`           // Brief description
+              Output   string                 `json:"output"`            // Full execution output
+              Errors   []string               `json:"errors"`            // Error messages
+              Files    []string               `json:"files_modified"`    // Modified file paths
+              Metadata map[string]interface{} `json:"metadata"`          // Additional data
+          }
+
+          // Validate checks if required fields are present
+          func (r *AgentResponse) Validate() error {
+              if r.Status == "" {
+                  return fmt.Errorf("status is required")
+              }
+              if r.Status != "success" && r.Status != "failed" {
+                  return fmt.Errorf("status must be 'success' or 'failed'")
+              }
+              return nil
+          }
+
+          // Issue represents a specific issue found during QC review
+          type Issue struct {
+              Severity    string `json:"severity"`     // "critical", "warning", "info"
+              Description string `json:"description"`  // Issue description
+              Location    string `json:"location"`     // File:line or component
+          }
+
+          // QCResponse represents structured JSON output from QC review
+          type QCResponse struct {
+              Verdict         string   `json:"verdict"`          // "GREEN", "RED", "YELLOW"
+              Feedback        string   `json:"feedback"`         // Detailed review feedback
+              Issues          []Issue  `json:"issues"`           // Specific issues found
+              Recommendations []string `json:"recommendations"`  // Suggested improvements
+              ShouldRetry     bool     `json:"should_retry"`     // Whether to retry
+              SuggestedAgent  string   `json:"suggested_agent"`  // Alternative agent suggestion
+          }
+
+          // Validate checks if required fields are present
+          func (r *QCResponse) Validate() error {
+              if r.Verdict == "" {
+                  return fmt.Errorf("verdict is required")
+              }
+              validVerdicts := map[string]bool{"GREEN": true, "RED": true, "YELLOW": true}
+              if !validVerdicts[r.Verdict] {
+                  return fmt.Errorf("verdict must be GREEN, RED, or YELLOW")
+              }
+              return nil
+          }
+        key_points:
+          - point: "Use JSON tags for field mapping"
+            details: "`json:\"field_name\"` allows automatic marshaling"
+          - point: "Initialize slices to empty, not nil"
+            details: "Errors: []string{} instead of nil ensures JSON marshals to []"
+          - point: "Metadata is flexible map for extensibility"
+            details: "map[string]interface{} allows arbitrary additional data"
+          - point: "Validation methods enforce required fields"
+            details: "Call Validate() after unmarshaling to ensure data integrity"
+        integration:
+          imports:
+            - "encoding/json (for Marshal/Unmarshal)"
+            - "fmt (for error messages)"
+          services_to_inject: []
+          config_values: []
+          error_handling:
+            - "Validate() returns error if required fields missing"
+            - "Unmarshal errors propagated to caller"
+      code_quality:
+        go:
+          formatter:
+            tool: "gofmt"
+            command: "gofmt -w internal/models/response.go internal/models/response_test.go"
+            blocking: true
+          vet:
+            tool: "go vet"
+            command: "go vet ./internal/models"
+            blocking: true
+          test_runner:
+            tool: "go test"
+            command: "go test ./internal/models -v"
+            blocking: true
+          full_quality_pipeline:
+            command: |
+              gofmt -w internal/models/response.go internal/models/response_test.go && \
+              go vet ./internal/models && \
+              go test ./internal/models -v
+      verification:
+        automated_tests:
+          command: "go test ./internal/models -v -run TestAgentResponse"
+          expected_output: |
+            === RUN   TestAgentResponse_Marshal
+            === RUN   TestAgentResponse_Unmarshal
+            === RUN   TestQCResponse_Unmarshal
+            === RUN   TestAgentResponse_Validate
+            --- PASS: TestAgentResponse_Marshal
+            --- PASS: TestAgentResponse_Unmarshal
+            --- PASS: TestQCResponse_Unmarshal
+            --- PASS: TestAgentResponse_Validate
+            PASS
+        success_criteria:
+          - "All tests pass"
+          - "JSON marshaling produces expected format"
+          - "JSON unmarshaling parses correctly"
+          - "Validation catches missing required fields"
+          - "go vet passes with no warnings"
+      commit:
+        type: "feat"
+        message: "define agent and QC JSON response schemas"
+        body: |
+          Add AgentResponse and QCResponse struct types with JSON tags
+          and validation methods. These schemas define the structured
+          format for agent execution output and QC reviews.
+
+          - AgentResponse: status, summary, output, errors, files, metadata
+          - QCResponse: verdict, feedback, issues, recommendations, suggested_agent
+          - Validation methods ensure required fields present
+          - Table-driven tests for marshal/unmarshal/validate
+        files:
+          - "internal/models/response.go"
+          - "internal/models/response_test.go"
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 2
+      name: "Modify agent invoker for JSON output"
+      agent: "golang-pro"
+      worktree_group: "chain-1-json-core"
+      files:
+        - "internal/agent/invoker.go"
+        - "internal/agent/invoker_test.go"
+      depends_on: [1]
+      estimated_time: "3h"
+      description: |
+        Modify the agent invoker to request JSON-formatted responses from agents
+        and parse them into AgentResponse structs. Adds JSON instruction to prompts
+        and implements parsing with fallback to plain text wrapping on failure.
+      test_first:
+        test_file: "internal/agent/invoker_test.go"
+        structure:
+          - "Test prompt modification with JSON instruction"
+          - "Test parsing valid JSON response"
+          - "Test fallback for malformed JSON"
+          - "Test preservation of existing functionality"
+        mocks:
+          - "Agent execution (mock exec.Command)"
+        fixtures:
+          - "Valid JSON agent response"
+          - "Malformed JSON requiring fallback"
+          - "Plain text response"
+        assertions:
+          - "JSON instruction appended to prompt"
+          - "Valid JSON parsed into AgentResponse"
+          - "Malformed JSON wrapped gracefully"
+          - "Error cases handled without crashes"
+        edge_cases:
+          - "Empty response from agent"
+          - "Partial JSON (truncated)"
+          - "JSON with extra fields (should be ignored)"
+        example_skeleton: |
+          // internal/agent/invoker_test.go
+          func TestInvoker_JSONPrompt(t *testing.T) {
+              tests := []struct {
+                  name          string
+                  originalPrompt string
+                  wantContains   string
+              }{
+                  {
+                      name:          "appends JSON instruction",
+                      originalPrompt: "Implement authentication",
+                      wantContains:   "Respond ONLY with valid JSON",
+                  },
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      invoker := NewInvoker()
+                      prompt := invoker.buildJSONPrompt(tt.originalPrompt)
+                      if !strings.Contains(prompt, tt.wantContains) {
+                          t.Errorf("buildJSONPrompt() missing %q", tt.wantContains)
+                      }
+                  })
+              }
+          }
+
+          func TestInvoker_ParseJSON(t *testing.T) {
+              tests := []struct {
+                  name    string
+                  output  string
+                  want    *models.AgentResponse
+                  wantErr bool
+              }{
+                  {
+                      name:   "valid JSON",
+                      output: `{"status":"success","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
+                      want: &models.AgentResponse{
+                          Status:   "success",
+                          Summary:  "Done",
+                          Output:   "result",
+                          Errors:   []string{},
+                          Files:    []string{},
+                          Metadata: map[string]interface{}{},
+                      },
+                      wantErr: false,
+                  },
+                  {
+                      name:    "malformed JSON - fallback",
+                      output:  "plain text output",
+                      want:    &models.AgentResponse{Status: "success", Output: "plain text output"},
+                      wantErr: false, // Should not error, fallback wraps it
+                  },
+              }
+              for _, tt := range tests {
+                  t.Run(tt.name, func(t *testing.T) {
+                      got, err := parseAgentJSON(tt.output)
+                      if (err != nil) != tt.wantErr {
+                          t.Errorf("parseAgentJSON() error = %v, wantErr %v", err, tt.wantErr)
+                          return
+                      }
+                      // Compare relevant fields
+                      if got.Status != tt.want.Status || got.Output != tt.want.Output {
+                          t.Errorf("parseAgentJSON() = %v, want %v", got, tt.want)
+                      }
+                  })
+              }
+          }
+      implementation:
+        approach: |
+          1. Add buildJSONPrompt() method that appends JSON instruction to task prompt
+          2. Modify Invoke() to use buildJSONPrompt()
+          3. Add parseAgentJSON() function to parse response
+          4. Implement fallback: if JSON parsing fails, wrap plain text in AgentResponse
+          5. Update InvocationResult to include AgentResponse field
+        code_structure: |
+          // internal/agent/invoker.go
+          func (i *Invoker) buildJSONPrompt(originalPrompt string) string {
+              jsonInstruction := `
+
+          IMPORTANT: Respond ONLY with valid JSON in this format:
+          {
+            "status": "success|failed",
+            "summary": "Brief description",
+            "output": "Full execution output",
+            "errors": ["error1"],
+            "files_modified": ["file1.go"],
+            "metadata": {}
+          }`
+              return originalPrompt + jsonInstruction
+          }
+
+          func parseAgentJSON(output string) (*models.AgentResponse, error) {
+              var resp models.AgentResponse
+
+              // Try parsing as JSON
+              err := json.Unmarshal([]byte(output), &resp)
+              if err != nil {
+                  // Fallback: wrap plain text
+                  resp = models.AgentResponse{
+                      Status:   "success",
+                      Summary:  "Plain text response",
+                      Output:   output,
+                      Errors:   []string{},
+                      Files:    []string{},
+                      Metadata: map[string]interface{}{"parse_fallback": true},
+                  }
+                  return &resp, nil // Don't return error, fallback succeeds
+              }
+
+              // Validate parsed JSON
+              if err := resp.Validate(); err != nil {
+                  return nil, fmt.Errorf("invalid JSON response: %w", err)
+              }
+
+              return &resp, nil
+          }
+
+          func (i *Invoker) Invoke(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+              // Build JSON-requesting prompt
+              jsonPrompt := i.buildJSONPrompt(task.Prompt)
+
+              // Execute agent with JSON prompt
+              result, err := i.executeAgent(ctx, task, jsonPrompt)
+              if err != nil {
+                  return nil, err
+              }
+
+              // Parse JSON response
+              agentResp, err := parseAgentJSON(result.Output)
+              if err != nil {
+                  return nil, fmt.Errorf("failed to parse agent response: %w", err)
+              }
+
+              // Attach parsed response to result
+              result.AgentResponse = agentResp
+
+              return result, nil
+          }
+        key_points:
+          - point: "Fallback prevents failures on non-JSON responses"
+            details: "If JSON parse fails, wrap plain text in AgentResponse struct"
+          - point: "Validation after parsing ensures data integrity"
+            details: "Call resp.Validate() to check required fields present"
+          - point: "Preserve backward compatibility"
+            details: "InvocationResult still has Output field, adds AgentResponse"
+      commit:
+        type: "feat"
+        message: "modify agent invoker to request and parse JSON"
+        body: |
+          Add JSON instruction to agent prompts and parse responses into
+          AgentResponse structs. Implements graceful fallback for non-JSON
+          responses by wrapping plain text.
+
+          - buildJSONPrompt() appends JSON instruction
+          - parseAgentJSON() with fallback to plain text wrapping
+          - InvocationResult includes AgentResponse field
+          - Backward compatible with existing code
+        files:
+          - "internal/agent/invoker.go"
+          - "internal/agent/invoker_test.go"
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 3
+      name: "Modify QC agent for JSON output"
+      agent: "golang-pro"
+      worktree_group: "chain-1-json-core"
+      files:
+        - "internal/executor/qc.go"
+        - "internal/executor/qc_test.go"
+      depends_on: [2]
+      estimated_time: "3h"
+      description: |
+        Modify QC Review() to request JSON responses and parse into QCResponse.
+        Similar pattern to agent invoker but for quality control reviews.
+      test_first:
+        test_file: "internal/executor/qc_test.go"
+        structure:
+          - "Test QC prompt includes JSON instruction"
+          - "Test parsing QC JSON response"
+          - "Test extraction of verdict and suggested_agent"
+        example_skeleton: |
+          func TestQC_ParseJSON(t *testing.T) {
+              tests := []struct {
+                  name string
+                  output string
+                  wantVerdict string
+                  wantAgent string
+              }{
+                  {"GREEN verdict", `{"verdict":"GREEN","feedback":"Good"}`, "GREEN", ""},
+                  {"RED with suggestion", `{"verdict":"RED","suggested_agent":"golang-pro"}`, "RED", "golang-pro"},
+              }
+              // Test implementation
+          }
+      implementation:
+        approach: "Add buildQCJSONPrompt(), parseQCJSON() following agent invoker pattern"
+        code_structure: |
+          func (qc *QualityController) buildQCJSONPrompt(basePrompt string) string {
+              return basePrompt + "\n\nRespond in JSON: {verdict, feedback, issues, recommendations, should_retry, suggested_agent}"
+          }
+          func parseQCJSON(output string) (*models.QCResponse, error) { /* similar to parseAgentJSON */ }
+      commit:
+        type: "feat"
+        message: "modify QC to request and parse JSON responses"
+        files: ["internal/executor/qc.go", "internal/executor/qc_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 4
+      name: "Enhance Markdown updater with execution history"
+      agent: "golang-pro"
+      worktree_group: "chain-2-storage"
+      files:
+        - "internal/updater/updater.go"
+        - "internal/updater/updater_test.go"
+      depends_on: []
+      estimated_time: "4h"
+      description: |
+        Add execution history section to Markdown plan files. Stores full agent
+        output and QC feedback for each retry attempt.
+      test_first:
+        test_file: "internal/updater/updater_test.go"
+        structure:
+          - "Test creating ### Execution History section"
+          - "Test appending multiple attempts"
+          - "Test preserving existing task structure"
+        example_skeleton: |
+          func TestUpdateMarkdownFeedback(t *testing.T) {
+              tests := []struct {
+                  name string
+                  existingPlan string
+                  attempt ExecutionAttempt
+                  wantContains []string
+              }{
+                  {"first attempt", planWithoutHistory, attempt1, []string{"### Execution History", "#### Attempt 1"}},
+                  {"second attempt", planWithHistory, attempt2, []string{"#### Attempt 2"}},
+              }
+              // Verify history section added/updated
+          }
+      implementation:
+        approach: |
+          1. Add UpdateTaskFeedback(planPath, taskNumber, attempt) function
+          2. Detect format (MD/YAML)
+          3. For Markdown: find task heading, create/append to ### Execution History
+          4. Use file locking (internal/filelock)
+        code_structure: |
+          type ExecutionAttempt struct {
+              AttemptNumber int
+              Agent         string
+              Verdict       string
+              AgentOutput   string
+              QCFeedback    string
+              Timestamp     time.Time
+          }
+          func UpdateTaskFeedback(planPath, taskNumber string, attempt *ExecutionAttempt) error {
+              // Auto-detect format, delegate to updateMarkdownFeedback or updateYAMLFeedback
+          }
+          func updateMarkdownFeedback(planPath, taskNumber string, attempt *ExecutionAttempt) error {
+              // Read file, find task, append history, atomic write with locking
+          }
+      commit:
+        type: "feat"
+        message: "enhance Markdown updater with execution history"
+        files: ["internal/updater/updater.go", "internal/updater/updater_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 5
+      name: "Enhance YAML updater with execution history"
+      agent: "golang-pro"
+      worktree_group: "chain-2-storage"
+      files:
+        - "internal/updater/updater.go"
+        - "internal/updater/updater_test.go"
+      depends_on: [4]
+      estimated_time: "3h"
+      description: |
+        Add execution_history array to YAML tasks. Stores structured attempt data
+        as YAML objects in array.
+      test_first:
+        test_file: "internal/updater/updater_test.go"
+        structure:
+          - "Test creating execution_history array"
+          - "Test appending to existing array"
+          - "Test YAML structure preservation"
+        example_skeleton: |
+          func TestUpdateYAMLFeedback(t *testing.T) {
+              yamlPlan := `tasks:\n  - task_number: 1\n    name: Test`
+              attempt := &ExecutionAttempt{AttemptNumber: 1, Verdict: "RED"}
+              result, err := updateYAMLFeedback("plan.yaml", "1", attempt)
+              // Verify execution_history array created
+          }
+      implementation:
+        approach: "Parse YAML, add/append to execution_history array, marshal back"
+        code_structure: |
+          func updateYAMLFeedback(planPath, taskNumber string, attempt *ExecutionAttempt) error {
+              var plan Plan
+              yaml.Unmarshal(data, &plan)
+              for i, task := range plan.Tasks {
+                  if task.Number == taskNumber {
+                      plan.Tasks[i].ExecutionHistory = append(task.ExecutionHistory, *attempt)
+                  }
+              }
+              updated, _ := yaml.Marshal(plan)
+              return filelock.AtomicWrite(planPath, updated)
+          }
+      commit:
+        type: "feat"
+        message: "enhance YAML updater with execution history"
+        files: ["internal/updater/updater.go", "internal/updater/updater_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 6
+      name: "Implement QC context loader"
+      agent: "golang-pro"
+      worktree_group: "chain-3-learning"
+      files:
+        - "internal/executor/qc.go"
+        - "internal/executor/qc_test.go"
+      depends_on: []
+      estimated_time: "3h"
+      description: |
+        QC agent loads execution history from both plan file and database before
+        reviewing. Provides full context for intelligent feedback.
+      test_first:
+        test_file: "internal/executor/qc_test.go"
+        structure:
+          - "Test loading context from plan file"
+          - "Test loading context from database"
+          - "Test merging plan and DB context"
+          - "Test handling empty history"
+      implementation:
+        approach: |
+          1. Add LoadContext(ctx, task, store) method to QualityController
+          2. Read plan file execution history (if exists)
+          3. Query database for historical attempts
+          4. Format into readable context string
+          5. Pass context to Review() method
+        code_structure: |
+          func (qc *QualityController) LoadContext(ctx context.Context, task models.Task, store *learning.Store) (string, error) {
+              var context strings.Builder
+              // Load from plan file
+              planContext := loadPlanFileContext(task)
+              context.WriteString("=== Current Run ===\n")
+              context.WriteString(planContext)
+              // Load from DB
+              dbHistory, _ := store.GetExecutionHistory(ctx, task.SourceFile, task.Number)
+              context.WriteString("\n=== Historical Attempts ===\n")
+              for _, exec := range dbHistory {
+                  context.WriteString(formatExecution(exec))
+              }
+              return context.String(), nil
+          }
+      commit:
+        type: "feat"
+        message: "implement QC context loading from plan and DB"
+        files: ["internal/executor/qc.go", "internal/executor/qc_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 7
+      name: "Implement agent selection algorithm"
+      agent: "golang-pro"
+      worktree_group: "chain-3-learning"
+      files:
+        - "internal/learning/analyzer.go"
+        - "internal/learning/analyzer_test.go"
+      depends_on: [6]
+      estimated_time: "4h"
+      description: |
+        Algorithm selects best agent for retry based on QC suggestion and
+        historical success rates. Used during retry loop for agent swapping.
+      test_first:
+        test_file: "internal/learning/analyzer_test.go"
+        structure:
+          - "Test using QC suggested agent"
+          - "Test selecting best performer from history"
+          - "Test excluding current failed agent"
+          - "Test fallback to general-purpose"
+        example_skeleton: |
+          func TestSelectBetterAgent(t *testing.T) {
+              tests := []struct {
+                  name string
+                  currentAgent string
+                  qcSuggestion string
+                  history []*TaskExecution
+                  want string
+              }{
+                  {"QC suggestion", "backend-dev", "golang-pro", nil, "golang-pro"},
+                  {"best performer", "backend-dev", "", historyWithStats, "test-automator"},
+                  {"fallback", "backend-dev", "", emptyHistory, "general-purpose"},
+              }
+              // Test selection logic
+          }
+      implementation:
+        approach: |
+          Priority order:
+          1. Use QC suggestion if provided
+          2. Analyze history for best success rate
+          3. Exclude current agent (already failed)
+          4. Fallback to "general-purpose"
+        code_structure: |
+          func SelectBetterAgent(currentAgent string, history []*TaskExecution, qcSuggestion string) string {
+              if qcSuggestion != "" && qcSuggestion != currentAgent {
+                  return qcSuggestion
+              }
+              agentStats := analyzeAgentPerformance(history)
+              candidates := filterOutAgent(agentStats, currentAgent)
+              if len(candidates) > 0 {
+                  return candidates[0].Agent // Best performer
+              }
+              return "general-purpose"
+          }
+      commit:
+        type: "feat"
+        message: "implement agent selection algorithm for retry swapping"
+        files: ["internal/learning/analyzer.go", "internal/learning/analyzer_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 8
+      name: "Integrate agent swapping into retry loop and enhance task logging"
+      agent: "golang-pro"
+      worktree_group: "chain-4-integration"
+      files:
+        - "internal/executor/task.go"
+        - "internal/executor/task_test.go"
+        - "internal/logger/file.go"
+        - "internal/logger/file_test.go"
+      depends_on: [1, 2, 3, 4, 5, 6, 7]
+      estimated_time: "6h"
+      description: |
+        Modify executeWithRetries() to swap agents during retry loop when
+        threshold reached. Stores feedback to plan+DB after each attempt.
+
+        Also enhance task*.log files to store full JSON responses from both
+        agents and QC, with attempt-by-attempt breakdown for retries.
+      test_first:
+        test_file: "internal/executor/task_test.go, internal/logger/file_test.go"
+        structure:
+          - "Test agent swap after min_failures_before_adapt"
+          - "Test no swap if disabled in config"
+          - "Test feedback stored to plan and DB"
+          - "Test QC context loaded before review"
+          - "Test task log contains full JSON from agent and QC"
+          - "Test task log includes retry attempt breakdown"
+        example_skeleton: |
+          func TestExecuteWithRetries_AgentSwap(t *testing.T) {
+              cfg := &config.Config{
+                  Learning: config.LearningConfig{
+                      AutoAdaptAgent: true,
+                      SwapDuringRetries: true,
+                      MinFailuresBeforeAdapt: 2,
+                  },
+              }
+              te := NewTaskExecutor(cfg, mockInvoker, mockQC, mockStore)
+              result, _ := te.executeWithRetries(ctx, task)
+              // Verify agent swapped after 2 RED verdicts
+          }
+      implementation:
+        approach: |
+          1. Track failures counter in retry loop
+          2. Store AgentResponse to plan+DB after each attempt
+          3. Load context before QC review
+          4. Parse QCResponse for verdict and suggested_agent
+          5. Store QCResponse to plan+DB
+          6. If RED and failures >= threshold, call SelectBetterAgent()
+          7. Swap task.Agent for next retry
+          8. Enhance LogTaskResult() to store full JSON responses in task*.log
+          9. Include attempt-by-attempt breakdown with agent/QC JSON for retries
+        code_structure: |
+          func (te *TaskExecutor) executeWithRetries(ctx context.Context, task models.Task) (*models.TaskResult, error) {
+              failures := 0
+              currentAgent := task.Agent
+              for attempt := 1; attempt <= maxRetries; attempt++ {
+                  task.Agent = currentAgent
+                  agentResult, _ := te.invoker.Invoke(ctx, task)
+                  // Store agent output
+                  te.updateFeedback(task, attempt, agentResult.AgentResponse)
+                  // Load context for QC
+                  context, _ := te.qc.LoadContext(ctx, task, te.store)
+                  qcResult, _ := te.qc.Review(ctx, task, agentResult.Output, context)
+                  // Store QC feedback
+                  te.updateFeedback(task, attempt, qcResult)
+                  if qcResult.Verdict == "RED" {
+                      failures++
+                      if failures >= te.cfg.MinFailuresBeforeAdapt && te.cfg.SwapDuringRetries {
+                          newAgent := learning.SelectBetterAgent(currentAgent, history, qcResult.SuggestedAgent)
+                          log.Printf("Swapping agent: %s → %s", currentAgent, newAgent)
+                          currentAgent = newAgent
+                      }
+                  } else {
+                      return success, nil
+                  }
+              }
+              return failure, errors.New("max retries")
+          }
+
+          // Logger enhancement in internal/logger/file.go:
+          func (fl *FileLogger) LogTaskResult(result models.TaskResult) error {
+              content := fmt.Sprintf("=== Task %s: %s ===\n", result.Task.Number, result.Task.Name)
+              content += fmt.Sprintf("Status: %s\n", result.Status)
+              content += fmt.Sprintf("Duration: %.1fs\n", result.Duration.Seconds())
+              content += fmt.Sprintf("Retry Count: %d\n\n", result.RetryCount)
+
+              // Log full JSON for each attempt
+              if len(result.ExecutionHistory) > 0 {
+                  content += "=== Execution History ===\n\n"
+                  for i, attempt := range result.ExecutionHistory {
+                      content += fmt.Sprintf("#### Attempt %d (Agent: %s) - %s\n", i+1, attempt.Agent, attempt.Verdict)
+                      content += fmt.Sprintf("Agent Output (JSON):\n%s\n\n", attempt.AgentOutput)
+                      content += fmt.Sprintf("QC Review (JSON):\n%s\n\n", attempt.QCFeedback)
+                  }
+              }
+
+              _, err = file.WriteString(content)
+              return err
+          }
+      commit:
+        type: "feat"
+        message: "integrate agent swapping into retry loop and enhance task logging"
+        body: |
+          Implement intra-run agent swapping based on failures. After
+          min_failures_before_adapt threshold, SelectBetterAgent() is called
+          and task.Agent is swapped for next retry.
+
+          - Dual storage: feedback → plan+DB after each attempt
+          - QC context loading from plan+DB before review
+          - Agent swap logic integrated into retry loop
+          - Configurable via swap_during_retries flag
+          - Enhanced task*.log files with full JSON responses
+          - Attempt-by-attempt breakdown in logs for retries
+        files: ["internal/executor/task.go", "internal/executor/task_test.go", "internal/logger/file.go", "internal/logger/file_test.go"]
+      status: "completed"
+      progress_notes: |
+        ✅ FULLY COMPLETE (2025-11-15)
+
+        All integration items successfully implemented through 3-step sequential deployment:
+
+        COMPLETED IMPLEMENTATIONS:
+
+        1. Config Wiring (Pre-existing)
+           - SwapDuringRetries field wired in run.go:481
+           - AutoAdaptAgent, MinFailuresBeforeAdapt already configured
+           - All learning config fields properly loaded
+
+        2. Task Logging Enhancement (Initial Implementation)
+           - Enhanced LogTaskResult() for JSON responses (verified in file.go)
+           - ExecutionAttempt struct added to TaskResult
+           - Attempt-by-attempt breakdown in task*.log files
+
+        3. Database Storage (Initial Implementation)
+           - QCVerdict and QCFeedback stored in task_executions table
+           - Verified in learning/store.go and schema.sql
+
+        4. LoadContext() Integration (Commit 62a9fb1)
+           Location: internal/executor/qc.go
+           Changes:
+           - Added LearningStore field to QualityController (line 20)
+           - Modified BuildReviewPrompt to call LoadContext() (lines 58-63)
+           - Auto-sync LearningStore in run.go:459 and task.go:451-457
+           - Historical context now injected into all QC review prompts
+
+        5. updateFeedback() Method Creation (Commit 20977e8)
+           Location: internal/executor/task.go:433-467
+           Implementation:
+           - Created helper method wrapping updater.UpdateTaskFeedback()
+           - Multi-file plan support (task.SourceFile → te.SourceFile → cfg.PlanPath)
+           - Graceful error handling (non-fatal failures)
+           - 8 comprehensive test cases (88.7% coverage)
+
+        6. SelectBetterAgent() Integration (Commit d2cd87d)
+           Location: internal/executor/task.go:694-715
+           Implementation:
+           - Added GetExecutionHistory() to LearningStore interface (line 37)
+           - Load execution history before calling SelectBetterAgent()
+           - Call learning.SelectBetterAgent() with current agent, history, QC suggestion
+           - Agent swap logic replaces simple QC suggestion check
+
+        7. updateFeedback() Wiring (Commit d2cd87d)
+           Location: internal/executor/task.go:601, 649
+           Calls:
+           - Line 601: After agent invocation - stores raw agent output
+           - Line 649: After QC review - stores verdict + feedback
+           - Implements dual storage: plan files + database
+
+        IMPLEMENTATION NOTES:
+
+        Plan Pseudocode vs. Actual Implementation:
+
+        Plan showed (line 1238):
+          te.updateFeedback(task, attempt, agentResult.AgentResponse)
+
+        Actual signature:
+          func (te *DefaultTaskExecutor) updateFeedback(
+              task models.Task,
+              attempt int,
+              agentOutput string,
+              qcFeedback string,
+              verdict string
+          ) error
+
+        Rationale: Simplified to accept string parameters instead of complex structs.
+        AgentResponse data extracted before calling updateFeedback.
+
+        Plan showed (line 1240):
+          context, _ := te.qc.LoadContext(ctx, task, te.store)
+          qcResult, _ := te.qc.Review(ctx, task, agentResult.Output, context)
+
+        Actual implementation:
+          // LoadContext integrated inside BuildReviewPrompt (qc.go:58-63)
+          // Review() signature unchanged - no breaking changes
+          // Context loaded and injected automatically when LearningStore available
+
+        Rationale: Avoided breaking Review() signature by moving context loading
+        into BuildReviewPrompt where it's naturally scoped.
+
+        VERIFICATION:
+        - All 465+ tests passing
+        - New integration tests: TestExecute_CallsUpdateFeedbackDuringRetries
+        - New integration tests: TestExecute_CallsSelectBetterAgentOnRetry
+        - Test coverage maintained at 86%+ overall
+        - Manual verification: execution history appears in plan files
+        - Manual verification: agent swapping occurs on RED threshold
+
+        LESSONS LEARNED:
+
+        1. Plan showed method calls without creating methods (updateFeedback)
+        2. Pseudocode in code_structure was interpreted as "example" not "spec"
+        3. Agents implemented explicit code but skipped implicit integration
+        4. Future plans should split: method creation + wiring into separate tasks
+
+        FILES MODIFIED (across 3 commits):
+        - internal/executor/qc.go
+        - internal/executor/qc_test.go
+        - internal/cmd/run.go
+        - internal/executor/task.go
+        - internal/executor/task_test.go
+      completed_date: "2025-11-15"
+    - task_number: 9
+      name: "Update config struct with new fields"
+      agent: "golang-pro"
+      worktree_group: "chain-4-integration"
+      files:
+        - "internal/config/config.go"
+        - "internal/config/config_test.go"
+      depends_on: [8]
+      estimated_time: "2h"
+      description: |
+        Add feedback and enhanced learning config fields to Config struct.
+        Includes validation and default values.
+      test_first:
+        test_file: "internal/config/config_test.go"
+        structure:
+          - "Test default values for new fields"
+          - "Test validation of feedback config"
+          - "Test validation of learning config"
+          - "Test config loading from YAML"
+        example_skeleton: |
+          func TestConfig_FeedbackDefaults(t *testing.T) {
+              cfg := NewDefaultConfig()
+              if !cfg.Feedback.StoreInPlanFile {
+                  t.Error("Expected store_in_plan_file default true")
+              }
+              if cfg.Feedback.Format != "json" {
+                  t.Error("Expected format default json")
+              }
+          }
+      implementation:
+        approach: "Add FeedbackConfig and update LearningConfig structs with YAML tags"
+        code_structure: |
+          type FeedbackConfig struct {
+              StoreInPlanFile bool   `yaml:"store_in_plan_file"`
+              StoreInDatabase bool   `yaml:"store_in_database"`
+              Format          string `yaml:"format"`
+              StoreOnGreen    bool   `yaml:"store_on_green"`
+              StoreOnRed      bool   `yaml:"store_on_red"`
+              StoreOnYellow   bool   `yaml:"store_on_yellow"`
+          }
+          type LearningConfig struct {
+              Enabled                bool `yaml:"enabled"`
+              DBPath                 string `yaml:"db_path"`
+              AutoAdaptAgent         bool `yaml:"auto_adapt_agent"`
+              SwapDuringRetries      bool `yaml:"swap_during_retries"`
+              EnhancePrompts         bool `yaml:"enhance_prompts"`
+              QCReadsPlanContext     bool `yaml:"qc_reads_plan_context"`
+              QCReadsDBContext       bool `yaml:"qc_reads_db_context"`
+              MaxContextEntries      int `yaml:"max_context_entries"`
+              MinFailuresBeforeAdapt int `yaml:"min_failures_before_adapt"`
+              KeepExecutionsDays     int `yaml:"keep_executions_days"`
+              MaxExecutionsPerTask   int `yaml:"max_executions_per_task"`
+          }
+          func NewDefaultConfig() *Config {
+              return &Config{
+                  Feedback: FeedbackConfig{
+                      StoreInPlanFile: true,
+                      StoreInDatabase: true,
+                      Format: "json",
+                      StoreOnGreen: true,
+                      StoreOnRed: true,
+                      StoreOnYellow: true,
+                  },
+                  Learning: LearningConfig{
+                      Enabled: true,
+                      SwapDuringRetries: true,
+                      QCReadsPlanContext: true,
+                      QCReadsDBContext: true,
+                      MaxContextEntries: 10,
+                      MinFailuresBeforeAdapt: 2,
+                  },
+              }
+          }
+      commit:
+        type: "feat"
+        message: "add feedback and learning config fields"
+        files: ["internal/config/config.go", "internal/config/config_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 10
+      name: "Unit tests for JSON parsing"
+      agent: "test-automator"
+      worktree_group: "chain-5-testing"
+      files:
+        - "internal/models/response_test.go"
+        - "internal/agent/invoker_test.go"
+        - "internal/executor/qc_test.go"
+      depends_on: [9]
+      estimated_time: "3h"
+      description: "Comprehensive unit tests for JSON parsing in all components"
+      test_first:
+        test_file: "See files list"
+        structure:
+          - "Edge cases: empty, malformed, missing fields"
+          - "Validation errors"
+          - "Fallback behavior"
+      implementation:
+        approach: "Add table-driven tests covering all JSON parsing paths"
+      commit:
+        type: "test"
+        message: "comprehensive unit tests for JSON parsing"
+        files: ["internal/models/response_test.go", "internal/agent/invoker_test.go", "internal/executor/qc_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 11
+      name: "Unit tests for plan updater feedback"
+      agent: "test-automator"
+      worktree_group: "chain-5-testing"
+      files:
+        - "internal/updater/updater_test.go"
+      depends_on: [10]
+      estimated_time: "3h"
+      description: "Test Markdown and YAML feedback storage with concurrency"
+      test_first:
+        test_file: "internal/updater/updater_test.go"
+        structure:
+          - "Multiple attempts appending correctly"
+          - "Format preservation (MD/YAML)"
+          - "Concurrent writes with file locking"
+      implementation:
+        approach: "Table-driven tests with goroutines for concurrency testing"
+      commit:
+        type: "test"
+        message: "comprehensive unit tests for plan updater feedback"
+        files: ["internal/updater/updater_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 12
+      name: "Unit tests for QC context loader"
+      agent: "test-automator"
+      worktree_group: "chain-5-testing"
+      files:
+        - "internal/executor/qc_test.go"
+      depends_on: [11]
+      estimated_time: "2h"
+      description: "Test context loading from plan file and database"
+      test_first:
+        test_file: "internal/executor/qc_test.go"
+        structure:
+          - "Loading from plan file only"
+          - "Loading from DB only"
+          - "Merging plan + DB context"
+          - "Empty history handling"
+      implementation:
+        approach: "Mock file system and database for isolated testing"
+      commit:
+        type: "test"
+        message: "unit tests for QC context loader"
+        files: ["internal/executor/qc_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 13
+      name: "Unit tests for agent selection"
+      agent: "test-automator"
+      worktree_group: "chain-5-testing"
+      files:
+        - "internal/learning/analyzer_test.go"
+      depends_on: [12]
+      estimated_time: "2h"
+      description: "Test agent selection algorithm with various scenarios"
+      test_first:
+        test_file: "internal/learning/analyzer_test.go"
+        structure:
+          - "QC suggestion takes priority"
+          - "Historical success rate analysis"
+          - "Current agent exclusion"
+          - "Fallback to general-purpose"
+      implementation:
+        approach: "Table-driven tests with mock history data"
+      commit:
+        type: "test"
+        message: "unit tests for agent selection algorithm"
+        files: ["internal/learning/analyzer_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 14
+      name: "Integration tests for retry flow"
+      agent: "test-automator"
+      worktree_group: "chain-5-testing"
+      files:
+        - "internal/executor/task_test.go"
+        - "internal/executor/learning_integration_test.go"
+      depends_on: [13]
+      estimated_time: "4h"
+      description: "End-to-end retry loop with agent swapping and feedback storage"
+      test_first:
+        test_file: "internal/executor/learning_integration_test.go"
+        structure:
+          - "Full retry flow: execute → store → review → swap"
+          - "Feedback in both plan and DB"
+          - "Agent swap after threshold"
+          - "Config flag variations"
+      implementation:
+        approach: "Integration test with in-memory DB and temp plan files"
+      commit:
+        type: "test"
+        message: "integration tests for retry flow with agent swapping"
+        files: ["internal/executor/task_test.go", "internal/executor/learning_integration_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 15
+      name: "E2E tests for complete feature"
+      agent: "test-automator"
+      worktree_group: "chain-5-testing"
+      files:
+        - "test/integration/learning_e2e_test.go"
+      depends_on: [14]
+      estimated_time: "4h"
+      description: "Full end-to-end test from plan execution to agent swapping"
+      test_first:
+        test_file: "test/integration/learning_e2e_test.go"
+        structure:
+          - "Execute plan with failing task"
+          - "Verify RED stored in plan+DB"
+          - "Retry with agent swap"
+          - "Verify GREEN after swap"
+          - "Verify complete history in both storages"
+      implementation:
+        approach: "Real execution with temporary directories and DB"
+      commit:
+        type: "test"
+        message: "E2E tests for inter-retry learning feature"
+        files: ["test/integration/learning_e2e_test.go"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 16
+      name: "Update config example file"
+      agent: "technical-documentation-specialist"
+      worktree_group: "independent-docs"
+      files:
+        - ".conductor/config.yaml.example"
+      depends_on: []
+      estimated_time: "1h"
+      description: "Add new feedback and learning fields to config example with comments"
+      implementation:
+        approach: "Add feedback and updated learning sections with detailed comments"
+      commit:
+        type: "docs"
+        message: "update config example with new feedback fields"
+        files: [".conductor/config.yaml.example"]
+      status: "completed"
+      completed_date: "2025-11-15"
+    - task_number: 17
+      name: "Update project documentation"
+      agent: "technical-documentation-specialist"
+      worktree_group: "independent-docs"
+      files:
+        - "CLAUDE.md"
+        - "README.md"
+      depends_on: []
+      estimated_time: "2h"
+      description: "Document inter-retry learning, JSON output, and dual feedback storage"
+      implementation:
+        approach: |
+          Update CLAUDE.md:
+          - Add JSON schema documentation
+          - Document dual feedback storage mechanism
+          - Explain inter-retry agent swapping
+          - Update config examples
+
+          Update README.md:
+          - Add feature description to Key Features
+          - Update configuration section
+          - Add example of agent swapping in action
+      commit:
+        type: "docs"
+        message: "update documentation for inter-retry learning feature"
+        files: ["CLAUDE.md", "README.md"]
+      status: "completed"
+      completed_date: "2025-11-15"
+  # Testing strategy
+  testing_strategy:
+    unit_tests:
+      location: "internal/*_test.go"
+      naming_convention: "*_test.go in same package"
+      run_command: "go test ./internal/..."
+      coverage_target: "85%"
+      coverage_command: "go test ./internal/... -cover"
+    integration_tests:
+      location: "internal/executor/*_integration_test.go"
+      what_to_test:
+        - "Retry loop with real components"
+        - "Feedback storage to plan and DB"
+        - "Agent swapping behavior"
+        - "Context loading from multiple sources"
+      setup_required:
+        - "In-memory SQLite database"
+        - "Temporary plan files"
+        - "Mock agent invoker"
+      run_command: "go test ./internal/executor -run Integration"
+    e2e_tests:
+      enabled: true
+      location: "test/integration/learning_e2e_test.go"
+      critical_flows:
+        - "Failed task → retry → agent swap → success"
+        - "Feedback stored in both plan and DB"
+        - "QC context includes historical attempts"
+      tools: "Go testing package with temp directories"
+      run_command: "go test ./test/integration -v"
+    test_design_principles:
+      patterns_to_use:
+        - pattern: "Table-driven tests"
+          example: |
+            tests := []struct {
+                name string
+                input string
+                want Result
+            }{
+                {"case1", "input1", result1},
+                {"case2", "input2", result2},
+            }
+            for _, tt := range tests {
+                t.Run(tt.name, func(t *testing.T) {
+                    got := Function(tt.input)
+                    if !reflect.DeepEqual(got, tt.want) {
+                        t.Errorf("got %v, want %v", got, tt.want)
+                    }
+                })
+            }
+      anti_patterns_to_avoid:
+        - pattern: "Global mutable state between tests"
+          why: "Creates test interdependencies"
+          instead: "Use t.Run subtests with local state"
+      mocking_guidelines:
+        mock_these:
+          - "Database calls (use in-memory SQLite or mock)"
+          - "Agent execution (mock exec.Command)"
+          - "File I/O (use temp files or mock fs)"
+        dont_mock_these:
+          - "JSON parsing (test real implementation)"
+          - "Config loading (test real YAML parsing)"
+          - "File locking (test real mechanism)"
+  # Commit strategy
+  commit_strategy:
+    total_commits: 34
+    commits:
+      - sequence: 1
+        type: "test"
+        description: "Add JSON schema tests"
+        files: ["internal/models/response_test.go"]
+        why_separate: "TDD - tests first"
+      - sequence: 2
+        type: "feat"
+        description: "Define JSON response schemas"
+        files: ["internal/models/response.go"]
+        why_separate: "Implementation after tests pass"
+        # Pattern continues for all 17 tasks...
+        # Each task typically has 2 commits: test, then implementation
+    message_format:
+      pattern: "type: brief description in present tense"
+      examples:
+        - "feat: define agent and QC JSON response schemas"
+        - "test: add comprehensive unit tests for JSON parsing"
+        - "refactor: extract agent selection to analyzer package"
+    commit_guidelines:
+      - "Keep commits atomic - one logical change per commit"
+      - "Write clear, descriptive messages in imperative mood"
+      - "Test commit before implementation commit"
+      - "Commit after each completed test/implementation pair"
+  # Resources and references
+  resources:
+    existing_code:
+      - type: "Agent invoker pattern"
+        path: "internal/agent/invoker.go"
+        note: "Study how agents are currently invoked"
+      - type: "QC review pattern"
+        path: "internal/executor/qc.go"
+        note: "Current QC implementation to extend"
+      - type: "Plan updater pattern"
+        path: "internal/updater/updater.go"
+        note: "File locking and atomic write patterns"
+      - type: "Learning store"
+        path: "internal/learning/store.go"
+        note: "Database schema and query patterns"
+      - type: "Test patterns"
+        path: "internal/parser/parser_test.go"
+        note: "Table-driven test examples"
+    documentation:
+      - type: "Current architecture"
+        path: "CLAUDE.md"
+        relevance: "Understanding existing patterns"
+      - type: "Database schema"
+        path: "internal/learning/schema.sql"
+        relevance: "task_executions table structure"
+      - type: "Config structure"
+        path: ".conductor/config.yaml.example"
+        relevance: "Configuration patterns"
+    validation_checklist:
+      - item: "All tests pass"
+        command: "go test ./..."
+        checked: false
+      - item: "Code formatted"
+        command: "gofmt -w ."
+        checked: false
+      - item: "No vet warnings"
+        command: "go vet ./..."
+        checked: false
+      - item: "Coverage >= 85%"
+        command: "go test ./... -cover"
+        checked: false
+      - item: "JSON schemas validate"
+        verify: "Test marshal/unmarshal roundtrip"
+        checked: false
+      - item: "File locking works"
+        verify: "Concurrent update tests pass"
+        checked: false
+      - item: "Agent swapping triggers correctly"
+        verify: "Integration tests verify threshold behavior"
+        checked: false
+      - item: "Config loads new fields"
+        verify: "Config tests pass"
+        checked: false
+      - item: "Documentation updated"
+        files: "CLAUDE.md, README.md, config.yaml.example"
+        checked: false

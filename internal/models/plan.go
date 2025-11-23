@@ -40,11 +40,13 @@ type QualityControlConfig struct {
 	RetryOnRed  int           // Number of retries on RED status
 }
 
-// WorktreeGroup represents a group of related tasks for organization and execution control
+// WorktreeGroup represents a group of related tasks for organization.
+// NOTE: Groups are organizational metadata only - NOT used for execution control.
+// Conductor uses Task.DependsOn to determine execution order via dependency graph.
 type WorktreeGroup struct {
 	GroupID        string // Unique identifier for the group
 	Description    string // Human-readable description of the group
-	ExecutionModel string // Execution model (e.g., "parallel", "sequential")
-	Isolation      string // Isolation level (e.g., "none", "weak", "strong")
+	ExecutionModel string // DEPRECATED: Not used for execution control (kept for backward compatibility)
+	Isolation      string // DEPRECATED: Not used for execution control (kept for backward compatibility)
 	Rationale      string // Rationale for the group and its configuration
 }

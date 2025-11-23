@@ -1,0 +1,31 @@
+conductor:
+  default_agent: godev
+
+plan:
+  metadata:
+    feature_name: "Phase 2"
+    created: "2025-11-23"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 4
+      name: "Task 4"
+      files: [file4.go]
+      depends_on:
+        - file: "plan-01.yaml"
+          task: 1
+        - file: "plan-01.yaml"
+          task: 2
+      estimated_time: "30m"
+      agent: godev
+      description: "Task 4 depends on Tasks 1 and 2 from plan-01 (cross-file)"
+
+    - task_number: 5
+      name: "Task 5"
+      files: [file5.go]
+      depends_on:
+        - file: "plan-01.yaml"
+          task: 3
+        - 4
+      estimated_time: "30m"
+      agent: godev
+      description: "Task 5 depends on Task 3 from plan-01 and Task 4 locally (mixed)"

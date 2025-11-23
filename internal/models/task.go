@@ -2,8 +2,22 @@ package models
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
+
+// CrossFileDependency represents a dependency on a task in a different plan file
+type CrossFileDependency struct {
+	File   string `yaml:"file" json:"file"`   // Filename (e.g., "plan-01-foundation.yaml")
+	TaskID string `yaml:"task" json:"task"`   // Task number in that file
+}
+
+// String returns a standardized string representation of a cross-file dependency
+// Format: "file:{filename}:task:{task-id}" (e.g., "file:plan-01-foundation.yaml:task:2")
+func (cfd *CrossFileDependency) String() string {
+	return fmt.Sprintf("file:%s:task:%s", cfd.File, cfd.TaskID)
+}
 
 // Task represents a single task in an implementation plan
 type Task struct {
@@ -100,6 +114,176 @@ func (t *Task) GetFormattedDuration() string {
 // IsIntegration returns true if the task type is "integration"
 func (t *Task) IsIntegration() bool {
 	return t.Type == "integration"
+}
+
+// UnmarshalYAML handles custom YAML unmarshaling for Task to support mixed dependency formats
+// Supports both:
+//   - Numeric-only: depends_on: [1, 2, 3]
+//   - Mixed: depends_on: [1, {file: "plan-01.yaml", task: 2}]
+func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// First, unmarshal into a raw map to handle dependencies specially
+	type TaskAlias Task
+	raw := struct {
+		*TaskAlias
+		DependsOn []interface{} `yaml:"depends_on"`
+	}{
+		TaskAlias: (*TaskAlias)(t),
+	}
+
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+
+	// Process depends_on: convert mixed format to normalized strings
+	if raw.DependsOn != nil {
+		normalized, err := normalizeDependencies(raw.DependsOn)
+		if err != nil {
+			return err
+		}
+		t.DependsOn = normalized
+	}
+
+	return nil
+}
+
+// normalizeDependencies converts a slice of mixed dependency formats into normalized strings
+// Supports: integers, floats, strings (numeric), and CrossFileDependency objects
+func normalizeDependencies(deps []interface{}) ([]string, error) {
+	var normalized []string
+
+	for _, dep := range deps {
+		switch v := dep.(type) {
+		case int:
+			normalized = append(normalized, fmt.Sprintf("%d", v))
+		case float64:
+			// YAML parses numbers as float64; check if it's a whole number
+			if v == float64(int(v)) {
+				normalized = append(normalized, fmt.Sprintf("%d", int(v)))
+			} else {
+				normalized = append(normalized, fmt.Sprintf("%v", v))
+			}
+		case string:
+			normalized = append(normalized, v)
+		case map[string]interface{}:
+			// Parse cross-file dependency
+			cfd, err := parseCrossFileDependencyMap(v)
+			if err != nil {
+				return nil, err
+			}
+			normalized = append(normalized, cfd.String())
+		default:
+			return nil, fmt.Errorf("unsupported dependency format: %T", v)
+		}
+	}
+
+	return normalized, nil
+}
+
+// parseCrossFileDependencyMap converts a map[string]interface{} to CrossFileDependency
+func parseCrossFileDependencyMap(m map[string]interface{}) (*CrossFileDependency, error) {
+	cfd := &CrossFileDependency{}
+
+	if file, ok := m["file"]; ok {
+		if fileStr, ok := file.(string); ok {
+			cfd.File = fileStr
+		} else {
+			return nil, fmt.Errorf("cross-file dependency 'file' must be a string, got %T", file)
+		}
+	} else {
+		return nil, errors.New("cross-file dependency missing required 'file' field")
+	}
+
+	if task, ok := m["task"]; ok {
+		switch v := task.(type) {
+		case int:
+			cfd.TaskID = fmt.Sprintf("%d", v)
+		case float64:
+			if v == float64(int(v)) {
+				cfd.TaskID = fmt.Sprintf("%d", int(v))
+			} else {
+				cfd.TaskID = fmt.Sprintf("%v", v)
+			}
+		case string:
+			cfd.TaskID = v
+		default:
+			return nil, fmt.Errorf("cross-file dependency 'task' must be int/float/string, got %T", task)
+		}
+	} else {
+		return nil, errors.New("cross-file dependency missing required 'task' field")
+	}
+
+	return cfd, nil
+}
+
+// NormalizeDependency converts a single dependency (in any format) to standardized string form
+// Returns error if the format is invalid
+func NormalizeDependency(dep interface{}) (string, error) {
+	switch v := dep.(type) {
+	case int:
+		return fmt.Sprintf("%d", v), nil
+	case float64:
+		if v == float64(int(v)) {
+			return fmt.Sprintf("%d", int(v)), nil
+		}
+		return fmt.Sprintf("%v", v), nil
+	case string:
+		return v, nil
+	case *CrossFileDependency:
+		return v.String(), nil
+	case CrossFileDependency:
+		return v.String(), nil
+	case map[string]interface{}:
+		cfd, err := parseCrossFileDependencyMap(v)
+		if err != nil {
+			return "", err
+		}
+		return cfd.String(), nil
+	default:
+		return "", fmt.Errorf("unsupported dependency format: %T", dep)
+	}
+}
+
+// IsCrossFileDep returns true if the dependency is a cross-file reference
+// Cross-file dependencies have the format: "file:{filename}:task:{task-id}"
+func IsCrossFileDep(dep string) bool {
+	return strings.HasPrefix(dep, "file:") && strings.Contains(dep, ":task:")
+}
+
+// ParseCrossFileDep extracts file and task information from a cross-file dependency string
+// Returns error if the string is not a valid cross-file dependency
+// Expected format: "file:{filename}:task:{task-id}" (e.g., "file:plan-01.yaml:task:2")
+func ParseCrossFileDep(dep string) (*CrossFileDependency, error) {
+	if !IsCrossFileDep(dep) {
+		return nil, fmt.Errorf("not a valid cross-file dependency: %s", dep)
+	}
+
+	// Parse format: "file:{filename}:task:{task-id}"
+	parts := strings.Split(dep, ":task:")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("malformed cross-file dependency: %s", dep)
+	}
+
+	filePrefix := parts[0]
+	taskID := parts[1]
+
+	// Extract filename from "file:{filename}"
+	if !strings.HasPrefix(filePrefix, "file:") {
+		return nil, fmt.Errorf("cross-file dependency must start with 'file:': %s", dep)
+	}
+
+	filename := strings.TrimPrefix(filePrefix, "file:")
+	if filename == "" {
+		return nil, fmt.Errorf("cross-file dependency has empty filename: %s", dep)
+	}
+
+	if taskID == "" {
+		return nil, fmt.Errorf("cross-file dependency has empty task ID: %s", dep)
+	}
+
+	return &CrossFileDependency{
+		File:   filename,
+		TaskID: taskID,
+	}, nil
 }
 
 // HasCyclicDependencies detects circular dependencies in a list of tasks

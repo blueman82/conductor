@@ -1,0 +1,20 @@
+conductor:
+  default_agent: godev
+
+plan:
+  metadata:
+    feature_name: "Deployment"
+    created: "2025-11-23"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 4
+      name: "Deploy Application"
+      files:
+        - deployment/docker-compose.yml
+        - deployment/deploy.sh
+      depends_on:
+        - file: "../features/plan-03-api.yaml"
+          task: 3
+      estimated_time: "30m"
+      agent: godev
+      description: "Deploy application with all features integrated"

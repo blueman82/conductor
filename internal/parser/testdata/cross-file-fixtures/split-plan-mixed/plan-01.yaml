@@ -1,0 +1,32 @@
+conductor:
+  default_agent: godev
+
+plan:
+  metadata:
+    feature_name: "Phase 1"
+    created: "2025-11-23"
+    estimated_tasks: 3
+  tasks:
+    - task_number: 1
+      name: "Task 1"
+      files: [file1.go]
+      depends_on: []
+      estimated_time: "30m"
+      agent: godev
+      description: "First task with no dependencies"
+
+    - task_number: 2
+      name: "Task 2"
+      files: [file2.go]
+      depends_on: [1]
+      estimated_time: "30m"
+      agent: godev
+      description: "Second task depends on Task 1 (local numeric)"
+
+    - task_number: 3
+      name: "Task 3"
+      files: [file3.go]
+      depends_on: [1, 2]
+      estimated_time: "30m"
+      agent: godev
+      description: "Third task depends on Tasks 1 and 2 (mixed local numeric)"

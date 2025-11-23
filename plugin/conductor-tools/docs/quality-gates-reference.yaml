@@ -1,0 +1,417 @@
+# Quality Gates Reference for Implementation Plans
+#
+# This file provides comprehensive quality gate examples for Python, TypeScript, and Go projects.
+# Reference this file in your implementation plan's code_quality sections.
+#
+# Usage in doc-yaml generated plans:
+#   code_quality:
+#     python:
+#       full_quality_pipeline:
+#         command: |
+#           python -m black . && \
+#           python -m mypy src/ && \
+#           python -m pytest
+#         description: "See ai_docs/quality-gates-reference.yaml for detailed breakdown"
+
+quality_gates:
+  purpose: |
+    Automated quality gates that must pass before a task is considered complete.
+    These are mandatory checks that enforce code quality standards.
+
+  python_gates:
+    - gate: "Type checking"
+      tool: "mypy"
+      command: "python -m mypy src/"
+      must_pass: true
+      failure_message: "Type errors found - fix before committing"
+      auto_fix: false
+      rationale: "Type errors indicate real bugs that will cause runtime failures"
+
+    - gate: "Code formatting"
+      tool: "black"
+      command: "python -m black --check ."
+      must_pass: true
+      failure_message: "Code not formatted - run 'python -m black .' to fix"
+      auto_fix: true
+      auto_fix_command: "python -m black ."
+      rationale: "Consistent formatting improves code readability"
+
+    - gate: "Unit tests"
+      tool: "pytest"
+      command: "python -m pytest"
+      must_pass: true
+      failure_message: "Tests failing - fix tests before committing"
+      auto_fix: false
+      rationale: "Broken tests indicate broken functionality"
+
+    - gate: "Linting"
+      tool: "ruff"
+      command: "python -m ruff check ."
+      must_pass: false
+      failure_message: "Linting issues found - fix or document exceptions"
+      auto_fix: true
+      auto_fix_command: "python -m ruff check --fix ."
+      rationale: "Linting catches common mistakes and anti-patterns"
+
+    - gate: "Import validation"
+      tool: "grep"
+      command: "grep -r 'from src\\.' . --include='*.py' || echo 'OK'"
+      must_pass: true
+      failure_message: "Found 'from src.' imports - use proper module imports"
+      auto_fix: false
+      rationale: "Incorrect imports break when running from different directories"
+
+  typescript_gates:
+    - gate: "Type checking"
+      tool: "tsc"
+      command: "npx tsc --noEmit"
+      must_pass: true
+      failure_message: "Type errors found - fix before committing"
+      auto_fix: false
+      rationale: "Type errors indicate real bugs that will cause runtime failures"
+
+    - gate: "Code formatting"
+      tool: "prettier"
+      command: "npx prettier --check ."
+      must_pass: true
+      failure_message: "Code not formatted - run 'npx prettier --write .' to fix"
+      auto_fix: true
+      auto_fix_command: "npx prettier --write ."
+      rationale: "Consistent formatting improves code readability"
+
+    - gate: "Unit tests"
+      tool: "jest/vitest"
+      command: "npm test"
+      must_pass: true
+      failure_message: "Tests failing - fix tests before committing"
+      auto_fix: false
+      rationale: "Broken tests indicate broken functionality"
+
+    - gate: "Linting"
+      tool: "eslint"
+      command: "npx eslint . --ext .ts,.tsx"
+      must_pass: false
+      failure_message: "Linting issues found - fix or configure exceptions"
+      auto_fix: true
+      auto_fix_command: "npx eslint --fix . --ext .ts,.tsx"
+      rationale: "Linting catches common mistakes and anti-patterns"
+
+  go_gates:
+    - gate: "Formatting"
+      tool: "gofmt"
+      command: "gofmt -l . | wc -l"
+      must_pass: true
+      failure_message: "Code not formatted - run 'gofmt -w .' to fix"
+      auto_fix: true
+      auto_fix_command: "gofmt -w ."
+      rationale: "Go code must follow standard formatting"
+
+    - gate: "Import organization"
+      tool: "goimports"
+      command: "goimports -l . | wc -l"
+      must_pass: true
+      failure_message: "Imports not organized - run 'goimports -w .' to fix"
+      auto_fix: true
+      auto_fix_command: "goimports -w ."
+      rationale: "Organized imports improve code readability"
+
+    - gate: "Static analysis"
+      tool: "go vet"
+      command: "go vet ./..."
+      must_pass: true
+      failure_message: "Go vet found issues - fix before committing"
+      auto_fix: false
+      rationale: "Go vet catches common mistakes and suspicious code"
+
+    - gate: "Unit tests"
+      tool: "go test"
+      command: "go test ./..."
+      must_pass: true
+      failure_message: "Tests failing - fix tests before committing"
+      auto_fix: false
+      rationale: "Broken tests indicate broken functionality"
+
+    - gate: "Race detection"
+      tool: "go test -race"
+      command: "go test -race ./..."
+      must_pass: true
+      failure_message: "Race conditions detected - fix before committing"
+      auto_fix: false
+      rationale: "Race conditions cause unpredictable failures in production"
+
+    - gate: "Linting"
+      tool: "golangci-lint"
+      command: "golangci-lint run"
+      must_pass: false
+      failure_message: "Linting issues found - fix or configure exceptions"
+      auto_fix: false
+      rationale: "Linting catches code quality issues"
+
+  gate_execution_pipelines:
+    description: |
+      Run gates in this order for optimal feedback:
+      1. Format code (auto-fix)
+      2. Run type checker (blocking)
+      3. Run static analysis (blocking for vet, non-blocking for linters)
+      4. Run tests (blocking)
+      5. Run specialized checks (race detection, import validation)
+
+    python_pipeline: |
+      #!/bin/bash
+      # Python Quality Gate Pipeline
+
+      # Step 1: Auto-fix formatting
+      python -m black .
+
+      # Step 2: Type checking (MUST PASS)
+      python -m mypy src/ || exit 1
+
+      # Step 3: Linting (optional but recommended)
+      python -m ruff check .
+
+      # Step 4: Tests (MUST PASS)
+      python -m pytest || exit 1
+
+      # Step 5: Import validation (MUST PASS)
+      if grep -r 'from src\.' . --include='*.py'; then
+        echo "ERROR: Found 'from src.' imports"
+        exit 1
+      fi
+
+      echo "All quality gates passed!"
+
+    typescript_pipeline: |
+      #!/bin/bash
+      # TypeScript Quality Gate Pipeline
+
+      # Step 1: Auto-fix formatting
+      npx prettier --write .
+
+      # Step 2: Type checking (MUST PASS)
+      npx tsc --noEmit || exit 1
+
+      # Step 3: Linting (optional but recommended)
+      npx eslint --fix . --ext .ts,.tsx
+
+      # Step 4: Tests (MUST PASS)
+      npm test || exit 1
+
+      echo "All quality gates passed!"
+
+    go_pipeline: |
+      #!/bin/bash
+      # Go Quality Gate Pipeline
+
+      # Step 1: Auto-fix formatting
+      gofmt -w .
+      goimports -w .
+
+      # Step 2: Static analysis (MUST PASS)
+      go vet ./... || exit 1
+
+      # Step 3: Tests (MUST PASS)
+      go test ./... || exit 1
+
+      # Step 4: Race detection (MUST PASS)
+      go test -race ./... || exit 1
+
+      # Step 5: Linting (optional but recommended)
+      golangci-lint run
+
+      echo "All quality gates passed!"
+
+advanced_code_quality:
+  purpose: |
+    Detailed tool-by-tool configuration for comprehensive quality checks.
+    Use this when you need fine-grained control over individual tools.
+
+  python:
+    formatter:
+      tool: "black"
+      command: "python -m black ."
+      blocking: true
+      description: "Auto-format Python code to PEP 8 style"
+      when_to_run: "Before every commit"
+      failure_action: "Auto-fix by running the command, then review changes"
+
+    linter:
+      tool: "ruff"
+      command: "python -m ruff check ."
+      blocking: false
+      description: "Fast Python linter for code quality issues"
+      when_to_run: "Before every commit"
+      failure_action: "Fix issues manually or run 'ruff check --fix .'"
+
+    type_checker:
+      tool: "mypy"
+      command: "python -m mypy src/"
+      blocking: true
+      description: "Static type checking for Python code"
+      when_to_run: "Before every commit, after adding/modifying type hints"
+      failure_action: "Fix type errors - these indicate real bugs"
+      common_issues:
+        - issue: "error: Cannot find implementation or library stub for module"
+          fix: "Add # type: ignore comment or install type stubs (pip install types-*)"
+        - issue: "error: Incompatible return value type"
+          fix: "Update return type hint or fix the return statement"
+
+    test_runner:
+      tool: "pytest"
+      command: "python -m pytest"
+      blocking: true
+      description: "Run all tests to ensure functionality"
+      when_to_run: "Before every commit"
+      failure_action: "Fix failing tests - do not commit broken code"
+
+    coverage_check:
+      tool: "pytest with coverage"
+      command: "python -m pytest --cov=src --cov-report=term-missing"
+      blocking: false
+      description: "Measure test coverage percentage"
+      when_to_run: "After implementing new features"
+      failure_action: "Add tests for uncovered code (aim for 80%+)"
+
+    full_quality_pipeline:
+      command: |
+        python -m black . && \
+        python -m ruff check . && \
+        python -m mypy src/ && \
+        python -m pytest --cov=src --cov-report=term-missing
+      description: "Complete quality check pipeline"
+      exit_on_failure: true
+
+  typescript:
+    formatter:
+      tool: "prettier"
+      command: "npx prettier --write ."
+      blocking: true
+      description: "Auto-format TypeScript/JavaScript code"
+      when_to_run: "Before every commit"
+      failure_action: "Auto-fix by running the command, then review changes"
+
+    linter:
+      tool: "eslint"
+      command: "npx eslint . --ext .ts,.tsx"
+      blocking: false
+      description: "Linter for TypeScript code quality"
+      when_to_run: "Before every commit"
+      failure_action: "Fix issues manually or run 'eslint --fix .'"
+
+    type_checker:
+      tool: "tsc"
+      command: "npx tsc --noEmit"
+      blocking: true
+      description: "TypeScript compiler type checking"
+      when_to_run: "Before every commit"
+      failure_action: "Fix type errors - these indicate real bugs"
+      common_issues:
+        - issue: "Property 'x' does not exist on type 'Y'"
+          fix: "Add property to type definition or use type assertion"
+        - issue: "Object is possibly 'undefined'"
+          fix: "Add null check or use optional chaining (?.)"
+
+    test_runner:
+      tool: "jest or vitest"
+      command: "npm test"
+      blocking: true
+      description: "Run all tests"
+      when_to_run: "Before every commit"
+      failure_action: "Fix failing tests - do not commit broken code"
+
+    full_quality_pipeline:
+      command: |
+        npx prettier --write . && \
+        npx eslint . --ext .ts,.tsx && \
+        npx tsc --noEmit && \
+        npm test
+      description: "Complete quality check pipeline"
+      exit_on_failure: true
+
+  go:
+    formatter:
+      tool: "gofmt"
+      command: "gofmt -w ."
+      blocking: true
+      description: "Auto-format Go code"
+      when_to_run: "Before every commit"
+      failure_action: "Auto-fix by running the command"
+
+    import_organizer:
+      tool: "goimports"
+      command: "goimports -w ."
+      blocking: true
+      description: "Organize imports and format code"
+      when_to_run: "Before every commit"
+      failure_action: "Auto-fix by running the command"
+
+    vet:
+      tool: "go vet"
+      command: "go vet ./..."
+      blocking: true
+      description: "Examines Go source code and reports suspicious constructs"
+      when_to_run: "Before every commit"
+      failure_action: "Fix issues - these indicate potential bugs"
+
+    linter:
+      tool: "golangci-lint"
+      command: "golangci-lint run"
+      blocking: false
+      description: "Comprehensive Go linter"
+      when_to_run: "Before every commit"
+      failure_action: "Fix issues or adjust .golangci.yml config"
+
+    test_runner:
+      tool: "go test"
+      command: "go test ./..."
+      blocking: true
+      description: "Run all tests"
+      when_to_run: "Before every commit"
+      failure_action: "Fix failing tests - do not commit broken code"
+
+    race_detector:
+      tool: "go test with race detector"
+      command: "go test -race ./..."
+      blocking: true
+      description: "Detect race conditions"
+      when_to_run: "Before committing concurrent code"
+      failure_action: "Fix race conditions using mutexes or channels"
+
+    full_quality_pipeline:
+      command: |
+        gofmt -w . && \
+        goimports -w . && \
+        go vet ./... && \
+        golangci-lint run && \
+        go test -race ./...
+      description: "Complete quality check pipeline"
+      exit_on_failure: true
+
+blocking_vs_non_blocking:
+  blocking_failures:
+    description: "These MUST pass before commit - task is not complete if these fail"
+    tools:
+      python:
+        - "black (formatter) - ensures consistent style"
+        - "mypy (type checker) - prevents type errors"
+        - "pytest (tests) - ensures functionality works"
+      typescript:
+        - "prettier (formatter) - ensures consistent style"
+        - "tsc --noEmit (type checker) - prevents type errors"
+        - "npm test (tests) - ensures functionality works"
+      go:
+        - "gofmt (formatter) - ensures consistent style"
+        - "goimports (import organizer) - organizes imports"
+        - "go vet (vet) - finds suspicious constructs"
+        - "go test (tests) - ensures functionality works"
+        - "go test -race (race detector) - prevents race conditions"
+
+  non_blocking_warnings:
+    description: "These should pass but can be fixed incrementally"
+    tools:
+      python:
+        - "ruff (linter) - code quality suggestions"
+        - "pytest --cov (coverage) - test coverage metrics"
+      typescript:
+        - "eslint (linter) - code quality suggestions"
+      go:
+        - "golangci-lint (linter) - code quality suggestions"

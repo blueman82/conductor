@@ -1,0 +1,18 @@
+conductor:
+  default_agent: godev
+
+plan:
+  metadata:
+    feature_name: "Foundation"
+    created: "2025-11-23"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 1
+      name: "Setup Infrastructure"
+      files:
+        - infrastructure/main.tf
+        - infrastructure/variables.tf
+      depends_on: []
+      estimated_time: "45m"
+      agent: godev
+      description: "Setup basic infrastructure and shared resources"

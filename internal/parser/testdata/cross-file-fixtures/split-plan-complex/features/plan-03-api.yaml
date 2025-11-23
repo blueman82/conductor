@@ -1,0 +1,21 @@
+conductor:
+  default_agent: godev
+
+plan:
+  metadata:
+    feature_name: "API Feature"
+    created: "2025-11-23"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 3
+      name: "API Module"
+      files:
+        - internal/api/api.go
+      depends_on:
+        - file: "../plan-01-foundation.yaml"
+          task: 1
+        - file: "plan-02-auth.yaml"
+          task: 2
+      estimated_time: "1h"
+      agent: godev
+      description: "API module depending on both foundation and auth"

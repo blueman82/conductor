@@ -1,0 +1,491 @@
+plan:
+  metadata:
+    feature_name: "Structured Rubric QC - QC Logic Implementation"
+    file_sequence: 2
+    total_files: 3
+    tasks_in_file: [4, 5, 6, 7]
+  tasks:
+    - task_number: 4
+      name: "Build structured review prompt with numbered criteria"
+      agent: "golang-pro"
+      worktree_group: "chain-2-qc-logic"
+      files:
+        - "internal/executor/qc.go"
+        - "internal/executor/qc_test.go"
+      depends_on: [2]
+      estimated_time: "1h"
+      description: |
+        Create BuildStructuredReviewPrompt function that generates QC prompts with explicitly
+        numbered criteria for agents to verify. Falls back to legacy prompt for tasks without criteria.
+      test_first:
+        test_file: "internal/executor/qc_test.go"
+        structure:
+          - "TestBuildStructuredReviewPrompt_WithCriteria"
+          - "TestBuildStructuredReviewPrompt_NoCriteria_UsesLegacy"
+        example_skeleton: |
+          func TestBuildStructuredReviewPrompt_WithCriteria(t *testing.T) {
+              qc := NewQualityController(nil)
+              task := models.Task{
+                  Name: "Test Task",
+                  Prompt: "Implement feature",
+                  SuccessCriteria: []string{
+                      "Criterion A",
+                      "Criterion B",
+                  },
+                  TestCommands: []string{"go test ./..."},
+              }
+
+              prompt := qc.BuildStructuredReviewPrompt(context.Background(), task, "agent output")
+
+              if !strings.Contains(prompt, "0. [ ] Criterion A") {
+                  t.Error("should include numbered criterion 0")
+              }
+              if !strings.Contains(prompt, "1. [ ] Criterion B") {
+                  t.Error("should include numbered criterion 1")
+              }
+              if !strings.Contains(prompt, "go test ./...") {
+                  t.Error("should include test commands")
+              }
+              if !strings.Contains(prompt, "criteria_results") {
+                  t.Error("should specify JSON response format with criteria_results")
+              }
+          }
+      implementation:
+        approach: |
+          Create new method BuildStructuredReviewPrompt that formats criteria with indices.
+          When task has SuccessCriteria, use structured prompt. Otherwise, fall back to legacy.
+        code_structure: |
+          func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, task models.Task, output string) string {
+              var sb strings.Builder
+
+              sb.WriteString(fmt.Sprintf("# Quality Control Review: %s\n\n", task.Name))
+              sb.WriteString("## Task Requirements\n")
+              sb.WriteString(task.Prompt)
+              sb.WriteString("\n\n")
+
+              if len(task.SuccessCriteria) > 0 {
+                  sb.WriteString("## SUCCESS CRITERIA - VERIFY EACH ONE\n\n")
+                  for i, criterion := range task.SuccessCriteria {
+                      sb.WriteString(fmt.Sprintf("%d. [ ] %s\n", i, criterion))
+                  }
+                  sb.WriteString("\n")
+              }
+
+              if len(task.TestCommands) > 0 {
+                  sb.WriteString("## TEST COMMANDS\n")
+                  for _, cmd := range task.TestCommands {
+                      sb.WriteString(fmt.Sprintf("- `%s`\n", cmd))
+                  }
+                  sb.WriteString("\n")
+              }
+
+              sb.WriteString("## AGENT OUTPUT\n```\n")
+              sb.WriteString(output)
+              sb.WriteString("\n```\n\n")
+
+              sb.WriteString("## RESPONSE FORMAT\nRespond with JSON including criteria_results array.\n")
+
+              return sb.String()
+          }
+        key_points:
+          - point: "Index criteria starting from 0 for machine parsing"
+            details: "Agents return index to match"
+          - point: "Include criterion text for debugging clarity"
+            details: "Hybrid approach from deliberation"
+          - point: "Follow existing BuildReviewPrompt pattern"
+            reference: "internal/executor/qc.go:64-100"
+      verification:
+        automated_tests:
+          command: "go test ./internal/executor/ -v -run TestBuildStructuredReviewPrompt"
+          expected_output: |
+            PASS
+        success_criteria:
+          - "Criteria numbered with indices 0, 1, 2..."
+          - "Test commands included in prompt"
+          - "JSON response format specified"
+          - "Falls back to legacy for tasks without criteria"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              gofmt -w internal/executor/qc.go && \
+              go vet ./internal/executor/... && \
+              go test ./internal/executor/ -v -run TestBuild
+            description: "Format, vet, and test QC prompt builder"
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "add BuildStructuredReviewPrompt for per-criterion QC verification"
+        files:
+          - "internal/executor/qc.go"
+          - "internal/executor/qc_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: YELLOW
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":133471,"duration_api_ms":150673,"num_turns":13,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Implemented BuildStructuredReviewPrompt with numbered criteria verification\",\n  \"output\": \"=== TDD Implementation Complete ===\\n\\nRed Phase:\\n- Added 4 failing tests for BuildStructuredReviewPrompt\\n- Tests verify numbered criteria (0-indexed), test commands, JSON response format\\n- Tests confirm fallback for tasks without criteria\\n\\nGreen Phase:\\n- Implemented BuildStructuredReviewPrompt in internal/executor/qc.go:88-121\\n- Generates structured QC prompts with numbered success criteria\\n- Falls back to basic prompt when SuccessCriteria is empty\\n- Includes test commands section when present\\n- Specifies JSON response format with criteria_results\\n\\nVerification:\\n- All 4 new tests pass\\n- All executor tests pass (1.186s)\\n- Coverage: 88.6% (exceeds 70% target)\\n\\nKey Features:\\n- 0-based indexing: \\\"0. [ ] Criterion A\\\" for machine parsing\\n- Criterion text included for debugging clarity\\n- Test commands listed with backticks\\n- Agent output wrapped in code fence\\n- Response format specifies criteria_results array requirement\",\n  \"errors\": [],\n  \"files_modified\": [\n    \"internal/executor/qc.go\",\n    \"internal/executor/qc_test.go\"\n  ],\n  \"metadata\": {\n    \"tests_added\": 4,\n    \"test_coverage\": \"88.6%\",\n    \"lines_added\": 145\n  }\n}\n```","session_id":"4b7afbd4-923a-4fdd-8fcf-b02e382c5453","total_cost_usd":0.42052829999999997,"usage":{"input_tokens":49,"cache_creation_input_tokens":44008,"cache_read_input_tokens":577382,"output_tokens":4591,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":44008}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":4464,"outputTokens":351,"cacheReadInputTokens":6876,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0069066,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":52,"outputTokens":4877,"cacheReadInputTokens":584269,"cacheCreationInputTokens":44008,"webSearchRequests":0,"costUSD":0.4136217,"contextWindow":200000}},"permission_denials":[],"uuid":"e6631ef0-76a9-4d6d-9c62-8f038247c3cd"}
+          qc_feedback: '[quality-control] Implementation is complete and correct. BuildStructuredReviewPrompt function at qc.go:88-121 generates QC prompts with 0-indexed numbered criteria, test commands in backticks, agent output in code fences, and specifies JSON response format with criteria_results. All 4 tests pass covering main functionality, fallback behavior, multiple commands, and criteria indexing.'
+          timestamp: "2025-11-16T23:30:33Z"
+      completed_date: "2025-11-16"
+    - task_number: 5
+      name: "Implement per-criterion aggregation with unanimous consensus"
+      agent: "golang-pro"
+      worktree_group: "chain-2-qc-logic"
+      files:
+        - "internal/executor/qc.go"
+        - "internal/executor/qc_test.go"
+      depends_on: [4]
+      estimated_time: "1h"
+      description: |
+        Add aggregateCriteriaResults function that combines per-criterion verdicts.
+        Uses unanimous consensus - criterion passes only if ALL agents say PASS.
+      test_first:
+        test_file: "internal/executor/qc_test.go"
+        structure:
+          - "TestAggregateCriteriaResults_AllPass"
+          - "TestAggregateCriteriaResults_OneFails_ReturnsRed"
+          - "TestAggregateCriteriaResults_NoCriteria_UsesAgentVerdict"
+        example_skeleton: |
+          func TestAggregateCriteriaResults_AllPass(t *testing.T) {
+              qc := NewQualityController(nil)
+              task := models.Task{
+                  SuccessCriteria: []string{"A", "B"},
+              }
+              resp := &models.QCResponse{
+                  Verdict: "GREEN",
+                  CriteriaResults: []models.CriterionResult{
+                      {Index: 0, Passed: true},
+                      {Index: 1, Passed: true},
+                  },
+              }
+
+              verdict := qc.aggregateCriteriaResults(resp, task)
+              if verdict != models.StatusGreen {
+                  t.Errorf("expected GREEN, got %s", verdict)
+              }
+          }
+
+          func TestAggregateCriteriaResults_OneFails_ReturnsRed(t *testing.T) {
+              qc := NewQualityController(nil)
+              task := models.Task{
+                  SuccessCriteria: []string{"A", "B"},
+              }
+              resp := &models.QCResponse{
+                  CriteriaResults: []models.CriterionResult{
+                      {Index: 0, Passed: true},
+                      {Index: 1, Passed: false},
+                  },
+              }
+
+              verdict := qc.aggregateCriteriaResults(resp, task)
+              if verdict != models.StatusRed {
+                  t.Errorf("expected RED when criterion fails, got %s", verdict)
+              }
+          }
+      implementation:
+        approach: |
+          Check each criterion result. If ANY criterion fails, return RED (unanimous consensus).
+          If no criteria, return agent's original verdict for backward compatibility.
+        code_structure: |
+          func (qc *QualityController) aggregateCriteriaResults(resp *models.QCResponse, task models.Task) string {
+              if len(resp.CriteriaResults) == 0 {
+                  return resp.Verdict // Backward compatible
+              }
+
+              for _, cr := range resp.CriteriaResults {
+                  if !cr.Passed {
+                      return models.StatusRed // Unanimous - any fail = RED
+                  }
+              }
+
+              return models.StatusGreen
+          }
+        key_points:
+          - point: "Unanimous consensus from AI Counsel deliberation"
+            details: "False negatives worse than false positives in QC"
+          - point: "Backward compatible for tasks without criteria"
+            reference: "Return resp.Verdict if CriteriaResults empty"
+      verification:
+        automated_tests:
+          command: "go test ./internal/executor/ -v -run TestAggregateCriteriaResults"
+          expected_output: |
+            PASS
+        success_criteria:
+          - "All criteria pass returns GREEN"
+          - "Any criterion fails returns RED"
+          - "Empty CriteriaResults uses agent verdict"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              gofmt -w internal/executor/qc.go && \
+              go vet ./internal/executor/... && \
+              go test ./internal/executor/ -v
+            description: "Format, vet, and test aggregation logic"
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "implement per-criterion aggregation with unanimous consensus"
+        files:
+          - "internal/executor/qc.go"
+          - "internal/executor/qc_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":112504,"duration_api_ms":132922,"num_turns":13,"result":"All tests pass.\n\n```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Implemented aggregateCriteriaResults with unanimous consensus\",\n  \"output\": \"Added aggregateCriteriaResults function to QualityController that:\\n- Returns GREEN if all criteria pass\\n- Returns RED if ANY criterion fails (unanimous consensus)\\n- Returns agent's original verdict when no criteria (backward compatible)\\n\\nAll 5 test cases pass:\\n- TestAggregateCriteriaResults_AllPass\\n- TestAggregateCriteriaResults_OneFails_ReturnsRed\\n- TestAggregateCriteriaResults_NoCriteria_UsesAgentVerdict\\n- TestAggregateCriteriaResults_AllFail\\n- TestAggregateCriteriaResults_FirstFails\\n\\nFull test suite passes (14 packages)\",\n  \"errors\": [],\n  \"files_modified\": [\n    \"internal/executor/qc.go\",\n    \"internal/executor/qc_test.go\"\n  ],\n  \"metadata\": {\n    \"tests_added\": 5,\n    \"implementation_lines\": 14,\n    \"tdd_phase\": \"green\"\n  }\n}\n```","session_id":"9f3327f9-62db-4991-adf4-0156a93613a5","total_cost_usd":0.3210425499999999,"usage":{"input_tokens":1069,"cache_creation_input_tokens":38325,"cache_read_input_tokens":364807,"output_tokens":3302,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":38325}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":6267,"outputTokens":416,"cacheReadInputTokens":6876,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0090346,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":1072,"outputTokens":3571,"cacheReadInputTokens":371694,"cacheCreationInputTokens":38325,"webSearchRequests":0,"costUSD":0.3120079499999999,"contextWindow":200000}},"permission_denials":[],"uuid":"945ca600-3b5b-4a3a-b195-c22e3ac04c0e"}
+          qc_feedback: |-
+            [quality-control] Implementation complete and correct. All 5 test cases pass. Function implements unanimous consensus as specified: returns RED if any criterion fails, GREEN if all pass, and preserves agent verdict for backward compatibility when no criteria present.
+            [golang-pro] Implementation fully meets requirements. The aggregateCriteriaResults function correctly implements unanimous consensus - returning RED if any criterion fails, GREEN if all pass, and using agent's original verdict for backward compatibility when no criteria exist. All 5 tests pass, including the exact test cases specified in requirements. Clean implementation with clear logic and proper documentation.
+          timestamp: "2025-11-16T23:33:11Z"
+      completed_date: "2025-11-16"
+    - task_number: 6
+      name: "Add multi-agent criteria consensus"
+      agent: "golang-pro"
+      worktree_group: "chain-2-qc-logic"
+      files:
+        - "internal/executor/qc.go"
+        - "internal/executor/qc_test.go"
+      depends_on: [5]
+      estimated_time: "1h30m"
+      description: |
+        Extend aggregateVerdicts to handle per-criterion consensus across multiple agents.
+        Criterion passes only if ALL agents unanimously agree it passes.
+      test_first:
+        test_file: "internal/executor/qc_test.go"
+        structure:
+          - "TestMultiAgentCriteriaConsensus_Unanimous"
+          - "TestMultiAgentCriteriaConsensus_OneAgentFails"
+          - "TestMultiAgentCriteriaConsensus_MixedResults"
+        example_skeleton: |
+          func TestMultiAgentCriteriaConsensus_OneAgentFails(t *testing.T) {
+              qc := NewQualityController(nil)
+              task := models.Task{
+                  SuccessCriteria: []string{"A", "B"},
+              }
+              results := []*ReviewResult{
+                  {
+                      AgentName: "agent1",
+                      CriteriaResults: []models.CriterionResult{
+                          {Index: 0, Passed: true},
+                          {Index: 1, Passed: true},
+                      },
+                  },
+                  {
+                      AgentName: "agent2",
+                      CriteriaResults: []models.CriterionResult{
+                          {Index: 0, Passed: true},
+                          {Index: 1, Passed: false}, // One agent fails B
+                      },
+                  },
+              }
+
+              final := qc.aggregateMultiAgentCriteria(results, task)
+              if final.Flag != models.StatusRed {
+                  t.Errorf("expected RED (not unanimous on B), got %s", final.Flag)
+              }
+          }
+      implementation:
+        approach: |
+          Create aggregateMultiAgentCriteria that collects votes per criterion from all agents.
+          Use unanimous consensus - criterion passes only if ALL agents say PASS.
+        code_structure: |
+          func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult, task models.Task) *ReviewResult {
+              if len(task.SuccessCriteria) == 0 {
+                  return qc.aggregateVerdicts(results, []string{})
+              }
+
+              // Collect votes per criterion
+              criterionVotes := make(map[int][]bool)
+              for i := range task.SuccessCriteria {
+                  criterionVotes[i] = []bool{}
+              }
+
+              for _, result := range results {
+                  if result == nil || len(result.CriteriaResults) == 0 {
+                      continue // Skip non-compliant agents
+                  }
+                  for _, cr := range result.CriteriaResults {
+                      if votes, ok := criterionVotes[cr.Index]; ok {
+                          criterionVotes[cr.Index] = append(votes, cr.Passed)
+                      }
+                  }
+              }
+
+              // Check unanimous consensus per criterion
+              allPassed := true
+              for _, votes := range criterionVotes {
+                  if len(votes) == 0 {
+                      allPassed = false // No votes = fail
+                      break
+                  }
+                  for _, passed := range votes {
+                      if !passed {
+                          allPassed = false
+                          break
+                      }
+                  }
+              }
+
+              verdict := models.StatusGreen
+              if !allPassed {
+                  verdict = models.StatusRed
+              }
+
+              return &ReviewResult{
+                  Flag:     verdict,
+                  Feedback: "Multi-agent criteria consensus",
+              }
+          }
+        key_points:
+          - point: "Unanimous per criterion from AI Counsel deliberation"
+            details: "All agents must agree for criterion to pass"
+          - point: "Handle missing CriteriaResults as YELLOW"
+            reference: "Skip non-compliant agents from consensus"
+      verification:
+        automated_tests:
+          command: "go test ./internal/executor/ -v -run TestMultiAgentCriteria"
+          expected_output: |
+            PASS
+        success_criteria:
+          - "All agents unanimous on all criteria returns GREEN"
+          - "One agent disagrees on any criterion returns RED"
+          - "Skips agents without CriteriaResults"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              gofmt -w internal/executor/qc.go && \
+              go vet ./internal/executor/... && \
+              go test ./internal/executor/ -v
+            description: "Format, vet, and test multi-agent consensus"
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "add multi-agent per-criterion consensus with unanimous agreement"
+        files:
+          - "internal/executor/qc.go"
+          - "internal/executor/qc_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":130361,"duration_api_ms":145542,"num_turns":13,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Added multi-agent per-criterion consensus with unanimous agreement\",\n  \"output\": \"Tests pass: TestMultiAgentCriteriaConsensus_Unanimous, TestMultiAgentCriteriaConsensus_OneAgentFails, TestMultiAgentCriteriaConsensus_MixedResults, TestMultiAgentCriteriaConsensus_SkipsAgentsWithoutCriteria, TestMultiAgentCriteriaConsensus_NoCriteria_FallsBackToAggregateVerdicts, TestMultiAgentCriteriaConsensus_NilResult, TestMultiAgentCriteriaConsensus_AllAgentsNonCompliant. Full executor test suite passes.\",\n  \"errors\": [],\n  \"files_modified\": [\"internal/executor/qc.go\", \"internal/executor/qc_test.go\"],\n  \"metadata\": {\n    \"new_function\": \"aggregateMultiAgentCriteria\",\n    \"tests_added\": 7,\n    \"consensus_model\": \"unanimous per criterion\"\n  }\n}\n```","session_id":"df5901ab-4e63-42eb-b55f-d356a2969404","total_cost_usd":0.3663856999999999,"usage":{"input_tokens":1080,"cache_creation_input_tokens":35216,"cache_read_input_tokens":500400,"output_tokens":4383,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":35216}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":4658,"outputTokens":324,"cacheReadInputTokens":6876,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0069656,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":1083,"outputTokens":4795,"cacheReadInputTokens":507287,"cacheCreationInputTokens":35216,"webSearchRequests":0,"costUSD":0.35942009999999996,"contextWindow":200000}},"permission_denials":[],"uuid":"4dcef45a-3162-4aba-8058-33e84514d4f8"}
+          qc_feedback: |-
+            [quality-control] Implementation correctly implements multi-agent per-criterion unanimous consensus. All 7 tests pass covering: unanimous agreement, single agent failure, mixed results, non-compliant agent skipping, fallback to aggregateVerdicts when no criteria, nil result handling, and all-agents-non-compliant edge case. Code structure matches specification exactly with proper vote collection per criterion index and unanimous consensus check.
+            [golang-pro] Multi-agent per-criterion consensus implemented correctly. Function aggregateMultiAgentCriteria uses unanimous consensus model where criterion passes only if ALL agents agree. Tests comprehensively cover: unanimous agreement (GREEN), single agent disagreement (RED), mixed results, non-compliant agents skipped, fallback to aggregateVerdicts when no criteria, nil results handling, and all agents non-compliant. Implementation matches specification exactly with proper vote collection and consensus checking logic.
+          timestamp: "2025-11-16T23:36:06Z"
+      completed_date: "2025-11-16"
+    - task_number: 7
+      name: "Integrate structured criteria into Review method with fallback"
+      agent: "golang-pro"
+      worktree_group: "chain-2-qc-logic"
+      files:
+        - "internal/executor/qc.go"
+        - "internal/executor/qc_test.go"
+      depends_on: [6]
+      estimated_time: "1h"
+      description: |
+        Update the main Review method to use structured prompts when task has criteria,
+        apply per-criterion aggregation, and fall back to YELLOW for non-compliant agents.
+      test_first:
+        test_file: "internal/executor/qc_test.go"
+        structure:
+          - "TestReview_WithStructuredCriteria"
+          - "TestReview_LegacyTaskWithoutCriteria"
+          - "TestReview_FallbackToYellowOnMalformedResponse"
+        example_skeleton: |
+          func TestReview_LegacyTaskWithoutCriteria(t *testing.T) {
+              invoker := &mockInvoker{
+                  response: `{"verdict": "GREEN", "feedback": "Looks good"}`,
+              }
+              qc := NewQualityController(invoker)
+              task := models.Task{
+                  Name:   "Legacy task",
+                  Prompt: "Do something",
+                  // No SuccessCriteria
+              }
+
+              result, err := qc.Review(context.Background(), task, "output")
+              if err != nil {
+                  t.Fatalf("unexpected error: %v", err)
+              }
+              if result.Flag != models.StatusGreen {
+                  t.Errorf("legacy task should use agent verdict, got %s", result.Flag)
+              }
+          }
+      implementation:
+        approach: |
+          Check if task.SuccessCriteria has items. If yes, use BuildStructuredReviewPrompt.
+          Parse response, apply aggregateCriteriaResults to override verdict.
+          If CriteriaResults missing, treat as YELLOW (from AI Counsel consensus).
+        code_structure: |
+          func (qc *QualityController) Review(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
+              var prompt string
+              if len(task.SuccessCriteria) > 0 {
+                  prompt = qc.BuildStructuredReviewPrompt(ctx, task, output)
+              } else {
+                  prompt = qc.BuildReviewPrompt(ctx, task, output) // Legacy
+              }
+
+              // ... invoke agent, parse response ...
+
+              if resp != nil && len(task.SuccessCriteria) > 0 {
+                  if len(resp.CriteriaResults) == 0 {
+                      // Agent didn't follow schema - treat as YELLOW
+                      result.Flag = models.StatusYellow
+                      result.Feedback += " (Warning: Agent did not return criteria_results)"
+                  } else {
+                      // Override verdict based on criteria
+                      result.Flag = qc.aggregateCriteriaResults(resp, task)
+                  }
+              }
+
+              return result, nil
+          }
+        key_points:
+          - point: "Backward compatible - check len(SuccessCriteria)"
+            details: "Legacy tasks use existing flow"
+          - point: "YELLOW for malformed responses (AI Counsel consensus)"
+            reference: "Already proven in qc.go:423-429"
+      verification:
+        automated_tests:
+          command: "go test ./internal/executor/ -v -run TestReview"
+          expected_output: |
+            PASS
+        success_criteria:
+          - "Tasks with criteria use structured prompt"
+          - "Tasks without criteria use legacy prompt"
+          - "Missing CriteriaResults treated as YELLOW"
+          - "Verdict overridden by criteria aggregation"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              gofmt -w internal/executor/qc.go && \
+              go vet ./internal/executor/... && \
+              go test ./internal/executor/ -v
+            description: "Format, vet, and test Review integration"
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "integrate structured criteria into Review with YELLOW fallback for non-compliance"
+        files:
+          - "internal/executor/qc.go"
+          - "internal/executor/qc_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: YELLOW
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":531635,"duration_api_ms":535238,"num_turns":62,"result":"All tests pass. Let me provide the output in the required JSON format:\n\n```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Integrated structured criteria into Review method with YELLOW fallback for non-compliant agents\",\n  \"output\": \"Implemented Task 7: Integrate structured criteria into Review method with fallback.\\n\\nKey Changes:\\n1. Updated Review() to check len(task.SuccessCriteria) > 0\\n2. Uses BuildStructuredReviewPrompt() for tasks with criteria\\n3. Falls back to BuildReviewPrompt() for legacy tasks without criteria\\n4. Applies criteria aggregation via aggregateCriteriaResults()\\n5. Returns YELLOW with warning when agent doesn't return criteria_results (AI Counsel consensus)\\n6. Stores CriteriaResults in ReviewResult for transparency\\n\\nTests Added:\\n- TestReview_WithStructuredCriteria: 3 subtests covering GREEN/RED verdict override\\n- TestReview_LegacyTaskWithoutCriteria: Backward compatibility\\n- TestReview_FallbackToYellowOnMalformedResponse: Non-compliant agent handling\\n- TestReview_StructuredPromptContainsRequiredSections: Prompt structure validation\\n\\nNote: Default NewQualityController uses Mode='auto' which routes to ReviewMultiAgent. Tests explicitly set Mode='' to test single-agent path. All 465+ tests pass.\",\n  \"errors\": [],\n  \"files_modified\": [\n    \"internal/executor/qc.go\",\n    \"internal/executor/qc_test.go\"\n  ],\n  \"metadata\": {\n    \"test_count\": \"465+\",\n    \"coverage\": \"maintained\",\n    \"backward_compatible\": true,\n    \"ai_counsel_consensus\": \"YELLOW fallback for non-compliant agents\"\n  }\n}\n```","session_id":"dedea42b-9062-457e-8337-8c3789eafed0","total_cost_usd":2.0522381499999995,"usage":{"input_tokens":81,"cache_creation_input_tokens":87117,"cache_read_input_tokens":4526729,"output_tokens":20981,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":87117}},"modelUsage":{"claude-sonnet-4-5-20250929":{"inputTokens":84,"outputTokens":20997,"cacheReadInputTokens":4533616,"cacheCreationInputTokens":87117,"webSearchRequests":0,"costUSD":2.001980549999999,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":43065,"outputTokens":1301,"cacheReadInputTokens":6876,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.05025759999999999,"contextWindow":200000}},"permission_denials":[],"uuid":"478695b4-13a9-426e-afc5-0a277e9bcb09"}
+          qc_feedback: '[golang-pro] Task 7 successfully implemented. Review method correctly integrates structured criteria with YELLOW fallback for non-compliant agents. Implementation checks len(task.SuccessCriteria) > 0, uses BuildStructuredReviewPrompt for tasks with criteria, applies aggregateCriteriaResults to override verdict, and returns YELLOW with warning when agent doesn''t return criteria_results (AI Counsel consensus). All required tests pass including TestReview_WithStructuredCriteria (3 subtests), TestReview_LegacyTaskWithoutCriteria, TestReview_FallbackToYellowOnMalformedResponse. Backward compatibility maintained for legacy tasks without criteria.'
+          timestamp: "2025-11-16T23:45:19Z"
+      completed_date: "2025-11-16"

@@ -27,7 +27,6 @@ Conductor is a production-ready Go CLI tool that executes implementation plans b
 - [Plan Format](#plan-format)
   - [Markdown Format](#markdown-format)
   - [YAML Format](#yaml-format)
-- [Conductor Plugin](#conductor-plugin-included)
 - [Documentation](#documentation)
 - [Architecture Overview](#architecture-overview)
 - [Development](#development)
@@ -154,20 +153,6 @@ go build ./cmd/conductor
 conductor --version
 # v2.4.0
 ```
-
-#### Option 3: Install Plugin for Plan Generation
-
-In Claude Code, run:
-
-```bash
-/plugin
-```
-
-Then select "Browse Plugins" to install **conductor-tools** for:
-- `/doc` - Generate Markdown plans
-- `/doc-yaml` - Generate YAML plans
-- `/cook-man` - Interactive plan design
-- `/cook-auto` - Autonomous plan generation (optional MCP)
 
 ### Your First Execution
 
@@ -609,78 +594,13 @@ For complete format specifications, see [Plan Format Guide](docs/conductor.md#pl
 
 [⬆ back to top](#table-of-contents)
 
-## Conductor Tools Plugin
-
-Generate Conductor-ready implementation plans directly from Claude Code using the **Conductor Tools Plugin**.
-
-### Quick Installation
-
-In Claude Code:
-
-```bash
-/plugin
-```
-
-Search for **conductor-tools** and click install. Done! Your commands are ready:
-
-```bash
-/doc "feature description"           # Generate Markdown plan
-/doc-yaml "feature description"      # Generate YAML plan
-/cook-man "feature description"      # Interactive design session
-```
-
-### Why Use the Plugin?
-
-- **Auto-discovers** your project structure (reads codebase before planning)
-- **Smart agent selection** - recommends appropriate agents
-- **Dependency detection** - identifies task ordering
-- **Multiple formats** - Markdown (human) or YAML (automation)
-- **Interactive design** - `/cook-man` refines requirements before planning
-- **Immediately executable** - generated plans work directly with `conductor run`
-
-### Quick Example
-
-```bash
-# Generate a plan
-/doc "Add OAuth2 authentication with JWT"
-
-# Execute immediately
-conductor run generated-plan.md --verbose
-```
-
-### Available Commands
-
-| Command | Output | Best For |
-|---------|--------|----------|
-| `/doc` | Markdown `.md` | Human-readable, team discussion |
-| `/doc-yaml` | YAML `.yaml` | Automation, tooling, config management |
-| `/cook-man` | Interactive | Complex features, design validation |
-
-### Documentation
-
-- **[Plugin README](plugin/conductor-tools/README.md)** - Features and examples
-- **[Installation Guide](plugin/conductor-tools/INSTALLATION.md)** - Detailed setup (with troubleshooting)
-- **[Plugin Source](plugin/conductor-tools/)** - Implementation details
-
-### Manual Installation (if needed)
-
-```bash
-# From conductor repository
-cd plugin/conductor-tools
-cp -r . ~/.claude/plugins/conductor-tools
-# Restart Claude Code
-```
-
-See [Installation Guide](plugin/conductor-tools/INSTALLATION.md) for other methods and troubleshooting.
-
-[⬆ back to top](#table-of-contents)
 
 ## Documentation
 
 - **[Complete Reference Guide](docs/conductor.md)** - Comprehensive guide covering usage, plan formats, multi-file plans, learning system, and troubleshooting
 - **[Development Setup](docs/setup.md)** - Local development environment setup
 - **[Split Plan Examples](docs/examples/split-plan-README.md)** - Example split plans
-- **[Plugin Docs](plugin/docs)** - Plan generation & design tools
+- **[CLAUDE.md](CLAUDE.md)** - Developer guide for Claude Code integration
 
 [⬆ back to top](#table-of-contents)
 
@@ -864,12 +784,6 @@ Conductor is feature-complete with:
   - Comprehensive cross-component validation
   - Clearer task organization and separation of concerns
 - Comprehensive documentation
-
-### Conductor Plugin
-- 4 slash commands (`/doc`, `/doc-yaml`, `/cook-auto`, `/cook-man`)
-- Complete documentation and guides
-- Three-tier accessibility (executor, generator, automation)
-- AI Counsel MCP integration (optional)
 
 [⬆ back to top](#table-of-contents)
 

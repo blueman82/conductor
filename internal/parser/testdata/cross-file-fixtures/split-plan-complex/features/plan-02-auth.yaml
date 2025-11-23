@@ -1,0 +1,19 @@
+conductor:
+  default_agent: godev
+
+plan:
+  metadata:
+    feature_name: "Authentication Feature"
+    created: "2025-11-23"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 2
+      name: "Authentication Module"
+      files:
+        - internal/auth/auth.go
+      depends_on:
+        - file: "../plan-01-foundation.yaml"
+          task: 1
+      estimated_time: "1h"
+      agent: godev
+      description: "Authentication module depending on foundation infrastructure"

@@ -1,0 +1,71 @@
+plan_index:
+  metadata:
+    feature_name: "Structured Rubric QC with Per-Criterion Verification"
+    created: "2025-11-16"
+    total_tasks: 8
+    total_files: 3
+    version: "2.3.0"
+
+  files:
+    - sequence: 1
+      filename: "plan-01-data-models.yaml"
+      worktree_groups: ["chain-1-models"]
+      tasks: [1, 2, 3]
+      description: "Data model extensions (Task struct, QCResponse, YAML parser)"
+
+    - sequence: 2
+      filename: "plan-02-qc-logic.yaml"
+      worktree_groups: ["chain-2-qc-logic"]
+      tasks: [4, 5, 6, 7]
+      description: "QC logic implementation (prompt builder, aggregation, consensus)"
+
+    - sequence: 3
+      filename: "plan-03-docs.yaml"
+      worktree_groups: ["independent-docs"]
+      tasks: [8]
+      description: "Documentation updates"
+
+  dependency_graph:
+    chains:
+      - id: "chain-1-models"
+        tasks: [1, 2, 3]
+        execution: "sequential"
+        description: "Data models must be complete before QC logic can use them"
+
+      - id: "chain-2-qc-logic"
+        tasks: [4, 5, 6, 7]
+        execution: "sequential"
+        depends_on: ["chain-1-models"]
+        description: "QC logic depends on completed data models"
+
+      - id: "independent-docs"
+        tasks: [8]
+        execution: "parallel"
+        depends_on: ["chain-2-qc-logic"]
+        description: "Documentation after implementation complete"
+
+  getting_started:
+    first_file: "plan-01-data-models.yaml"
+    first_task: 1
+    instructions: |
+      1. Start with plan-01-data-models.yaml - Task 1
+      2. Complete chain-1-models tasks (1→2→3) sequentially
+      3. Merge chain-1-models branch to main
+      4. Start plan-02-qc-logic.yaml - Task 4
+      5. Complete chain-2-qc-logic tasks (4→5→6→7) sequentially
+      6. Merge chain-2-qc-logic branch to main
+      7. Complete Task 8 (documentation)
+      8. Final merge to main
+
+  overview: |
+    Implementation plan for Structured Rubric QC v2.3. This feature adds explicit
+    success_criteria parsing to Task struct, enabling QC agents to verify each
+    criterion individually with per-criterion multi-agent consensus.
+
+    Key decisions from AI Counsel deliberation:
+    - HYBRID criterion matching: Index for parsing, text for debugging
+    - YELLOW fallback for non-compliant agents (proven in production)
+    - UNANIMOUS consensus per criterion (false negatives worse than false positives)
+    - YAML parser first (trivial), Markdown as best-effort fallback
+
+    Estimated effort: ~550 lines, ~8 hours total

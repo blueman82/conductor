@@ -1,0 +1,463 @@
+conductor:
+  worktree_groups:
+    - group_id: "chain-1-models"
+      description: "Tasks 1→2→3 (data model extensions)"
+      tasks: [1, 2, 3]
+      branch: "feature/structured-rubric-qc/chain-1-models"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Data models must be extended before parsers or QC logic can use them"
+    - group_id: "chain-2-qc-logic"
+      description: "Tasks 4→5→6→7 (QC prompt and aggregation)"
+      tasks: [4, 5, 6, 7]
+      branch: "feature/structured-rubric-qc/chain-2-qc-logic"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "QC logic depends on models being complete; each step builds on previous"
+    - group_id: "independent-docs"
+      description: "Task 8 (documentation updates)"
+      tasks: [8]
+      branch: "feature/structured-rubric-qc/independent-docs"
+      execution_model: "parallel"
+      isolation: "separate-worktree"
+      rationale: "Documentation can be written after all implementation is complete"
+plan:
+  metadata:
+    feature_name: "Structured Rubric QC with Per-Criterion Verification"
+    created: "2025-11-16"
+    target: "Add explicit success_criteria parsing to Task struct with multi-agent per-criterion consensus"
+    estimated_tasks: 8
+    version: "2.3.0"
+  context:
+    framework: "Go 1.21+"
+    architecture: "Clean Architecture with separated concerns (models, parser, executor)"
+    test_framework: "Go testing package with table-driven tests"
+    other_context:
+      - "Conductor v2.2 already has multi-agent QC infrastructure"
+      - "Current QC uses blob-based prompt review without structured criteria"
+      - "Consensus mechanism uses strictest-wins (RED > YELLOW > GREEN)"
+      - "YAML and Markdown parsers exist for plan files"
+    expectations:
+      - "Write tests BEFORE implementation (TDD)"
+      - "Commit frequently (after each completed task)"
+      - "Follow existing code patterns in internal/executor/qc.go"
+      - "Keep changes minimal (YAGNI)"
+      - "Maintain backward compatibility - tasks without criteria use legacy blob review"
+  prerequisites:
+    - item: "Go 1.21+ installed"
+      details: "go version should show 1.21 or higher"
+      verified: false
+    - item: "All existing tests pass"
+      details: "Run: go test ./..."
+      verified: false
+    - item: "Understand existing QC flow"
+      details: "Read internal/executor/qc.go lines 407-467 (aggregateVerdicts)"
+      verified: false
+    - item: "Branch created"
+      details: "feature/structured-rubric-qc from main"
+      verified: false
+  tasks:
+    - task_number: 1
+      name: "Add SuccessCriteria and TestCommands fields to Task struct"
+      agent: "golang-pro"
+      worktree_group: "chain-1-models"
+      files:
+        - "internal/models/task.go"
+        - "internal/models/task_test.go"
+      depends_on: []
+      estimated_time: "30m"
+      description: |
+        Extend the Task struct to include optional success_criteria and test_commands fields.
+        These fields enable structured QC verification where agents check explicit requirements.
+      test_first:
+        test_file: "internal/models/task_test.go"
+        structure:
+          - "TestTask_WithSuccessCriteria"
+          - "TestTask_EmptySuccessCriteria_BackwardCompatible"
+        example_skeleton: |
+          func TestTask_WithSuccessCriteria(t *testing.T) {
+              task := Task{
+                  Number: "1",
+                  Name:   "Test task",
+                  Prompt: "Do something",
+                  SuccessCriteria: []string{
+                      "Criterion 1",
+                      "Criterion 2",
+                  },
+                  TestCommands: []string{"go test ./..."},
+              }
+
+              err := task.Validate()
+              if err != nil {
+                  t.Errorf("expected no error, got: %v", err)
+              }
+              if len(task.SuccessCriteria) != 2 {
+                  t.Errorf("expected 2 criteria, got: %d", len(task.SuccessCriteria))
+              }
+          }
+
+          func TestTask_EmptySuccessCriteria_BackwardCompatible(t *testing.T) {
+              task := Task{
+                  Number: "1",
+                  Name:   "Legacy task",
+                  Prompt: "Do something",
+              }
+
+              err := task.Validate()
+              if err != nil {
+                  t.Errorf("legacy task should be valid: %v", err)
+              }
+              if task.SuccessCriteria != nil && len(task.SuccessCriteria) > 0 {
+                  t.Error("empty criteria should be nil or empty slice")
+              }
+          }
+      implementation:
+        approach: |
+          Add two new optional slice fields to Task struct with YAML/JSON tags.
+          These fields are optional for backward compatibility.
+        code_structure: |
+          type Task struct {
+              // ... existing fields ...
+
+              // Structured verification (v2.3+)
+              SuccessCriteria []string `yaml:"success_criteria,omitempty" json:"success_criteria,omitempty"`
+              TestCommands    []string `yaml:"test_commands,omitempty" json:"test_commands,omitempty"`
+          }
+        key_points:
+          - point: "Use omitempty for backward compatibility"
+            details: "Tasks without criteria should serialize without these fields"
+          - point: "Add after Metadata field"
+            reference: "internal/models/task.go:22"
+      verification:
+        automated_tests:
+          command: "go test ./internal/models/ -v -run TestTask"
+          expected_output: |
+            PASS
+            ok      github.com/harrison/conductor/internal/models
+        success_criteria:
+          - "New fields added to Task struct with proper tags"
+          - "Existing Task validation passes (backward compatible)"
+          - "Tasks with criteria pass validation"
+          - "All existing tests still pass"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              gofmt -w internal/models/task.go && \
+              go vet ./internal/models/... && \
+              go test ./internal/models/ -v
+            description: "Format, vet, and test models package"
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "add SuccessCriteria and TestCommands fields to Task struct"
+        files:
+          - "internal/models/task.go"
+          - "internal/models/task_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":34449,"duration_api_ms":39580,"num_turns":7,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Added SuccessCriteria and TestCommands fields to Task struct with full test coverage\",\n  \"output\": \"PASS\\nok  github.com/harrison/conductor/internal/models\\n\\nAll 465+ existing tests pass. New fields:\\n- SuccessCriteria []string with yaml/json omitempty tags\\n- TestCommands []string with yaml/json omitempty tags\\n\\nBackward compatible - existing tasks without these fields continue to work.\",\n  \"errors\": [],\n  \"files_modified\": [\n    \"internal/models/task.go\",\n    \"internal/models/task_test.go\"\n  ],\n  \"metadata\": {\n    \"tests_added\": 5,\n    \"fields_added\": [\"SuccessCriteria\", \"TestCommands\"],\n    \"backward_compatible\": true\n  }\n}\n```","session_id":"11de595d-38bf-4dd8-9c18-ebd3613da1d6","total_cost_usd":0.287506,"usage":{"input_tokens":68,"cache_creation_input_tokens":45893,"cache_read_input_tokens":169170,"output_tokens":1502,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":45893}},"modelUsage":{"claude-sonnet-4-5-20250929":{"inputTokens":71,"outputTokens":1522,"cacheReadInputTokens":169170,"cacheCreationInputTokens":52691,"webSearchRequests":0,"costUSD":0.27138524999999997,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":5982,"outputTokens":331,"cacheReadInputTokens":0,"cacheCreationInputTokens":6787,"webSearchRequests":0,"costUSD":0.01612075,"contextWindow":200000}},"permission_denials":[],"uuid":"5329b1a3-e5db-4231-89f5-8c2c2cfaf63c"}
+          qc_feedback: Implementation complete and correct. Fields added at line 25-26 with proper yaml/json omitempty tags. Test coverage includes validation, backward compatibility, and constraint checking. All 5 new tests pass along with 465+ existing tests.
+          timestamp: "2025-11-16T19:45:21Z"
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":48261,"duration_api_ms":55699,"num_turns":7,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"SuccessCriteria and TestCommands fields already implemented in Task struct\",\n  \"output\": \"Fields exist at internal/models/task.go:25-26 with proper YAML/JSON tags and omitempty for backward compatibility. Tests at internal/models/task_test.go:7-48 verify functionality. All 16 Task tests pass including TestTask_WithSuccessCriteria and TestTask_EmptySuccessCriteria_BackwardCompatible.\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"fields_location\": \"internal/models/task.go:25-26\",\n    \"tests_location\": \"internal/models/task_test.go:7-48\",\n    \"test_count\": 16,\n    \"already_implemented\": true\n  }\n}\n```","session_id":"a9ecf746-f16a-440a-9fdb-7a2de349899c","total_cost_usd":0.23764615,"usage":{"input_tokens":16,"cache_creation_input_tokens":43044,"cache_read_input_tokens":84783,"output_tokens":724,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":43044}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":3623,"outputTokens":313,"cacheReadInputTokens":0,"cacheCreationInputTokens":6852,"webSearchRequests":0,"costUSD":0.013753,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":19,"outputTokens":750,"cacheReadInputTokens":84783,"cacheCreationInputTokens":49907,"webSearchRequests":0,"costUSD":0.22389314999999999,"contextWindow":200000}},"permission_denials":[],"uuid":"e7a8824e-55a8-49a9-aac5-c29ee719be46"}
+          qc_feedback: Implementation complete and verified. SuccessCriteria and TestCommands fields correctly added to Task struct at internal/models/task.go:25-26 with proper YAML/JSON tags and omitempty for backward compatibility. Tests at internal/models/task_test.go:7-48 verify both new functionality (TestTask_WithSuccessCriteria) and backward compatibility (TestTask_EmptySuccessCriteria_BackwardCompatible). All 16 Task tests pass including the required test cases.
+          timestamp: "2025-11-16T23:18:54Z"
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: YELLOW
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":43649,"duration_api_ms":54237,"num_turns":7,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"SuccessCriteria and TestCommands fields already implemented in Task struct\",\n  \"output\": \"Fields already present in internal/models/task.go:25-26 with proper YAML/JSON tags and omitempty for backward compatibility. Tests already exist in internal/models/task_test.go:7-48 covering both populated and empty criteria scenarios. All 16 Task tests pass including TestTask_WithSuccessCriteria and TestTask_EmptySuccessCriteria_BackwardCompatible.\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"tests_passed\": 16,\n    \"implementation_location\": \"internal/models/task.go:25-26\",\n    \"test_location\": \"internal/models/task_test.go:7-48\"\n  }\n}\n```","session_id":"4557beff-513c-4ea8-b526-6604cd81535e","total_cost_usd":0.24606335000000001,"usage":{"input_tokens":17,"cache_creation_input_tokens":45614,"cache_read_input_tokens":82092,"output_tokens":680,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":45614}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":3622,"outputTokens":317,"cacheReadInputTokens":0,"cacheCreationInputTokens":6876,"webSearchRequests":0,"costUSD":0.013802,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":20,"outputTokens":713,"cacheReadInputTokens":82092,"cacheCreationInputTokens":52501,"webSearchRequests":0,"costUSD":0.23226135,"contextWindow":200000}},"permission_denials":[],"uuid":"617336bb-4314-4290-94da-131046114936"}
+          qc_feedback: '[quality-control] Implementation complete and correct. SuccessCriteria and TestCommands fields properly added at internal/models/task.go:25-26 with correct YAML/JSON tags and omitempty for backward compatibility. Both required test cases present (TestTask_WithSuccessCriteria and TestTask_EmptySuccessCriteria_BackwardCompatible) with comprehensive validation. All 16 Task tests pass.'
+          timestamp: "2025-11-16T23:23:51Z"
+      completed_date: "2025-11-16"
+    - task_number: 2
+      name: "Add CriterionResult to QCResponse"
+      agent: "golang-pro"
+      worktree_group: "chain-1-models"
+      files:
+        - "internal/models/response.go"
+        - "internal/models/response_test.go"
+      depends_on: [1]
+      estimated_time: "30m"
+      description: |
+        Add CriterionResult struct and extend QCResponse to include per-criterion results.
+        This enables QC agents to return structured verification for each success criterion.
+      test_first:
+        test_file: "internal/models/response_test.go"
+        structure:
+          - "TestQCResponse_WithCriteriaResults"
+          - "TestCriterionResult_Validation"
+        example_skeleton: |
+          func TestQCResponse_WithCriteriaResults(t *testing.T) {
+              resp := QCResponse{
+                  Verdict:  "GREEN",
+                  Feedback: "All criteria verified",
+                  CriteriaResults: []CriterionResult{
+                      {
+                          Index:     0,
+                          Criterion: "JWT validation implemented",
+                          Passed:    true,
+                          Evidence:  "Function exists at auth/jwt.go:45",
+                      },
+                      {
+                          Index:      1,
+                          Criterion:  "Tests achieve 90% coverage",
+                          Passed:     false,
+                          FailReason: "Coverage is 85%",
+                      },
+                  },
+              }
+
+              if len(resp.CriteriaResults) != 2 {
+                  t.Errorf("expected 2 results, got %d", len(resp.CriteriaResults))
+              }
+              if resp.CriteriaResults[0].Passed != true {
+                  t.Error("first criterion should pass")
+              }
+              if resp.CriteriaResults[1].Passed != false {
+                  t.Error("second criterion should fail")
+              }
+          }
+      implementation:
+        approach: |
+          Define CriterionResult struct with Index (machine-parseable), Criterion (human-readable),
+          Passed, Evidence, and FailReason fields. Add CriteriaResults slice to QCResponse.
+        code_structure: |
+          type CriterionResult struct {
+              Index      int    `json:"index"`
+              Criterion  string `json:"criterion"`
+              Passed     bool   `json:"passed"`
+              Evidence   string `json:"evidence,omitempty"`
+              FailReason string `json:"fail_reason,omitempty"`
+          }
+
+          type QCResponse struct {
+              // ... existing fields ...
+              CriteriaResults []CriterionResult `json:"criteria_results,omitempty"`
+          }
+        key_points:
+          - point: "Use Index for machine parsing, Criterion for debugging"
+            details: "Hybrid approach from AI Counsel deliberation"
+          - point: "Add after SuggestedAgent field"
+            reference: "internal/models/response.go:18"
+      verification:
+        automated_tests:
+          command: "go test ./internal/models/ -v -run TestQCResponse"
+          expected_output: |
+            PASS
+        success_criteria:
+          - "CriterionResult struct defined with all fields"
+          - "QCResponse includes CriteriaResults slice"
+          - "JSON marshaling/unmarshaling works correctly"
+          - "Backward compatible - empty CriteriaResults omitted"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              gofmt -w internal/models/response.go && \
+              go vet ./internal/models/... && \
+              go test ./internal/models/ -v
+            description: "Format, vet, and test response changes"
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "add CriterionResult struct and extend QCResponse for per-criterion verification"
+        files:
+          - "internal/models/response.go"
+          - "internal/models/response_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":76523,"duration_api_ms":87215,"num_turns":13,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Added CriterionResult struct and extended QCResponse for per-criterion verification\",\n  \"output\": \"=== RUN   TestQCResponse_WithCriteriaResults\\n--- PASS: TestQCResponse_WithCriteriaResults (0.00s)\\n=== RUN   TestCriterionResult_JSONMarshal\\n--- PASS: TestCriterionResult_JSONMarshal (0.00s)\\n=== RUN   TestCriterionResult_JSONUnmarshal\\n--- PASS: TestCriterionResult_JSONUnmarshal (0.00s)\\nPASS\\nok  \\tgithub.com/harrison/conductor/internal/models\\t0.241s\",\n  \"errors\": [],\n  \"files_modified\": [\n    \"internal/models/response.go\",\n    \"internal/models/response_test.go\"\n  ],\n  \"metadata\": {\n    \"tests_added\": 3,\n    \"test_cases\": 7,\n    \"backward_compatible\": true,\n    \"json_omitempty\": true\n  }\n}\n```","session_id":"07f83084-8cbc-44cd-9db6-bbf54a6db6d8","total_cost_usd":0.40062755,"usage":{"input_tokens":55,"cache_creation_input_tokens":52819,"cache_read_input_tokens":419926,"output_tokens":4244,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":52819}},"modelUsage":{"claude-sonnet-4-5-20250929":{"inputTokens":58,"outputTokens":4271,"cacheReadInputTokens":426745,"cacheCreationInputTokens":52819,"webSearchRequests":0,"costUSD":0.39033375000000003,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":7648,"outputTokens":393,"cacheReadInputTokens":6808,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0102938,"contextWindow":200000}},"permission_denials":[],"uuid":"7a3d6ba9-7426-414b-8ac8-0a5bdd1eaca6"}
+          qc_feedback: 'Implementation fully satisfies all requirements. CriterionResult struct defined with Index (int), Criterion (string), Passed (bool), Evidence (string, omitempty), and FailReason (string, omitempty). QCResponse extended with CriteriaResults slice using omitempty for backward compatibility. Added after SuggestedAgent as specified. Tests comprehensive: TestQCResponse_WithCriteriaResults matches spec exactly, TestCriterionResult_JSONMarshal verifies omitempty behavior (empty criteria omitted, evidence/fail_reason omitted when empty), TestCriterionResult_JSONUnmarshal confirms backward compatibility. All 3 new tests pass. JSON marshaling/unmarshaling works correctly.'
+          timestamp: "2025-11-16T19:46:52Z"
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":40527,"duration_api_ms":54971,"num_turns":5,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"CriterionResult struct and QCResponse extension already implemented and tested\",\n  \"output\": \"All tests pass:\\n- TestQCResponse_WithCriteriaResults: validates struct fields, passed/failed criteria\\n- TestCriterionResult_JSONMarshal: JSON serialization, omitempty behavior\\n- TestCriterionResult_JSONUnmarshal: backward compatibility, field parsing\\n\\nImplementation verified at:\\n- internal/models/response.go:34-40 (CriterionResult struct)\\n- internal/models/response.go:50 (CriteriaResults in QCResponse)\\n- internal/models/response_test.go:341-486 (comprehensive tests)\",\n  \"errors\": [],\n  \"files_modified\": [\"internal/models/response.go\", \"internal/models/response_test.go\"],\n  \"metadata\": {\n    \"tests_passed\": 9,\n    \"coverage_includes\": [\"struct_definition\", \"json_marshal\", \"json_unmarshal\", \"backward_compatibility\", \"omitempty_behavior\"]\n  }\n}\n```","session_id":"8894d397-5072-403f-9002-3ad751914f5c","total_cost_usd":0.19285115,"usage":{"input_tokens":15,"cache_creation_input_tokens":40401,"cache_read_input_tokens":93346,"output_tokens":491,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":40401}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":3396,"outputTokens":370,"cacheReadInputTokens":6876,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0059336,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":15,"outputTokens":491,"cacheReadInputTokens":93346,"cacheCreationInputTokens":40401,"webSearchRequests":0,"costUSD":0.18691755,"contextWindow":200000}},"permission_denials":[],"uuid":"8349a1f5-bdc9-4015-b893-9fc0af10bed8"}
+          qc_feedback: |-
+            [quality-control] Implementation complete and correct. CriterionResult struct defined at internal/models/response.go:34-40 with all required fields (Index, Criterion, Passed, Evidence, FailReason). QCResponse extended with CriteriaResults slice at line 50. All tests pass: TestQCResponse_WithCriteriaResults validates struct fields, TestCriterionResult_JSONMarshal verifies serialization and omitempty behavior, TestCriterionResult_JSONUnmarshal confirms backward compatibility. JSON tags properly configured with omitempty for Evidence and FailReason fields.
+            [golang-pro] Implementation complete and correct. CriterionResult struct defined with all required fields (Index, Criterion, Passed, Evidence, FailReason) at response.go:34-40. QCResponse extended with CriteriaResults slice at line 50. JSON marshaling/unmarshaling verified with omitempty behavior. Backward compatibility confirmed - empty CriteriaResults omitted from JSON output. All 9 tests pass covering struct definition, marshal, unmarshal, and edge cases.
+          timestamp: "2025-11-16T23:25:07Z"
+      completed_date: "2025-11-16"
+    - task_number: 3
+      name: "Update YAML parser to map success_criteria and test_commands"
+      agent: "golang-pro"
+      worktree_group: "chain-1-models"
+      files:
+        - "internal/parser/yaml.go"
+        - "internal/parser/yaml_test.go"
+      depends_on: [1]
+      estimated_time: "45m"
+      description: |
+        Update YAML parser to map success_criteria and test_commands arrays from plan files
+        directly to Task struct fields. The parser already handles similar array fields.
+      test_first:
+        test_file: "internal/parser/yaml_test.go"
+        structure:
+          - "TestYAMLParser_SuccessCriteria"
+          - "TestYAMLParser_NoSuccessCriteria_BackwardCompatible"
+        example_skeleton: |
+          func TestYAMLParser_SuccessCriteria(t *testing.T) {
+              yamlContent := `
+          plan:
+            tasks:
+              - id: 1
+                name: "Test task"
+                files: [test.go]
+                depends_on: []
+                estimated_time: 30m
+                description: "Do something"
+                success_criteria:
+                  - "Criterion 1"
+                  - "Criterion 2"
+                test_commands:
+                  - "go test ./..."
+          `
+              plan, err := ParseYAML([]byte(yamlContent))
+              if err != nil {
+                  t.Fatalf("parse error: %v", err)
+              }
+              if len(plan.Tasks) != 1 {
+                  t.Fatalf("expected 1 task, got %d", len(plan.Tasks))
+              }
+              task := plan.Tasks[0]
+              if len(task.SuccessCriteria) != 2 {
+                  t.Errorf("expected 2 criteria, got %d", len(task.SuccessCriteria))
+              }
+              if task.SuccessCriteria[0] != "Criterion 1" {
+                  t.Errorf("first criterion mismatch: %s", task.SuccessCriteria[0])
+              }
+              if len(task.TestCommands) != 1 {
+                  t.Errorf("expected 1 test command, got %d", len(task.TestCommands))
+              }
+          }
+      implementation:
+        approach: |
+          The YAML parser uses Go's yaml.Unmarshal. Add success_criteria and test_commands
+          fields to the yamlTask struct, then map them to the Task struct during conversion.
+        code_structure: |
+          type yamlTask struct {
+              // ... existing fields ...
+              SuccessCriteria []string `yaml:"success_criteria"`
+              TestCommands    []string `yaml:"test_commands"`
+          }
+
+          // In parseYAMLTask:
+          task.SuccessCriteria = yt.SuccessCriteria
+          task.TestCommands = yt.TestCommands
+        key_points:
+          - point: "Follow existing pattern for Files and DependsOn"
+            reference: "internal/parser/yaml.go:80-100"
+          - point: "YAML unmarshaling handles arrays automatically"
+            details: "No manual parsing needed"
+      verification:
+        automated_tests:
+          command: "go test ./internal/parser/ -v -run TestYAML"
+          expected_output: |
+            PASS
+        success_criteria:
+          - "success_criteria array parsed from YAML"
+          - "test_commands array parsed from YAML"
+          - "Empty arrays handled correctly"
+          - "Backward compatible with plans missing these fields"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              gofmt -w internal/parser/yaml.go && \
+              go vet ./internal/parser/... && \
+              go test ./internal/parser/ -v
+            description: "Format, vet, and test parser changes"
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "update YAML parser to map success_criteria and test_commands to Task"
+        files:
+          - "internal/parser/yaml.go"
+          - "internal/parser/yaml_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: ""
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":77772,"duration_api_ms":92619,"num_turns":14,"result":"```json\n{\n  \"status\": \"success\",\n  \"summary\": \"Updated YAML parser to map success_criteria and test_commands arrays to Task struct\",\n  \"output\": \"Added SuccessCriteria and TestCommands fields to yamlTask struct with yaml tags. Mapped fields directly to Task struct during parsing. All tests pass including 3 new tests: TestYAMLParser_SuccessCriteria, TestYAMLParser_NoSuccessCriteria_BackwardCompatible, TestYAMLParser_MultipleTestCommands\",\n  \"errors\": [],\n  \"files_modified\": [\"internal/parser/yaml.go\", \"internal/parser/yaml_test.go\"],\n  \"metadata\": {\n    \"tests_added\": 3,\n    \"lines_changed\": \"~15\"\n  }\n}\n```","session_id":"50707abd-48be-415c-899d-589dc0b86674","total_cost_usd":0.4815548,"usage":{"input_tokens":53,"cache_creation_input_tokens":65766,"cache_read_input_tokens":540140,"output_tokens":3730,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":65766}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":6867,"outputTokens":402,"cacheReadInputTokens":6830,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.009559999999999999,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":56,"outputTokens":4074,"cacheReadInputTokens":546981,"cacheCreationInputTokens":65766,"webSearchRequests":0,"costUSD":0.47199480000000005,"contextWindow":200000}},"permission_denials":[],"uuid":"7dd7d496-aa26-46e9-8095-64d2167cc8d1"}
+          qc_feedback: ""
+          timestamp: "2025-11-16T19:48:23Z"
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: YELLOW
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":83262,"duration_api_ms":92768,"num_turns":6,"result":"{\n  \"status\": \"success\",\n  \"summary\": \"YAML parser already maps success_criteria and test_commands to Task struct\",\n  \"output\": \"Implementation already complete. The yamlTask struct (yaml.go:43-44) has SuccessCriteria and TestCommands fields with proper yaml tags. The Parse function (yaml.go:165-166) maps these to the Task struct. The Task struct (task.go:25-26) includes the fields with json/yaml tags. Three tests pass: TestYAMLParser_SuccessCriteria, TestYAMLParser_NoSuccessCriteria_BackwardCompatible, TestYAMLParser_MultipleTestCommands.\",\n  \"errors\": [],\n  \"files_modified\": [],\n  \"metadata\": {\n    \"tests_passed\": 3,\n    \"implementation_status\": \"already_complete\",\n    \"yaml_parser_lines\": \"43-44, 165-166\",\n    \"task_struct_lines\": \"25-26\"\n  }\n}","session_id":"654e10d7-8581-46ff-aad2-779832edb816","total_cost_usd":0.028524599999999997,"usage":{"input_tokens":6,"cache_creation_input_tokens":232,"cache_read_input_tokens":60453,"output_tokens":95,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":232}},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":3558,"outputTokens":270,"cacheReadInputTokens":6876,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0055956,"contextWindow":200000},"claude-sonnet-4-5-20250929":{"inputTokens":9,"outputTokens":122,"cacheReadInputTokens":67340,"cacheCreationInputTokens":232,"webSearchRequests":0,"costUSD":0.022928999999999998,"contextWindow":200000}},"permission_denials":[],"uuid":"90319218-9bf8-40bd-9427-40d661cd3d9f"}
+          qc_feedback: '[quality-control] Implementation complete and correct. YAML parser already has success_criteria and test_commands fields in yamlTask struct (lines 43-44) with proper yaml tags. Parse function maps these to Task struct (lines 165-166). Task struct includes the fields with proper json/yaml tags (lines 25-26). Three comprehensive tests verify functionality: parsing multiple criteria, backward compatibility with empty/missing fields, and multiple test commands. All tests pass.'
+          timestamp: "2025-11-16T23:27:13Z"
+      completed_date: "2025-11-16"
+  testing_strategy:
+    unit_tests:
+      location: "internal/**/test_*.go"
+      naming_convention: "*_test.go"
+      run_command: "go test ./..."
+      coverage_target: "85%"
+      coverage_command: "go test ./... -cover"
+    integration_tests:
+      location: "test/integration/"
+      what_to_test:
+        - "End-to-end QC review with structured criteria"
+        - "Multi-agent consensus on criteria"
+        - "Backward compatibility with legacy plans"
+  commit_strategy:
+    total_commits: 8
+    message_format:
+      pattern: "type: brief description"
+      examples:
+        - "feat: add SuccessCriteria fields to Task struct"
+        - "feat: add CriterionResult to QCResponse"
+        - "feat: update YAML parser for criteria"
+        - "test: add integration tests for structured QC"
+  common_pitfalls:
+    - pitfall: "Breaking backward compatibility"
+      why: "Existing plans without criteria must continue to work"
+      how_to_avoid: "Use omitempty tags, check len(criteria) > 0 before structured review"
+    - pitfall: "Index mismatch between prompt and response"
+      why: "Agents must return criteria by index matching the prompt"
+      how_to_avoid: "Number criteria explicitly in prompt: '0. [ ] First criterion'"
+    - pitfall: "Not handling malformed agent responses"
+      why: "Agents may not follow schema exactly"
+      how_to_avoid: "Treat missing CriteriaResults as YELLOW (consensus decision)"
+  resources:
+    existing_code:
+      - type: "QC aggregation logic"
+        path: "internal/executor/qc.go:407-467"
+        note: "aggregateVerdicts uses strictest-wins"
+      - type: "Multi-agent invocation"
+        path: "internal/executor/qc.go:300-404"
+        note: "invokeMultipleAgents runs agents in parallel"
+      - type: "JSON response parsing"
+        path: "internal/executor/qc.go:469-501"
+        note: "parseQCJSON extracts from Claude CLI envelope"
+    validation_checklist:
+      - item: "All tests pass"
+        command: "go test ./..."
+        checked: false
+      - item: "Code formatted"
+        command: "gofmt -l ."
+        checked: false
+      - item: "No vet issues"
+        command: "go vet ./..."
+        checked: false
+      - item: "Backward compatible"
+        verify: "Plans without criteria still work"
+        checked: false

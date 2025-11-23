@@ -1,0 +1,31 @@
+conductor:
+  default_agent: godev
+  quality_control:
+    enabled: true
+    review_agent: code-reviewer
+
+plan:
+  metadata:
+    feature_name: "Setup Phase"
+    created: "2025-11-23"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 1
+      name: "Initialize Repository"
+      files:
+        - go.mod
+        - main.go
+      depends_on: []
+      estimated_time: "15m"
+      agent: godev
+      description: "Initialize Go module and create basic main.go entry point"
+
+    - task_number: 2
+      name: "Setup CLI Framework"
+      files:
+        - cmd/root.go
+        - cmd/version.go
+      depends_on: [1]
+      estimated_time: "30m"
+      agent: godev
+      description: "Set up cobra CLI framework"
