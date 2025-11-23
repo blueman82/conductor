@@ -58,6 +58,9 @@ Conductor automates complex multi-step implementations by:
 
 - **Wave-Based Execution**: Tasks execute in parallel within waves, sequentially between waves
 - **Dependency Management**: Automatic dependency graph calculation with cycle detection
+  - Local dependencies within single files
+  - Cross-file dependencies with explicit notation (v2.6+)
+  - Automatic validation of all dependency links
 - **Quality Control**: Automated review of task outputs (GREEN/RED/YELLOW verdicts)
 - **Retry Logic**: Automatic retry on failures (up to 2 attempts per task)
 - **Skip Completed Tasks**: Resume interrupted plans by skipping already-completed tasks
@@ -66,6 +69,12 @@ Conductor automates complex multi-step implementations by:
 - **Dual Format Support**: Both Markdown and YAML plan formats
 - **Dry Run Mode**: Test execution without actually running tasks
 - **Progress Logging**: Real-time console output and file-based logs
+- **Multi-File Plans** (v2.5+): Split large plans across multiple files
+  - Objective splitting by feature/component/service
+  - Cross-file dependency management (v2.6+)
+  - Worktree groups for execution organization
+  - File-to-task mapping for precise tracking and resumability
+  - 100% backward compatible with single-file plans
 - **Adaptive Learning** (v2.0+): AI-powered learning system that improves over time
   - Tracks execution history and failure patterns
   - Automatically adapts agent selection after failures
@@ -96,6 +105,11 @@ Conductor automates complex multi-step implementations by:
   - QC system verifies both criteria types for comprehensive quality control
   - Automatic dependency context injection for tasks with dependencies
   - Better task organization and clearer separation of concerns
+- **Cross-File Dependencies** (v2.6+): Explicit task linking across plan files
+  - Reference tasks in other files with `file` and `task` notation
+  - Automatic validation of all cross-file links during parsing
+  - Better control over multi-file execution order
+  - Supports complex microservices and multi-component orchestration
 
 [⬆ back to top](#table-of-contents)
 
@@ -115,23 +129,23 @@ Download pre-built binary from the latest release:
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.5.2/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.5.2/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux (x86_64)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.4.0/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.5.2/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Verify installation
 conductor --version
-# v2.4.0
+# v2.5.2
 ```
 
 #### Option 2: Build from Source
@@ -151,7 +165,7 @@ go build ./cmd/conductor
 
 # Verify installation
 conductor --version
-# v2.4.0
+# v2.5.2
 ```
 
 ### Your First Execution
@@ -713,7 +727,7 @@ The VERSION file serves as the single source of truth and is automatically injec
 
 ## Multi-File Plans
 
-Conductor supports splitting large implementation plans across multiple files with automatic merging and dependency management:
+Conductor supports splitting large implementation plans across multiple files with automatic merging, explicit cross-file dependencies (v2.6+), and intelligent dependency management:
 
 ```bash
 # Load and execute multiple plan files
@@ -721,23 +735,55 @@ conductor run setup.md features.md deployment.md
 
 # Validate split plans before execution
 conductor validate *.md
+
+# Validate with cross-file dependency checking
+conductor validate infrastructure.yaml services.yaml deployment.yaml
 ```
 
 **Features:**
 - Multi-file plan loading with auto-format detection
 - Objective plan splitting by feature/component/service
-- Cross-file dependency management
+- Explicit cross-file dependencies with validation (v2.6+)
+  - Reference tasks in other files: `file: path.yaml, task: 5`
+  - Automatic link validation during parsing
+  - Works with both YAML and Markdown formats
+- Implicit ordering for simpler use cases (v2.5)
 - Worktree groups for execution control
 - File-to-task mapping for resume operations
 - 100% backward compatible with single-file plans
 
-See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-splitting) for detailed documentation and examples.
+### Cross-File Dependency Example (v2.6+)
+
+**infrastructure.yaml:**
+```yaml
+tasks:
+  - id: 1
+    name: Setup Database
+    depends_on: []
+```
+
+**services.yaml:**
+```yaml
+tasks:
+  - id: 1
+    name: Auth Service
+    depends_on:
+      - file: infrastructure.yaml
+        task: 1
+```
+
+Execute together with automatic validation:
+```bash
+conductor run infrastructure.yaml services.yaml
+```
+
+See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-splitting) and [Cross-File Dependencies Guide](docs/CROSS_FILE_DEPENDENCIES.md) for detailed documentation and examples.
 
 [⬆ back to top](#table-of-contents)
 
 ## Project Status
 
-**Current Status**: Production-ready v2.5.0
+**Current Status**: Production-ready v2.5.2
 
 Conductor is feature-complete with:
 - Complete implementation with 86%+ test coverage

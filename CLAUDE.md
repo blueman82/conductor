@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.4.0 with comprehensive multi-agent orchestration, multi-file plan support, quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection with critical RED verdict fix, domain-specific review criteria, and auto-incrementing version management.
+**Current Status**: Production-ready v2.5.2 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection with critical RED verdict fix, domain-specific review criteria, integration tasks with dual criteria validation, and auto-incrementing version management.
 
 ## Development Commands
 
@@ -504,7 +504,7 @@ Conductor's parsers (Markdown and YAML) extract these fields from plan files:
 - `Number` - Task identifier (string)
 - `Name` - Task title
 - `Files` - List of files the task modifies
-- `DependsOn` - Task dependencies for wave calculation
+- `DependsOn` - Task dependencies for wave calculation (local and cross-file, v2.6+)
 - `EstimatedTime` - Duration estimate (parsed as time.Duration)
 - `Agent` - Claude agent to execute the task
 - `Status` - Task completion status (completed, failed, in-progress, pending)
@@ -519,6 +519,41 @@ Conductor's parsers (Markdown and YAML) extract these fields from plan files:
   - Used for organizational purposes and multi-file plan coordination
   - **Not used for execution control** - conductor doesn't enforce isolation or execution order based on groups
   - Groups are tracked in Wave.GroupInfo for logging and analysis
+
+**Cross-File Dependencies (v2.6+)**:
+- Local references: Task number (integer) refers to tasks in the same file
+- Cross-file references: Object with `file` (path) and `task` (number) keys
+- Syntax varies by format:
+
+**YAML Format**:
+```yaml
+tasks:
+  - id: 1
+    name: Setup Database
+    depends_on: []
+
+  - id: 2
+    name: Auth Service
+    depends_on:
+      - 1                              # Local task in same file
+      - file: foundation.yaml          # Cross-file reference
+        task: 3                         # Task 3 from foundation.yaml
+      - file: infrastructure/db.yaml
+        task: 5                         # Task 5 from infrastructure/db.yaml
+```
+
+**Markdown Format** (pseudo-syntax for reference):
+```markdown
+## Task 2: Auth Service
+**Depends on**: Task 1, foundation.yaml#3, infrastructure/db.yaml#5
+
+Implementation details...
+```
+
+**SourceFile field** (internal, set during parsing):
+- Tracks which file a task came from
+- Used by plan merger to link cross-file dependencies
+- Essential for multi-file execution and resume operations
 
 **Extended task sections** (for human developers):
 - `test_first`, `implementation`, `verification`, `commit` sections in YAML
@@ -546,7 +581,7 @@ result, err := invoker.Invoke(ctx, task)
 
 ## Production Status
 
-Conductor v2.4.0 is production-ready with 86%+ test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support, adaptive learning system, inter-retry agent swapping, intelligent QC agent selection, and auto-incrementing version management implemented and tested.
+Conductor v2.5.2 is production-ready with 86%+ test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support with cross-file dependencies, adaptive learning system, inter-retry agent swapping, intelligent QC agent selection, integration tasks with dual criteria, and auto-incrementing version management implemented and tested.
 
 **Latest coverage run (2025-11-17, `go test -cover ./...`):**
 
@@ -574,9 +609,10 @@ This run also verified the newly added configuration matrix tests and end-to-end
 - Quality control reviews with structured JSON responses
 - Inter-retry agent swapping based on QC recommendations
 - Adaptive learning from execution history
-- Multi-file plan support with cross-file dependencies
+- Multi-file plan support with explicit cross-file dependencies (v2.6+)
 - Resumable execution with state tracking
 - Dual feedback storage (plan files + database)
+- Integration tasks with component and cross-component validation
 - Comprehensive logging and error handling
 
 **v2.1 Enhancements:**
@@ -593,6 +629,19 @@ This run also verified the newly added configuration matrix tests and end-to-end
 - File path verification in QC prompts ("EXPECTED FILE PATHS" section)
 - Historical context loading in structured review prompts
 - TTL-based caching for intelligent agent selections (reduces API calls)
+
+**v2.5 Enhancements:**
+- Integration tasks with dual criteria validation (component + cross-component)
+- Automatic dependency context injection for all tasks with dependencies
+- Clearer task organization with explicit component vs integration distinction
+- Better separation of concerns in multi-component systems
+
+**v2.6+ Enhancements (In Development):**
+- Explicit cross-file dependency notation with `file` and `task` keys
+- Automatic validation of all cross-file dependency links
+- Enhanced plan merger with cross-file link tracking
+- SourceFile field for precise multi-file execution tracking
+- Backward compatible with implicit ordering from v2.5
 
 ## Integration Tasks Architecture
 
@@ -839,7 +888,7 @@ Implement the auth middleware integration into the API router...
 
 ## Multi-File Plan Examples
 
-### Example 1: Split Backend Plan
+### Example 1: Split Backend Plan (Implicit Ordering)
 
 Part 1 (setup.md):
 ```markdown
@@ -884,17 +933,122 @@ Or validate first:
 conductor validate setup.md features.md
 ```
 
-### Example 2: Microservices Plan
+### Example 2: Split Backend Plan with Explicit Cross-File Dependencies (v2.6+)
 
-Three separate plans:
-- `auth-service-plan.md` - Authentication service (6 tasks)
-- `api-service-plan.md` - Main API (8 tasks)
-- `deployment-plan.md` - Infrastructure & deployment (5 tasks)
+Part 1 (infrastructure.yaml):
+```yaml
+plan:
+  name: Infrastructure Setup
+  tasks:
+    - id: 1
+      name: Database Setup
+      files: [infrastructure/db.yaml]
+      depends_on: []
+      estimated_time: 10 minutes
+      agent: terraform-pro
+      description: Initialize PostgreSQL database and migrations.
+```
+
+Part 2 (services.yaml):
+```yaml
+plan:
+  name: Core Services
+  tasks:
+    - id: 1
+      name: Auth Service
+      files: [internal/auth/auth.go]
+      depends_on:
+        - file: infrastructure.yaml
+          task: 1                    # Explicit cross-file dependency
+      estimated_time: 15 minutes
+      agent: golang-pro
+      description: Implement JWT authentication service.
+
+    - id: 2
+      name: API Server
+      files: [cmd/api/server.go]
+      depends_on:
+        - 1                         # Local dependency (Task 1 in this file)
+        - file: infrastructure.yaml
+          task: 1                   # Can reference same cross-file task
+      estimated_time: 10 minutes
+      agent: golang-pro
+      description: Setup API server with auth integration.
+```
+
+Execute with explicit cross-file references:
+```bash
+conductor run infrastructure.yaml services.yaml --max-concurrency 2
+```
+
+Validation automatically checks all cross-file links:
+```bash
+conductor validate infrastructure.yaml services.yaml
+```
+
+### Example 3: Microservices Plan with Multiple Files
+
+Three separate plans with cross-file dependencies:
+
+**auth-service.yaml**:
+```yaml
+plan:
+  name: Authentication Service
+  tasks:
+    - id: 1
+      name: JWT Module
+      depends_on: []
+    - id: 2
+      name: Auth API
+      depends_on: [1]
+```
+
+**api-service.yaml**:
+```yaml
+plan:
+  name: Main API Service
+  tasks:
+    - id: 1
+      name: API Server Setup
+      depends_on:
+        - file: auth-service.yaml
+          task: 2                   # Depends on auth service API
+    - id: 2
+      name: User Endpoints
+      depends_on: [1]
+```
+
+**deployment.yaml**:
+```yaml
+plan:
+  name: Deployment
+  tasks:
+    - id: 1
+      name: Deploy Auth Service
+      depends_on:
+        - file: auth-service.yaml
+          task: 2
+    - id: 2
+      name: Deploy API Service
+      depends_on:
+        - file: api-service.yaml
+          task: 2
+        - 1                        # Wait for auth deployment
+```
+
+Execute entire microservices pipeline:
+```bash
+conductor run auth-service.yaml api-service.yaml deployment.yaml --max-concurrency 4
+```
+
+### Example 4: Worktree Groups with Cross-File Dependencies
 
 With worktree groups:
 - `auth-service` group → sequential execution (isolation: strong)
 - `api-service` group → parallel where possible (isolation: weak)
 - `deployment` group → sequential (isolation: strong)
+
+Use cross-file dependencies to enforce execution order between groups while allowing parallelism within groups.
 
 ## Module Path
 
