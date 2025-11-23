@@ -1,0 +1,26 @@
+plan:
+  metadata:
+    name: "Diamond Pattern - Branches"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 2
+      name: "Implement Component A"
+      files:
+        - components/component_a.go
+      depends_on:
+        - file: setup.yaml
+          task: 1
+      prompt: |
+        Implement component A using the initialized system from task 1.
+        Add unit tests for all public functions.
+
+    - task_number: 3
+      name: "Implement Component B"
+      files:
+        - components/component_b.go
+      depends_on:
+        - file: setup.yaml
+          task: 1
+      prompt: |
+        Implement component B using the initialized system from task 1.
+        Add unit tests for all public functions.

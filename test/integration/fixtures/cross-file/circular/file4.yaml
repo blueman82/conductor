@@ -1,0 +1,13 @@
+plan:
+  metadata:
+    name: "Indirect Circular - File 4"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 2
+      name: "Task Two"
+      files:
+        - f2.txt
+      depends_on:
+        - file: file3.yaml
+          task: 1
+      prompt: "Task 2 depends on task 1 in file 3 (creates indirect cycle)"

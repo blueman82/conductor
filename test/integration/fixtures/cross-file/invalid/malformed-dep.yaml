@@ -1,0 +1,12 @@
+plan:
+  metadata:
+    name: "Invalid - Malformed Dependency"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 4
+      name: "Task Four"
+      files:
+        - file4.txt
+      depends_on:
+        - file: valid.yaml
+      prompt: "This task has malformed cross-file dependency (missing task field)"

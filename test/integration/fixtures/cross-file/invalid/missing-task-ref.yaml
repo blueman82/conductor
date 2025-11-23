@@ -1,0 +1,13 @@
+plan:
+  metadata:
+    name: "Invalid - References Non-Existent Task"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 3
+      name: "Task Three"
+      files:
+        - file3.txt
+      depends_on:
+        - file: valid.yaml
+          task: 999
+      prompt: "This task has invalid cross-file dependency"

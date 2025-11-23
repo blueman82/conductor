@@ -1,0 +1,24 @@
+plan:
+  metadata:
+    name: "Mixed Dependencies - Part 1"
+    estimated_tasks: 3
+  tasks:
+    - task_number: 1
+      name: "Setup Database"
+      files:
+        - db/setup.go
+      prompt: "Set up database schema and migrations"
+
+    - task_number: 2
+      name: "Create API Router"
+      files:
+        - api/router.go
+      depends_on:
+        - 1
+      prompt: "Create the main API router using database from task 1"
+
+    - task_number: 3
+      name: "Add Logging"
+      files:
+        - logging/logger.go
+      prompt: "Implement logging infrastructure"

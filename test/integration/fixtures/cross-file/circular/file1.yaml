@@ -1,0 +1,13 @@
+plan:
+  metadata:
+    name: "Circular Dependency - File 1"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 1
+      name: "Task One"
+      files:
+        - f1.txt
+      depends_on:
+        - file: file2.yaml
+          task: 2
+      prompt: "Task 1 depends on task 2 in file 2"
