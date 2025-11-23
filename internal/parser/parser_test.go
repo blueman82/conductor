@@ -1343,3 +1343,263 @@ func TestApplyRetryOnRedFallback_Integration(t *testing.T) {
 		}
 	})
 }
+
+// TestMergePlans_CrossFileLocalDependencies tests merging plans with both local and cross-file dependencies
+func TestMergePlans_CrossFileLocalDependencies(t *testing.T) {
+	plan1 := &models.Plan{
+		Name:     "Plan 1",
+		FilePath: "/path/to/plan-01.md",
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Prompt 1", DependsOn: []string{}},
+			{Number: "2", Name: "Task 2", Prompt: "Prompt 2", DependsOn: []string{"1"}},
+		},
+	}
+	plan2 := &models.Plan{
+		Name:     "Plan 2",
+		FilePath: "/path/to/plan-02.md",
+		Tasks: []models.Task{
+			{
+				Number:    "5",
+				Name:      "Task 5",
+				Prompt:    "Prompt 5",
+				DependsOn: []string{"file:plan-01.md:task:2"},
+			},
+		},
+	}
+
+	merged, err := MergePlans(plan1, plan2)
+	if err != nil {
+		t.Fatalf("MergePlans() error = %v", err)
+	}
+	if merged == nil {
+		t.Fatal("MergePlans() returned nil plan")
+	}
+	if len(merged.Tasks) != 3 {
+		t.Errorf("MergePlans() resulted in %d tasks, want 3", len(merged.Tasks))
+	}
+
+	// Verify tasks have SourceFile set correctly
+	for i, task := range merged.Tasks {
+		if task.Number == "1" || task.Number == "2" {
+			if task.SourceFile != "/path/to/plan-01.md" {
+				t.Errorf("Task %s: expected SourceFile=/path/to/plan-01.md, got %s", task.Number, task.SourceFile)
+			}
+		} else if task.Number == "5" {
+			if task.SourceFile != "/path/to/plan-02.md" {
+				t.Errorf("Task %s: expected SourceFile=/path/to/plan-02.md, got %s", task.Number, task.SourceFile)
+			}
+		} else {
+			t.Errorf("Unexpected task at index %d: %s", i, task.Number)
+		}
+	}
+}
+
+// TestMergePlans_CrossFileInvalidTaskReference tests merging with invalid cross-file references
+func TestMergePlans_CrossFileInvalidTaskReference(t *testing.T) {
+	plan1 := &models.Plan{
+		Name:     "Plan 1",
+		FilePath: "/path/to/plan-01.md",
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Prompt 1", DependsOn: []string{}},
+		},
+	}
+	plan2 := &models.Plan{
+		Name:     "Plan 2",
+		FilePath: "/path/to/plan-02.md",
+		Tasks: []models.Task{
+			{
+				Number:    "5",
+				Name:      "Task 5",
+				Prompt:    "Prompt 5",
+				DependsOn: []string{"file:plan-01.md:task:999"}, // non-existent task
+			},
+		},
+	}
+
+	_, err := MergePlans(plan1, plan2)
+	if err == nil {
+		t.Error("MergePlans() expected error for invalid cross-file reference, got nil")
+	}
+	if !strings.Contains(err.Error(), "non-existent") {
+		t.Errorf("Expected error to contain 'non-existent', got: %v", err)
+	}
+}
+
+// TestMergePlans_LinearCrossFileChain tests linear cross-file dependencies
+func TestMergePlans_LinearCrossFileChain(t *testing.T) {
+	// Scenario: plan-01 task 1 -> plan-02 task 5 -> plan-02 task 10
+	plan1 := &models.Plan{
+		Name:     "Plan 1",
+		FilePath: "/path/to/plan-01.md",
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Prompt 1", DependsOn: []string{}},
+		},
+	}
+	plan2 := &models.Plan{
+		Name:     "Plan 2",
+		FilePath: "/path/to/plan-02.md",
+		Tasks: []models.Task{
+			{
+				Number:    "5",
+				Name:      "Task 5",
+				Prompt:    "Prompt 5",
+				DependsOn: []string{"file:plan-01.md:task:1"},
+			},
+			{
+				Number:    "10",
+				Name:      "Task 10",
+				Prompt:    "Prompt 10",
+				DependsOn: []string{"5"},
+			},
+		},
+	}
+
+	merged, err := MergePlans(plan1, plan2)
+	if err != nil {
+		t.Fatalf("MergePlans() error = %v", err)
+	}
+
+	// Verify all tasks are present
+	if len(merged.Tasks) != 3 {
+		t.Fatalf("Expected 3 tasks, got %d", len(merged.Tasks))
+	}
+
+	// Verify task 5 has correct cross-file dependency
+	for _, task := range merged.Tasks {
+		if task.Number == "5" {
+			if len(task.DependsOn) != 1 || task.DependsOn[0] != "file:plan-01.md:task:1" {
+				t.Errorf("Task 5: expected DependsOn=['file:plan-01.md:task:1'], got %v", task.DependsOn)
+			}
+		}
+	}
+}
+
+// TestMergePlans_DiamondCrossFileDependencies tests diamond dependency pattern across files
+func TestMergePlans_DiamondCrossFileDependencies(t *testing.T) {
+	// Scenario: plan-01 task 1 -> [plan-02 tasks 2,3] -> plan-03 task 4
+	plan1 := &models.Plan{
+		Name:     "Plan 1",
+		FilePath: "/path/to/plan-01.md",
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1", Prompt: "Prompt 1", DependsOn: []string{}},
+		},
+	}
+	plan2 := &models.Plan{
+		Name:     "Plan 2",
+		FilePath: "/path/to/plan-02.md",
+		Tasks: []models.Task{
+			{
+				Number:    "2",
+				Name:      "Task 2",
+				Prompt:    "Prompt 2",
+				DependsOn: []string{"file:plan-01.md:task:1"},
+			},
+			{
+				Number:    "3",
+				Name:      "Task 3",
+				Prompt:    "Prompt 3",
+				DependsOn: []string{"file:plan-01.md:task:1"},
+			},
+		},
+	}
+	plan3 := &models.Plan{
+		Name:     "Plan 3",
+		FilePath: "/path/to/plan-03.md",
+		Tasks: []models.Task{
+			{
+				Number:    "4",
+				Name:      "Task 4",
+				Prompt:    "Prompt 4",
+				DependsOn: []string{"file:plan-02.md:task:2", "file:plan-02.md:task:3"},
+			},
+		},
+	}
+
+	merged, err := MergePlans(plan1, plan2, plan3)
+	if err != nil {
+		t.Fatalf("MergePlans() error = %v", err)
+	}
+
+	// Verify all tasks are present
+	if len(merged.Tasks) != 4 {
+		t.Fatalf("Expected 4 tasks, got %d", len(merged.Tasks))
+	}
+
+	// Verify task 4 has both cross-file dependencies
+	for _, task := range merged.Tasks {
+		if task.Number == "4" {
+			if len(task.DependsOn) != 2 {
+				t.Errorf("Task 4: expected 2 dependencies, got %d", len(task.DependsOn))
+			}
+			expected := map[string]bool{
+				"file:plan-02.md:task:2": true,
+				"file:plan-02.md:task:3": true,
+			}
+			for _, dep := range task.DependsOn {
+				if !expected[dep] {
+					t.Errorf("Task 4: unexpected dependency %q", dep)
+				}
+			}
+		}
+	}
+}
+
+// TestResolveCrossFileDependencies_ValidReferences tests valid cross-file resolution
+func TestResolveCrossFileDependencies_ValidReferences(t *testing.T) {
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:1"}},
+		{Number: "10", Name: "Task 10", DependsOn: []string{"5"}},
+	}
+	fileMap := map[string]string{
+		"1":  "/path/to/plan-01.md",
+		"5":  "/path/to/plan-02.md",
+		"10": "/path/to/plan-02.md",
+	}
+
+	err := ResolveCrossFileDependencies(tasks, fileMap)
+	if err != nil {
+		t.Errorf("ResolveCrossFileDependencies() unexpected error: %v", err)
+	}
+}
+
+// TestResolveCrossFileDependencies_MissingTask tests invalid cross-file references
+func TestResolveCrossFileDependencies_MissingTask(t *testing.T) {
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:999"}}, // non-existent
+	}
+	fileMap := map[string]string{
+		"1": "/path/to/plan-01.md",
+		"5": "/path/to/plan-02.md",
+	}
+
+	err := ResolveCrossFileDependencies(tasks, fileMap)
+	if err == nil {
+		t.Error("ResolveCrossFileDependencies() expected error for missing task, got nil")
+	}
+	if !strings.Contains(err.Error(), "non-existent") {
+		t.Errorf("Expected error to contain 'non-existent', got: %v", err)
+	}
+}
+
+// TestResolveCrossFileDependencies_InvalidFormat tests malformed cross-file dependencies
+func TestResolveCrossFileDependencies_InvalidFormat(t *testing.T) {
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md"}}, // malformed - missing task:
+	}
+	fileMap := map[string]string{
+		"1": "/path/to/plan-01.md",
+		"5": "/path/to/plan-02.md",
+	}
+
+	err := ResolveCrossFileDependencies(tasks, fileMap)
+	if err == nil {
+		t.Error("ResolveCrossFileDependencies() expected error for malformed dependency, got nil")
+	}
+	// Treated as a local dependency that doesn't exist
+	if !strings.Contains(err.Error(), "non-existent") {
+		t.Errorf("Expected error to contain 'non-existent', got: %v", err)
+	}
+}

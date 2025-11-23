@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/harrison/conductor/internal/models"
 )
 
 func TestParseYAMLPlan(t *testing.T) {
@@ -874,6 +876,223 @@ plan:
 				}
 				if plan.QualityControl.Agents.BlockedAgents[i] != agent {
 					t.Errorf("Expected blocked agent %d to be %q, got %q", i, agent, plan.QualityControl.Agents.BlockedAgents[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseYAMLWithCrossFileDependencies(t *testing.T) {
+	tests := []struct {
+		name                  string
+		yamlContent           string
+		expectedTaskNum       string
+		expectedDependsOn     []string
+		shouldError           bool
+		errorContains         string
+	}{
+		{
+			name: "simple cross-file dependency",
+			yamlContent: `
+plan:
+  metadata:
+    feature_name: "Cross-file Test"
+  tasks:
+    - task_number: 3
+      name: "Task 3"
+      depends_on:
+        - file: "plan-01.yaml"
+          task: 2
+      estimated_time: "30m"
+      description: "Task with cross-file dependency"
+`,
+			expectedTaskNum:   "3",
+			expectedDependsOn: []string{"file:plan-01.yaml:task:2"},
+			shouldError:       false,
+		},
+		{
+			name: "mixed numeric and cross-file dependencies",
+			yamlContent: `
+plan:
+  metadata:
+    feature_name: "Mixed Dependencies"
+  tasks:
+    - task_number: 4
+      name: "Task 4"
+      depends_on:
+        - 1
+        - file: "plan-02.yaml"
+          task: 3
+        - 2
+      estimated_time: "1h"
+      description: "Task with mixed dependencies"
+`,
+			expectedTaskNum:   "4",
+			expectedDependsOn: []string{"1", "file:plan-02.yaml:task:3", "2"},
+			shouldError:       false,
+		},
+		{
+			name: "multiple cross-file dependencies",
+			yamlContent: `
+plan:
+  metadata:
+    feature_name: "Multiple Cross-file"
+  tasks:
+    - task_number: 5
+      name: "Task 5"
+      depends_on:
+        - file: "plan-01-foundation.yaml"
+          task: 1
+        - file: "plan-02-auth.yaml"
+          task: 2
+        - file: "plan-03-api.yaml"
+          task: 4
+      estimated_time: "2h"
+      description: "Task with multiple cross-file dependencies"
+`,
+			expectedTaskNum:   "5",
+			expectedDependsOn: []string{"file:plan-01-foundation.yaml:task:1", "file:plan-02-auth.yaml:task:2", "file:plan-03-api.yaml:task:4"},
+			shouldError:       false,
+		},
+		{
+			name: "cross-file with float task number",
+			yamlContent: `
+plan:
+  metadata:
+    feature_name: "Float Task Number"
+  tasks:
+    - task_number: 6
+      name: "Task 6"
+      depends_on:
+        - file: "plan-01.yaml"
+          task: 2.5
+      estimated_time: "45m"
+      description: "Task with float task ID in cross-file dependency"
+`,
+			expectedTaskNum:   "6",
+			expectedDependsOn: []string{"file:plan-01.yaml:task:2.5"},
+			shouldError:       false,
+		},
+		{
+			name: "cross-file with string task number",
+			yamlContent: `
+plan:
+  metadata:
+    feature_name: "String Task Number"
+  tasks:
+    - task_number: 7
+      name: "Task 7"
+      depends_on:
+        - file: "plan-setup.yaml"
+          task: "integration-1"
+      estimated_time: "1h"
+      description: "Task with string task ID in cross-file dependency"
+`,
+			expectedTaskNum:   "7",
+			expectedDependsOn: []string{"file:plan-setup.yaml:task:integration-1"},
+			shouldError:       false,
+		},
+		{
+			name: "cross-file dependency missing file field",
+			yamlContent: `
+plan:
+  metadata:
+    feature_name: "Missing File"
+  tasks:
+    - task_number: 8
+      name: "Task 8"
+      depends_on:
+        - task: 2
+      estimated_time: "30m"
+      description: "Task with malformed cross-file dependency"
+`,
+			shouldError:   true,
+			errorContains: "missing required 'file' field",
+		},
+		{
+			name: "cross-file dependency missing task field",
+			yamlContent: `
+plan:
+  metadata:
+    feature_name: "Missing Task"
+  tasks:
+    - task_number: 9
+      name: "Task 9"
+      depends_on:
+        - file: "plan-01.yaml"
+      estimated_time: "30m"
+      description: "Task with malformed cross-file dependency"
+`,
+			shouldError:   true,
+			errorContains: "missing required 'task' field",
+		},
+		{
+			name: "backward compatibility - numeric only dependencies",
+			yamlContent: `
+plan:
+  metadata:
+    feature_name: "Backward Compat"
+  tasks:
+    - task_number: 1
+      name: "Task 1"
+      depends_on: []
+      estimated_time: "30m"
+      description: "First task"
+    - task_number: 2
+      name: "Task 2"
+      depends_on: [1]
+      estimated_time: "45m"
+      description: "Second task"
+`,
+			expectedTaskNum:   "2",
+			expectedDependsOn: []string{"1"},
+			shouldError:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewYAMLParser()
+			plan, err := parser.Parse(strings.NewReader(tt.yamlContent))
+
+			if tt.shouldError {
+				if err == nil {
+					t.Errorf("expected error, but parsing succeeded")
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error containing %q, got %q", tt.errorContains, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("failed to parse YAML: %v", err)
+			}
+
+			// Find the task we're testing
+			var task *models.Task
+			for i := range plan.Tasks {
+				if plan.Tasks[i].Number == tt.expectedTaskNum {
+					task = &plan.Tasks[i]
+					break
+				}
+			}
+
+			if task == nil {
+				t.Fatalf("task %s not found in parsed plan", tt.expectedTaskNum)
+			}
+
+			// Verify dependencies
+			if len(task.DependsOn) != len(tt.expectedDependsOn) {
+				t.Errorf("expected %d dependencies, got %d", len(tt.expectedDependsOn), len(task.DependsOn))
+			}
+
+			for i, expected := range tt.expectedDependsOn {
+				if i >= len(task.DependsOn) {
+					break
+				}
+				if task.DependsOn[i] != expected {
+					t.Errorf("dependency %d: expected %q, got %q", i, expected, task.DependsOn[i])
 				}
 			}
 		})

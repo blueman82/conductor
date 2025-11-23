@@ -50,6 +50,7 @@ type DependencyGraph struct {
 }
 
 // ValidateTasks checks that all task dependencies are valid
+// Supports both local dependencies (task numbers) and cross-file dependencies
 func ValidateTasks(tasks []models.Task) error {
 	taskMap := make(map[string]bool)
 	for _, task := range tasks {
@@ -62,11 +63,29 @@ func ValidateTasks(tasks []models.Task) error {
 		taskMap[task.Number] = true
 	}
 
-	// Validate dependencies
+	// Validate dependencies (both local and cross-file)
 	for _, task := range tasks {
 		for _, dep := range task.DependsOn {
-			if !taskMap[dep] {
-				return fmt.Errorf("task %s (%s): depends on non-existent task %s", task.Number, task.Name, dep)
+			// Check if it's a cross-file dependency
+			if models.IsCrossFileDep(dep) {
+				// Parse and validate cross-file dependency
+				crossFileDep, err := models.ParseCrossFileDep(dep)
+				if err != nil {
+					return fmt.Errorf("task %s (%s): invalid cross-file dependency %q: %w",
+						task.Number, task.Name, dep, err)
+				}
+
+				// Verify the referenced task exists
+				if !taskMap[crossFileDep.TaskID] {
+					return fmt.Errorf("task %s (%s): cross-file dependency references non-existent task %q in file %q",
+						task.Number, task.Name, crossFileDep.TaskID, crossFileDep.File)
+				}
+			} else {
+				// Local dependency - verify it exists
+				if !taskMap[dep] {
+					return fmt.Errorf("task %s (%s): depends on non-existent task %s",
+						task.Number, task.Name, dep)
+				}
 			}
 		}
 	}
@@ -158,18 +177,86 @@ func BuildDependencyGraph(tasks []models.Task) *DependencyGraph {
 	// Only add edges for valid dependencies
 	for _, task := range tasks {
 		for _, dep := range task.DependsOn {
+			// Resolve dependency (handle both local and cross-file)
+			depTaskID := resolveTaskDependency(dep)
+
 			// Validate that dependency exists
-			if _, exists := g.Tasks[dep]; !exists {
+			if _, exists := g.Tasks[depTaskID]; !exists {
 				// Skip invalid dependencies - they will be caught by validation
 				continue
 			}
-			// dep -> task (dep must complete before task)
-			g.Edges[dep] = append(g.Edges[dep], task.Number)
+			// depTaskID -> task (depTaskID must complete before task)
+			g.Edges[depTaskID] = append(g.Edges[depTaskID], task.Number)
 			g.InDegree[task.Number]++
 		}
 	}
 
 	return g
+}
+
+// resolveTaskDependency extracts the task ID from a dependency string.
+// Handles both local dependencies (simple task number) and cross-file dependencies.
+// For cross-file dependencies, returns just the task ID part.
+func resolveTaskDependency(dep string) string {
+	if models.IsCrossFileDep(dep) {
+		// Parse cross-file dependency and return just the task ID
+		if crossFileDep, err := models.ParseCrossFileDep(dep); err == nil {
+			return crossFileDep.TaskID
+		}
+	}
+	// Local dependency - return as-is
+	return dep
+}
+
+// BuildFileAwareDependencyGraph constructs a dependency graph with explicit file context.
+// Unlike BuildDependencyGraph, this function preserves the full cross-file dependency
+// information and returns a mapping that includes file context for each dependency.
+// Returns a map of task ID -> list of full dependency strings (including cross-file refs).
+func BuildFileAwareDependencyGraph(tasks []models.Task) (map[string][]string, error) {
+	// Validate that all tasks have unique numbers
+	taskMap := make(map[string]bool)
+	for _, task := range tasks {
+		if task.Number == "" {
+			return nil, fmt.Errorf("task has empty number")
+		}
+		if taskMap[task.Number] {
+			return nil, fmt.Errorf("duplicate task number: %s", task.Number)
+		}
+		taskMap[task.Number] = true
+	}
+
+	// Build dependency graph with full cross-file information preserved
+	depGraph := make(map[string][]string)
+
+	for _, task := range tasks {
+		depGraph[task.Number] = task.DependsOn
+
+		// Validate all dependencies exist
+		for _, dep := range task.DependsOn {
+			if models.IsCrossFileDep(dep) {
+				// Parse and validate cross-file dependency
+				crossFileDep, err := models.ParseCrossFileDep(dep)
+				if err != nil {
+					return nil, fmt.Errorf("task %s: invalid cross-file dependency %q: %w",
+						task.Number, dep, err)
+				}
+
+				// Verify the referenced task exists
+				if !taskMap[crossFileDep.TaskID] {
+					return nil, fmt.Errorf("task %s: cross-file dependency references non-existent task %q in file %q",
+						task.Number, crossFileDep.TaskID, crossFileDep.File)
+				}
+			} else {
+				// Local dependency - verify it exists
+				if !taskMap[dep] {
+					return nil, fmt.Errorf("task %s: depends on non-existent task %s",
+						task.Number, dep)
+				}
+			}
+		}
+	}
+
+	return depGraph, nil
 }
 
 // HasCycle detects if the graph contains a cycle using DFS with color marking

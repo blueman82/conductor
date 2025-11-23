@@ -3,7 +3,7 @@
 ## Task 3: Implement Core Feature
 
 **File(s)**: `internal/feature/feature.go`
-**Depends on**: plan-01-setup.md:Task 2
+**Depends on**: file:plan-01-setup.md/task:2
 **Estimated time**: 1h
 **Agent**: godev
 

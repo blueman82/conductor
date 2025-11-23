@@ -1,0 +1,30 @@
+conductor:
+  default_agent: godev
+
+plan:
+  metadata:
+    feature_name: "Simple Cross-File Example"
+    created: "2025-11-23"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 1
+      name: "Setup Database"
+      files:
+        - internal/db/schema.sql
+        - internal/db/connection.go
+      depends_on: []
+      estimated_time: "45m"
+      agent: golang-pro
+      description: "Initialize database schema and connection pool"
+
+    - task_number: 2
+      name: "Implement API Layer"
+      files:
+        - internal/api/handlers.go
+        - internal/api/routes.go
+      depends_on:
+        - file: "cross-file-mixed.yaml"
+          task: 1
+      estimated_time: "1h30m"
+      agent: golang-pro
+      description: "Create API endpoints that depend on database from other plan"

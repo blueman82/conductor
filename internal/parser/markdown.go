@@ -239,6 +239,72 @@ func extractText(n ast.Node, source []byte) string {
 	return buf.String()
 }
 
+// parseDependenciesFromMarkdown parses dependency strings from Markdown format
+// Supports multiple formats:
+// - Numeric: "1, 2, 3"
+// - Cross-file: "file:plan-01.yaml/task:2" or "file:plan-01.yaml:task:2"
+// - Cross-file with spaces: "file:plan-01.yaml / task:2" or "file:plan-01.yaml : task:2"
+// - Mixed: "1, file:plan-01.yaml/task:2, 3"
+// - Task notation: "Task 1, file:plan-01.yaml/task:2"
+func parseDependenciesFromMarkdown(task *models.Task, depStr string) {
+	// Split by comma to handle multiple dependencies
+	parts := strings.Split(depStr, ",")
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+
+		// Skip empty parts
+		if part == "" {
+			continue
+		}
+
+		// Check for cross-file dependency pattern (with optional spaces around separators)
+		// Patterns: file:NAME/task:ID or file:NAME:task:ID or file:NAME / task:ID or file:NAME : task:ID
+		crossFilePatterns := []*regexp.Regexp{
+			regexp.MustCompile(`^file:([^/:]+)\s*/\s*task:(.+)$`), // file:name / task:id
+			regexp.MustCompile(`^file:([^/:]+)\s*:\s*task:(.+)$`), // file:name : task:id
+			regexp.MustCompile(`^file:([^/:]+)/task:(.+)$`),       // file:name/task:id
+			regexp.MustCompile(`^file:([^/]+):task:(.+)$`),        // file:name:task:id
+		}
+
+		matched := false
+		for _, pat := range crossFilePatterns {
+			if matches := pat.FindStringSubmatch(part); len(matches) == 3 {
+				filename := strings.TrimSpace(matches[1])
+				taskID := strings.TrimSpace(matches[2])
+				depStr := fmt.Sprintf("file:%s:task:%s", filename, taskID)
+				task.DependsOn = append(task.DependsOn, depStr)
+				matched = true
+				break
+			}
+		}
+		if matched {
+			continue
+		}
+
+		// Check for "Task N" prefix (e.g., "Task 1", "Task 2.5", "Task integration-1")
+		taskPrefixPat := regexp.MustCompile(`^Task\s+(.+)$`)
+		if matches := taskPrefixPat.FindStringSubmatch(part); len(matches) == 2 {
+			taskNum := strings.TrimSpace(matches[1])
+			task.DependsOn = append(task.DependsOn, taskNum)
+			continue
+		}
+
+		// Check for numeric pattern (int, float, alphanumeric)
+		numPat := regexp.MustCompile(`^[\d.]+[a-zA-Z-]*$|^\d+$`)
+		if numPat.MatchString(part) {
+			task.DependsOn = append(task.DependsOn, part)
+			continue
+		}
+
+		// If it doesn't match any pattern, try to extract a numeric portion
+		numRegex := regexp.MustCompile(`[\d.]+[a-zA-Z-]*|\d+`)
+		if matches := numRegex.FindStringSubmatch(part); len(matches) > 0 {
+			task.DependsOn = append(task.DependsOn, strings.TrimSpace(matches[0]))
+		}
+	}
+}
+
 // removeCodeBlocks strips code blocks from content to prevent false positives
 // in metadata extraction. Code blocks are marked by triple backticks (```).
 func removeCodeBlocks(content string) string {
@@ -316,18 +382,16 @@ func parseTaskMetadata(task *models.Task, content string) {
 		}
 	}
 
-	// Parse **Depends on**:
+	// Parse **Depends on**: supports multiple formats
+	// - Numeric: "1, 2, 3"
+	// - Cross-file: "file:plan-01.yaml/task:2"
+	// - Cross-file alt: "file:plan-01-foundation.yaml:task:1"
+	// - Mixed: "1, file:plan-01.yaml/task:2, 3"
 	depRegex := regexp.MustCompile(`\*\*Depends on\*\*:\s*(.+)`)
 	if matches := depRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
 		depStr := strings.TrimSpace(matches[1])
 		if !strings.Contains(strings.ToLower(depStr), "none") {
-			// Parse "Task X, Task Y" or "X, Y" or "[X, Y]"
-			// Support int, float, and alphanumeric task numbers
-			numRegex := regexp.MustCompile(`[\d.]+[a-zA-Z-]*|\d+`)
-			nums := numRegex.FindAllString(depStr, -1)
-			for _, n := range nums {
-				task.DependsOn = append(task.DependsOn, strings.TrimSpace(n))
-			}
+			parseDependenciesFromMarkdown(task, depStr)
 		}
 	}
 

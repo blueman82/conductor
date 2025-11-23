@@ -264,7 +264,7 @@ func ApplyRetryOnRedFallback(plan *models.Plan, configMinFailures int) {
 }
 
 // MergePlans combines multiple plans into a single plan
-// while preserving all task dependencies.
+// while preserving all task dependencies, including cross-file references.
 func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 	if len(plans) == 0 {
 		return &models.Plan{Tasks: []models.Task{}}, nil
@@ -272,7 +272,9 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 
 	seen := make(map[string]bool)
 	var mergedTasks []models.Task
+	fileMap := make(map[string]string) // task number -> source file path
 
+	// First pass: collect all tasks and build file map
 	for _, plan := range plans {
 		if plan == nil {
 			continue
@@ -284,8 +286,14 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 			seen[task.Number] = true
 			// Set SourceFile to track which plan file this task comes from
 			task.SourceFile = plan.FilePath
+			fileMap[task.Number] = plan.FilePath
 			mergedTasks = append(mergedTasks, task)
 		}
+	}
+
+	// Second pass: validate and resolve cross-file dependencies
+	if err := ResolveCrossFileDependencies(mergedTasks, fileMap); err != nil {
+		return nil, err
 	}
 
 	var result *models.Plan
@@ -307,6 +315,44 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 		result = &models.Plan{Tasks: mergedTasks}
 	}
 	return result, nil
+}
+
+// ResolveCrossFileDependencies validates and resolves cross-file task references.
+// It ensures all cross-file dependencies reference valid tasks that exist in the merged plan.
+// Returns error if any cross-file reference is invalid or points to a non-existent task.
+func ResolveCrossFileDependencies(tasks []models.Task, fileMap map[string]string) error {
+	// Build map of all valid task numbers
+	validTasks := make(map[string]bool)
+	for _, task := range tasks {
+		validTasks[task.Number] = true
+	}
+
+	// Validate all dependencies (both local and cross-file)
+	for _, task := range tasks {
+		for _, dep := range task.DependsOn {
+			// Check if it's a cross-file dependency
+			if models.IsCrossFileDep(dep) {
+				// Parse the cross-file dependency
+				crossFileDep, err := models.ParseCrossFileDep(dep)
+				if err != nil {
+					return fmt.Errorf("task %s: invalid cross-file dependency %q: %w", task.Number, dep, err)
+				}
+
+				// Verify the referenced task exists
+				if !validTasks[crossFileDep.TaskID] {
+					return fmt.Errorf("task %s: cross-file dependency references non-existent task %q in file %q",
+						task.Number, crossFileDep.TaskID, crossFileDep.File)
+				}
+			} else {
+				// Local dependency - verify it exists in the task list
+				if !validTasks[dep] {
+					return fmt.Errorf("task %s: depends on non-existent task %s", task.Number, dep)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // FilterPlanFiles accepts an array of file and/or directory paths and returns

@@ -808,3 +808,345 @@ func TestParseTaskNumber(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateTasks_CrossFileReferences tests validation of cross-file dependencies
+func TestValidateTasks_CrossFileReferences(t *testing.T) {
+	tests := []struct {
+		name    string
+		tasks   []models.Task
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid cross-file reference",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:1"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "multiple cross-file references",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:1"}},
+				{Number: "10", Name: "Task 10", DependsOn: []string{"file:plan-02.md:task:5"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "cross-file reference to non-existent task",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:999"}},
+			},
+			wantErr: true,
+			errMsg:  "non-existent task",
+		},
+		{
+			name: "invalid cross-file format",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md"}}, // missing task:
+			},
+			wantErr: true,
+			errMsg:  "non-existent", // Treated as a local dependency that doesn't exist
+		},
+		{
+			name: "mixed local and cross-file dependencies",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "2", Name: "Task 2", DependsOn: []string{"1"}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:2", "2"}},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTasks(tt.tasks)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateTasks() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("Expected error to contain %q, got %q", tt.errMsg, err.Error())
+			}
+		})
+	}
+}
+
+// TestBuildFileAwareDependencyGraph_Valid tests building a file-aware dependency graph
+func TestBuildFileAwareDependencyGraph_Valid(t *testing.T) {
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "2", Name: "Task 2", DependsOn: []string{"1"}},
+		{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:1"}},
+		{Number: "10", Name: "Task 10", DependsOn: []string{"file:plan-02.md:task:5", "2"}},
+	}
+
+	depGraph, err := BuildFileAwareDependencyGraph(tasks)
+	if err != nil {
+		t.Fatalf("BuildFileAwareDependencyGraph() error = %v", err)
+	}
+
+	if depGraph == nil {
+		t.Fatal("BuildFileAwareDependencyGraph() returned nil graph")
+	}
+
+	// Verify all tasks are in the graph
+	if len(depGraph) != 4 {
+		t.Errorf("Expected 4 tasks in graph, got %d", len(depGraph))
+	}
+
+	// Verify dependencies are preserved with full cross-file information
+	if len(depGraph["5"]) != 1 || depGraph["5"][0] != "file:plan-01.md:task:1" {
+		t.Errorf("Task 5: expected ['file:plan-01.md:task:1'], got %v", depGraph["5"])
+	}
+
+	if len(depGraph["10"]) != 2 {
+		t.Errorf("Task 10: expected 2 dependencies, got %d", len(depGraph["10"]))
+	}
+}
+
+// TestBuildFileAwareDependencyGraph_InvalidReference tests error handling for invalid cross-file refs
+func TestBuildFileAwareDependencyGraph_InvalidReference(t *testing.T) {
+	tests := []struct {
+		name    string
+		tasks   []models.Task
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "reference to non-existent task",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:999"}},
+			},
+			wantErr: true,
+			errMsg:  "non-existent",
+		},
+		{
+			name: "malformed cross-file dependency",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md"}},
+			},
+			wantErr: true,
+			errMsg:  "non-existent", // Treated as a local dependency that doesn't exist
+		},
+		{
+			name: "local reference to non-existent task",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"999"}},
+			},
+			wantErr: true,
+			errMsg:  "non-existent",
+		},
+		{
+			name: "duplicate task numbers",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "1", Name: "Task 1 Duplicate", DependsOn: []string{}},
+			},
+			wantErr: true,
+			errMsg:  "duplicate",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			depGraph, err := BuildFileAwareDependencyGraph(tt.tasks)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("BuildFileAwareDependencyGraph() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errMsg, err.Error())
+				}
+				if depGraph != nil {
+					t.Error("Expected nil graph on error")
+				}
+			}
+		})
+	}
+}
+
+// TestBuildDependencyGraph_CrossFileResolution tests that BuildDependencyGraph properly resolves cross-file deps
+func TestBuildDependencyGraph_CrossFileResolution(t *testing.T) {
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:1"}},
+		{Number: "10", Name: "Task 10", DependsOn: []string{"5"}},
+	}
+
+	graph := BuildDependencyGraph(tasks)
+	if graph == nil {
+		t.Fatal("BuildDependencyGraph() returned nil")
+	}
+
+	// Verify that cross-file dependencies are resolved to extract task ID
+	// Task 5 depends on "file:plan-01.md:task:1" which resolves to task "1"
+	// So the in-degree of task "5" should be 1, with "1" as its dependency
+	if graph.InDegree["5"] != 1 {
+		t.Errorf("Task 5 in-degree: expected 1, got %d", graph.InDegree["5"])
+	}
+
+	// Verify that task "1" has task "5" as a dependent
+	if len(graph.Edges["1"]) != 1 || graph.Edges["1"][0] != "5" {
+		t.Errorf("Task 1 edges: expected ['5'], got %v", graph.Edges["1"])
+	}
+
+	// Verify that task "10" depends on task "5" (local dependency)
+	if graph.InDegree["10"] != 1 {
+		t.Errorf("Task 10 in-degree: expected 1, got %d", graph.InDegree["10"])
+	}
+}
+
+// TestCalculateWaves_CrossFileDependencies tests wave calculation with cross-file dependencies
+func TestCalculateWaves_CrossFileDependencies(t *testing.T) {
+	tests := []struct {
+		name          string
+		tasks         []models.Task
+		wantWaveCount int
+		wantErr       bool
+		validate      func(*testing.T, []models.Wave)
+	}{
+		{
+			name: "linear cross-file chain",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:1"}},
+				{Number: "10", Name: "Task 10", DependsOn: []string{"5"}},
+			},
+			wantWaveCount: 3,
+			wantErr:       false,
+			validate: func(t *testing.T, waves []models.Wave) {
+				// Wave 1: [1]
+				// Wave 2: [5] (depends on 1)
+				// Wave 3: [10] (depends on 5)
+				if len(waves[0].TaskNumbers) != 1 || waves[0].TaskNumbers[0] != "1" {
+					t.Error("Wave 1 should contain only task 1")
+				}
+				if len(waves[1].TaskNumbers) != 1 || waves[1].TaskNumbers[0] != "5" {
+					t.Error("Wave 2 should contain only task 5")
+				}
+				if len(waves[2].TaskNumbers) != 1 || waves[2].TaskNumbers[0] != "10" {
+					t.Error("Wave 3 should contain only task 10")
+				}
+			},
+		},
+		{
+			name: "diamond pattern with cross-file",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "2", Name: "Task 2", DependsOn: []string{"file:plan-01.md:task:1"}},
+				{Number: "3", Name: "Task 3", DependsOn: []string{"file:plan-01.md:task:1"}},
+				{Number: "4", Name: "Task 4", DependsOn: []string{"2", "3"}},
+			},
+			wantWaveCount: 3,
+			wantErr:       false,
+			validate: func(t *testing.T, waves []models.Wave) {
+				// Wave 1: [1]
+				// Wave 2: [2, 3]
+				// Wave 3: [4]
+				if len(waves[0].TaskNumbers) != 1 {
+					t.Errorf("Wave 1 should have 1 task, got %d", len(waves[0].TaskNumbers))
+				}
+				if len(waves[1].TaskNumbers) != 2 {
+					t.Errorf("Wave 2 should have 2 tasks, got %d", len(waves[1].TaskNumbers))
+				}
+				if len(waves[2].TaskNumbers) != 1 {
+					t.Errorf("Wave 3 should have 1 task, got %d", len(waves[2].TaskNumbers))
+				}
+			},
+		},
+		{
+			name: "cross-file reference to non-existent task",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:999"}},
+			},
+			wantWaveCount: 0,
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			waves, err := CalculateWaves(tt.tasks)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CalculateWaves() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if err != nil {
+				return
+			}
+
+			if len(waves) != tt.wantWaveCount {
+				t.Errorf("Expected %d waves, got %d", tt.wantWaveCount, len(waves))
+			}
+
+			if tt.validate != nil {
+				tt.validate(t, waves)
+			}
+		})
+	}
+}
+
+// TestDetectCycle_CrossFileReferences tests cycle detection with cross-file dependencies
+func TestDetectCycle_CrossFileReferences(t *testing.T) {
+	tests := []struct {
+		name      string
+		tasks     []models.Task
+		wantCycle bool
+	}{
+		{
+			name: "no cycle with cross-file",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-01.md:task:1"}},
+			},
+			wantCycle: false,
+		},
+		{
+			name: "simple cycle across files",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{"file:plan-02.md:task:5"}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"1"}},
+			},
+			wantCycle: true,
+		},
+		{
+			name: "self-reference via cross-file",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{"file:plan-01.md:task:1"}},
+			},
+			wantCycle: true,
+		},
+		{
+			name: "complex cycle with cross-file",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", DependsOn: []string{"file:plan-02.md:task:5"}},
+				{Number: "5", Name: "Task 5", DependsOn: []string{"file:plan-03.md:task:10"}},
+				{Number: "10", Name: "Task 10", DependsOn: []string{"1"}},
+			},
+			wantCycle: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			graph := BuildDependencyGraph(tt.tasks)
+			hasCycle := graph.HasCycle()
+			if hasCycle != tt.wantCycle {
+				t.Errorf("HasCycle() = %v, want %v", hasCycle, tt.wantCycle)
+			}
+		})
+	}
+}

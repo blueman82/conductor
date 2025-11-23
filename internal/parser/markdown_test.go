@@ -1156,3 +1156,98 @@ conductor:
 		})
 	}
 }
+
+func TestParseMarkdownCrossFileDependencies(t *testing.T) {
+	tests := []struct {
+		name              string
+		content           string
+		expectedDependsOn []string
+	}{
+		{
+			name: "simple cross-file dependency with slash notation",
+			content: `**File(s)**: ` + "`internal/feature/feature.go`" + `
+**Depends on**: file:plan-01-setup.md/task:2
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"file:plan-01-setup.md:task:2"},
+		},
+		{
+			name: "simple cross-file dependency with colon notation",
+			content: `**File(s)**: ` + "`internal/feature/feature.go`" + `
+**Depends on**: file:plan-01-setup.yaml:task:2
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"file:plan-01-setup.yaml:task:2"},
+		},
+		{
+			name: "mixed numeric and cross-file dependencies",
+			content: `**File(s)**: ` + "`cmd/api/router.go`" + `
+**Depends on**: Task 1, file:plan-01-foundation.yaml/task:2, 3
+**Estimated time**: 2h`,
+			expectedDependsOn: []string{"1", "file:plan-01-foundation.yaml:task:2", "3"},
+		},
+		{
+			name: "multiple cross-file dependencies",
+			content: `**File(s)**: ` + "`internal/integration/integration.go`" + `
+**Depends on**: file:plan-01-foundation.yaml:task:1, file:plan-02-auth.yaml:task:2, file:plan-03-api.yaml:task:4
+**Estimated time**: 3h`,
+			expectedDependsOn: []string{"file:plan-01-foundation.yaml:task:1", "file:plan-02-auth.yaml:task:2", "file:plan-03-api.yaml:task:4"},
+		},
+		{
+			name: "cross-file with alphanumeric task numbers",
+			content: `**File(s)**: ` + "`internal/feature/feature.go`" + `
+**Depends on**: file:plan-integration.yaml:task:integration-1
+**Estimated time**: 1h30m`,
+			expectedDependsOn: []string{"file:plan-integration.yaml:task:integration-1"},
+		},
+		{
+			name: "task notation with cross-file",
+			content: `**File(s)**: ` + "`internal/api/api.go`" + `
+**Depends on**: Task 1, file:plan-02.md/task:3, Task 4
+**Estimated time**: 2h`,
+			expectedDependsOn: []string{"1", "file:plan-02.md:task:3", "4"},
+		},
+		{
+			name: "backward compatibility - numeric only",
+			content: `**File(s)**: ` + "`file.go`" + `
+**Depends on**: 1, 2, 3
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"1", "2", "3"},
+		},
+		{
+			name: "backward compatibility - task notation",
+			content: `**File(s)**: ` + "`file.go`" + `
+**Depends on**: Task 1, Task 2
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"1", "2"},
+		},
+		{
+			name: "cross-file with whitespace",
+			content: `**File(s)**: ` + "`file.go`" + `
+**Depends on**: file:plan-01.yaml / task:2, 3
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"file:plan-01.yaml:task:2", "3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := &models.Task{}
+			parseTaskMetadata(task, tt.content)
+
+			// Verify dependencies
+			if len(task.DependsOn) != len(tt.expectedDependsOn) {
+				t.Errorf("expected %d dependencies, got %d", len(tt.expectedDependsOn), len(task.DependsOn))
+				t.Logf("Expected: %v", tt.expectedDependsOn)
+				t.Logf("Got: %v", task.DependsOn)
+			}
+
+			for i, expected := range tt.expectedDependsOn {
+				if i >= len(task.DependsOn) {
+					break
+				}
+				if task.DependsOn[i] != expected {
+					t.Errorf("dependency %d: expected %q, got %q", i, expected, task.DependsOn[i])
+				}
+			}
+		})
+	}
+}
