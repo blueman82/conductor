@@ -3403,29 +3403,20 @@ $ grep "suggested_agent" .conductor/logs/task-*.log
 
 #### QC JSON Parsing Errors
 
-**Symptom**: "Failed to parse QC response" or malformed JSON errors
+**Note (v2.8+)**: JSON schema enforcement via `--json-schema` flag guarantees valid JSON responses. Parsing errors should not occur in normal operation.
+
+**Symptom**: "Schema enforcement failed" errors (rare)
 
 **Solution:**
 ```bash
-# Check feedback format configuration
-$ cat .conductor/config.yaml | grep format
-
-# Ensure JSON format is enabled
-feedback:
-  format: json  # Must be json for structured responses
-
-# Verify QC agent returns valid JSON
-# Common issues:
-# 1. QC agent not trained for JSON output
-# 2. Response contains non-JSON text before/after JSON
-# 3. Missing required fields (verdict is required)
-
 # Check QC logs for raw response
 $ cat .conductor/logs/qc-*.log
 
-# Fallback: Use text format if JSON parsing fails consistently
-feedback:
-  format: text  # Plain text format (less features)
+# Verify Claude CLI version supports --json-schema
+$ claude --help | grep json-schema
+
+# Check if QC response structure matches schema
+# Required fields: verdict (GREEN/RED/YELLOW), feedback
 ```
 
 **Valid QC JSON Response:**
@@ -3439,14 +3430,11 @@ feedback:
 }
 ```
 
-**Invalid QC Response (will cause parsing errors):**
-```
-Here's my review:
-{
-  "verdict": "GREEN"
-}
-Additional notes...
-```
+**Schema Enforcement (v2.8+)**: The `--json-schema` flag ensures Claude's response matches the expected structure at generation time, eliminating issues with:
+- Non-JSON text before/after JSON
+- Missing required fields
+- Invalid field types
+- Markdown code fences wrapping JSON
 
 #### Context Not Loading for QC
 

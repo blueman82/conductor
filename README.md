@@ -83,7 +83,7 @@ Conductor automates complex multi-step implementations by:
   - Learns from past successes to optimize future runs
   - CLI commands for statistics and insights
 - **Structured QC Responses** (v2.1+): Quality control returns JSON with verdicts, issues, and recommendations
-  - Automatic parsing of Claude CLI JSON envelopes and markdown code fences
+  - JSON schema enforcement (v2.8+) guarantees valid response structure
   - Agent suggestions for improved retry success rates
   - Enhanced context loading from plan files and database
 - **Structured Success Criteria** (v2.3+): Per-criterion verification with multi-agent consensus
@@ -110,6 +110,15 @@ Conductor automates complex multi-step implementations by:
   - Automatic validation of all cross-file links during parsing
   - Better control over multi-file execution order
   - Supports complex microservices and multi-component orchestration
+- **Agent Watch Behavioral Analytics** (v2.7+): Observability for Claude Code agents
+  - Parse JSONL session files from `~/.claude/projects/`
+  - Pattern detection, failure prediction, performance scoring
+  - Export to JSON/Markdown/CSV formats
+  - Integration with learning system for comprehensive analytics
+- **JSON Schema Enforcement** (v2.8+): Guaranteed response structure
+  - Uses Claude CLI `--json-schema` flag for agent/QC responses
+  - Eliminates parse failures and retry logic
+  - Simpler, more reliable agent invocations
 
 [⬆ back to top](#table-of-contents)
 
@@ -801,8 +810,7 @@ Conductor is feature-complete with:
   - Pattern detection and analysis
   - Four CLI learning commands
 - **Structured QC responses** (v2.1)
-  - JSON parsing with nested envelope extraction
-  - Markdown code fence stripping
+  - JSON schema enforcement (v2.8+)
   - Detailed issues and recommendations
 - **Inter-retry agent swapping** (v2.1)
   - QC suggests alternative agents on failures
@@ -829,6 +837,14 @@ Conductor is feature-complete with:
   - Automatic dependency context injection
   - Comprehensive cross-component validation
   - Clearer task organization and separation of concerns
+- **Agent Watch behavioral analytics** (v2.7)
+  - JSONL session parsing from `~/.claude/projects/`
+  - Pattern detection and failure prediction
+  - Export to JSON/Markdown/CSV
+- **JSON schema enforcement** (v2.8)
+  - Uses Claude CLI `--json-schema` flag
+  - Guaranteed valid agent/QC responses
+  - Eliminates parse failures and retry logic
 - Comprehensive documentation
 
 [⬆ back to top](#table-of-contents)
