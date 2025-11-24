@@ -399,6 +399,14 @@ func TestParseClaudeOutput(t *testing.T) {
 			wantSessionID: "",
 			wantErr:       false,
 		},
+		{
+			name:          "structured_output from --json-schema",
+			output:        `{"type":"result","result":"","session_id":"test-123","structured_output":{"status":"success","summary":"Task done","output":"Created file","errors":[],"files_modified":["test.go"]}}`,
+			wantContent:   `{"errors":[],"files_modified":["test.go"],"output":"Created file","status":"success","summary":"Task done"}`,
+			wantError:     "",
+			wantSessionID: "test-123",
+			wantErr:       false,
+		},
 	}
 
 	for _, tt := range tests {

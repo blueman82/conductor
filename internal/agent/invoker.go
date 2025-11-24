@@ -87,10 +87,12 @@ func serializeAgentToJSON(agent *Agent) (string, error) {
 }
 
 // PrepareAgentPrompt adds formatting instructions to agent prompts for consistent output
-// Does not include JSON instructions - those are enforced via --json-schema flag
+// Includes minimal JSON instruction - structure is enforced via --json-schema flag
 func PrepareAgentPrompt(prompt string) string {
-	const instructionPrefix = "Do not use markdown formatting or emojis in your response. "
-	return instructionPrefix + prompt
+	const instructionSuffix = `
+
+After completing all work, respond with JSON containing: status ("success" or "failed"), summary, output, errors (array), files_modified (array).`
+	return prompt + instructionSuffix
 }
 
 // parseAgentJSON parses JSON response from agent
@@ -314,7 +316,7 @@ func (inv *Invoker) InvokeWithTimeout(task models.Task, timeout time.Duration) (
 }
 
 // ParseClaudeOutput parses the JSON output from claude CLI
-// Handles both "content" and "result" fields for flexible agent response formats
+// Handles "structured_output" (from --json-schema), "content", and "result" fields
 // If the output is not valid JSON, it returns the raw output as content
 func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
 	// First try to parse as JSON
@@ -334,8 +336,17 @@ func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
 		}
 	}
 
+	// Check for "structured_output" field (used when --json-schema is specified)
+	// This takes highest precedence as it's the schema-validated output
+	if structuredOutput, ok := jsonMap["structured_output"]; ok {
+		// Re-serialize the structured output as JSON string for downstream parsing
+		if outputBytes, err := json.Marshal(structuredOutput); err == nil {
+			result.Content = string(outputBytes)
+			return result, nil
+		}
+	}
+
 	// Check for "result" field (used by some agents like conductor-qc)
-	// This takes precedence as it's a custom field used by our agents
 	if resultField, ok := jsonMap["result"]; ok {
 		if resultStr, ok := resultField.(string); ok {
 			result.Content = resultStr
