@@ -1,0 +1,532 @@
+conductor:
+  worktree_groups:
+    - group_id: "foundation-chain"
+      description: "Tasks 1→2→3→4→5→6 (JSONL parser and session discovery)"
+      tasks: [1, 2, 3, 4, 5, 6]
+      branch: "feature/agent-watch/foundation-chain"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Foundation tasks must be completed before behavioral metrics extraction. Sequential execution ensures consistent JSONL parsing infrastructure."
+      setup_commands: |
+        git worktree add ../wt-agent-watch-foundation -b feature/agent-watch/foundation-chain
+        cd ../wt-agent-watch-foundation
+
+        # Task 1: Create behavioral models package
+        # Task 2: Implement JSONL parser for Claude session files
+        # Task 3: Session discovery from ~/.claude/projects/*/agent-*.jsonl
+        # Task 4: Extract behavioral metrics (tools, bash, files, tokens, cost)
+        # Task 5: Build metrics aggregation pipeline
+        # Task 6: Create comprehensive unit tests for foundation layer
+
+        # Commit after each task
+        git checkout main
+        git merge feature/agent-watch/foundation-chain
+        git push origin main
+
+    - group_id: "database-chain"
+      description: "Tasks 7→8→9 (Database schema and migration)"
+      tasks: [7, 8, 9]
+      branch: "feature/agent-watch/database-chain"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Database schema depends on understanding behavioral metrics (foundation). Can run in parallel with other tasks after foundation complete."
+      setup_commands: |
+        # Wait for foundation chain to merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-database -b feature/agent-watch/database-chain
+        cd ../wt-agent-watch-database
+
+        # Task 7: Expand learning schema with behavioral tables
+        # Task 8: Implement auto-migration for behavioral tables
+        # Task 9: Add behavioral data accessors to learning store
+
+        git checkout main
+        git merge feature/agent-watch/database-chain
+        git push origin main
+
+    - group_id: "integration-chain"
+      description: "Tasks 10→11→12 (QC and executor integration)"
+      tasks: [10, 11, 12]
+      branch: "feature/agent-watch/integration-chain"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "QC integration depends on database layer and behavioral models. Allows agents to receive behavioral context during reviews."
+      setup_commands: |
+        # Wait for database chain to merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-integration -b feature/agent-watch/integration-chain
+        cd ../wt-agent-watch-integration
+
+        # Task 10: Capture session_id from Claude CLI invocation
+        # Task 11: Integrate behavioral metrics into executor for QC context
+        # Task 12: Enhance QC prompts with behavioral analysis context
+
+        git checkout main
+        git merge feature/agent-watch/integration-chain
+        git push origin main
+
+    - group_id: "cli-chain"
+      description: "Tasks 13→14→15→16→17→18→19 (observe command implementation)"
+      tasks: [13, 14, 15, 16, 17, 18, 19]
+      branch: "feature/agent-watch/cli-chain"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "CLI implementation depends on behavioral models and database. Builds observe subcommand with all features from bash Agent Watch."
+      setup_commands: |
+        # Can start after foundation and database chains merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-cli -b feature/agent-watch/cli-chain
+        cd ../wt-agent-watch-cli
+
+        # Task 13: Implement observe root command
+        # Task 14: Add project selection with interactive menu
+        # Task 15: Implement filtering (search, type, errors, time)
+        # Task 16: Add export functionality (JSON, Markdown)
+        # Task 17: Implement pagination and display formatting
+        # Task 18: Add summary statistics and real-time streaming
+        # Task 19: Build comprehensive CLI tests
+
+        git checkout main
+        git merge feature/agent-watch/cli-chain
+        git push origin main
+
+    - group_id: "console-enhancement"
+      description: "Tasks 20→21 (Console logger behavioral metrics)"
+      tasks: [20, 21]
+      branch: "feature/agent-watch/console-enhancement"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Independent enhancement to console output. Can run in parallel with CLI chain."
+      setup_commands: |
+        git worktree add ../wt-agent-watch-console -b feature/agent-watch/console-enhancement
+        cd ../wt-agent-watch-console
+
+        # Task 20: Enhance console logger with behavioral metrics
+        # Task 21: Add colorized output for metrics display
+
+        git checkout main
+        git merge feature/agent-watch/console-enhancement
+        git push origin main
+
+    - group_id: "analytics-chain"
+      description: "Tasks 22→23→24 (Advanced analytics and learning)"
+      tasks: [22, 23, 24]
+      branch: "feature/agent-watch/analytics-chain"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Advanced analytics depend on complete behavioral data collection. Implement pattern detection and adaptive algorithms."
+      setup_commands: |
+        # Wait for all core chains to merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-analytics -b feature/agent-watch/analytics-chain
+        cd ../wt-agent-watch-analytics
+
+        # Task 22: Implement behavior pattern detection algorithms
+        # Task 23: Add failure prediction based on tool usage patterns
+        # Task 24: Build agent performance scoring system
+
+        git checkout main
+        git merge feature/agent-watch/analytics-chain
+        git push origin main
+
+    - group_id: "testing-docs"
+      description: "Tasks 25→26 (Integration tests and documentation)"
+      tasks: [25, 26]
+      branch: "feature/agent-watch/testing-docs"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Final integration tests and documentation depend on all core implementation complete."
+      setup_commands: |
+        # Wait for all chains to merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-testing -b feature/agent-watch/testing-docs
+        cd ../wt-agent-watch-testing
+
+        # Task 25: Create comprehensive integration tests
+        # Task 26: Write Agent Watch documentation and examples
+
+        git checkout main
+        git merge feature/agent-watch/testing-docs
+        git push origin main
+
+  default_agent: "golang-pro"
+  max_concurrency: 3
+
+  quality_control:
+    enabled: true
+    retry_on_red: 2
+    agents:
+      mode: "intelligent"
+      max_agents: 2
+
+plan:
+  metadata:
+    feature_name: "Agent Watch Integration - Session Tracking and Behavioral Analytics"
+    created: "2025-11-24"
+    target: "Integrate Agent Watch as native Go feature with session tracking, behavioral metrics extraction, real-time streaming, and QC enhancement"
+    estimated_tasks: 26
+    estimated_time: "48-64 hours"
+
+  context:
+    framework: "Go 1.25.4"
+    architecture: "Clean Architecture with dependency injection"
+    test_framework: "Go testing package with testify"
+    other_context:
+      - "Conductor v2.5.2 with 86%+ test coverage"
+      - "Claude CLI provides session_id in JSON output"
+      - "Agent Watch bash features: project menu, filtering, exports, pagination, stats, streaming"
+      - "JSONL files located at ~/.claude/projects/{project}/agent-{session-id}.jsonl"
+      - "TDD mandatory: tests before implementation"
+      - "Following existing code patterns from parser, executor, learning packages"
+    expectations:
+      - "Achieve 80%+ test coverage for new behavioral package"
+      - "Maintain backward compatibility with existing functionality"
+      - "Follow go fmt and golangci-lint standards"
+      - "Implement graceful degradation if session files unavailable"
+      - "Use table-driven tests with subtests pattern"
+
+  tasks:
+    - task_number: 1
+      name: "Create behavioral models package with core data structures"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/models.go"
+        - "internal/behavioral/doc.go"
+      depends_on: []
+      estimated_time: "45m"
+
+      success_criteria:
+        - "Session struct contains id, project, timestamp, status fields"
+        - "BehavioralMetrics struct has tool_executions, bash_commands, file_operations, token_usage"
+        - "ToolExecution struct captures tool name, count, success rate, error rate"
+        - "BashCommand struct tracks command, exit_code, output length"
+        - "FileOperation struct records operation type (create/modify/delete), file path, success"
+        - "TokenUsage struct contains input_tokens, output_tokens, cost_usd"
+        - "All structs have proper JSON tags for serialization"
+        - "Comprehensive godoc comments for all exported types"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v"
+        - "go test ./internal/behavioral/... -run TestModels"
+
+      description: |
+        Create foundation data structures for behavioral metrics extraction.
+        These models represent the schema extracted from JSONL session files.
+
+      implementation:
+        approach: |
+          Define Go structs representing JSONL data with proper JSON serialization tags.
+          Include validation methods and helper functions for metrics calculation.
+          Follow conductor's models pattern from internal/models/.
+
+        code_structure: |
+          internal/behavioral/models.go:
+            - Session struct (id, project, timestamp, status, agent_name)
+            - BehavioralMetrics struct (aggregate container)
+            - ToolExecution struct (name, count, success_rate, error_rate, avg_duration)
+            - BashCommand struct (command, exit_code, output_length, duration)
+            - FileOperation struct (type, path, size_bytes, success)
+            - TokenUsage struct (input, output, cost_usd, model_name)
+            - Validation methods (Validate())
+            - Calculation helpers (CalculateTotalCost(), AggregateMetrics())
+
+        key_points:
+          - point: "Mirror JSONL schema exactly"
+            details: "Extract from ~/.claude/projects/*/agent-*.jsonl structure"
+          - point: "Use consistent naming"
+            details: "Match bash Agent Watch variable names for parity"
+          - point: "Add calculation helpers"
+            details: "Include methods for cost, duration, success rate calculations"
+
+      commit:
+        type: "feat"
+        message: "feat: add behavioral models package with core data structures"
+
+    - task_number: 2
+      name: "Implement JSONL parser for Claude session files"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/parser.go"
+        - "internal/behavioral/parser_test.go"
+        - "internal/behavioral/testdata/sample-session.jsonl"
+      depends_on: [1]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Parser reads JSONL files line by line"
+        - "Each line parsed as JSON event with type field"
+        - "Supports event types: tool_call, bash_command, file_operation, token_usage"
+        - "Handles malformed lines gracefully (skip with warning)"
+        - "Returns SessionData struct with all parsed events"
+        - "Parser tests cover >90% of parsing logic"
+        - "Test data includes sample JSONL with various event types"
+        - "Error handling for missing files and invalid JSON"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v -run TestJSONL"
+        - "go test ./internal/behavioral/... -run TestParser"
+
+      description: |
+        Parse JSONL session files from ~/.claude/projects to extract raw events.
+        Implement robust parsing with error handling and event type discrimination.
+
+      implementation:
+        approach: |
+          Read JSONL file line-by-line. Each line is JSON event with type field.
+          Parse into appropriate event struct based on type. Collect all events
+          into SessionData container. Handle errors gracefully with logging.
+
+        code_structure: |
+          internal/behavioral/parser.go:
+            - SessionData struct (session info + events array)
+            - Event interface (common for all event types)
+            - ToolCallEvent, BashCommandEvent, FileOperationEvent, TokenUsageEvent structs
+            - ParseSessionFile(filepath) (*SessionData, error)
+            - parseEventLine(line string) (Event, error)
+            - Validation for event completeness
+
+        key_points:
+          - point: "Line-by-line streaming"
+            details: "Don't load entire file in memory; stream lines"
+          - point: "Type discrimination"
+            details: "Each event has 'type' field routing to specific parser"
+          - point: "Graceful degradation"
+            details: "Skip malformed lines, log warnings, continue parsing"
+
+      commit:
+        type: "feat"
+        message: "feat: implement JSONL parser for session files"
+
+    - task_number: 3
+      name: "Implement session discovery from ~/.claude/projects"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/discovery.go"
+        - "internal/behavioral/discovery_test.go"
+        - "internal/behavioral/testdata/mock-projects"
+      depends_on: [1, 2]
+      estimated_time: "1h"
+
+      success_criteria:
+        - "Scans ~/.claude/projects for agent-*.jsonl files"
+        - "Returns list of SessionInfo structs with project, filename, session_id"
+        - "Handles missing projects directory gracefully"
+        - "Filters valid session files (agent-{uuid}.jsonl pattern)"
+        - "Returns sessions sorted by timestamp (newest first)"
+        - "Extracts session_id from filename"
+        - "Test coverage >85%"
+        - "Performs minimal I/O (stat only, no full file reads)"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v -run TestDiscovery"
+        - "go test ./internal/behavioral/... -run TestSessionInfo"
+
+      description: |
+        Discover all Claude session JSONL files from ~/.claude/projects directory.
+        Return sorted list of sessions for selection and analysis.
+
+      implementation:
+        approach: |
+          Walk ~/.claude/projects directory. Find all agent-*.jsonl files.
+          Extract session_id and project from path. Return as sorted list.
+          Use filepath.Walk or os.ReadDir for directory traversal.
+
+        code_structure: |
+          internal/behavioral/discovery.go:
+            - SessionInfo struct (project, filename, session_id, created_at, file_size)
+            - DiscoverSessions(baseDir string) ([]SessionInfo, error)
+            - DiscoverProjectSessions(project string) ([]SessionInfo, error)
+            - extractSessionID(filename string) (string, error)
+            - parseSessionPath(path string) (*SessionInfo, error)
+            - isValidSessionFile(filename string) bool
+
+        key_points:
+          - point: "Minimal I/O"
+            details: "Only stat files; don't read full content in discovery"
+          - point: "Pattern matching"
+            details: "Match agent-{uuid}.jsonl pattern for valid sessions"
+          - point: "Path handling"
+            details: "Handle ~ expansion; use os.UserHomeDir()"
+
+      commit:
+        type: "feat"
+        message: "feat: implement session discovery from ~/.claude/projects"
+
+    - task_number: 4
+      name: "Extract behavioral metrics from parsed JSONL events"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/extractor.go"
+        - "internal/behavioral/extractor_test.go"
+      depends_on: [2, 3]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Aggregates tool_call events into ToolExecution metrics"
+        - "Aggregates bash_command events into BashCommand metrics"
+        - "Aggregates file_operation events into FileOperation metrics"
+        - "Sums token_usage events for total cost calculation"
+        - "Calculates success rates from event counts"
+        - "Handles missing/incomplete events"
+        - "Returns BehavioralMetrics struct with aggregated data"
+        - "Test coverage >85% including edge cases"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v -run TestExtract"
+        - "go test ./internal/behavioral/... -run TestMetrics"
+
+      description: |
+        Extract and aggregate behavioral metrics from parsed JSONL events.
+        Transform raw events into actionable metrics for QC and analytics.
+
+      implementation:
+        approach: |
+          Process SessionData events. Group by event type. For each type,
+          aggregate into metrics. Calculate rates, costs, and summary stats.
+          Handle missing values gracefully.
+
+        code_structure: |
+          internal/behavioral/extractor.go:
+            - ExtractMetrics(sessionData *SessionData) *BehavioralMetrics
+            - aggregateToolExecutions(events []ToolCallEvent) []ToolExecution
+            - aggregateBashCommands(events []BashCommandEvent) []BashCommand
+            - aggregateFileOperations(events []FileOperationEvent) []FileOperation
+            - calculateTokenCost(tokens int, model string) float64
+            - calculateSuccessRate(successes, total int) float64
+            - calculateAverageDuration(events []Event) time.Duration
+
+        key_points:
+          - point: "Aggregation logic"
+            details: "Group identical tools/commands; sum counts; calculate rates"
+          - point: "Cost calculation"
+            details: "Use standard token pricing for models (GPT-4: $15/$45 per 1M)"
+          - point: "Error resilience"
+            details: "Missing event fields don't crash; use zero values"
+
+      commit:
+        type: "feat"
+        message: "feat: extract behavioral metrics from parsed events"
+
+    - task_number: 5
+      name: "Build metrics aggregation pipeline with caching"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/aggregator.go"
+        - "internal/behavioral/aggregator_test.go"
+      depends_on: [3, 4]
+      estimated_time: "1h"
+
+      success_criteria:
+        - "Aggregator loads and caches session metrics"
+        - "Supports filtering by project, time range, agent name"
+        - "Implements LRU cache for parsed sessions (limit: 50)"
+        - "Provides methods: GetSessionMetrics(), ListSessions(), GetProjectMetrics()"
+        - "Cache invalidation on file modification"
+        - "Thread-safe with sync.RWMutex"
+        - "Test coverage >80%"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v -run TestAggregator"
+        - "go test ./internal/behavioral/... -run TestCache"
+
+      description: |
+        Implement aggregation pipeline with caching for performance.
+        Avoid re-parsing JSONL files on every request.
+
+      implementation:
+        approach: |
+          Create Aggregator struct holding session cache. LoadSession opens
+          JSONL, parses, extracts metrics, caches result. Subsequent requests
+          hit cache. Invalidate cache on file change (use mtime).
+
+        code_structure: |
+          internal/behavioral/aggregator.go:
+            - Aggregator struct (cache map, locks, max_cache_size)
+            - NewAggregator(maxCacheSize int) *Aggregator
+            - LoadSession(filePath string) (*BehavioralMetrics, error)
+            - GetSessionMetrics(project, session_id string) (*BehavioralMetrics, error)
+            - ListSessions(project string) ([]SessionInfo, error)
+            - GetProjectMetrics(project string) (*AggregateProjectMetrics, error)
+            - InvalidateCache(filePath string)
+            - Cache entry with mtime tracking
+
+        key_points:
+          - point: "LRU eviction"
+            details: "Limit cache to 50 sessions; evict oldest on overflow"
+          - point: "File modification detection"
+            details: "Check mtime; invalidate cache if file changed"
+          - point: "Thread safety"
+            details: "Use sync.RWMutex for concurrent access"
+
+      commit:
+        type: "feat"
+        message: "feat: implement metrics aggregation pipeline with caching"
+
+    - task_number: 6
+      name: "Create comprehensive foundation layer tests"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/integration_test.go"
+        - "internal/behavioral/testdata/full-session-example.jsonl"
+        - "internal/behavioral/testdata/malformed-events.jsonl"
+      depends_on: [1, 2, 3, 4, 5]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Integration tests cover end-to-end flow (discovery → parse → extract → aggregate)"
+        - "Tests for edge cases: missing files, empty sessions, malformed JSON"
+        - "Tests for concurrent cache access"
+        - "Test fixtures with realistic JSONL data"
+        - "All tests pass with -race flag"
+        - "Coverage for behavioral package >85%"
+        - "Benchmarks for parsing and aggregation"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v"
+        - "go test ./internal/behavioral/... -race"
+        - "go test ./internal/behavioral/... -benchmem -bench ."
+
+      description: |
+        Write comprehensive tests for foundation behavioral package.
+        Cover integration between components and edge cases.
+
+      implementation:
+        approach: |
+          Write table-driven integration tests. Test full flow from session
+          discovery through metrics extraction. Include edge cases and
+          concurrent access patterns. Add benchmarks for hot paths.
+
+        code_structure: |
+          internal/behavioral/integration_test.go:
+            - TestFullSessionFlow() - discovery → parse → extract → aggregate
+            - TestMalformedEvents() - graceful handling
+            - TestConcurrentAccess() - race condition testing
+            - TestCachePerformance() - benchmark cache hits/misses
+            - BenchmarkParseSession()
+            - BenchmarkExtractMetrics()
+            - Test fixtures in testdata/
+
+        key_points:
+          - point: "Table-driven tests"
+            details: "Use subtests (t.Run) for multiple scenarios"
+          - point: "Race detection"
+            details: "Run all tests with -race flag"
+          - point: "Realistic data"
+            details: "Use actual JSONL structure from Claude CLI"
+
+      commit:
+        type: "test"
+        message: "test: add comprehensive foundation layer tests for behavioral package"
+
+plan_continuation_file: "agent-watch-integration-part2.yaml"

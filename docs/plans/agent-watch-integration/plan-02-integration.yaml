@@ -1,0 +1,404 @@
+conductor:
+  worktree_groups:
+    - group_id: "database-chain"
+      description: "Tasks 7→8→9 (Database schema and migration)"
+      tasks: [7, 8, 9]
+      branch: "feature/agent-watch/database-chain"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Database schema depends on understanding behavioral metrics (foundation). Can run in parallel with other tasks after foundation complete."
+      setup_commands: |
+        # Wait for foundation chain to merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-database -b feature/agent-watch/database-chain
+        cd ../wt-agent-watch-database
+
+        # Task 7: Expand learning schema with behavioral tables
+        # Task 8: Implement auto-migration for behavioral tables
+        # Task 9: Add behavioral data accessors to learning store
+
+        git checkout main
+        git merge feature/agent-watch/database-chain
+        git push origin main
+
+  default_agent: "golang-pro"
+  max_concurrency: 3
+
+  quality_control:
+    enabled: true
+    retry_on_red: 2
+    agents:
+      mode: "intelligent"
+      max_agents: 2
+
+plan:
+  metadata:
+    feature_name: "Agent Watch Integration Part 2 - Database and QC Integration"
+    created: "2025-11-24"
+    target: "Expand learning database schema, implement auto-migration, integrate behavioral metrics into QC"
+    estimated_tasks: 12
+    estimated_time: "24-32 hours"
+
+  context:
+    framework: "Go 1.25.4"
+    architecture: "Clean Architecture with dependency injection"
+    test_framework: "Go testing package with testify"
+    other_context:
+      - "Conductor v2.5.2 with existing SQLite learning database"
+      - "Schema auto-migration via schema.sql embedded file"
+      - "Behavioral models defined in Part 1"
+      - "QC system uses Claude JSON responses with structured criteria"
+      - "Session tracking via session_id from Claude CLI JSON output"
+    expectations:
+      - "Maintain backward compatibility with existing learning schema"
+      - "Implement idempotent migrations"
+      - "Test database operations with in-memory SQLite"
+      - "Follow existing store patterns from internal/learning/"
+
+  tasks:
+    - task_number: 7
+      name: "Expand learning schema with behavioral tables"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/learning/schema.sql"
+        - "internal/learning/schema_test.go"
+      depends_on: []
+      estimated_time: "1h 15m"
+
+      success_criteria:
+        - "Schema file updated with behavioral tables"
+        - "Tables: behavioral_sessions, tool_executions, bash_commands, file_operations, token_usage"
+        - "behavioral_sessions: id, run_id, task_id, session_id, project, agent, start_time, end_time"
+        - "tool_executions: id, session_id, tool_name, call_count, success_count, error_count, avg_duration_ms"
+        - "bash_commands: id, session_id, command, exit_code, output_length, duration_ms"
+        - "file_operations: id, session_id, operation_type, file_path, size_bytes, success"
+        - "token_usage: id, session_id, input_tokens, output_tokens, cost_usd, model_name"
+        - "Foreign key constraints linking to main task_executions table"
+        - "Indexes on session_id, task_id, run_id for query performance"
+        - "Schema remains backward compatible (no breaking changes)"
+
+      test_commands:
+        - "go test ./internal/learning/... -v -run TestSchema"
+        - "sqlite3 :memory: < internal/learning/schema.sql"
+
+      description: |
+        Extend the learning database schema to support behavioral metrics storage.
+        Add tables for sessions, tool execution, bash commands, file operations, and tokens.
+
+      implementation:
+        approach: |
+          Append behavioral tables to existing schema.sql. Define foreign key
+          relationships to task_executions. Add indexes for query performance.
+          Ensure schema is idempotent (use CREATE TABLE IF NOT EXISTS).
+
+        code_structure: |
+          internal/learning/schema.sql additions:
+            - CREATE TABLE behavioral_sessions (...)
+            - CREATE TABLE tool_executions (...)
+            - CREATE TABLE bash_commands (...)
+            - CREATE TABLE file_operations (...)
+            - CREATE TABLE token_usage (...)
+            - CREATE INDEX idx_behavioral_sessions_task_id (...)
+            - CREATE INDEX idx_tool_executions_session_id (...)
+            - etc.
+
+        key_points:
+          - point: "Idempotent schema"
+            details: "Use IF NOT EXISTS to allow re-application"
+          - point: "Foreign keys"
+            details: "Link behavioral data to task_executions(id)"
+          - point: "Indexes for queries"
+            details: "Index session_id, task_id for filtering/aggregation"
+
+      commit:
+        type: "feat"
+        message: "feat: expand learning schema with behavioral tables"
+
+    - task_number: 8
+      name: "Implement auto-migration for behavioral tables"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/learning/store.go"
+        - "internal/learning/migration.go"
+        - "internal/learning/migration_test.go"
+      depends_on: [7]
+      estimated_time: "1h"
+
+      success_criteria:
+        - "Store.initSchema() applies behavioral table schema on startup"
+        - "Migrations are idempotent (safe to run multiple times)"
+        - "Version tracking for schema migrations"
+        - "Handles existing databases without data loss"
+        - "Tests verify migration on fresh and existing databases"
+        - "Migration errors are logged with context"
+        - "Test coverage >85%"
+
+      test_commands:
+        - "go test ./internal/learning/... -v -run TestMigration"
+        - "go test ./internal/learning/... -run TestAutoInit"
+
+      description: |
+        Implement automatic migration system for behavioral tables.
+        Ensure safe schema application on both fresh and existing databases.
+
+      implementation:
+        approach: |
+          Enhance Store.initSchema() to detect and apply behavioral table
+          schema. Use simple versioning approach: track applied migrations
+          in schema_versions table. Apply pending migrations sequentially.
+
+        code_structure: |
+          internal/learning/store.go:
+            - Enhanced initSchema() method
+            - Checks for behavioral tables
+            - Applies missing table definitions
+
+          internal/learning/migration.go:
+            - MigrationVersion struct
+            - ApplyMigrations() func
+            - GetAppliedVersions() func
+            - IsMigrationApplied() func
+
+        key_points:
+          - point: "Idempotency"
+            details: "Safe to call initSchema() multiple times"
+          - point: "Version tracking"
+            details: "Know which migrations have been applied"
+          - point: "Error handling"
+            details: "Log migration errors without crashing"
+
+      commit:
+        type: "feat"
+        message: "feat: implement auto-migration for behavioral tables"
+
+    - task_number: 9
+      name: "Add behavioral data accessors to learning store"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/learning/store.go"
+        - "internal/learning/store_test.go"
+      depends_on: [8]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Methods: RecordSessionMetrics(), GetSessionMetrics(), GetTaskBehavior()"
+        - "RecordSessionMetrics(runID, taskID, sessionID, metrics) error"
+        - "GetSessionMetrics(sessionID) (*BehavioralMetrics, error)"
+        - "GetTaskBehavior(taskID) (*AggregatedBehavior, error)"
+        - "Efficient queries with proper indexing"
+        - "Transaction support for atomic recording"
+        - "Tests verify CRUD operations and edge cases"
+        - "Test coverage >80%"
+
+      test_commands:
+        - "go test ./internal/learning/... -v -run TestStore"
+        - "go test ./internal/learning/... -run TestBehavioral"
+
+      description: |
+        Implement accessors for behavioral metrics in learning store.
+        Allow recording and querying behavioral data from database.
+
+      implementation:
+        approach: |
+          Add methods to Store to record and retrieve behavioral metrics.
+          Use prepared statements for performance. Implement transactions
+          for atomic operations. Handle NULL values gracefully.
+
+        code_structure: |
+          internal/learning/store.go additions:
+            - RecordSessionMetrics() - insert behavioral data
+            - GetSessionMetrics() - retrieve by session_id
+            - GetTaskBehavior() - aggregate by task_id
+            - GetProjectBehavior() - aggregate by project
+            - DeleteOldBehavioralData() - cleanup (optional)
+            - Prepared statements for efficiency
+
+        key_points:
+          - point: "Transaction support"
+            details: "Atomic recording of session + metrics"
+          - point: "Prepared statements"
+            details: "Reuse for performance"
+          - point: "Efficient queries"
+            details: "Join with task_executions; use indexes"
+
+      commit:
+        type: "feat"
+        message: "feat: add behavioral data accessors to learning store"
+
+    - task_number: 10
+      name: "Capture session_id from Claude CLI invocation response"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/agent/invoker.go"
+        - "internal/agent/invoker_test.go"
+        - "internal/models/response.go"
+      depends_on: [7]
+      estimated_time: "1h"
+
+      success_criteria:
+        - "Claude CLI JSON response includes session_id field"
+        - "AgentResponse struct has SessionID field"
+        - "InvocationResult captures session_id"
+        - "Session file path derivable from session_id (~/claude/projects/{project}/agent-{session_id}.jsonl)"
+        - "Graceful handling if session_id missing (log warning, continue)"
+        - "Tests verify session_id extraction and storage"
+        - "Backward compatible with existing response handling"
+
+      test_commands:
+        - "go test ./internal/agent/... -v -run TestInvocation"
+        - "go test ./internal/models/... -run TestResponse"
+
+      description: |
+        Enhance invoker to extract and store session_id from Claude CLI JSON response.
+        Enable subsequent behavioral metrics extraction.
+
+      implementation:
+        approach: |
+          Add SessionID field to AgentResponse. Extract from Claude JSON output.
+          Store in InvocationResult. Pass through executor for behavioral collection.
+
+        code_structure: |
+          internal/models/response.go:
+            - Add SessionID field to AgentResponse struct
+            - JSON tag: "session_id"
+
+          internal/agent/invoker.go:
+            - Extract session_id in ParseClaudeOutput()
+            - Set in AgentResponse
+            - Log session_id in invoker output
+
+        key_points:
+          - point: "JSON field"
+            details: "session_id comes from Claude CLI JSON"
+          - point: "Storage"
+            details: "Keep in AgentResponse and InvocationResult"
+          - point: "Graceful missing"
+            details: "If absent, log warning but don't fail"
+
+      commit:
+        type: "feat"
+        message: "feat: capture session_id from Claude CLI invocation response"
+
+    - task_number: 11
+      name: "Integrate behavioral metrics into executor for QC context"
+      type: "integration"
+      agent: "golang-pro"
+      files:
+        - "internal/executor/task.go"
+        - "internal/executor/executor_test.go"
+        - "internal/executor/behavior_integration_test.go"
+      depends_on: [9, 10]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "After task invocation, behavioral metrics loaded from JSONL"
+        - "Session metrics stored in learning database"
+        - "Metrics passed to QC controller for context injection"
+        - "Graceful handling if JSONL file unavailable"
+        - "No blocking of task execution if metrics unavailable"
+        - "Tests verify behavior collection and storage"
+        - "Integration tests show metrics flow through executor"
+
+      test_commands:
+        - "go test ./internal/executor/... -v -run TestBehavior"
+        - "go test ./internal/executor/... -run TestIntegration"
+
+      description: |
+        Integrate behavioral metrics extraction into task executor.
+        After agent invocation, load session JSONL and extract metrics.
+        Store in database and pass to QC.
+
+      implementation:
+        approach: |
+          In executor's executeTask() flow: after agent invocation,
+          extract session_id. Load behavioral metrics from JSONL.
+          Store in database. Inject into QC context.
+
+        code_structure: |
+          internal/executor/task.go:
+            - executeTask() enhanced with post-invocation behavior collection
+            - collectBehavioralMetrics(session_id, task, invoker) (*BehavioralMetrics, error)
+            - storeBehavioralMetrics() integration
+            - Pass metrics to QC review
+
+          internal/executor/behavior_integration.go:
+            - BehaviorCollector struct
+            - LoadSessionMetrics() method
+            - AggregateMetrics() helper
+
+        key_points:
+          - point: "Post-invocation hook"
+            details: "After agent completes, before QC"
+          - point: "Graceful degradation"
+            details: "Missing JSONL doesn't block task"
+          - point: "Database storage"
+            details: "Record metrics for learning and audit"
+
+      commit:
+        type: "feat"
+        message: "feat: integrate behavioral metrics collection into executor"
+
+    - task_number: 12
+      name: "Enhance QC prompts with behavioral analysis context"
+      type: "integration"
+      agent: "golang-pro"
+      files:
+        - "internal/executor/qc.go"
+        - "internal/executor/qc_test.go"
+        - "internal/executor/behavior_context.go"
+      depends_on: [11]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "QC prompts include behavioral metrics summary"
+        - "Context shows tool usage patterns, bash commands, file operations"
+        - "Highlights anomalies (excessive tool calls, high error rates)"
+        - "Includes cost summary (tokens, estimated spend)"
+        - "Behavioral context formatted as readable section in prompt"
+        - "QC agents can make informed decisions based on behavior"
+        - "Tests verify context generation and injection"
+
+      test_commands:
+        - "go test ./internal/executor/... -v -run TestQCBehavior"
+        - "go test ./internal/executor/... -run TestContextInjection"
+
+      description: |
+        Enhance QC prompts to include behavioral metrics context.
+        Allow QC agents to assess task completion considering behavior patterns.
+
+      implementation:
+        approach: |
+          Create behavior context formatter. Inject into QC review prompt
+          after regular criteria checks. Format metrics as readable summary.
+          Highlight key patterns and anomalies.
+
+        code_structure: |
+          internal/executor/behavior_context.go:
+            - FormatBehaviorContext(*BehavioralMetrics) string
+            - IdentifyAnomalies() []string
+            - SummarizeCost() string
+            - SummarizeToolUsage() string
+
+          internal/executor/qc.go:
+            - Enhanced Review() method
+            - injectBehaviorContext() helper
+            - buildBehaviorPromptSection() func
+
+        key_points:
+          - point: "Readable format"
+            details: "Format metrics as human-readable text"
+          - point: "Anomaly detection"
+            details: "Flag unusual patterns (high errors, extreme costs)"
+          - point: "Integrated seamlessly"
+            details: "Append to existing prompt naturally"
+
+      commit:
+        type: "feat"
+        message: "feat: enhance QC prompts with behavioral analysis context"
+
+plan_continuation_file: "agent-watch-integration-part3.yaml"

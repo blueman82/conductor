@@ -1,0 +1,1019 @@
+conductor:
+  worktree_groups:
+    - group_id: "cli-chain"
+      description: "Tasks 13→14→15→16→17→18→19 (observe command implementation)"
+      tasks: [13, 14, 15, 16, 17, 18, 19]
+      branch: "feature/agent-watch/cli-chain"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "CLI implementation depends on behavioral models and database. Builds observe subcommand with all features from bash Agent Watch."
+      setup_commands: |
+        # Can start after foundation and database chains merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-cli -b feature/agent-watch/cli-chain
+        cd ../wt-agent-watch-cli
+
+        # Task 13: Implement observe root command
+        # Task 14: Add project selection with interactive menu
+        # Task 15: Implement filtering (search, type, errors, time)
+        # Task 16: Add export functionality (JSON, Markdown)
+        # Task 17: Implement pagination and display formatting
+        # Task 18: Add summary statistics and real-time streaming
+        # Task 19: Build comprehensive CLI tests
+
+        git checkout main
+        git merge feature/agent-watch/cli-chain
+        git push origin main
+
+    - group_id: "console-enhancement"
+      description: "Tasks 20→21 (Console logger behavioral metrics)"
+      tasks: [20, 21]
+      branch: "feature/agent-watch/console-enhancement"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Independent enhancement to console output. Can run in parallel with CLI chain."
+      setup_commands: |
+        git worktree add ../wt-agent-watch-console -b feature/agent-watch/console-enhancement
+        cd ../wt-agent-watch-console
+
+        # Task 20: Enhance console logger with behavioral metrics
+        # Task 21: Add colorized output for metrics display
+
+        git checkout main
+        git merge feature/agent-watch/console-enhancement
+        git push origin main
+
+    - group_id: "analytics-chain"
+      description: "Tasks 22→23→24 (Advanced analytics and learning)"
+      tasks: [22, 23, 24]
+      branch: "feature/agent-watch/analytics-chain"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Advanced analytics depend on complete behavioral data collection. Implement pattern detection and adaptive algorithms."
+      setup_commands: |
+        # Wait for CLI chain to merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-analytics -b feature/agent-watch/analytics-chain
+        cd ../wt-agent-watch-analytics
+
+        # Task 22: Implement behavior pattern detection algorithms
+        # Task 23: Add failure prediction based on tool usage patterns
+        # Task 24: Build agent performance scoring system
+
+        git checkout main
+        git merge feature/agent-watch/analytics-chain
+        git push origin main
+
+    - group_id: "testing-docs"
+      description: "Tasks 25→26 (Integration tests and documentation)"
+      tasks: [25, 26]
+      branch: "feature/agent-watch/testing-docs"
+      execution_model: "sequential"
+      isolation: "separate-worktree"
+      rationale: "Final integration tests and documentation depend on all core implementation complete."
+      setup_commands: |
+        # Wait for all chains to merge
+        git checkout main
+        git pull origin main
+        git worktree add ../wt-agent-watch-testing -b feature/agent-watch/testing-docs
+        cd ../wt-agent-watch-testing
+
+        # Task 25: Create comprehensive integration tests
+        # Task 26: Write Agent Watch documentation and examples
+
+        git checkout main
+        git merge feature/agent-watch/testing-docs
+        git push origin main
+
+  default_agent: "golang-pro"
+  max_concurrency: 3
+
+  quality_control:
+    enabled: true
+    retry_on_red: 2
+    agents:
+      mode: "intelligent"
+      max_agents: 2
+
+plan:
+  metadata:
+    feature_name: "Agent Watch Integration Part 3 - CLI, Analytics, and Documentation"
+    created: "2025-11-24"
+    target: "Complete observe CLI command, advanced analytics, and comprehensive documentation"
+    estimated_tasks: 14
+    estimated_time: "32-40 hours"
+
+  context:
+    framework: "Go 1.25.4"
+    architecture: "Clean Architecture with dependency injection"
+    test_framework: "Go testing package with testify"
+    other_context:
+      - "Behavioral models and database layer complete from Parts 1-2"
+      - "Bash Agent Watch reference: /Users/harrison/Github/agent-watch/view-agents.sh"
+      - "CLI framework: spf13/cobra (used throughout Conductor)"
+      - "Colorization: fatih/color (already in go.mod)"
+      - "Pagination: 50 agents per page (matches bash implementation)"
+    expectations:
+      - "Full feature parity with bash Agent Watch"
+      - "Interactive menus for project selection"
+      - "Multiple filtering options (search, type, errors, time ranges)"
+      - "Export formats: JSON, Markdown"
+      - "Real-time streaming (optional, gated by flag)"
+      - "Comprehensive test coverage >80%"
+
+  tasks:
+    - task_number: 13
+      name: "Implement observe root command"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe.go"
+        - "internal/cmd/observe_test.go"
+      depends_on: []
+      estimated_time: "1h"
+
+      success_criteria:
+        - "observe subcommand registered in root command"
+        - "observe --help shows all available subcommands"
+        - "Default action: display interactive project menu"
+        - "Subcommands: project, session, list, export, stats, stream"
+        - "Global flags: --project, --session, --filter-type, --errors-only, --time-range"
+        - "Proper error handling and user feedback"
+        - "Tests verify command registration and help output"
+
+      test_commands:
+        - "go test ./internal/cmd/... -v -run TestObserve"
+        - "go run ./cmd/conductor observe --help"
+
+      description: |
+        Create observe root command as entry point for Agent Watch functionality.
+        Implement subcommand structure and global flags.
+
+      implementation:
+        approach: |
+          Register observe command with cobra. Define subcommands for specific
+          operations. Implement global flag parsing. Default to interactive mode.
+
+        code_structure: |
+          internal/cmd/observe.go:
+            - NewObserveCommand() *cobra.Command
+            - Root observe command with run function
+            - Subcommands: NewObserveProjectCmd(), NewObserveSessionCmd(), etc.
+            - Global flags: project, session, filter-type, errors-only, time-range
+            - Helper functions for flag parsing and validation
+
+        key_points:
+          - point: "Follow Cobra patterns"
+            details: "Match structure of learning.go command"
+          - point: "Subcommand structure"
+            details: "Each feature as separate subcommand"
+          - point: "Interactive default"
+            details: "If no args, show project selection menu"
+
+      commit:
+        type: "feat"
+        message: "feat: implement observe root command with subcommand structure"
+
+    - task_number: 14
+      name: "Add project selection with interactive menu"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe_menu.go"
+        - "internal/cmd/observe_menu_test.go"
+        - "internal/behavioral/project.go"
+      depends_on: [13]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Interactive menu lists available projects from ~/.claude/projects"
+        - "User can select project with arrow keys or number input"
+        - "Menu shows project name, session count, total files"
+        - "Pagination if >20 projects (menu splits across pages)"
+        - "ESC/Ctrl-C to exit menu"
+        - "Colorized output for readability"
+        - "Tests verify menu rendering and selection logic"
+
+      test_commands:
+        - "go test ./internal/cmd/... -v -run TestMenu"
+        - "go test ./internal/behavioral/... -run TestProject"
+
+      description: |
+        Implement interactive project selection menu.
+        Display available projects and allow user selection via keyboard.
+
+      implementation:
+        approach: |
+          List projects from ~/.claude/projects. Display in formatted menu
+          with pagination. Read keyboard input for selection. Return chosen
+          project. Mock input for testing.
+
+        code_structure: |
+          internal/cmd/observe_menu.go:
+            - DisplayProjectMenu() (string, error)
+            - readUserInput() rune
+            - formatMenuLine(project, index) string
+            - handlePagination(projects, pageSize) [][]ProjectInfo
+
+          internal/behavioral/project.go:
+            - ProjectInfo struct (name, session_count, total_size)
+            - ListProjects() ([]ProjectInfo, error)
+            - GetProjectStats() (*ProjectStats, error)
+
+        key_points:
+          - point: "Interactive I/O"
+            details: "Use bufio.Reader for user input"
+          - point: "Colorization"
+            details: "Use fatih/color for highlights"
+          - point: "Pagination"
+            details: "Handle large project lists"
+
+      commit:
+        type: "feat"
+        message: "feat: add interactive project selection menu"
+
+    - task_number: 15
+      name: "Implement filtering (search, type, errors, time range)"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe_filter.go"
+        - "internal/cmd/observe_filter_test.go"
+        - "internal/behavioral/filter.go"
+      depends_on: [13]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Filter by search term (agent name, tool name, command substring)"
+        - "Filter by event type (tool_call, bash_command, file_operation)"
+        - "Filter errors only (exit_code != 0, failures)"
+        - "Filter by time range (today, last_hour, custom dates)"
+        - "Combine filters (AND logic)"
+        - "Efficient filtering with early termination"
+        - "Tests for all filter combinations"
+        - "Clear error messages for invalid filters"
+
+      test_commands:
+        - "go test ./internal/cmd/... -v -run TestFilter"
+        - "go test ./internal/behavioral/... -run TestFilter"
+
+      description: |
+        Implement flexible filtering system for behavioral metrics.
+        Support search, type, error, and time range filters.
+
+      implementation:
+        approach: |
+          Create Filter struct with optional fields for each dimension.
+          Implement predicate function for filtering metrics. Support
+          combining multiple filters with AND logic.
+
+        code_structure: |
+          internal/behavioral/filter.go:
+            - FilterCriteria struct (search, event_type, errors_only, since, until)
+            - ApplyFilters(metrics []BehavioralMetrics, criteria FilterCriteria) []BehavioralMetrics
+            - matchesFilter(metric, criteria) bool
+
+          internal/cmd/observe_filter.go:
+            - ParseFilterFlags() FilterCriteria
+            - ValidateTimeRange() error
+            - BuildFilterQuery() string
+
+        key_points:
+          - point: "AND logic"
+            details: "All specified filters must match"
+          - point: "Time parsing"
+            details: "Support 'today', '1h', ISO dates"
+          - point: "Case insensitive"
+            details: "Search should be case-insensitive"
+
+      commit:
+        type: "feat"
+        message: "feat: implement filtering (search, type, errors, time range)"
+
+    - task_number: 16
+      name: "Add export functionality (JSON, Markdown)"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe_export.go"
+        - "internal/cmd/observe_export_test.go"
+        - "internal/behavioral/exporter.go"
+      depends_on: [13, 15]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Export to JSON format (structured, pretty-printed)"
+        - "Export to Markdown format (human-readable table)"
+        - "Respect applied filters in export"
+        - "CSV export option (bonus)"
+        - "Write to file or stdout"
+        - "Timestamp included in exports"
+        - "Tests verify JSON and Markdown output format"
+
+      test_commands:
+        - "go test ./internal/cmd/... -v -run TestExport"
+        - "go test ./internal/behavioral/... -run TestExporter"
+
+      description: |
+        Implement export functionality for behavioral data.
+        Support JSON (for tooling) and Markdown (for reports).
+
+      implementation:
+        approach: |
+          Create exporters for each format. Accept filtered metrics list.
+          Convert to appropriate format with proper headers/structure.
+          Write to file or stdout as specified.
+
+        code_structure: |
+          internal/behavioral/exporter.go:
+            - Exporter interface (Export() string)
+            - JSONExporter struct
+            - MarkdownExporter struct
+            - ExportToFile(path, format) error
+            - ExportToString(format) string
+
+          internal/cmd/observe_export.go:
+            - HandleExportCommand() error
+            - parseExportFormat() (string, error)
+            - getExportPath() (string, error)
+
+        key_points:
+          - point: "Format flexibility"
+            details: "Support JSON for APIs, Markdown for humans"
+          - point: "Pretty printing"
+            details: "JSON with indentation, Markdown tables"
+          - point: "File handling"
+            details: "Write to file safely with temp + rename"
+
+      commit:
+        type: "feat"
+        message: "feat: add JSON and Markdown export functionality"
+
+    - task_number: 17
+      name: "Implement pagination and display formatting"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe_display.go"
+        - "internal/cmd/observe_display_test.go"
+        - "internal/behavioral/display.go"
+      depends_on: [13]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Paginate sessions/agents at 50 per page (match bash)"
+        - "Display navigation (page X of Y, next/prev commands)"
+        - "Formatted tables with columns: agent, tools, commands, files, cost"
+        - "Colorized output: green for success, red for errors"
+        - "Column alignment and wrapping for long values"
+        - "Summary line per row (total operations, cost, duration)"
+        - "Tests verify pagination and formatting"
+
+      test_commands:
+        - "go test ./internal/cmd/... -v -run TestDisplay"
+        - "go test ./internal/behavioral/... -run TestDisplay"
+
+      description: |
+        Implement pagination and formatted display for behavioral data.
+        Show 50 items per page with clear navigation.
+
+      implementation:
+        approach: |
+          Create Paginator for managing pages. Format metrics as table rows.
+          Apply colors. Calculate column widths. Handle overflow gracefully.
+
+        code_structure: |
+          internal/behavioral/display.go:
+            - Paginator struct (items, page_size, current_page)
+            - NextPage(), PrevPage(), GetCurrentPage() methods
+            - FormatTable(metrics) []string
+            - FormatRow(metric) string
+            - CalculateColumnWidths() map[string]int
+
+          internal/cmd/observe_display.go:
+            - DisplayPaginatedResults() error
+            - printTableHeader() string
+            - printTableRow(metric) string
+            - printNavigationBar(paginator) string
+
+        key_points:
+          - point: "Page size"
+            details: "50 items per page (from bash implementation)"
+          - point: "Colorization"
+            details: "Green/red based on success/failure"
+          - point: "Column widths"
+            details: "Dynamic based on content"
+
+      commit:
+        type: "feat"
+        message: "feat: implement pagination and display formatting"
+
+    - task_number: 18
+      name: "Add summary statistics and real-time streaming"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe_stats.go"
+        - "internal/cmd/observe_stats_test.go"
+        - "internal/behavioral/stats.go"
+      depends_on: [13]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Summary stats: total agents, total operations, total cost, success rate"
+        - "Agent type breakdown (code-reviewer, golang-pro, etc.)"
+        - "Top 5 most-used tools"
+        - "Total tokens and estimated cost in USD"
+        - "Real-time streaming (optional, --stream-activity flag)"
+        - "Streaming shows new agents as they complete tasks"
+        - "Tests verify stats calculation and streaming"
+
+      test_commands:
+        - "go test ./internal/cmd/... -v -run TestStats"
+        - "go test ./internal/behavioral/... -run TestStats"
+
+      description: |
+        Add summary statistics display and optional real-time streaming.
+        Show aggregate metrics and option to watch live activity.
+
+      implementation:
+        approach: |
+          Calculate aggregate metrics from collected data. Format for display.
+          For streaming: watch behavioral_sessions table for new entries,
+          display as they arrive. Gated by --stream-activity config flag.
+
+        code_structure: |
+          internal/behavioral/stats.go:
+            - AggregateStats struct (total_agents, total_ops, total_cost, etc.)
+            - CalculateStats(metrics []BehavioralMetrics) *AggregateStats
+            - GetTopTools(limit) []ToolStatSummary
+            - GetAgentTypeBreakdown() map[string]int
+
+          internal/cmd/observe_stats.go:
+            - DisplayStats() error
+            - formatStatsTable() string
+            - StreamActivity(project string) error
+            - watchNewSessions(db) chan SessionUpdate
+
+        key_points:
+          - point: "Streaming optional"
+            details: "Gated by --stream-activity and config setting"
+          - point: "Real-time updates"
+            details: "Poll database or watch file changes"
+          - point: "Cost calculation"
+            details: "Sum token costs based on model pricing"
+
+      commit:
+        type: "feat"
+        message: "feat: add summary statistics and real-time streaming"
+
+    - task_number: 19
+      name: "Build comprehensive CLI tests and examples"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe_integration_test.go"
+        - "cmd/conductor/examples/agent-watch-demo.md"
+      depends_on: [13, 14, 15, 16, 17, 18]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Integration tests for observe command with mock data"
+        - "Tests for project menu, filtering, export, pagination"
+        - "Tests for stats and streaming"
+        - "All tests pass with -race flag"
+        - "Test coverage >80%"
+        - "Examples showing common observe usage patterns"
+        - "Documentation of all observe features"
+
+      test_commands:
+        - "go test ./internal/cmd/... -v -run TestObserveIntegration"
+        - "go test ./internal/cmd/... -race ./..."
+
+      description: |
+        Write comprehensive tests for observe CLI and provide usage examples.
+
+      implementation:
+        approach: |
+          Create integration tests with fixtures. Mock user input for
+          interactive menu. Test with sample behavioral data. Provide
+          examples in documentation showing real-world usage.
+
+        code_structure: |
+          internal/cmd/observe_integration_test.go:
+            - TestObserveFullWorkflow() - complete user journey
+            - TestObserveMenuSelection() - interactive menu
+            - TestObserveFiltering() - all filter combinations
+            - TestObserveExport() - JSON and Markdown exports
+            - TestObservePagination() - page navigation
+            - TestObserveStats() - statistics calculation
+            - Fixtures with realistic behavioral data
+
+        key_points:
+          - point: "Integration tests"
+            details: "Test full workflows, not just unit functions"
+          - point: "Mock input"
+            details: "Simulate user keyboard input"
+          - point: "Realistic fixtures"
+            details: "Use actual JSONL session data"
+
+      commit:
+        type: "test"
+        message: "test: add comprehensive CLI tests and usage examples"
+
+    - task_number: 20
+      name: "Enhance console logger with behavioral metrics"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/logger/console.go"
+        - "internal/logger/console_test.go"
+      depends_on: []
+      estimated_time: "1h"
+
+      success_criteria:
+        - "Console logger displays behavioral metrics after task completion"
+        - "Shows: tools used, bash commands, file operations, cost"
+        - "Integrated into LogTaskResult() method"
+        - "Graceful if behavioral data unavailable"
+        - "Clear, readable format"
+        - "Tests verify metric display"
+
+      test_commands:
+        - "go test ./internal/logger/... -v -run TestBehavioral"
+        - "go test ./internal/logger/... -run TestConsole"
+
+      description: |
+        Enhance console logger to display behavioral metrics.
+        Show metrics summary after each task completes.
+
+      implementation:
+        approach: |
+          Add behavioral metrics to LogTaskResult(). Format as readable
+          summary. Include in task completion output. Handle missing metrics.
+
+        code_structure: |
+          internal/logger/console.go:
+            - Enhanced LogTaskResult() with behavioral metrics
+            - formatBehavioralMetrics() helper
+            - buildMetricsSummary() func
+
+        key_points:
+          - point: "Non-intrusive display"
+            details: "Append to existing output naturally"
+          - point: "Readable format"
+            details: "Summary format with key metrics"
+          - point: "Optional data"
+            details: "Works if behavioral data unavailable"
+
+      commit:
+        type: "feat"
+        message: "feat: enhance console logger with behavioral metrics display"
+
+    - task_number: 21
+      name: "Add colorized output for metrics display"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/logger/console_color.go"
+        - "internal/logger/console_color_test.go"
+      depends_on: [20]
+      estimated_time: "45m"
+
+      success_criteria:
+        - "Use fatih/color for colorization"
+        - "Green for success metrics (tool calls, file creates)"
+        - "Red for failures (errors, failed commands)"
+        - "Yellow for warnings (high cost, unusual patterns)"
+        - "Cyan for labels and separators"
+        - "Tests verify color codes applied"
+        - "Colors disabled when output not TTY"
+
+      test_commands:
+        - "go test ./internal/logger/... -v -run TestColor"
+
+      description: |
+        Add colorized output to metrics display.
+        Use consistent color scheme for readability.
+
+      implementation:
+        approach: |
+          Use fatih/color package. Define color scheme. Apply colors
+          to metrics output. Detect TTY and disable if piped.
+
+        code_structure: |
+          internal/logger/console_color.go:
+            - colorScheme struct (colors for different metrics types)
+            - formatColorizedMetric() string
+            - shouldUseColor() bool (check for TTY)
+
+        key_points:
+          - point: "Consistent scheme"
+            details: "Green=success, Red=fail, Yellow=warn, Cyan=labels"
+          - point: "TTY detection"
+            details: "Disable colors when piped (not a terminal)"
+          - point: "Readability"
+            details: "Don't overuse; highlight key data"
+
+      commit:
+        type: "feat"
+        message: "feat: add colorized output for metrics display"
+
+    - task_number: 22
+      name: "Implement behavior pattern detection algorithms"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/patterns.go"
+        - "internal/behavioral/patterns_test.go"
+      depends_on: []
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Detect tool usage patterns (frequent combinations)"
+        - "Identify bash command sequences (common patterns)"
+        - "Flag anomalies: unusual tool combinations, repeated failures"
+        - "Cluster sessions by behavior (similarity metrics)"
+        - "Track pattern evolution over time"
+        - "Tests verify pattern detection accuracy"
+        - "Fuzzy matching for similar patterns"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v -run TestPatterns"
+
+      description: |
+        Implement algorithms to detect behavioral patterns.
+        Find common sequences and anomalies in agent activity.
+
+      implementation:
+        approach: |
+          Analyze tool sequences and command patterns. Use frequency
+          analysis and clustering. Detect anomalies via statistical
+          deviation. Track patterns across time windows.
+
+        code_structure: |
+          internal/behavioral/patterns.go:
+            - PatternDetector struct
+            - DetectToolSequences() []ToolSequence
+            - DetectBashPatterns() []CommandPattern
+            - IdentifyAnomalies() []Anomaly
+            - ClusterSessions() []BehaviorCluster
+            - PatternEvolution struct (pattern, frequency over time)
+
+        key_points:
+          - point: "Frequency analysis"
+            details: "Count tool/command combinations"
+          - point: "Clustering"
+            details: "Group similar behaviors"
+          - point: "Anomaly detection"
+            details: "Statistical deviation from normal"
+
+      commit:
+        type: "feat"
+        message: "feat: implement behavior pattern detection algorithms"
+
+    - task_number: 23
+      name: "Add failure prediction based on tool usage patterns"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/prediction.go"
+        - "internal/behavioral/prediction_test.go"
+      depends_on: [22]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Predict task failure based on historical tool patterns"
+        - "Calculate failure probability from similar past sessions"
+        - "Identify tool combinations correlated with failures"
+        - "Provide confidence scores (0-1)"
+        - "Explain predictions (which tools correlate with failure)"
+        - "Tests verify prediction accuracy on historical data"
+        - "Handle new/unseen tool combinations gracefully"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v -run TestPrediction"
+
+      description: |
+        Build failure prediction model based on behavioral patterns.
+        Alert on high-risk tool combinations before task starts.
+
+      implementation:
+        approach: |
+          Analyze historical sessions. Calculate tool failure rates.
+          For new sessions, compare tool usage to historical patterns.
+          Compute failure probability. Provide explanations.
+
+        code_structure: |
+          internal/behavioral/prediction.go:
+            - FailurePredictor struct (historical patterns, thresholds)
+            - PredictFailure(session *Session) (probability float64, explanation string, error)
+            - CalculateToolFailureRates() map[string]float64
+            - FindSimilarHistoricalSessions() []Session
+            - CalculateProbability() float64
+
+        key_points:
+          - point: "Historical analysis"
+            details: "Use past failures to predict future"
+          - point: "Confidence scores"
+            details: "Return 0-1 probability"
+          - point: "Explainability"
+            details: "Show which tools drive prediction"
+
+      commit:
+        type: "feat"
+        message: "feat: add failure prediction based on tool usage patterns"
+
+    - task_number: 24
+      name: "Build agent performance scoring system"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/scoring.go"
+        - "internal/behavioral/scoring_test.go"
+      depends_on: [22]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "Score agents by performance metrics (success rate, cost efficiency, speed)"
+        - "Calculate composite score (0-100)"
+        - "Break down score by dimension (quality, cost, speed)"
+        - "Compare agents within domain (all golang agents, etc.)"
+        - "Provide rankings and percentiles"
+        - "Tests verify score calculations"
+        - "Handle edge cases (new agents with few sessions)"
+
+      test_commands:
+        - "go test ./internal/behavioral/... -v -run TestScoring"
+
+      description: |
+        Build performance scoring system for agents.
+        Rate agents by multiple dimensions for better selection.
+
+      implementation:
+        approach: |
+          Define scoring dimensions: success rate, cost per operation,
+          speed, error recovery. Calculate composite scores. Rank agents.
+          Compare within categories. Adjust for sample size.
+
+        code_structure: |
+          internal/behavioral/scoring.go:
+            - PerformanceScorer struct
+            - ScoreAgent(agent string) *AgentScore
+            - CalculateSuccessScore() float64
+            - CalculateCostEfficiencyScore() float64
+            - CalculateSpeedScore() float64
+            - RankAgents() []RankedAgent
+            - CompareWithinDomain() map[string]float64
+
+        key_points:
+          - point: "Multi-dimensional"
+            details: "Score across multiple metrics"
+          - point: "Weighting"
+            details: "Composite score balances dimensions"
+          - point: "Domain comparison"
+            details: "Compare similar agents (e.g., all Go experts)"
+
+      commit:
+        type: "feat"
+        message: "feat: build agent performance scoring system"
+
+    - task_number: 25
+      name: "Create comprehensive integration tests"
+      type: "integration"
+      agent: "golang-pro"
+      files:
+        - "internal/behavioral/integration_test.go"
+        - "internal/cmd/observe_integration_test.go"
+        - "cmd/conductor/examples/agent-watch-integration-test.go"
+      depends_on:
+        # Part 1 dependencies
+        - file: "plan-01-foundation.yaml"
+          task: 1
+        - file: "plan-01-foundation.yaml"
+          task: 2
+        - file: "plan-01-foundation.yaml"
+          task: 3
+        - file: "plan-01-foundation.yaml"
+          task: 4
+        - file: "plan-01-foundation.yaml"
+          task: 5
+        - file: "plan-01-foundation.yaml"
+          task: 6
+        # Part 2 dependencies
+        - file: "plan-02-integration.yaml"
+          task: 7
+        - file: "plan-02-integration.yaml"
+          task: 8
+        - file: "plan-02-integration.yaml"
+          task: 9
+        - file: "plan-02-integration.yaml"
+          task: 10
+        - file: "plan-02-integration.yaml"
+          task: 11
+        - file: "plan-02-integration.yaml"
+          task: 12
+        # Part 3 dependencies (same file)
+        - 13
+        - 14
+        - 15
+        - 16
+        - 17
+        - 18
+        - 19
+        - 20
+        - 21
+        - 22
+        - 23
+        - 24
+      estimated_time: "2h"
+
+      success_criteria:
+        - "End-to-end test: invocation → behavioral collection → DB storage → QC context → observe display"
+        - "Real JSONL session files for testing"
+        - "Verify behavioral metrics flow through system"
+        - "Test observe command with real data"
+        - "Verify QC enhancement with behavioral context"
+        - "Test all filtering and export combinations"
+        - "All tests pass with -race flag"
+        - "Coverage >80% for all new behavioral code"
+
+      test_commands:
+        - "go test ./... -v -run TestIntegration"
+        - "go test ./... -race"
+        - "go test ./... -cover"
+
+      integration_criteria:
+        - "Task execution with behavioral metrics end-to-end"
+        - "QC review receives behavioral context"
+        - "Observe command displays metrics correctly"
+        - "Database properly stores and retrieves behavioral data"
+        - "All filtering and export features working"
+
+      description: |
+        Create comprehensive integration tests for entire Agent Watch system.
+        Verify end-to-end flow from invocation through analytics.
+
+      implementation:
+        approach: |
+          Write integration tests spanning all components. Use realistic
+          JSONL session data. Test complete workflows. Verify data flows
+          through system correctly.
+
+        code_structure: |
+          internal/behavioral/integration_test.go:
+            - TestFullBehavioralFlow() - discovery → parse → extract → store
+            - TestDatabaseStorage() - verify records in DB
+            - TestCachePerformance() - verify aggregator efficiency
+
+          internal/cmd/observe_integration_test.go:
+            - TestObserveWithRealData() - full observe workflow
+            - TestObserveExport() - verify exports
+            - TestObserveFiltering() - verify all filters
+
+          cmd/conductor/examples/:
+            - Full example showing agent-watch integration
+            - Sample plan using observe command
+            - Expected output examples
+
+        key_points:
+          - point: "Real data"
+            details: "Use actual JSONL from Claude CLI"
+          - point: "Complete workflows"
+            details: "Test invocation through observe"
+          - point: "Race detection"
+            details: "All tests pass with -race"
+
+      commit:
+        type: "test"
+        message: "test: add comprehensive end-to-end integration tests"
+
+    - task_number: 26
+      name: "Write Agent Watch documentation and examples"
+      type: "component"
+      agent: "golang-pro"
+      files:
+        - "docs/AGENT_WATCH.md"
+        - "docs/examples/agent-watch-usage.md"
+        - "docs/examples/agent-watch-filtering.md"
+        - "CLAUDE.md"
+      depends_on: [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+      estimated_time: "1h 30m"
+
+      success_criteria:
+        - "AGENT_WATCH.md: complete feature guide"
+        - "Usage examples: observe project, session, filtering, export, streaming"
+        - "API documentation for observe command"
+        - "Integration guide: how behavioral metrics enhance QC"
+        - "Analytics guide: using pattern detection and scoring"
+        - "Performance notes: caching, database optimization"
+        - "Troubleshooting section"
+        - "CLAUDE.md updated with Agent Watch references"
+
+      test_commands:
+        - "test -f docs/AGENT_WATCH.md"
+        - "grep -q 'conductor observe' docs/AGENT_WATCH.md"
+
+      description: |
+        Write comprehensive documentation for Agent Watch integration.
+        Include usage examples, API docs, and integration guide.
+
+      implementation:
+        approach: |
+          Document observe command with examples. Explain behavioral
+          metrics and QC integration. Provide filtering guide. Document
+          analytics features. Update CLAUDE.md with overview.
+
+        code_structure: |
+          docs/AGENT_WATCH.md:
+            - Overview of Agent Watch functionality
+            - Installation and setup
+            - Command reference (all subcommands)
+            - Usage examples
+            - Configuration options
+            - Performance tuning
+            - Troubleshooting
+
+          docs/examples/:
+            - agent-watch-usage.md - common use cases
+            - agent-watch-filtering.md - filtering guide
+            - agent-watch-analytics.md - analytics features
+
+          CLAUDE.md additions:
+            - Agent Watch section
+            - Behavioral metrics overview
+            - QC enhancement explanation
+
+        key_points:
+          - point: "Comprehensive"
+            details: "Cover all features with examples"
+          - point: "User-focused"
+            details: "Guide users through common tasks"
+          - point: "Reference"
+            details: "Clear command reference"
+
+      commit:
+        type: "docs"
+        message: "docs: add comprehensive Agent Watch documentation and examples"
+
+plan_notes: |
+  ## Multi-File Plan Structure
+
+  This Agent Watch integration plan is split across three files:
+  - **agent-watch-integration-part1.yaml** (Tasks 1-6): Foundation layer - behavioral models, JSONL parser, session discovery, metrics extraction
+  - **agent-watch-integration-part2.yaml** (Tasks 7-12): Database and QC integration - schema expansion, auto-migration, QC enhancement
+  - **agent-watch-integration-part3.yaml** (Tasks 13-26): CLI, analytics, and documentation
+
+  ## Key Dependencies
+
+  - Parts 2-3 depend on Part 1 foundation (behavioral models complete)
+  - Database chain depends on foundation being complete
+  - CLI chain depends on foundation and database
+  - Analytics and console enhancements can run parallel to CLI
+  - Testing/docs depend on all prior chains
+
+  ## Feature Parity with Bash Agent Watch
+
+  All bash features implemented in Go:
+  - Project selection menu (14)
+  - Filtering: search, type, errors, time (15)
+  - Exports: JSON, Markdown (16)
+  - Pagination at 50/page (17)
+  - Summary statistics (18)
+  - Real-time streaming (18, optional)
+  - Console logging (20-21)
+
+  ## Integration Points
+
+  1. **Session ID Capture** (Task 10): Modified invoker extracts session_id from Claude JSON
+  2. **Behavioral Collection** (Task 11): Executor loads JSONL after task invocation
+  3. **QC Enhancement** (Task 12): QC prompts include behavioral context
+  4. **Console Output** (Tasks 20-21): Metrics displayed during task execution
+  5. **Analytics** (Tasks 22-24): Pattern detection and performance scoring
+
+  ## Database Schema Changes
+
+  - No breaking changes to existing schema
+  - New tables for behavioral data (sessions, tool_executions, bash_commands, etc.)
+  - Auto-migration via schema.sql
+  - Optional behavioral data (graceful if unavailable)
+
+  ## Testing Strategy
+
+  - TDD: tests before implementation (red-green-refactor)
+  - Table-driven tests with subtests
+  - Integration tests with real JSONL fixtures
+  - Race condition testing (-race flag)
+  - Coverage target: 80%+ for behavioral package
+
+  ## Success Metrics
+
+  After completion:
+  - `conductor observe` command fully functional
+  - All bash Agent Watch features available in Go
+  - Behavioral metrics enhance QC decision-making
+  - Real-time streaming optional for power users
+  - 80%+ test coverage on behavioral code
+  - Full documentation with examples
