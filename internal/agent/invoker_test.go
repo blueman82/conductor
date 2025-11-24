@@ -135,17 +135,17 @@ func TestBuildCommandArgs(t *testing.T) {
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction and task prompt
+					// Verify prompt includes JSON instruction suffix and task prompt
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis") &&
+						if strings.Contains(arg, "respond with JSON containing") &&
 							strings.Contains(arg, "Do something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Command should include formatting instructions and the task prompt")
+						t.Error("Command should include JSON instruction suffix and the task prompt")
 					}
 				},
 			},
@@ -180,16 +180,16 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify formatting instruction prefix (agent reference removed in e431bfd)
+					// Verify JSON instruction suffix (formatting instruction removed)
 					hasFormatting := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis") {
+						if strings.Contains(arg, "respond with JSON containing") {
 							hasFormatting = true
 							break
 						}
 					}
 					if !hasFormatting {
-						t.Error("Prompt should include formatting instructions")
+						t.Error("Prompt should include JSON instruction suffix")
 					}
 				},
 			},
@@ -210,10 +210,10 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction prefix (no JSON instruction - that's in --json-schema)
+					// Verify prompt includes JSON instruction suffix
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
+						if strings.Contains(arg, "respond with JSON containing") &&
 							strings.Contains(arg, "Do work") {
 							hasPrompt = true
 							break
@@ -246,26 +246,17 @@ Swift agent content
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction prefix (no JSON instruction - that's in --json-schema)
+					// Verify prompt includes JSON instruction suffix
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
+						if strings.Contains(arg, "respond with JSON containing") &&
 							strings.Contains(arg, "Create something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions when no registry is available")
-					}
-				},
-				func(t *testing.T, args []string) {
-					// Verify JSON instruction is NOT in prompt (now in --json-schema)
-					for _, arg := range args {
-						if strings.Contains(arg, "After completing all implementation work") {
-							t.Error("Prompt should NOT include JSON instruction (moved to --json-schema)")
-							break
-						}
+						t.Error("Prompt should include JSON instruction when no registry is available")
 					}
 				},
 			},
