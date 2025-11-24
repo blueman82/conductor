@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -461,6 +462,41 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 	}
 }
 
+// collectBehavioralMetrics extracts metrics from a session JSONL file and stores in database
+// Returns nil if session file not found (graceful degradation)
+func (te *DefaultTaskExecutor) collectBehavioralMetrics(ctx context.Context, sessionID string, task models.Task, taskExecutionID int64) error {
+	// Skip if no learning store
+	if te.LearningStore == nil {
+		return nil
+	}
+
+	// Convert to concrete type to access database
+	store, ok := te.LearningStore.(*learning.Store)
+	if !ok {
+		return nil // Graceful degradation
+	}
+
+	// Create behavior collector
+	collector := NewBehaviorCollector(store, "")
+
+	// Load session metrics
+	metrics, err := collector.LoadSessionMetrics(sessionID)
+	if err != nil {
+		// Log warning but don't fail task - graceful degradation
+		fmt.Fprintf(os.Stderr, "Warning: failed to load behavioral metrics for session %s: %v\n", sessionID, err)
+		return nil
+	}
+
+	// Store metrics in database
+	if err := collector.StoreSessionMetrics(ctx, taskExecutionID, metrics); err != nil {
+		// Log warning but don't fail task - graceful degradation
+		fmt.Fprintf(os.Stderr, "Warning: failed to store behavioral metrics: %v\n", err)
+		return nil
+	}
+
+	return nil
+}
+
 // updateFeedback stores execution attempt feedback to the plan file.
 // This is called ONLY after QC review completes, when we have the full context
 // (agent output + verdict + QC feedback). We do NOT call this before QC review
@@ -634,6 +670,43 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 		result.Output = output
 		result.Duration = totalDuration
+
+		// Collect behavioral metrics post-invocation (before QC)
+		// This captures the session_id from the invocation and loads JSONL metrics
+		if invocation.SessionID != "" {
+			// We need the task_execution_id to link behavioral data
+			// Store attempt execution first to get the ID
+			if te.LearningStore != nil {
+				fileToRecord := te.PlanFile
+				if task.SourceFile != "" {
+					fileToRecord = task.SourceFile
+				} else if te.SourceFile != "" {
+					fileToRecord = te.SourceFile
+				}
+
+				// Create preliminary execution record (before QC)
+				prelimExec := &learning.TaskExecution{
+					PlanFile:     fileToRecord,
+					RunNumber:    te.RunNumber,
+					TaskNumber:   task.Number,
+					TaskName:     task.Name,
+					Agent:        task.Agent,
+					Prompt:       task.Prompt,
+					Success:      false, // Will be updated after QC
+					Output:       invocation.Output,
+					ErrorMessage: "",
+					DurationSecs: int64(invocation.Duration.Seconds()),
+					QCVerdict:    "", // Not yet determined
+					QCFeedback:   "",
+				}
+
+				// Record to get task_execution_id
+				if err := te.LearningStore.RecordExecution(ctx, prelimExec); err == nil {
+					// Collect behavioral metrics with the task_execution_id
+					_ = te.collectBehavioralMetrics(ctx, invocation.SessionID, task, prelimExec.ID)
+				}
+			}
+		}
 
 		// Initialize execution attempt record
 		execAttempt := models.ExecutionAttempt{
