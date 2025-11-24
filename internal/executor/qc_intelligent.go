@@ -212,31 +212,50 @@ func (is *IntelligentSelector) invokeClaudeForSelection(ctx context.Context, pro
 	return &recommendation, nil
 }
 
-// stripCodeFences removes markdown code fences from JSON response
+// stripCodeFences removes markdown code fences from JSON response.
+// Handles thinking text and content before/after fences by searching for JSON markers anywhere.
+// Supports case-insensitive fence detection (```json, ```JSON, ```Json, etc).
+// Two-pass strategy: First tries ```json specifically, then falls back to plain ``` markers.
 func stripCodeFences(content string) string {
-	content = strings.TrimSpace(content)
+	trimmed := strings.TrimSpace(content)
 
-	// Remove ```json ... ``` or ``` ... ```
-	if strings.HasPrefix(content, "```") {
-		lines := strings.Split(content, "\n")
-		if len(lines) >= 2 {
-			// Skip first line (```json or ```)
-			start := 1
-			end := len(lines) - 1
-
-			// Skip last line if it's closing ```
-			if end > start && strings.TrimSpace(lines[end]) == "```" {
-				end--
+	// Look for ```json...``` pattern ANYWHERE in content (case-insensitive)
+	// This handles both ```json and ```JSON variants, including thinking text before/after
+	lowerContent := strings.ToLower(trimmed)
+	if strings.Contains(lowerContent, "```json") {
+		// Find opening fence (case-insensitive)
+		start := strings.Index(lowerContent, "```json")
+		if start != -1 {
+			// Move past the opening fence and any newline
+			start += len("```json")
+			if start < len(trimmed) && trimmed[start] == '\n' {
+				start++
 			}
 
-			// Rejoin the middle lines
-			if start <= end {
-				content = strings.Join(lines[start:end+1], "\n")
+			// Find closing fence after the opening
+			remaining := trimmed[start:]
+			end := strings.Index(remaining, "```")
+			if end > 0 {
+				return strings.TrimSpace(remaining[:end])
 			}
 		}
 	}
 
-	return strings.TrimSpace(content)
+	// Fallback: look for any ``` markers at START of content
+	if strings.HasPrefix(trimmed, "```") {
+		start := strings.Index(trimmed, "```") + 3
+		// Skip any language identifier on same line
+		if newlineIdx := strings.Index(trimmed[start:], "\n"); newlineIdx != -1 {
+			start += newlineIdx + 1
+		}
+
+		end := strings.LastIndex(trimmed, "```")
+		if end > start {
+			return strings.TrimSpace(trimmed[start:end])
+		}
+	}
+
+	return content
 }
 
 // applyGuardrails validates and constrains the agent selection

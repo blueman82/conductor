@@ -163,6 +163,7 @@ func TestStripCodeFences(t *testing.T) {
 		input    string
 		expected string
 	}{
+		// Original test cases
 		{
 			name:     "no code fence",
 			input:    `{"agents": ["test"]}`,
@@ -182,6 +183,42 @@ func TestStripCodeFences(t *testing.T) {
 			name:     "multiline json",
 			input:    "```json\n{\n  \"agents\": [\"a\", \"b\"],\n  \"rationale\": \"test\"\n}\n```",
 			expected: "{\n  \"agents\": [\"a\", \"b\"],\n  \"rationale\": \"test\"\n}",
+		},
+		// New edge cases for robustness
+		{
+			name:     "thinking text before fence",
+			input:    "Wait, let me reconsider...\n\n```json\n{\"agents\": [\"test\"]}\n```",
+			expected: `{"agents": ["test"]}`,
+		},
+		{
+			name:     "thinking text after fence",
+			input:    "```json\n{\"agents\": [\"test\"]}\n```\n\nDone processing.",
+			expected: `{"agents": ["test"]}`,
+		},
+		{
+			name:     "uppercase JSON marker",
+			input:    "```JSON\n{\"agents\": [\"test\"]}\n```",
+			expected: `{"agents": ["test"]}`,
+		},
+		{
+			name:     "mixed case Json marker",
+			input:    "```Json\n{\"agents\": [\"test\"]}\n```",
+			expected: `{"agents": ["test"]}`,
+		},
+		{
+			name:     "fence in middle of content",
+			input:    "Here's the result:\n```json\n{\"agents\": [\"test\"]}\n```\nEnd of response",
+			expected: `{"agents": ["test"]}`,
+		},
+		{
+			name:     "whitespace around JSON in fence",
+			input:    "```json\n  {\"agents\": [\"test\"]}  \n```",
+			expected: `{"agents": ["test"]}`,
+		},
+		{
+			name:     "multiple line thinking before fence",
+			input:    "Let me analyze this...\nI need to select agents.\nWait, let me reconsider...\n\n```json\n{\"agents\": [\"a\", \"b\"]}\n```",
+			expected: `{"agents": ["a", "b"]}`,
 		},
 	}
 
