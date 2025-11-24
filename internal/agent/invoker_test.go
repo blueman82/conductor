@@ -210,18 +210,26 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction prefix and JSON instruction
+					// Verify prompt includes formatting instruction prefix (no JSON instruction - that's in --json-schema)
 					hasPrompt := false
 					for _, arg := range args {
 						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
-							strings.Contains(arg, "Do work") &&
-							strings.Contains(arg, "After completing all implementation work") {
+							strings.Contains(arg, "Do work") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions and JSON instruction when agent doesn't exist in registry")
+						t.Error("Prompt should include formatting instructions when agent doesn't exist in registry")
+					}
+				},
+				func(t *testing.T, args []string) {
+					// Verify JSON instruction is NOT in prompt (now in --json-schema)
+					for _, arg := range args {
+						if strings.Contains(arg, "After completing all implementation work") {
+							t.Error("Prompt should NOT include JSON instruction (moved to --json-schema)")
+							break
+						}
 					}
 				},
 			},
@@ -238,18 +246,26 @@ Swift agent content
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction prefix and JSON instruction
+					// Verify prompt includes formatting instruction prefix (no JSON instruction - that's in --json-schema)
 					hasPrompt := false
 					for _, arg := range args {
 						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
-							strings.Contains(arg, "Create something") &&
-							strings.Contains(arg, "After completing all implementation work") {
+							strings.Contains(arg, "Create something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions and JSON instruction when no registry is available")
+						t.Error("Prompt should include formatting instructions when no registry is available")
+					}
+				},
+				func(t *testing.T, args []string) {
+					// Verify JSON instruction is NOT in prompt (now in --json-schema)
+					for _, arg := range args {
+						if strings.Contains(arg, "After completing all implementation work") {
+							t.Error("Prompt should NOT include JSON instruction (moved to --json-schema)")
+							break
+						}
 					}
 				},
 			},
@@ -612,56 +628,6 @@ func TestClaudeOutputMarshaling(t *testing.T) {
 	}
 }
 
-// TestBuildCommandArgsWithAgentsFlag tests Method 1 agent invocation using --agents JSON flag
-func TestInvoker_BuildJSONPrompt(t *testing.T) {
-	tests := []struct {
-		name           string
-		originalPrompt string
-		wantContains   []string
-	}{
-		{
-			name:           "appends JSON instruction",
-			originalPrompt: "Implement authentication",
-			wantContains: []string{
-				"Implement authentication",
-				"After completing all implementation work",
-				`"status": "success|failed"`,
-				`"summary"`,
-				`"output"`,
-				`"errors"`,
-				`"files_modified"`,
-				`"metadata"`,
-			},
-		},
-		{
-			name:           "preserves original prompt",
-			originalPrompt: "Build iOS app with SwiftUI",
-			wantContains: []string{
-				"Build iOS app with SwiftUI",
-				"After completing all implementation work",
-			},
-		},
-		{
-			name:           "handles empty prompt",
-			originalPrompt: "",
-			wantContains: []string{
-				"After completing all implementation work",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			invoker := NewInvoker()
-			prompt := invoker.buildJSONPrompt(tt.originalPrompt)
-			for _, want := range tt.wantContains {
-				if !strings.Contains(prompt, want) {
-					t.Errorf("buildJSONPrompt() missing %q", want)
-				}
-			}
-		})
-	}
-}
 
 func TestParseAgentJSON(t *testing.T) {
 	tests := []struct {
@@ -697,43 +663,19 @@ func TestParseAgentJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:   "malformed JSON - fallback to plain text",
-			output: "plain text output",
-			want: &models.AgentResponse{
-				Status:   "success",
-				Summary:  "Plain text response",
-				Output:   "plain text output",
-				Errors:   []string{},
-				Files:    []string{},
-				Metadata: map[string]interface{}{"parse_fallback": true},
-			},
-			wantErr: false,
+			name:    "malformed JSON - schema enforcement prevents this",
+			output:  "plain text output",
+			wantErr: true,
 		},
 		{
-			name:   "empty response",
-			output: "",
-			want: &models.AgentResponse{
-				Status:   "success",
-				Summary:  "Plain text response",
-				Output:   "",
-				Errors:   []string{},
-				Files:    []string{},
-				Metadata: map[string]interface{}{"parse_fallback": true},
-			},
-			wantErr: false,
+			name:    "empty response - schema enforcement prevents this",
+			output:  "",
+			wantErr: true,
 		},
 		{
-			name:   "partial JSON - fallback",
-			output: `{"status":"success"`,
-			want: &models.AgentResponse{
-				Status:   "success",
-				Summary:  "Plain text response",
-				Output:   `{"status":"success"`,
-				Errors:   []string{},
-				Files:    []string{},
-				Metadata: map[string]interface{}{"parse_fallback": true},
-			},
-			wantErr: false,
+			name:    "partial JSON - schema enforcement prevents this",
+			output:  `{"status":"success"`,
+			wantErr: true,
 		},
 		{
 			name:   "JSON with extra fields",
@@ -749,17 +691,9 @@ func TestParseAgentJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:   "invalid status value - fallback",
-			output: `{"status":"invalid","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
-			want: &models.AgentResponse{
-				Status:   "success",
-				Summary:  "Plain text response",
-				Output:   `{"status":"invalid","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
-				Errors:   []string{},
-				Files:    []string{},
-				Metadata: map[string]interface{}{"parse_fallback": true},
-			},
-			wantErr: false,
+			name:    "invalid status value - schema enforcement prevents this",
+			output:  `{"status":"invalid","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
+			wantErr: true,
 		},
 	}
 
@@ -768,6 +702,10 @@ func TestParseAgentJSON(t *testing.T) {
 			got, err := parseAgentJSON(tt.output)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseAgentJSON() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			// Skip assertion checks if we expected an error
+			if tt.wantErr {
 				return
 			}
 			if got.Status != tt.want.Status {
@@ -784,13 +722,6 @@ func TestParseAgentJSON(t *testing.T) {
 			}
 			if len(got.Files) != len(tt.want.Files) {
 				t.Errorf("Files length = %v, want %v", len(got.Files), len(tt.want.Files))
-			}
-			if tt.want.Metadata != nil {
-				if fallback, ok := tt.want.Metadata["parse_fallback"]; ok && fallback == true {
-					if got.Metadata["parse_fallback"] != true {
-						t.Errorf("Missing parse_fallback metadata flag")
-					}
-				}
 			}
 		})
 	}
@@ -849,6 +780,19 @@ Go development content
 						t.Error("Command must have --agents flag when agent is specified")
 					}
 				},
+				// Check 1.5: --json-schema flag must be present
+				func(t *testing.T, args []string) {
+					hasJsonSchemaFlag := false
+					for _, arg := range args {
+						if arg == "--json-schema" {
+							hasJsonSchemaFlag = true
+							break
+						}
+					}
+					if !hasJsonSchemaFlag {
+						t.Error("Command must have --json-schema flag for structured responses")
+					}
+				},
 				// Check 2: --agents must come before -p flag
 				func(t *testing.T, args []string) {
 					agentsFlagIdx := -1
@@ -863,6 +807,22 @@ Go development content
 					}
 					if agentsFlagIdx >= 0 && pFlagIdx >= 0 && agentsFlagIdx >= pFlagIdx {
 						t.Error("--agents flag must come before -p flag")
+					}
+				},
+				// Check 2.5: --json-schema must come before -p flag
+				func(t *testing.T, args []string) {
+					jsonSchemaIdx := -1
+					pFlagIdx := -1
+					for i, arg := range args {
+						if arg == "--json-schema" {
+							jsonSchemaIdx = i
+						}
+						if arg == "-p" {
+							pFlagIdx = i
+						}
+					}
+					if jsonSchemaIdx >= 0 && pFlagIdx >= 0 && jsonSchemaIdx >= pFlagIdx {
+						t.Error("--json-schema flag must come before -p flag")
 					}
 				},
 				// Check 3: --agents value must be valid JSON
@@ -927,7 +887,7 @@ Go development content
 			},
 		},
 		{
-			name: "task without agent - no --agents flag",
+			name: "task without agent - no --agents flag but has --json-schema",
 			task: models.Task{
 				Number:        "2",
 				Name:          "Simple Task",
@@ -947,6 +907,18 @@ Go development content
 					}
 					if hasAgentsFlag {
 						t.Error("Command should not have --agents flag when no agent specified")
+					}
+				},
+				func(t *testing.T, args []string) {
+					hasJsonSchemaFlag := false
+					for _, arg := range args {
+						if arg == "--json-schema" {
+							hasJsonSchemaFlag = true
+							break
+						}
+					}
+					if !hasJsonSchemaFlag {
+						t.Error("Command must have --json-schema flag even without agent")
 					}
 				},
 			},
