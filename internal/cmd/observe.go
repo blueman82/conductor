@@ -42,15 +42,29 @@ execution history.`,
 	cmd.AddCommand(NewObserveBashCmd())
 	cmd.AddCommand(NewObserveFilesCmd())
 	cmd.AddCommand(NewObserveErrorsCmd())
+	cmd.AddCommand(NewObserveStatsCmd())
+	cmd.AddCommand(NewObserveStreamCmd())
+	cmd.AddCommand(NewObserveExportCmd())
 
 	return cmd
 }
 
 // observeInteractive is the default interactive mode when no subcommand is specified
 func observeInteractive(cmd *cobra.Command, args []string) error {
-	// TODO: Implement interactive project/session selection menu
 	fmt.Println("Agent Watch Interactive Mode")
 	fmt.Println("=============================")
+
+	// If project flag not set, show interactive menu
+	if observeProject == "" {
+		selectedProject, err := DisplayProjectMenu()
+		if err != nil {
+			return fmt.Errorf("project selection failed: %w", err)
+		}
+		observeProject = selectedProject
+		fmt.Printf("\nSelected project: %s\n", observeProject)
+	}
+
+	// TODO: After project selection, show session selection or project summary
 	fmt.Println()
 	fmt.Println("Available subcommands:")
 	fmt.Println("  project   - View project-level metrics")
@@ -59,6 +73,8 @@ func observeInteractive(cmd *cobra.Command, args []string) error {
 	fmt.Println("  bash      - Bash command analysis")
 	fmt.Println("  files     - File operation analysis")
 	fmt.Println("  errors    - Error analysis and patterns")
+	fmt.Println("  stats     - Display summary statistics")
+	fmt.Println("  stream    - Stream real-time activity")
 	fmt.Println()
 	fmt.Println("Use 'conductor observe <subcommand> --help' for more information")
 
@@ -181,6 +197,40 @@ func NewObserveErrorsCmd() *cobra.Command {
 			// TODO: Implement error analysis
 			fmt.Println("Error analysis not yet implemented")
 			return nil
+		},
+	}
+	return cmd
+}
+
+// NewObserveStatsCmd creates the 'conductor observe stats' subcommand
+func NewObserveStatsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Display summary statistics",
+		Long: `Display aggregate statistics including:
+- Total sessions and agents
+- Success and error rates
+- Average duration
+- Token usage and cost
+- Top tools by usage
+- Agent performance breakdown`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return DisplayStats(observeProject)
+		},
+	}
+	return cmd
+}
+
+// NewObserveStreamCmd creates the 'conductor observe stream' subcommand
+func NewObserveStreamCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stream",
+		Short: "Stream real-time activity",
+		Long: `Watch and display agent activity in real-time.
+Polls the behavioral database for new sessions and displays them as they occur.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			return StreamActivity(ctx, observeProject)
 		},
 	}
 	return cmd
