@@ -90,10 +90,19 @@ Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor →
 ### Claude CLI Invocation
 
 ```go
-args := []string{"-p", prompt, "--settings", `{"disableAllHooks": true}`, "--output-format", "json"}
+// v2.8+: JSON schema enforcement guarantees response structure
+args := []string{
+    "--agents", agentJSON,                    // Agent definition
+    "--json-schema", models.AgentResponseSchema(), // Enforces response structure
+    "-p", prompt,
+    "--permission-mode", "bypassPermissions",
+    "--settings", `{"disableAllHooks": true}`,
+    "--output-format", "json",                // CLI wrapper format
+}
 cmd := exec.CommandContext(ctx, "claude", args...)
-// With agent: prompt = fmt.Sprintf("use the %s subagent to: %s", agent, task.Prompt)
 ```
+
+**Schema Enforcement (v2.8+)**: `--json-schema` flag guarantees Claude's response matches expected structure at generation time, eliminating parse failures and retry logic.
 
 ### Quality Control
 
@@ -111,7 +120,7 @@ type QCResponse struct {
 }
 ```
 
-**Parsing**: `parseQCJSON()` extracts from Claude CLI envelope `{"type":"result","result":"..."}`, strips markdown fences, validates.
+**Parsing (v2.8+)**: `parseQCJSON()` extracts content from Claude CLI envelope. Schema enforcement guarantees valid JSON - no fence stripping or retry needed.
 
 **Inter-Retry Agent Swapping (v2.1)**: On RED with `SuggestedAgent`, `learning.SelectBetterAgent()` validates and swaps for retry. Controlled by `learning.swap_during_retries` config.
 
@@ -204,17 +213,18 @@ tasks:
 
 ## Production Status
 
-**v2.5.2**: 86%+ test coverage (465+ tests). Complete pipeline implemented and tested.
+**v2.8.0**: 86%+ test coverage (465+ tests). Complete pipeline with JSON schema enforcement.
 
 **Major Features**:
 - Multi-agent orchestration with dependency resolution
 - QC reviews with structured JSON responses
-- Inter-retry agent swapping
+- JSON schema enforcement (v2.8+) - guaranteed response structure
 - Adaptive learning from execution history
 - Multi-file plans with cross-file dependencies (v2.6+)
 - Resumable execution with state tracking
 - Dual feedback storage (plan files + database)
 - Integration tasks with dual criteria
+- Agent Watch behavioral analytics (v2.7+)
 - Comprehensive logging and error handling
 
 **Recent Enhancements**:
@@ -223,6 +233,8 @@ tasks:
 - v2.4: Intelligent QC selection, domain-specific criteria, RED verdict fix
 - v2.5: Integration tasks, dependency context injection
 - v2.6+: Explicit cross-file dependencies, enhanced validation
+- v2.7: Agent Watch integration, behavioral analytics
+- v2.8: JSON schema enforcement via --json-schema flag
 
 ## Module Path
 
