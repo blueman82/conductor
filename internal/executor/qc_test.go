@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
@@ -3021,4 +3022,170 @@ func TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegrati
 	if contains(prompt, "This should not appear") {
 		t.Error("Integration criteria should not be included in non-integration task prompts")
 	}
+}
+
+// TestInjectBehaviorContext_WithProvider tests behavioral context injection with a provider
+func TestInjectBehaviorContext_WithProvider(t *testing.T) {
+	// Create mock metrics provider
+	mockProvider := &mockBehavioralMetricsProvider{
+		metrics: &behavioral.BehavioralMetrics{
+			TotalSessions:   3,
+			SuccessRate:     0.75,
+			AverageDuration: 30 * time.Second,
+			TotalCost:       0.25,
+			ErrorRate:       0.1,
+			ToolExecutions: []behavioral.ToolExecution{
+				{Name: "Read", Count: 15, SuccessRate: 0.95, AvgDuration: 50 * time.Millisecond},
+				{Name: "Bash", Count: 8, SuccessRate: 0.7, AvgDuration: 200 * time.Millisecond},
+			},
+			TokenUsage: behavioral.TokenUsage{
+				InputTokens:  5000,
+				OutputTokens: 2000,
+				CostUSD:      0.25,
+				ModelName:    "claude-sonnet-4-5",
+			},
+		},
+	}
+
+	var provider BehavioralMetricsProvider = mockProvider
+	qc := NewQualityController(nil)
+	qc.BehavioralMetrics = &provider
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
+
+	// Verify behavioral context is injected
+	if !contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
+		t.Error("BuildReviewPrompt() should include BEHAVIORAL ANALYSIS CONTEXT when provider is set")
+	}
+	if !contains(prompt, "Sessions**: 3") {
+		t.Error("BuildReviewPrompt() should include session count")
+	}
+	if !contains(prompt, "Success Rate**: 75.0%") {
+		t.Error("BuildReviewPrompt() should include success rate")
+	}
+	if !contains(prompt, "Tool Usage") {
+		t.Error("BuildReviewPrompt() should include tool usage section")
+	}
+	if !contains(prompt, "Cost Summary") {
+		t.Error("BuildReviewPrompt() should include cost summary")
+	}
+}
+
+// TestInjectBehaviorContext_WithoutProvider tests behavioral context injection without provider
+func TestInjectBehaviorContext_WithoutProvider(t *testing.T) {
+	qc := NewQualityController(nil)
+	// BehavioralMetrics is nil by default
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
+
+	// Verify no behavioral context when provider is not set
+	if contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
+		t.Error("BuildReviewPrompt() should not include BEHAVIORAL ANALYSIS CONTEXT when provider is nil")
+	}
+}
+
+// TestInjectBehaviorContext_StructuredPrompt tests behavioral context in structured prompts
+func TestInjectBehaviorContext_StructuredPrompt(t *testing.T) {
+	mockProvider := &mockBehavioralMetricsProvider{
+		metrics: &behavioral.BehavioralMetrics{
+			TotalSessions:   5,
+			SuccessRate:     0.8,
+			AverageDuration: 1 * time.Minute,
+			TotalCost:       1.5, // High cost - should trigger anomaly
+			ErrorRate:       0.25, // High error rate - should trigger anomaly
+			BashCommands: []behavioral.BashCommand{
+				{Command: "cmd1", Success: false},
+				{Command: "cmd2", Success: false},
+				{Command: "cmd3", Success: false},
+				{Command: "cmd4", Success: false},
+			},
+		},
+	}
+
+	var provider BehavioralMetricsProvider = mockProvider
+	qc := NewQualityController(nil)
+	qc.BehavioralMetrics = &provider
+
+	task := models.Task{
+		Number: "2",
+		Name:   "Task with criteria",
+		Prompt: "Do something",
+		SuccessCriteria: []string{
+			"Criterion 1",
+			"Criterion 2",
+		},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Task output")
+
+	// Verify behavioral context is in structured prompt
+	if !contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
+		t.Error("BuildStructuredReviewPrompt() should include BEHAVIORAL ANALYSIS CONTEXT")
+	}
+	// Verify anomalies are detected and shown
+	if !contains(prompt, "Anomalies Detected") {
+		t.Error("BuildStructuredReviewPrompt() should include anomalies section when there are anomalies")
+	}
+	if !contains(prompt, "High cost") {
+		t.Error("BuildStructuredReviewPrompt() should flag high cost anomaly")
+	}
+	if !contains(prompt, "High error rate") {
+		t.Error("BuildStructuredReviewPrompt() should flag high error rate anomaly")
+	}
+	if !contains(prompt, "bash failures") {
+		t.Error("BuildStructuredReviewPrompt() should flag multiple bash failures")
+	}
+	// Verify consideration note
+	if !contains(prompt, "Consider these behavioral patterns") {
+		t.Error("BuildStructuredReviewPrompt() should include behavioral consideration note")
+	}
+}
+
+// TestInjectBehaviorContext_NilMetrics tests handling when provider returns nil metrics
+func TestInjectBehaviorContext_NilMetrics(t *testing.T) {
+	mockProvider := &mockBehavioralMetricsProvider{
+		metrics: nil, // Provider returns nil
+	}
+
+	var provider BehavioralMetricsProvider = mockProvider
+	qc := NewQualityController(nil)
+	qc.BehavioralMetrics = &provider
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
+
+	// Verify no behavioral context when metrics are nil
+	if contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
+		t.Error("BuildReviewPrompt() should not include BEHAVIORAL ANALYSIS CONTEXT when metrics are nil")
+	}
+}
+
+// mockBehavioralMetricsProvider is a test mock for BehavioralMetricsProvider
+type mockBehavioralMetricsProvider struct {
+	metrics *behavioral.BehavioralMetrics
+}
+
+func (m *mockBehavioralMetricsProvider) GetMetrics(ctx context.Context, taskNumber string) *behavioral.BehavioralMetrics {
+	return m.metrics
 }

@@ -13,6 +13,146 @@ import (
 	"github.com/harrison/conductor/internal/models"
 )
 
+// TestFormatBehavioralMetrics verifies behavioral metrics formatting.
+func TestFormatBehavioralMetrics(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]interface{}
+		expected string
+	}{
+		{
+			name:     "nil metadata",
+			metadata: nil,
+			expected: "",
+		},
+		{
+			name:     "empty metadata",
+			metadata: map[string]interface{}{},
+			expected: "",
+		},
+		{
+			name: "all metrics present",
+			metadata: map[string]interface{}{
+				"tool_count":      5,
+				"bash_count":      3,
+				"file_operations": 2,
+				"cost":            0.0125,
+			},
+			expected: "tools: 5, bash: 3, files: 2, cost: $0.0125",
+		},
+		{
+			name: "partial metrics",
+			metadata: map[string]interface{}{
+				"tool_count": 3,
+				"cost":       0.0050,
+			},
+			expected: "tools: 3, cost: $0.0050",
+		},
+		{
+			name: "float64 counts",
+			metadata: map[string]interface{}{
+				"tool_count": float64(10),
+				"bash_count": float64(5),
+			},
+			expected: "tools: 10, bash: 5",
+		},
+		{
+			name: "zero values ignored",
+			metadata: map[string]interface{}{
+				"tool_count": 0,
+				"bash_count": 2,
+				"cost":       0.0,
+			},
+			expected: "bash: 2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatBehavioralMetrics(tt.metadata)
+			if result != tt.expected {
+				t.Errorf("formatBehavioralMetrics() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestLogTaskResultVerboseWithBehavioralMetrics verifies behavioral metrics appear in verbose output.
+func TestLogTaskResultVerboseWithBehavioralMetrics(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+	logger.SetVerbose(true)
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Agent:  "test-agent",
+		Metadata: map[string]interface{}{
+			"tool_count": 5,
+			"bash_count": 3,
+			"cost":       0.0125,
+		},
+	}
+
+	result := models.TaskResult{
+		Task:     task,
+		Status:   models.StatusGreen,
+		Duration: 2 * time.Second,
+	}
+
+	err := logger.LogTaskResult(result)
+	if err != nil {
+		t.Fatalf("LogTaskResult() failed: %v", err)
+	}
+
+	output := buf.String()
+
+	// Check for behavioral metrics section
+	if !strings.Contains(output, "Behavioral:") {
+		t.Error("expected output to contain 'Behavioral:' section")
+	}
+
+	// Check for specific metrics
+	expectedMetrics := []string{"tools: 5", "bash: 3", "cost: $0.0125"}
+	for _, metric := range expectedMetrics {
+		if !strings.Contains(output, metric) {
+			t.Errorf("expected output to contain %q", metric)
+		}
+	}
+}
+
+// TestLogTaskResultVerboseWithoutBehavioralMetrics verifies no behavioral section when no data.
+func TestLogTaskResultVerboseWithoutBehavioralMetrics(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "debug")
+	logger.SetVerbose(true)
+
+	task := models.Task{
+		Number:   "1",
+		Name:     "Test task",
+		Agent:    "test-agent",
+		Metadata: nil,
+	}
+
+	result := models.TaskResult{
+		Task:     task,
+		Status:   models.StatusGreen,
+		Duration: 2 * time.Second,
+	}
+
+	err := logger.LogTaskResult(result)
+	if err != nil {
+		t.Fatalf("LogTaskResult() failed: %v", err)
+	}
+
+	output := buf.String()
+
+	// Should NOT contain behavioral section
+	if strings.Contains(output, "Behavioral:") {
+		t.Error("expected output NOT to contain 'Behavioral:' section when no data")
+	}
+}
+
 // TestNewConsoleLogger verifies the constructor creates a ConsoleLogger with the provided writer.
 func TestNewConsoleLogger(t *testing.T) {
 	t.Run("with valid writer", func(t *testing.T) {

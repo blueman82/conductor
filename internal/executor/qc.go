@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
@@ -75,6 +76,7 @@ type QualityController struct {
 	LearningStore       *learning.Store      // Learning store for historical context (optional)
 	Logger              QCLogger             // Logger for QC events (optional, can be nil)
 	IntelligentSelector *IntelligentSelector // Intelligent selector for mode="intelligent" (v2.4+)
+	BehavioralMetrics   *BehavioralMetricsProvider // Provider for behavioral metrics context (v2.7+)
 }
 
 // QCLogger is the minimal interface for QC logging functionality
@@ -84,6 +86,12 @@ type QCLogger interface {
 	LogQCAggregatedResult(verdict string, strategy string)
 	LogQCCriteriaResults(agentName string, results []models.CriterionResult)
 	LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string)
+}
+
+// BehavioralMetricsProvider provides behavioral metrics for QC context injection
+type BehavioralMetricsProvider interface {
+	// GetMetrics returns behavioral metrics for the current task execution
+	GetMetrics(ctx context.Context, taskNumber string) *behavioral.BehavioralMetrics
 }
 
 // InvokerInterface defines the interface for agent invocation
@@ -138,6 +146,11 @@ Agent Output:
 		if historicalContext, err := qc.LoadContext(ctx, task, qc.LearningStore); err == nil && historicalContext != "" {
 			basePrompt += "\n\n" + historicalContext
 		}
+	}
+
+	// Inject behavioral metrics context if provider configured
+	if behaviorContext := qc.injectBehaviorContext(ctx, task); behaviorContext != "" {
+		basePrompt += "\n\n" + behaviorContext
 	}
 
 	// Add formatting instructions
@@ -220,6 +233,12 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 			sb.WriteString(historicalContext)
 			sb.WriteString("\n\n")
 		}
+	}
+
+	// Inject behavioral metrics context if provider configured
+	if behaviorContext := qc.injectBehaviorContext(ctx, task); behaviorContext != "" {
+		sb.WriteString(behaviorContext)
+		sb.WriteString("\n")
 	}
 
 	sb.WriteString("## RESPONSE FORMAT\nYou MUST ONLY respond with JSON including criteria_results array.\n")
@@ -932,6 +951,25 @@ func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult
 		Flag:     verdict,
 		Feedback: feedback,
 	}
+}
+
+// injectBehaviorContext retrieves and formats behavioral metrics for QC prompt injection
+func (qc *QualityController) injectBehaviorContext(ctx context.Context, task models.Task) string {
+	if qc.BehavioralMetrics == nil {
+		return ""
+	}
+
+	provider := *qc.BehavioralMetrics
+	if provider == nil {
+		return ""
+	}
+
+	metrics := provider.GetMetrics(ctx, task.Number)
+	if metrics == nil {
+		return ""
+	}
+
+	return BuildBehaviorPromptSection(metrics)
 }
 
 // LoadContext loads execution history from database for the task

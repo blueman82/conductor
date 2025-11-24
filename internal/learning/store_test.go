@@ -53,7 +53,7 @@ func TestNewStore(t *testing.T) {
 			// Verify schema initialized
 			version, err := store.getSchemaVersion()
 			require.NoError(t, err)
-			assert.Equal(t, 1, version)
+			assert.Equal(t, len(migrations), version)
 
 			// Verify database path set correctly
 			assert.Equal(t, tt.dbPath, store.dbPath)
@@ -80,7 +80,16 @@ func TestInitSchema(t *testing.T) {
 			defer store.Close()
 
 			// Verify all tables exist
-			tables := []string{"task_executions", "approach_history", "schema_version"}
+			tables := []string{
+				"task_executions",
+				"approach_history",
+				"schema_version",
+				"behavioral_sessions",
+				"tool_executions",
+				"bash_commands",
+				"file_operations",
+				"token_usage",
+			}
 			for _, table := range tables {
 				exists, err := store.tableExists(table)
 				require.NoError(t, err)
@@ -92,6 +101,11 @@ func TestInitSchema(t *testing.T) {
 				"idx_task_executions_task",
 				"idx_task_executions_timestamp",
 				"idx_approach_history_task",
+				"idx_behavioral_sessions_task_id",
+				"idx_tool_executions_session_id",
+				"idx_bash_commands_session_id",
+				"idx_file_operations_session_id",
+				"idx_token_usage_session_id",
 			}
 			for _, index := range indexes {
 				exists, err := store.indexExists(index)
@@ -144,8 +158,8 @@ func TestSchemaVersion(t *testing.T) {
 		wantErr     bool
 	}{
 		{
-			name:        "returns version 1 for new database",
-			wantVersion: 1,
+			name:        "returns latest version for new database",
+			wantVersion: len(migrations),
 			wantErr:     false,
 		},
 	}
@@ -229,7 +243,7 @@ func TestSchemaIdempotency(t *testing.T) {
 
 		// Version should remain the same
 		assert.Equal(t, version1, version2)
-		assert.Equal(t, 1, version2)
+		assert.Equal(t, len(migrations), version2)
 	})
 }
 
@@ -262,7 +276,7 @@ func TestConcurrentInitialization(t *testing.T) {
 
 			version, err := stores[i].getSchemaVersion()
 			require.NoError(t, err)
-			assert.Equal(t, 1, version)
+			assert.Equal(t, len(migrations), version)
 		}
 	})
 }

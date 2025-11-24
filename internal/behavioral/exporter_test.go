@@ -395,6 +395,204 @@ func TestTruncateString(t *testing.T) {
 	}
 }
 
+func TestCSVExporter_Export(t *testing.T) {
+	tests := []struct {
+		name        string
+		metrics     *BehavioralMetrics
+		wantErr     bool
+		wantContains []string
+	}{
+		{
+			name: "complete metrics",
+			metrics: &BehavioralMetrics{
+				TotalSessions:   10,
+				SuccessRate:     0.85,
+				ErrorRate:       0.15,
+				TotalErrors:     2,
+				AverageDuration: 3 * time.Minute,
+				TotalCost:       5.25,
+				TokenUsage: TokenUsage{
+					InputTokens:  1000,
+					OutputTokens: 500,
+					CostUSD:      5.25,
+					ModelName:    "claude-sonnet-4-5",
+				},
+				AgentPerformance: map[string]int{"agent1": 5, "agent2": 3},
+				ToolExecutions: []ToolExecution{
+					{Name: "Read", Count: 50, SuccessRate: 1.0, ErrorRate: 0.0, AvgDuration: 100 * time.Millisecond},
+				},
+				BashCommands: []BashCommand{
+					{Command: "ls -la", ExitCode: 0, Success: true, Duration: time.Second, OutputLength: 100},
+				},
+				FileOperations: []FileOperation{
+					{Type: "read", Path: "/test/file.txt", Success: true, SizeBytes: 1024, Duration: 50},
+				},
+			},
+			wantErr: false,
+			wantContains: []string{
+				"Type,Name,Value",
+				"Summary,TotalSessions,10",
+				"Summary,SuccessRate,0.8500",
+				"TokenUsage,InputTokens,1000",
+				"AgentPerformance,agent1,5",
+				"ToolExecution,Read,",
+				"BashCommand,ls -la,",
+				"FileOperation,/test/file.txt,",
+			},
+		},
+		{
+			name: "minimal metrics",
+			metrics: &BehavioralMetrics{
+				TotalSessions: 1,
+				SuccessRate:   1.0,
+				ErrorRate:     0.0,
+			},
+			wantErr: false,
+			wantContains: []string{
+				"Type,Name,Value",
+				"Summary,TotalSessions,1",
+				"Summary,SuccessRate,1.0000",
+			},
+		},
+		{
+			name:    "nil metrics",
+			metrics: nil,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exporter := &CSVExporter{}
+			result, err := exporter.Export(tt.metrics)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("CSVExporter.Export() expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("CSVExporter.Export() unexpected error: %v", err)
+				return
+			}
+
+			// Check for expected content
+			for _, want := range tt.wantContains {
+				if !strings.Contains(result, want) {
+					t.Errorf("CSVExporter.Export() missing expected content: %q", want)
+				}
+			}
+		})
+	}
+}
+
+func TestEscapeCSV(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "no special chars",
+			input: "simple text",
+			want:  "simple text",
+		},
+		{
+			name:  "contains comma",
+			input: "value,with,commas",
+			want:  "\"value,with,commas\"",
+		},
+		{
+			name:  "contains quotes",
+			input: "value\"with\"quotes",
+			want:  "\"value\"\"with\"\"quotes\"",
+		},
+		{
+			name:  "contains newline",
+			input: "value\nwith\nnewline",
+			want:  "\"value\nwith\nnewline\"",
+		},
+		{
+			name:  "contains carriage return",
+			input: "value\rwith\rreturn",
+			want:  "\"value\rwith\rreturn\"",
+		},
+		{
+			name:  "mixed special chars",
+			input: "value,with\"mixed\nchars",
+			want:  "\"value,with\"\"mixed\nchars\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := escapeCSV(tt.input)
+			if result != tt.want {
+				t.Errorf("escapeCSV() = %q, want %q", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestExportToFile_CSV(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "export.csv")
+
+	metrics := &BehavioralMetrics{
+		TotalSessions: 10,
+		SuccessRate:   0.8,
+		ErrorRate:     0.2,
+	}
+
+	err := ExportToFile(metrics, outputPath, "csv")
+	if err != nil {
+		t.Errorf("ExportToFile() unexpected error: %v", err)
+	}
+
+	// Verify file exists
+	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
+		t.Errorf("ExportToFile() did not create output file")
+	}
+
+	// Verify file contents
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Errorf("Failed to read output file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.HasPrefix(contentStr, "Type,Name,Value\n") {
+		t.Errorf("ExportToFile() incorrect CSV header")
+	}
+
+	if !strings.Contains(contentStr, "Summary,TotalSessions,10") {
+		t.Errorf("ExportToFile() incorrect file content")
+	}
+}
+
+func TestExportToString_CSV(t *testing.T) {
+	metrics := &BehavioralMetrics{
+		TotalSessions: 5,
+		SuccessRate:   0.9,
+		ErrorRate:     0.1,
+	}
+
+	result, err := ExportToString(metrics, "csv")
+	if err != nil {
+		t.Errorf("ExportToString() unexpected error: %v", err)
+	}
+
+	if !strings.HasPrefix(result, "Type,Name,Value\n") {
+		t.Errorf("ExportToString() incorrect CSV format")
+	}
+
+	if !strings.Contains(result, "Summary,TotalSessions,5") {
+		t.Errorf("ExportToString() missing expected data")
+	}
+}
+
 func TestMarkdownExporter_ComplexMetrics(t *testing.T) {
 	metrics := &BehavioralMetrics{
 		TotalSessions:   100,

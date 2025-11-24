@@ -33,7 +33,7 @@ Examples:
 		RunE: HandleExportCommand,
 	}
 
-	cmd.Flags().StringVarP(&exportFormat, "format", "f", "json", "Export format: json, markdown (or md)")
+	cmd.Flags().StringVarP(&exportFormat, "format", "f", "json", "Export format: json, markdown (or md), csv")
 	cmd.Flags().StringVarP(&exportOutput, "output", "o", "", "Output file path (empty for stdout)")
 
 	return cmd
@@ -53,17 +53,29 @@ func HandleExportCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// TODO: Load metrics from behavioral database
-	// For now, return placeholder metrics
+	// TODO: Load metrics from behavioral database applying filters at query time
+	// Filters would be applied when loading sessions from database:
+	//   sessions := loadSessions(criteria)
+	//   metrics := aggregateSessions(sessions)
+	//   metrics.ToolExecutions = applyFilters(metrics.ToolExecutions, criteria)
+	// For now, return placeholder metrics with empty slices
 	metrics := &behavioral.BehavioralMetrics{
-		TotalSessions: 0,
-		SuccessRate:   0.0,
-		ErrorRate:     0.0,
+		TotalSessions:  0,
+		SuccessRate:    0.0,
+		ErrorRate:      0.0,
+		ToolExecutions: []behavioral.ToolExecution{},
+		BashCommands:   []behavioral.BashCommand{},
+		FileOperations: []behavioral.FileOperation{},
 	}
 
-	// Apply filters to metrics
-	// TODO: Implement actual filtering when database integration is complete
-	_ = criteria
+	// Apply filters to detailed data (when database integration is complete)
+	// Note: criteria is parsed and ready for database query filtering
+	if criteria.ErrorsOnly || criteria.EventType != "" || criteria.Search != "" {
+		// Filter logic would be: load only matching data from database
+		metrics.ToolExecutions = behavioral.ApplyFiltersToToolExecutions(metrics.ToolExecutions, criteria)
+		metrics.BashCommands = behavioral.ApplyFiltersToBashCommands(metrics.BashCommands, criteria)
+		metrics.FileOperations = behavioral.ApplyFiltersToFileOperations(metrics.FileOperations, criteria)
+	}
 
 	// Export based on output destination
 	if exportOutput == "" {
@@ -103,10 +115,11 @@ func parseExportFormat(format string) (string, error) {
 	validFormats := map[string]bool{
 		"json":     true,
 		"markdown": true,
+		"csv":      true,
 	}
 
 	if !validFormats[format] {
-		return "", fmt.Errorf("invalid format '%s': must be one of: json, markdown (or md)", format)
+		return "", fmt.Errorf("invalid format '%s': must be one of: json, markdown (or md), csv", format)
 	}
 
 	return format, nil

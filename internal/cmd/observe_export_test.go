@@ -222,6 +222,11 @@ func TestHandleExportCommand_FormatValidation(t *testing.T) {
 			shouldFail: false,
 		},
 		{
+			name:       "valid csv",
+			format:     "csv",
+			shouldFail: false,
+		},
+		{
 			name:       "invalid format",
 			format:     "xml",
 			shouldFail: true,

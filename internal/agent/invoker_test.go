@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -335,39 +336,52 @@ Go development content
 
 func TestParseClaudeOutput(t *testing.T) {
 	tests := []struct {
-		name        string
-		output      string
-		wantContent string
-		wantError   string
-		wantErr     bool
+		name          string
+		output        string
+		wantContent   string
+		wantError     string
+		wantSessionID string
+		wantErr       bool
 	}{
 		{
-			name:        "valid JSON output",
-			output:      `{"content":"Hello World","error":""}`,
-			wantContent: "Hello World",
-			wantError:   "",
-			wantErr:     false,
+			name:          "valid JSON output",
+			output:        `{"content":"Hello World","error":""}`,
+			wantContent:   "Hello World",
+			wantError:     "",
+			wantSessionID: "",
+			wantErr:       false,
 		},
 		{
-			name:        "valid JSON with error",
-			output:      `{"content":"","error":"Something went wrong"}`,
-			wantContent: "",
-			wantError:   "Something went wrong",
-			wantErr:     false,
+			name:          "valid JSON with session_id",
+			output:        `{"content":"Task done","error":"","session_id":"abc-123-xyz"}`,
+			wantContent:   "Task done",
+			wantError:     "",
+			wantSessionID: "abc-123-xyz",
+			wantErr:       false,
 		},
 		{
-			name:        "non-JSON output",
-			output:      "Plain text output without JSON",
-			wantContent: "Plain text output without JSON",
-			wantError:   "",
-			wantErr:     false,
+			name:          "valid JSON with error",
+			output:        `{"content":"","error":"Something went wrong"}`,
+			wantContent:   "",
+			wantError:     "Something went wrong",
+			wantSessionID: "",
+			wantErr:       false,
 		},
 		{
-			name:        "empty output",
-			output:      "",
-			wantContent: "",
-			wantError:   "",
-			wantErr:     false,
+			name:          "non-JSON output",
+			output:        "Plain text output without JSON",
+			wantContent:   "Plain text output without JSON",
+			wantError:     "",
+			wantSessionID: "",
+			wantErr:       false,
+		},
+		{
+			name:          "empty output",
+			output:        "",
+			wantContent:   "",
+			wantError:     "",
+			wantSessionID: "",
+			wantErr:       false,
 		},
 	}
 
@@ -384,58 +398,103 @@ func TestParseClaudeOutput(t *testing.T) {
 			if result.Error != tt.wantError {
 				t.Errorf("Error = %q, want %q", result.Error, tt.wantError)
 			}
+			if result.SessionID != tt.wantSessionID {
+				t.Errorf("SessionID = %q, want %q", result.SessionID, tt.wantSessionID)
+			}
 		})
 	}
 }
 
 func TestInvoke(t *testing.T) {
-	// Create temporary directory for test files
-	tmpDir := t.TempDir()
+	tests := []struct {
+		name              string
+		scriptOutput      string
+		wantSessionID     string
+		wantContentPart   string
+		wantSessionIDLogs bool
+	}{
+		{
+			name:              "output with session_id",
+			scriptOutput:      `{"content":"Task completed successfully","error":"","session_id":"session-abc-123"}`,
+			wantSessionID:     "session-abc-123",
+			wantContentPart:   "Task completed successfully",
+			wantSessionIDLogs: true,
+		},
+		{
+			name:              "output without session_id",
+			scriptOutput:      `{"content":"Task completed successfully","error":""}`,
+			wantSessionID:     "",
+			wantContentPart:   "Task completed successfully",
+			wantSessionIDLogs: false,
+		},
+	}
 
-	// Create a mock executable script that simulates claude CLI
-	mockScript := filepath.Join(tmpDir, "mock-claude")
-	scriptContent := `#!/bin/sh
-echo '{"content":"Task completed successfully","error":""}'
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary directory for test files
+			tmpDir := t.TempDir()
+
+			// Create a mock executable script that simulates claude CLI
+			mockScript := filepath.Join(tmpDir, "mock-claude")
+			scriptContent := fmt.Sprintf(`#!/bin/sh
+echo '%s'
 exit 0
-`
-	err := os.WriteFile(mockScript, []byte(scriptContent), 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
+`, tt.scriptOutput)
+			err := os.WriteFile(mockScript, []byte(scriptContent), 0755)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	// Create invoker with mock claude path
-	inv := &Invoker{
-		ClaudePath: mockScript,
-	}
+			// Create invoker with mock claude path
+			inv := &Invoker{
+				ClaudePath: mockScript,
+			}
 
-	// Create test task
-	task := models.Task{
-		Number:        "1",
-		Name:          "Test Task",
-		Prompt:        "Do something",
-		EstimatedTime: 30 * time.Minute,
-	}
+			// Create test task
+			task := models.Task{
+				Number:        "1",
+				Name:          "Test Task",
+				Prompt:        "Do something",
+				EstimatedTime: 30 * time.Minute,
+			}
 
-	// Invoke with context
-	ctx := context.Background()
-	result, err := inv.Invoke(ctx, task)
+			// Invoke with context
+			ctx := context.Background()
+			result, err := inv.Invoke(ctx, task)
 
-	if err != nil {
-		t.Fatalf("Invoke() error = %v", err)
-	}
+			if err != nil {
+				t.Fatalf("Invoke() error = %v", err)
+			}
 
-	if result == nil {
-		t.Fatal("Invoke() returned nil result")
-	}
+			if result == nil {
+				t.Fatal("Invoke() returned nil result")
+			}
 
-	// Parse and verify output
-	output, err := ParseClaudeOutput(result.Output)
-	if err != nil {
-		t.Fatalf("ParseClaudeOutput() error = %v", err)
-	}
+			// Verify SessionID in result
+			if result.SessionID != tt.wantSessionID {
+				t.Errorf("result.SessionID = %q, want %q", result.SessionID, tt.wantSessionID)
+			}
 
-	if !strings.Contains(output.Content, "Task completed successfully") {
-		t.Errorf("Output content = %q, want to contain 'Task completed successfully'", output.Content)
+			// Verify SessionID in AgentResponse
+			if result.AgentResponse != nil && result.AgentResponse.SessionID != tt.wantSessionID {
+				t.Errorf("result.AgentResponse.SessionID = %q, want %q", result.AgentResponse.SessionID, tt.wantSessionID)
+			}
+
+			// Parse and verify output
+			output, err := ParseClaudeOutput(result.Output)
+			if err != nil {
+				t.Fatalf("ParseClaudeOutput() error = %v", err)
+			}
+
+			if !strings.Contains(output.Content, tt.wantContentPart) {
+				t.Errorf("Output content = %q, want to contain %q", output.Content, tt.wantContentPart)
+			}
+
+			// Verify session_id in parsed output
+			if output.SessionID != tt.wantSessionID {
+				t.Errorf("output.SessionID = %q, want %q", output.SessionID, tt.wantSessionID)
+			}
+		})
 	}
 }
 
@@ -523,8 +582,9 @@ exit 0
 func TestClaudeOutputMarshaling(t *testing.T) {
 	// Test that ClaudeOutput can be marshaled/unmarshaled correctly
 	original := &ClaudeOutput{
-		Content: "Test content",
-		Error:   "Test error",
+		Content:   "Test content",
+		Error:     "Test error",
+		SessionID: "test-session-123",
 	}
 
 	// Marshal to JSON
@@ -546,6 +606,9 @@ func TestClaudeOutputMarshaling(t *testing.T) {
 	}
 	if parsed.Error != original.Error {
 		t.Errorf("Error = %q, want %q", parsed.Error, original.Error)
+	}
+	if parsed.SessionID != original.SessionID {
+		t.Errorf("SessionID = %q, want %q", parsed.SessionID, original.SessionID)
 	}
 }
 

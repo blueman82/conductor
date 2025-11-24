@@ -6,25 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.5.2 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection with critical RED verdict fix, domain-specific review criteria, integration tasks with dual criteria validation, and auto-incrementing version management.
+**Current Status**: Production-ready v2.5.2 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, and auto-incrementing version management.
 
 ## Development Commands
 
 ### Build & Run
 ```bash
-# Build the binary
-go build ./cmd/conductor
-
-# Run from source
-go run ./cmd/conductor
-
-# Show version
-./conductor --version
-
-# Show help
-./conductor --help
-
-# Learning commands
+go build ./cmd/conductor          # Build binary
+go run ./cmd/conductor            # Run from source
+./conductor --version             # Show version
+./conductor --help                # Show help
 ./conductor learning stats        # View learning statistics
 ./conductor learning export       # Export learning data
 ./conductor learning clear        # Clear learning history
@@ -32,1029 +23,211 @@ go run ./cmd/conductor
 
 ### Testing
 ```bash
-# Run all tests
-go test ./...
-
-# Run all tests with coverage
-go test ./... -cover
-
-# Run tests for specific package
-go test ./internal/parser/ -v
-go test ./internal/executor/ -v
-go test ./internal/agent/ -v
-go test ./internal/learning/ -v
-
-# Run specific test
-go test ./internal/parser/ -run TestMarkdownParser -v
-
-# Run with race detection
-go test -race ./...
-
-# Generate coverage report
-go test ./... -coverprofile=coverage.out
-go tool cover -html=coverage.out
-```
-
-### Code Quality
-```bash
-# Format code
-go fmt ./...
-
-# Run linter (if installed)
-golangci-lint run
-
-# Check for issues
-go vet ./...
+go test ./...                              # Run all tests
+go test ./... -cover                       # Run with coverage
+go test ./internal/parser/ -v              # Test specific package
+go test ./internal/parser/ -run TestMarkdownParser -v  # Run specific test
+go test -race ./...                        # Run with race detection
+go test ./... -coverprofile=coverage.out   # Generate coverage report
+go tool cover -html=coverage.out           # View coverage HTML
 ```
 
 ### Version Management
 ```bash
-# Current version (stored in VERSION file)
-cat VERSION
-
-# Build with current version
-make build
-
-# Auto-increment patch version (1.1.0 → 1.1.1) and build
-make build-patch
-
-# Auto-increment minor version (1.1.0 → 1.2.0) and build
-make build-minor
-
-# Auto-increment major version (1.1.0 → 2.0.0) and build
-make build-major
+cat VERSION              # Current version (stored in VERSION file)
+make build               # Build with current version
+make build-patch         # Auto-increment patch (1.1.0 → 1.1.1) and build
+make build-minor         # Auto-increment minor (1.1.0 → 1.2.0) and build
+make build-major         # Auto-increment major (1.1.0 → 2.0.0) and build
 ```
 
 **Versioning**: Conductor uses semantic versioning with auto-increment targets. The VERSION file is the single source of truth, automatically injected into the binary at build time via LDFLAGS.
 
 ## Architecture Overview
 
-### High-Level Flow
+### Execution Pipeline
 
-**Single-File Plans:**
 ```
-Plan File (.md/.yaml)
-  → Parser (auto-detects format)
-  → Dependency Graph Builder (validates, detects cycles)
-  → Wave Calculator (Kahn's algorithm for topological sort)
-  → Orchestrator (coordinates execution)
-  → Wave Executor (spawns parallel tasks)
-  → Pre-Task Hook (loads failure history, injects context)
-  → Task Executor (invokes claude CLI, handles retries)
-  → Quality Control (reviews output, decides GREEN/RED/YELLOW)
-  → Post-Task Hook (stores success/failure patterns)
-  → Plan Updater (marks tasks complete)
-  → Learning System (analyzes patterns, generates insights)
+Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor → Task Executor → QC → Learning System
 ```
 
-**Multi-File Plans:**
-```
-Multiple Plan Files (.md/.yaml)
-  → Parser (auto-detects format per file)
-  → Plan Merger (validates, deduplicates, merges)
-  → Dependency Graph Builder (cross-file dependencies)
-  → Wave Calculator (respects worktree groups)
-  → Orchestrator (maintains file origins)
-  → Pre-Task Hook (loads failure history, injects context)
-  → Execution & Logging (file-aware tracking)
-  → Post-Task Hook (stores success/failure patterns)
-  → Learning System (cross-run pattern analysis)
-```
+**Multi-File Plans** (v2.6+): Parser handles multiple files → Plan Merger validates cross-file deps → Rest of pipeline
 
 ### Key Components
 
-**Parser (`internal/parser/`)**: Auto-detects file format and parses plan files into Task structs. Markdown parser extracts tasks from `## Task N:` headings. YAML parser handles structured format. Both support optional YAML frontmatter for conductor config.
+**Parser (`internal/parser/`)**: Auto-detects format (.md/.yaml), parses into Task structs. Markdown extracts from `## Task N:` headings, YAML handles structured format. Both support YAML frontmatter for config.
 
-**Plan Merger** (multi-file support):
-- Loads and merges multiple plan files (.md or .yaml)
-- Auto-detects format per file
-- Validates cross-file dependencies
-- Tracks file-to-task mapping for resume operations
-- Maintains worktree group organization
+**Plan Merger**: Loads/merges multiple plan files, validates cross-file dependencies, tracks file-to-task mapping for resume operations.
 
-**Models (`internal/models/`)**: Core data structures (Task, Plan, Wave, TaskResult). Task includes Status and CompletedAt fields for resumable execution. Task.DependsOn creates dependency graph. Wave groups parallel-executable tasks. Plan includes WorktreeGroups (organizational metadata only) and FileToTaskMap for multi-file coordination. Helper methods: IsCompleted(), CanSkip().
-
-**WorktreeGroup field:** Organizational metadata for human reference and logging. NOT used for execution control. Conductor uses dependency graph (`depends_on`) to determine execution order. Groups are logged in `Wave.GroupInfo` for tracking purposes.
+**Models (`internal/models/`)**: Task, Plan, Wave, TaskResult. Task has Status/CompletedAt for resumable execution, DependsOn for dependency graph. Plan has WorktreeGroups (organizational only) and FileToTaskMap.
 
 **Executor (`internal/executor/`)**:
-- `graph.go`: Dependency graph builder using Kahn's algorithm for wave calculation. DFS with color marking for cycle detection. Validates all dependencies exist.
-- `qc.go`: Quality control reviews using dedicated agent. Parses GREEN/RED/YELLOW flags from JSON or legacy text output. Uses `parseQCJSON()` with Claude CLI envelope extraction. Handles retry logic (max 2 attempts on RED).
-- `task.go`: Task executor implementing invoke → review → retry pipeline. Handles GREEN/RED/YELLOW flags, retries on RED, updates plan file on completion. Inter-retry agent swapping via `learning.SelectBetterAgent()`. Single `updateFeedback()` call after QC review (not before). 84.5% test coverage with comprehensive error path testing.
-- `wave.go`: Wave executor for sequential wave execution with bounded concurrency. Filters completed tasks before execution based on SkipCompleted config. Creates synthetic GREEN results for skipped tasks. Respects RetryFailed flag for failed task re-execution.
+- `graph.go`: Kahn's algorithm for wave calculation, DFS cycle detection
+- `qc.go`: Quality control with JSON parsing, GREEN/RED/YELLOW verdicts, retry logic (max 2)
+- `task.go`: Invoke → review → retry pipeline, inter-retry agent swapping, single updateFeedback() call after QC
+- `wave.go`: Sequential wave execution, bounded concurrency, filters completed tasks
 
 **Agent (`internal/agent/`)**:
-- `discovery.go`: Scans `~/.claude/agents/` for agent .md files with YAML frontmatter. Uses directory whitelisting (root + numbered dirs 01-10) and file filtering (skips README.md, *-framework.md, examples/, transcripts/, logs/) to eliminate false warnings. Registry provides fast agent lookup with ~94% test coverage.
-- `invoker.go`: Executes `claude -p` commands with proper flags. Always disables hooks, uses JSON output format. Prefixes prompts with "use the {agent} subagent to:" when agent specified.
+- `discovery.go`: Scans `~/.claude/agents/`, directory whitelisting, file filtering
+- `invoker.go`: Executes `claude -p` with JSON output, disables hooks, prefixes prompts with agent name
 
-**Learning (`internal/learning/`)**:
-- `store.go`: Persistent storage for task execution history. Stores success/failure outcomes, error messages, file changes, and timestamps. JSON-based storage with file-per-task organization in `.conductor/learning/` directory.
-- `analyzer.go`: Pattern recognition engine that analyzes historical task executions. Identifies common failure patterns, success strategies, and file-based correlations. Generates actionable insights for future task execution.
-- `hooks.go`: Pre-task and post-task hooks that integrate learning into the execution pipeline. Pre-task hook loads relevant failure history and injects context into task prompts. Post-task hook stores execution outcomes for future analysis.
-- Architecture: Learning data stored in `.conductor/learning/{task-name}-{timestamp}.json`. Each entry contains task metadata, execution outcome, duration, files modified, and detailed error information for failures.
+**Learning (`internal/learning/`)**: Stores execution history (store.go), analyzes patterns (analyzer.go), integrates via hooks (hooks.go). Data in `.conductor/learning/`.
 
-**CLI (`internal/cmd/`)**:
-- `root.go`: Root command with version display and subcommand registration
-- `run.go`: Implements `conductor run` command for plan execution
-  - CLI flags: --dry-run, --max-concurrency, --timeout, --verbose, --skip-completed, --retry-failed, --log-dir
-  - Config file merging (CLI flags override config.yaml)
-  - Plan file loading with auto-format detection
-  - Orchestrator integration with progress logging
-  - Comprehensive error handling
-- `validate.go`: Implements `conductor validate` command for plan validation
-- `learning.go`: Implements `conductor learning` command group
-  - `learning export`: Export learning data to JSON for analysis
-  - `learning stats`: Display learning statistics and insights
-  - `learning clear`: Clear learning history (with confirmation)
-- Console logger: Real-time progress updates with timestamps
+**CLI (`internal/cmd/`)**: root.go, run.go, validate.go, learning.go. Flags: --dry-run, --max-concurrency, --timeout, --verbose, --skip-completed, --retry-failed, --log-dir.
 
-**Config (`internal/config/`)**:
-- Supports .conductor/config.yaml for default settings
-- Configuration priority: defaults → config file → CLI flags (highest priority)
-- Fields: max_concurrency, timeout, dry_run, skip_completed, retry_failed, log_dir, log_level
-- Learning configuration: learning_enabled (default: true), learning_dir (default: .conductor/learning), max_history_entries (default: 100)
+**Config (`internal/config/`)**: .conductor/config.yaml. Priority: defaults → config → CLI flags. Fields: max_concurrency, timeout, dry_run, skip_completed, retry_failed, log_dir, log_level, learning settings.
 
 ### Dependency Graph Algorithm
 
-Uses **Kahn's algorithm** for topological sort with wave grouping:
-1. Calculate in-degree for each task (number of dependencies)
-2. Wave 1: All tasks with in-degree 0 (no dependencies)
-3. Process wave, decrease in-degree of dependent tasks
-4. Wave N: Tasks that now have in-degree 0
-5. Repeat until all tasks processed
+**Kahn's algorithm** for topological sort:
+1. Calculate in-degree (number of dependencies)
+2. Wave 1: tasks with in-degree 0
+3. Process wave, decrease dependent in-degrees
+4. Repeat until all processed
 
-Cycle detection uses **DFS with color marking**:
-- White (0): Not visited
-- Gray (1): Currently visiting (on recursion stack)
-- Black (2): Fully visited
-- Back edge (gray → gray) = cycle detected
+**Cycle detection**: DFS with color marking (White=0, Gray=1, Black=2). Back edge = cycle.
 
-### Claude CLI Invocation Pattern
+### Claude CLI Invocation
 
-All agent invocations follow this structure:
 ```go
-args := []string{
-    "-p",  // Non-interactive print mode
-    prompt,
-    "--settings", `{"disableAllHooks": true}`,  // No user hooks
-    "--output-format", "json",  // Structured output
-}
+args := []string{"-p", prompt, "--settings", `{"disableAllHooks": true}`, "--output-format", "json"}
 cmd := exec.CommandContext(ctx, "claude", args...)
+// With agent: prompt = fmt.Sprintf("use the %s subagent to: %s", agent, task.Prompt)
 ```
 
-Agent references are added by prefixing prompt:
-```go
-prompt = fmt.Sprintf("use the %s subagent to: %s", agent, task.Prompt)
-```
+### Quality Control
 
-### Quality Control Pattern
-
-QC reviews use structured JSON output format with envelope extraction:
-
-**JSON Response Schema (`internal/models/response.go`):**
+**JSON Response Schema:**
 ```go
 type QCResponse struct {
-    Verdict         string   `json:"verdict"`          // "GREEN", "RED", "YELLOW"
-    Feedback        string   `json:"feedback"`         // Detailed review feedback
-    Issues          []Issue  `json:"issues"`           // Specific issues found
-    Recommendations []string `json:"recommendations"`  // Suggested improvements
-    ShouldRetry     bool     `json:"should_retry"`     // Whether to retry
-    SuggestedAgent  string   `json:"suggested_agent"`  // Alternative agent suggestion
-}
-
-type Issue struct {
-    Severity    string `json:"severity"`    // "critical", "warning", "info"
-    Description string `json:"description"` // Issue description
-    Location    string `json:"location"`    // File:line or component
+    Verdict         string   `json:"verdict"`          // GREEN, RED, YELLOW
+    Feedback        string   `json:"feedback"`
+    Issues          []Issue  `json:"issues"`
+    Recommendations []string `json:"recommendations"`
+    ShouldRetry     bool     `json:"should_retry"`
+    SuggestedAgent  string   `json:"suggested_agent"`  // For inter-retry swapping
+    CriteriaResults []CriterionResult `json:"criteria_results"`  // Per-criterion (v2.3+)
+    IntegrationResults []CriterionResult `json:"integration_results"`  // Integration (v2.5+)
 }
 ```
 
-**QC JSON Parsing (`internal/executor/qc.go`):**
-```go
-// parseQCJSON extracts and validates QC response from Claude CLI output
-func parseQCJSON(output string) (*models.QCResponse, error) {
-    // Step 1: Extract "result" field from Claude CLI envelope
-    claudeOut, _ := agent.ParseClaudeOutput(output)
-    actualOutput := claudeOut.Content
+**Parsing**: `parseQCJSON()` extracts from Claude CLI envelope `{"type":"result","result":"..."}`, strips markdown fences, validates.
 
-    // Step 2: Strip markdown code fences if present (```json...```)
-    if strings.HasPrefix(strings.TrimSpace(actualOutput), "```") {
-        actualOutput = extractJSONFromCodeFence(actualOutput)
-    }
+**Inter-Retry Agent Swapping (v2.1)**: On RED with `SuggestedAgent`, `learning.SelectBetterAgent()` validates and swaps for retry. Controlled by `learning.swap_during_retries` config.
 
-    // Step 3: Parse and validate JSON
-    var resp models.QCResponse
-    json.Unmarshal([]byte(actualOutput), &resp)
-    resp.Validate()
-    return &resp, nil
-}
-```
+**Structured Criteria (v2.3+)**: Tasks define `success_criteria` list. QC returns per-criterion PASS/FAIL. Multi-agent unanimous consensus required.
 
-Claude CLI returns wrapped JSON: `{"type":"result","result":"..."}`. The `agent.ParseClaudeOutput()` function extracts the inner `result` field, then `extractJSONFromCodeFence()` strips any markdown wrappers before JSON parsing.
+**Intelligent Selection (v2.4+)**: Claude-based QC agent recommendations analyzing task context + executing agent. Modes: auto, explicit, mixed, intelligent. Guardrails: code-reviewer baseline, max agents cap, registry validation, TTL caching.
 
-**Dual Feedback Storage (`internal/executor/task.go`):**
-- `updateFeedback()` called ONLY after QC review completes (line ~647)
-- Stores: attempt number, agent, verdict, agent output, QC feedback, timestamp
-- Uses `updater.UpdateTaskFeedback()` to write execution history to plan files
-- Eliminates duplicate entries by avoiding pre-QC storage
+### Adaptive Learning
 
-```go
-// Called once per attempt, after QC review is complete
-te.updateFeedback(task, attempt+1, invocation.Output, qcFeedback, verdict)
-```
+**Flow**: Pre-Task Hook (load history) → Task Execution → QC Review → Inter-Retry Swap → Dual Storage (plan file + DB) → Post-Task Hook (record outcome)
 
-**Inter-Retry Agent Swapping (v2.1):**
-Quality control can suggest alternative agents via `SuggestedAgent` field. When QC returns RED verdict with a suggested agent, conductor uses `learning.SelectBetterAgent()` to determine the optimal agent for retry:
+**Storage**: SQLite `.conductor/learning/executions.db`. Tracks: task_name, timestamp, outcome, duration, files_modified, error_message, retry_count.
 
-```go
-// After RED verdict, check for agent swap opportunity
-if newAgent, reason := learning.SelectBetterAgent(task.Agent, history, review.SuggestedAgent);
-   newAgent != "" && newAgent != task.Agent {
-    task.Agent = newAgent  // Swap agent for next retry
-}
-```
-
-Flow: Task fails (RED) → QC suggests better agent → `SelectBetterAgent()` validates → Auto-swap on retry → Enhanced success rate
-
-**Retry Logic:**
-- Only retry on RED verdict
-- Up to MaxRetries (default: 2)
-- Agent swapping occurs between retries when suggested
-- Controlled by `learning.swap_during_retries` config (default: true)
-- Respects `min_failures_before_adapt` threshold from config
-
-### Structured Success Criteria (v2.3+)
-
-Tasks can define explicit success criteria for per-criterion QC verification:
-
-```yaml
-tasks:
-  - id: 5
-    name: "Add JWT Authentication"
-    files: [internal/auth/jwt.go]
-    success_criteria:
-      - "JWT validation function implemented"
-      - "Supports HS256 algorithm"
-      - "Unit tests achieve 90% coverage"
-    test_commands:
-      - "go test ./internal/auth/ -v"
-```
-
-**QC Verification Process:**
-1. Criteria numbered in prompt (0, 1, 2...)
-2. QC agents return per-criterion PASS/FAIL with evidence
-3. Multi-agent consensus: criterion passes only if ALL agents agree
-4. Any failed criterion = RED verdict (unanimous consensus required)
-
-**Response Schema (`internal/models/response.go`):**
-```go
-type QCResponse struct {
-    Verdict         string             `json:"verdict"`
-    Feedback        string             `json:"feedback"`
-    CriteriaResults []CriterionResult  `json:"criteria_results"`  // Per-criterion verdicts
-    Issues          []Issue            `json:"issues"`
-    Recommendations []string           `json:"recommendations"`
-    ShouldRetry     bool               `json:"should_retry"`
-    SuggestedAgent  string             `json:"suggested_agent"`
-}
-
-type CriterionResult struct {
-    Index    int    `json:"index"`     // Criterion index (0-based)
-    Passed   bool   `json:"passed"`    // PASS/FAIL
-    Evidence string `json:"evidence"`  // Evidence or reason
-}
-```
-
-**Multi-Agent QC (`internal/executor/qc.go`):**
-```go
-// MergeQCResponses combines results from multiple QC agents
-// using unanimous consensus (all must agree for PASS)
-func MergeQCResponses(responses []*models.QCResponse) *models.QCResponse {
-    // Unanimous consensus: criterion passes only if ALL agents mark PASS
-    // Any disagreement = FAIL
-}
-```
-
-**Backward Compatible**: Tasks without `success_criteria` use legacy blob review (unstructured output assessment).
-
-### Intelligent QC Agent Selection (v2.4+)
-
-Beyond file-extension based selection, Conductor supports intelligent agent selection using Claude to analyze task context:
-
-**Selection Modes:**
-- `"auto"` (default): File-extension mapping (.go→golang-pro, .py→python-pro)
-- `"explicit"`: Use only agents from `ExplicitList`
-- `"mixed"`: Auto-select + additional agents
-- `"intelligent"`: Claude-based selection with task + executing agent context
-
-**Intelligent Selection Flow:**
-1. Build prompt with task context (name, files, description) + executing agent
-2. Query Claude for agent recommendations (single API call)
-3. Apply deterministic guardrails (cap, registry validation, code-reviewer baseline)
-4. Cache results to avoid redundant API calls during retries
-
-**Configuration (`internal/models/plan.go`):**
-```go
-type QCAgentConfig struct {
-    Mode              string   // "auto", "explicit", "mixed", or "intelligent"
-    ExplicitList      []string // Explicit agent list
-    AdditionalAgents  []string // Extra agents for mixed mode
-    BlockedAgents     []string // Agents to never use
-    // Intelligent selection settings (v2.4+)
-    MaxAgents         int      // Maximum agents to select (default: 4)
-    CacheTTLSeconds   int      // Cache TTL in seconds (default: 3600)
-    RequireCodeReview bool     // Always include code-reviewer baseline (default: true)
-}
-```
-
-**Guardrails:**
-- Always includes `code-reviewer` as baseline (if RequireCodeReview=true)
-- Caps selection at MaxAgents (default: 4)
-- Validates all agents against registry allowlist
-- Filters blocked agents
-- Falls back to `"auto"` mode if intelligent selection fails
-
-**Example Usage:**
-```yaml
-quality_control:
-  enabled: true
-  agents:
-    mode: intelligent
-    max_agents: 3
-    cache_ttl_seconds: 1800
-    require_code_review: true
-    blocked: [deprecated-agent]
-```
-
-**Implementation Files:**
-- `internal/executor/qc_intelligent.go`: Intelligent selector with Claude invocation
-- `internal/executor/qc_cache.go`: TTL-based caching for selection results
-- `internal/executor/qc_selection.go`: Main selection logic with mode switching
-
-**Benefits:**
-- Domain-aware: Recommends security-auditor for auth tasks, database-optimizer for DB operations
-- Stack-aware: Considers executing agent's strengths and blind spots
-- Cost-controlled: Caches results to minimize API calls
-
-### Adaptive Learning System
-
-Conductor learns from task execution history to improve future runs:
-
-**Learning Flow:**
-1. **Pre-Task Hook**: Before executing a task, load historical failures for similar tasks
-2. **Context Injection**: Augment task prompt with relevant failure patterns and solutions
-3. **Task Execution**: Execute task with enhanced context
-4. **Post-Task Hook**: Store execution outcome (success/failure, duration, files, errors)
-5. **Pattern Analysis**: Analyze stored history to identify trends and insights
-
-**Learning Data Structure:**
-```json
-{
-  "task_name": "Task 5: Implement error handling",
-  "task_number": "5",
-  "timestamp": "2025-01-12T10:30:00Z",
-  "outcome": "failed",
-  "duration_seconds": 45.2,
-  "files_modified": ["internal/executor/task.go"],
-  "error_message": "compilation error: undefined variable",
-  "retry_count": 1
-}
-```
-
-**Pattern Recognition:**
-- Failure clustering: Group similar failures by error message, files, task type
-- Success strategies: Identify patterns in successful task executions
-- File correlations: Track which files commonly fail together
-- Time analysis: Detect tasks that consistently take longer than estimated
-
-**Learning Commands:**
-```bash
-# Export all learning data for external analysis
-conductor learning export > analysis.json
-
-# View statistics and insights
-conductor learning stats
-
-# Clear learning history (with confirmation)
-conductor learning clear
-```
-
-**Configuration:**
-Learning can be configured in `.conductor/config.yaml`:
+**Config** (.conductor/config.yaml):
 ```yaml
 learning:
-  enabled: true                    # Enable/disable learning system
-  db_path: .conductor/learning/executions.db  # SQLite database path
-  auto_adapt_agent: true          # Enable agent adaptation based on patterns
-  swap_during_retries: true       # v2.1: swap agents within same run (not just between runs)
-  enhance_prompts: true           # Add learned context to prompts
-  qc_reads_plan_context: true     # v2.1: QC loads execution history from plan file
-  qc_reads_db_context: true       # v2.1: QC loads execution history from database
-  max_context_entries: 10         # v2.1: limit context to last N attempts
-  min_failures_before_adapt: 2    # Failure threshold before adapting
-  max_executions_per_task: 100    # Max entries per task in database
-  keep_executions_days: 90        # Data retention period
-```
-
-**Hook Integration:**
-Hooks are automatically invoked during task execution:
-- Pre-task: `PreTaskHook(task, store)` - injects failure context
-- Post-task: `PostTaskHook(task, result, store)` - stores outcome
-
-**QC Context Loading (`internal/executor/qc.go`):**
-```go
-// LoadContext loads execution history from database for the task
-func (qc *QualityController) LoadContext(ctx context.Context, task models.Task, store *learning.Store) (string, error) {
-    history, err := store.GetExecutionHistory(ctx, task.SourceFile, task.Number)
-    // Formats historical attempts with verdicts, feedback, and errors
-    // for QC agent to make informed retry recommendations
-}
+  enabled: true                    # Master switch
+  auto_adapt_agent: false         # Auto-switch on failures
+  swap_during_retries: true       # v2.1: within-run swapping
+  enhance_prompts: true           # Add context to prompts
+  qc_reads_plan_context: true     # Load from plan file
+  qc_reads_db_context: true       # Load from database
+  max_context_entries: 10         # Limit context
+  min_failures_before_adapt: 2    # Threshold
 ```
 
 ## Test-Driven Development
 
-**This project follows strict TDD**:
-1. **Red**: Write failing test first
-2. **Green**: Implement minimal code to pass
-3. **Refactor**: Improve code quality
-4. **Commit**: Commit after each completed task
+**Strict TDD**: Red → Green → Refactor → Commit
 
-### Test Organization
-- Test files live alongside source: `foo.go` → `foo_test.go`
-- Test fixtures in `internal/{package}/testdata/`
-- Table-driven tests using `t.Run()` for subtests
-- Interfaces enable mocking (e.g., `InvokerInterface` for QC tests)
+**Test Organization**: `foo.go` → `foo_test.go`, fixtures in `testdata/`, table-driven tests with `t.Run()`, interfaces for mocking.
 
-### Coverage Targets
-- Critical paths (graph algorithms, QC logic): 90%+
-- Overall target: 70%+ (currently 86.4% - exceeds target)
+**Coverage Targets**: Critical paths 90%+, overall 70%+ (currently 86.4%).
 
-## Important Implementation Details
-
-### File Format Detection
-Extension-based auto-detection in `parser.DetectFormat()`:
-- `.md`, `.markdown` → Markdown parser
-- `.yaml`, `.yml` → YAML parser
-- Convenience function `ParseFile()` handles detection + parsing
-
-### Task Metadata Parsing
-
-Conductor's parsers (Markdown and YAML) extract these fields from plan files:
+## Task Metadata Parsing
 
 **Core fields** (always parsed):
-- `Number` - Task identifier (string)
-- `Name` - Task title
-- `Files` - List of files the task modifies
-- `DependsOn` - Task dependencies for wave calculation (local and cross-file, v2.6+)
-- `EstimatedTime` - Duration estimate (parsed as time.Duration)
-- `Agent` - Claude agent to execute the task
-- `Status` - Task completion status (completed, failed, in-progress, pending)
-- `CompletedAt` - Timestamp when task was completed
-- `SuccessCriteria` - List of explicit success criteria for QC verification (v2.3+)
-- `TestCommands` - Commands to run for verification (v2.3+)
+- `Number`, `Name`, `Files`, `DependsOn`, `EstimatedTime`, `Agent`, `Status`, `CompletedAt`, `SuccessCriteria`, `TestCommands`
 
-**Multi-file plan fields**:
-- `WorktreeGroup` - Group assignment for task organization
-  - Parsed by both Markdown parser (`**WorktreeGroup**: value`) and YAML parser (`worktree_group: value`)
-  - Stored in Task.WorktreeGroup field
-  - Used for organizational purposes and multi-file plan coordination
-  - **Not used for execution control** - conductor doesn't enforce isolation or execution order based on groups
-  - Groups are tracked in Wave.GroupInfo for logging and analysis
+**Multi-file fields**:
+- `WorktreeGroup`: Organizational only, NOT for execution control
+- `SourceFile`: Internal, tracks file origin for multi-file plans
 
 **Cross-File Dependencies (v2.6+)**:
-- Local references: Task number (integer) refers to tasks in the same file
-- Cross-file references: Object with `file` (path) and `task` (number) keys
-- Syntax varies by format:
+- Local: Integer task number
+- Cross-file: `{file: "path.yaml", task: 5}`
 
-**YAML Format**:
+**YAML Format:**
 ```yaml
-tasks:
-  - id: 1
-    name: Setup Database
-    depends_on: []
-
-  - id: 2
-    name: Auth Service
-    depends_on:
-      - 1                              # Local task in same file
-      - file: foundation.yaml          # Cross-file reference
-        task: 3                         # Task 3 from foundation.yaml
-      - file: infrastructure/db.yaml
-        task: 5                         # Task 5 from infrastructure/db.yaml
+depends_on:
+  - 1                              # Local
+  - file: foundation.yaml          # Cross-file
+    task: 3
 ```
 
-**Markdown Format** (pseudo-syntax for reference):
+**Markdown Format:**
 ```markdown
-## Task 2: Auth Service
 **Depends on**: Task 1, foundation.yaml#3, infrastructure/db.yaml#5
-
-Implementation details...
 ```
 
-**SourceFile field** (internal, set during parsing):
-- Tracks which file a task came from
-- Used by plan merger to link cross-file dependencies
-- Essential for multi-file execution and resume operations
+## Integration Tasks (v2.5+)
 
-**Extended task sections** (for human developers):
-- `test_first`, `implementation`, `verification`, `commit` sections in YAML
-- These sections are included in Task.Prompt as markdown but not parsed as structured fields
-- Provide detailed guidance for engineers implementing the tasks
-- Can be generated via implementation planning tools for comprehensive task specifications
+**Component tasks** (`type: "component"`): Single module, `success_criteria` only.
 
-### Agent Discovery
-Registry scans `~/.claude/agents/` on initialization:
-```go
-registry := agent.NewRegistry("") // Uses ~/.claude/agents default
-agents, _ := registry.Discover()
-if registry.Exists("quality-control") {
-    // Agent available
-}
-```
+**Integration tasks** (`type: "integration"`): Wire components, BOTH `success_criteria` AND `integration_criteria`.
 
-### Context-Based Timeouts
-All agent invocations accept context for cancellation:
-```go
-ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-defer cancel()
-result, err := invoker.Invoke(ctx, task)
-```
-
-## Production Status
-
-Conductor v2.5.2 is production-ready with 86%+ test coverage (465+ tests passing). Complete pipeline: parsing → validation → dependency analysis → orchestration → execution → quality control → adaptive learning → logging. All core features, multi-file plan support with cross-file dependencies, adaptive learning system, inter-retry agent swapping, intelligent QC agent selection, integration tasks with dual criteria, and auto-incrementing version management implemented and tested.
-
-**Latest coverage run (2025-11-17, `go test -cover ./...`):**
-
-| Package | Coverage |
-| --- | --- |
-| `internal/config` | 86.3% |
-| `internal/executor` | 90.0% |
-| `internal/agent` | 91.3% |
-| `internal/learning` | 90.6% |
-| `internal/logger` | 71.6% |
-| `internal/models` | 100.0% |
-| `internal/parser` | 74.6% |
-| `internal/cmd` | 76.9% |
-| `internal/filelock` | 83.1% |
-| `internal/fileutil` | 90.9% |
-| `internal/display` | 97.0% |
-| `internal/updater` | 89.8% |
-| `cmd/conductor` | 0.0% (wrapper delegates to internal packages) |
-| `test/integration` | No statements (harness package used for E2E tests) |
-
-This run also verified the newly added configuration matrix tests and end-to-end scenarios (happy/failed/mixed verdicts plus skip/resume and structured success-criteria flows).
-
-**Major Features:**
-- Multi-agent orchestration with dependency resolution
-- Quality control reviews with structured JSON responses
-- Inter-retry agent swapping based on QC recommendations
-- Adaptive learning from execution history
-- Multi-file plan support with explicit cross-file dependencies (v2.6+)
-- Resumable execution with state tracking
-- Dual feedback storage (plan files + database)
-- Integration tasks with component and cross-component validation
-- Comprehensive logging and error handling
-
-**v2.1 Enhancements:**
-- QC JSON parsing with Claude CLI envelope extraction
-- `extractJSONFromCodeFence()` strips markdown wrappers
-- Single `updateFeedback()` call eliminates duplicate history entries
-- `learning.SelectBetterAgent()` for intelligent agent swapping
-- QC loads historical context via `LoadContext()` for informed retry decisions
-
-**v2.4 Enhancements:**
-- **Critical fix**: `aggregateMultiAgentCriteria()` now respects agent RED verdicts even when criteria pass
-- Intelligent QC agent selection via Claude API (analyzes task context + executing agent)
-- Domain-specific review criteria auto-injection (Go/SQL/TypeScript/Python)
-- File path verification in QC prompts ("EXPECTED FILE PATHS" section)
-- Historical context loading in structured review prompts
-- TTL-based caching for intelligent agent selections (reduces API calls)
-
-**v2.5 Enhancements:**
-- Integration tasks with dual criteria validation (component + cross-component)
-- Automatic dependency context injection for all tasks with dependencies
-- Clearer task organization with explicit component vs integration distinction
-- Better separation of concerns in multi-component systems
-
-**v2.6+ Enhancements (In Development):**
-- Explicit cross-file dependency notation with `file` and `task` keys
-- Automatic validation of all cross-file dependency links
-- Enhanced plan merger with cross-file link tracking
-- SourceFile field for precise multi-file execution tracking
-- Backward compatible with implicit ordering from v2.5
-
-## Integration Tasks Architecture
-
-Conductor supports explicit integration tasks with dual criteria validation to coordinate complex implementations across multiple components:
-
-### Overview
-
-Integration tasks wire together multiple components that were implemented separately. They differ from regular component tasks by requiring validation at two levels:
-- **Component Level**: Verifies each integrated component works correctly (`success_criteria`)
-- **Integration Level**: Verifies components work together correctly (`integration_criteria`)
-
-### Task Types
-
-**Component Tasks**:
-- Single-purpose feature implementation
-- Uses `success_criteria` only
-- Minimal or no dependencies
-- Example: "Implement JWT validation function"
-- Verified by: QC reviews component-level criteria only
-
-**Integration Tasks**:
-- Wires multiple components together
-- Uses BOTH `success_criteria` AND `integration_criteria`
-- Marked with `type: "integration"`
-- Typically has 3+ dependencies
-- Example: "Wire auth module to API router"
-- Verified by: QC reviews both criteria types, all must pass
-
-### Dual Criteria System
-
-Integration tasks define two levels of success criteria:
-
-**1. success_criteria** - Component-level checks:
-```yaml
-success_criteria:
-  - "Endpoint returns 200 status code"
-  - "Authentication function has correct signature"
-  - "Error handling returns proper HTTP status"
-```
-
-**2. integration_criteria** - Cross-component interaction checks:
-```yaml
-integration_criteria:
-  - "Auth middleware executes before route handlers"
-  - "Database transaction commits atomically"
-  - "Error from auth module propagates to client"
-  - "User context flows through entire request pipeline"
-```
-
-### Quality Control Validation
-
-For integration tasks, QC agents validate both criteria types:
-
-1. All `success_criteria` must pass (component-level validation)
-2. All `integration_criteria` must pass (integration-level validation)
-3. Any failed criterion = RED verdict (unanimous consensus)
-4. Detailed per-criterion feedback helps pinpoint integration issues
-
-QC Response includes:
-```go
-type QCResponse struct {
-    Verdict              string             // "GREEN", "RED", "YELLOW"
-    Feedback             string             // Overall feedback
-    CriteriaResults      []CriterionResult  // success_criteria verdicts
-    IntegrationResults   []CriterionResult  // integration_criteria verdicts
-    Issues               []Issue            // Specific problems found
-    Recommendations      []string           // Suggested fixes
-    ShouldRetry          bool               // Whether to retry
-    SuggestedAgent       string             // Alternative agent suggestion
-}
-```
-
-### Integration Prompt Enhancement
-
-Tasks with dependencies automatically receive integration context in their prompts:
-
-```
-# INTEGRATION TASK CONTEXT
-
-Before implementing, you MUST read these dependency files to understand
-the integration points you need to wire together:
-
-## Dependency: Task 1 - Database Setup
-**Files to read**: internal/db/connection.go
-**Integration point**: Database connection pool and transaction API
-**WHY YOU MUST READ THIS**: Your task needs to use the connection pool
-exported by this task and ensure transactions complete properly.
-
-## Dependency: Task 2 - Auth Module
-**Files to read**: internal/auth/middleware.go
-**Integration point**: Middleware that runs before route handlers
-**WHY YOU MUST READ THIS**: Your task needs to call auth middleware at
-the correct point in the request pipeline.
-
----
-
-# YOUR INTEGRATION TASK
-
-**Task Name**: Wire Auth to API Router
-**Type**: integration
-
-Integrate the auth module (Task 2) and database (Task 1) into the API router...
-
-## Success Criteria (Component Level)
-1. Route handlers execute and return responses
-2. Auth checks credentials correctly
-...
-
-## Integration Criteria (Cross-Component)
-1. Auth middleware executes BEFORE route logic
-2. Database transaction completes before response sent
-...
-```
-
-This context injection happens for:
-- Explicit integration tasks (`type: "integration"`)
-- Any task with dependencies (`depends_on` is not empty)
-
-Context includes:
-- Task number, name, and files to read
-- Integration point description
-- Explanation of why the dependency matters
-- Suggestion to verify the integration point works correctly
-
-### YAML Format Examples
-
-**Component Task** (simple, no integration):
-```yaml
-tasks:
-  - id: 1
-    name: "Implement JWT Validation Function"
-    type: "component"
-    files:
-      - internal/auth/jwt.go
-    agent: golang-pro
-    success_criteria:
-      - "ValidateJWT function implemented"
-      - "Supports HS256 algorithm"
-      - "Rejects invalid signatures with error"
-      - "Unit tests achieve 80% coverage"
-```
-
-**Integration Task** (wires components together):
+**Dual Criteria Example:**
 ```yaml
 tasks:
   - id: 4
-    name: "Wire Auth Middleware to API Router"
-    type: "integration"
-    files:
-      - cmd/api/router.go
-      - internal/middleware/auth.go
-    depends_on: [1, 2, 3]
-    agent: golang-pro
-    success_criteria:
-      - "Router accepts GET /api/users request"
-      - "Response returns user data as JSON"
-      - "Error responses include proper HTTP status codes"
-    integration_criteria:
-      - "Auth middleware executes before route handlers"
-      - "Unauthenticated requests receive 401 Unauthorized"
-      - "Authenticated requests proceed to route handler"
-      - "Database connection from Task 2 is used in handler"
-      - "Transaction commits after response sent"
-    test_commands:
-      - "go test ./cmd/api -v"
-      - "curl -X GET http://localhost:8080/api/users -H 'Authorization: Bearer token'"
+    type: integration
+    success_criteria:          # Component-level
+      - "Router accepts requests"
+      - "Auth function correct signature"
+    integration_criteria:      # Cross-component
+      - "Auth middleware executes before handlers"
+      - "Database transaction commits atomically"
+      - "Error propagates end-to-end"
 ```
 
-**Markdown Format Example**:
-```markdown
-## Task 4: Wire Auth Middleware to API Router
+**QC Validation**: All criteria must pass (unanimous consensus). Detailed per-criterion feedback.
 
-**Type**: integration
-**Files**: cmd/api/router.go, internal/middleware/auth.go
-**Depends on**: Task 1, Task 2, Task 3
-**Agent**: golang-pro
+**Context Injection**: Tasks with dependencies get integration context explaining what to read and why.
 
-### Success Criteria
-- Router accepts GET /api/users request
-- Response returns user data as JSON
-- Error responses include proper HTTP status codes
+**Best Practices**:
+- Use integration tasks for 2+ component wiring
+- Define criteria focusing on data/control flow between components
+- Read dependency files before implementing
+- Verify sequencing constraints ("X before Y")
 
-### Integration Criteria
-- Auth middleware executes before route handlers
-- Unauthenticated requests receive 401 Unauthorized
-- Authenticated requests proceed to route handler
-- Database connection from Task 2 is used in handler
-- Transaction commits after response sent
+## Production Status
 
-Implement the auth middleware integration into the API router...
-```
+**v2.5.2**: 86%+ test coverage (465+ tests). Complete pipeline implemented and tested.
 
-### Implementation Details
+**Major Features**:
+- Multi-agent orchestration with dependency resolution
+- QC reviews with structured JSON responses
+- Inter-retry agent swapping
+- Adaptive learning from execution history
+- Multi-file plans with cross-file dependencies (v2.6+)
+- Resumable execution with state tracking
+- Dual feedback storage (plan files + database)
+- Integration tasks with dual criteria
+- Comprehensive logging and error handling
 
-**Task Model Extensions** (`internal/models/task.go`):
-- `Type` field: "component", "integration", or "" (defaults to regular)
-- `SuccessCriteria` field: List of component-level criteria
-- `IntegrationCriteria` field: List of cross-component criteria (integration tasks only)
-
-**Parser Support** (`internal/parser/`):
-- Markdown parser extracts `**Type**: integration` field
-- Markdown parser extracts `### Integration Criteria` section
-- YAML parser reads `type` and `integration_criteria` fields
-- Backward compatible: tasks without `type` treated as regular
-
-**QC Processing** (`internal/executor/qc.go`):
-- `buildQCPrompt()` includes both criteria types for integration tasks
-- `parseQCJSON()` extracts both `criteria_results` and `integration_results`
-- `MergeQCResponses()` uses unanimous consensus for all criteria
-- Detailed per-criterion feedback helps identify which integration points failed
-
-**Prompt Builder** (`internal/executor/task.go`):
-- `PreTaskHook()` injects integration context for tasks with dependencies
-- Context includes dependency files to read and integration point descriptions
-- Applies to both explicit integration tasks and any task with dependencies
-
-### Best Practices for Integration Tasks
-
-**When to Use Integration Tasks:**
-1. Task wires 2+ components together
-2. Success depends on correct inter-component communication
-3. You want explicit validation of integration points
-4. QC feedback should distinguish component vs integration issues
-
-**When to Use Regular Component Tasks:**
-1. Task implements a single, self-contained feature
-2. Task has no dependencies or minimal dependencies
-3. Success criteria are all component-level checks
-4. No cross-component validation needed
-
-**Defining Integration Criteria:**
-1. Focus on data/control flow between components
-2. Include visibility/sequencing constraints ("X happens before Y")
-3. Verify error propagation between components
-4. Check resource lifecycle (transactions, connections, locks)
-5. Validate assumptions about component APIs
-
-**Integration Context Reading:**
-1. Always read files from dependencies before implementing
-2. Understand the exported APIs and their contracts
-3. Verify integration points match the documented behavior
-4. Check for any assumptions or constraints in dependency code
-5. Confirm error handling expectations
-
-## Multi-File Plan Examples
-
-### Example 1: Split Backend Plan (Implicit Ordering)
-
-Part 1 (setup.md):
-```markdown
-## Task 1: Database Setup
-**Files**: infrastructure/db.tf
-**Depends on**: None
-
-Initialize PostgreSQL and migrations.
-
-## Task 2: API Server Setup
-**Files**: cmd/api/main.go
-**Depends on**: Task 1
-**WorktreeGroup**: backend-core
-
-Set up web server framework.
-```
-
-Part 2 (features.md):
-```markdown
-## Task 3: Auth Service
-**Files**: internal/auth/auth.go
-**Depends on**: Task 1, Task 2
-**WorktreeGroup**: backend-features
-
-Implement JWT authentication.
-
-## Task 4: User API
-**Files**: internal/api/users.go
-**Depends on**: Task 3
-**WorktreeGroup**: backend-features
-
-Create user CRUD endpoints.
-```
-
-Execute together:
-```bash
-conductor run setup.md features.md --max-concurrency 3
-```
-
-Or validate first:
-```bash
-conductor validate setup.md features.md
-```
-
-### Example 2: Split Backend Plan with Explicit Cross-File Dependencies (v2.6+)
-
-Part 1 (infrastructure.yaml):
-```yaml
-plan:
-  name: Infrastructure Setup
-  tasks:
-    - id: 1
-      name: Database Setup
-      files: [infrastructure/db.yaml]
-      depends_on: []
-      estimated_time: 10 minutes
-      agent: terraform-pro
-      description: Initialize PostgreSQL database and migrations.
-```
-
-Part 2 (services.yaml):
-```yaml
-plan:
-  name: Core Services
-  tasks:
-    - id: 1
-      name: Auth Service
-      files: [internal/auth/auth.go]
-      depends_on:
-        - file: infrastructure.yaml
-          task: 1                    # Explicit cross-file dependency
-      estimated_time: 15 minutes
-      agent: golang-pro
-      description: Implement JWT authentication service.
-
-    - id: 2
-      name: API Server
-      files: [cmd/api/server.go]
-      depends_on:
-        - 1                         # Local dependency (Task 1 in this file)
-        - file: infrastructure.yaml
-          task: 1                   # Can reference same cross-file task
-      estimated_time: 10 minutes
-      agent: golang-pro
-      description: Setup API server with auth integration.
-```
-
-Execute with explicit cross-file references:
-```bash
-conductor run infrastructure.yaml services.yaml --max-concurrency 2
-```
-
-Validation automatically checks all cross-file links:
-```bash
-conductor validate infrastructure.yaml services.yaml
-```
-
-### Example 3: Microservices Plan with Multiple Files
-
-Three separate plans with cross-file dependencies:
-
-**auth-service.yaml**:
-```yaml
-plan:
-  name: Authentication Service
-  tasks:
-    - id: 1
-      name: JWT Module
-      depends_on: []
-    - id: 2
-      name: Auth API
-      depends_on: [1]
-```
-
-**api-service.yaml**:
-```yaml
-plan:
-  name: Main API Service
-  tasks:
-    - id: 1
-      name: API Server Setup
-      depends_on:
-        - file: auth-service.yaml
-          task: 2                   # Depends on auth service API
-    - id: 2
-      name: User Endpoints
-      depends_on: [1]
-```
-
-**deployment.yaml**:
-```yaml
-plan:
-  name: Deployment
-  tasks:
-    - id: 1
-      name: Deploy Auth Service
-      depends_on:
-        - file: auth-service.yaml
-          task: 2
-    - id: 2
-      name: Deploy API Service
-      depends_on:
-        - file: api-service.yaml
-          task: 2
-        - 1                        # Wait for auth deployment
-```
-
-Execute entire microservices pipeline:
-```bash
-conductor run auth-service.yaml api-service.yaml deployment.yaml --max-concurrency 4
-```
-
-### Example 4: Worktree Groups with Cross-File Dependencies
-
-With worktree groups:
-- `auth-service` group → sequential execution (isolation: strong)
-- `api-service` group → parallel where possible (isolation: weak)
-- `deployment` group → sequential (isolation: strong)
-
-Use cross-file dependencies to enforce execution order between groups while allowing parallelism within groups.
+**Recent Enhancements**:
+- v2.1: QC JSON parsing, agent swapping, dual feedback
+- v2.3: Structured success criteria, per-criterion verification
+- v2.4: Intelligent QC selection, domain-specific criteria, RED verdict fix
+- v2.5: Integration tasks, dependency context injection
+- v2.6+: Explicit cross-file dependencies, enhanced validation
 
 ## Module Path
 
-The Go module uses path: `github.com/harrison/conductor`
+`github.com/harrison/conductor`
 
-When importing internal packages:
 ```go
 import (
     "github.com/harrison/conductor/internal/parser"
@@ -1083,29 +256,86 @@ No networking, no ML frameworks, no web frameworks. Just local CLI orchestration
 - Leverage --skip-completed for resume
 
 ### Multi-File Plans
-
-**File Organization**
-- 1 file per feature/module/service
-- Aim for 5-20 tasks per file
+- 1 file per feature/module/service (5-20 tasks per file)
 - Clear, descriptive filenames
+- Keep intra-file dependencies tight, minimize cross-file
+- Use explicit cross-file notation (v2.6+) for clarity
+- Validate before execution: `conductor validate *.md`
+- Worktree groups for organization (NOT execution control)
 
-**Cross-File Dependencies**
-- Keep intra-file dependencies tight
-- Minimize cross-file dependencies where possible
-- Document file execution order if strict
+## Agent Watch (v2.7+)
 
-**Worktree Groups**
-- Use groups for execution control
-- `sequential` for state-dependent tasks
-- `parallel` for independent tasks
-- `strong` isolation for infrastructure tasks
+### Overview
 
-**Task Naming**
-- Prefix with module name: "Backend: Setup DB"
-- Clear task boundaries
-- File mappings should be obvious
+Agent Watch provides behavioral observability for Claude Code agents. It extracts and analyzes data from session JSONL files in `~/.claude/projects/`.
 
-**Testing Split Plans**
-- Validate all files together: `conductor validate *.md`
-- Dry-run before actual execution
-- Check dependency graph for cross-file links
+### Commands
+
+```bash
+conductor observe              # Interactive mode with project selection
+conductor observe stats        # Display summary statistics
+conductor observe stream       # Real-time activity streaming
+conductor observe export       # Export to JSON/Markdown/CSV
+conductor observe tools        # Tool usage analysis
+conductor observe bash         # Bash command patterns
+conductor observe files        # File operation analysis
+conductor observe errors       # Error pattern analysis
+conductor observe project      # Project-level metrics
+conductor observe session      # Session-specific analysis
+```
+
+### Filtering
+
+```bash
+--project myapp          # Filter by project name
+--session abc123         # Filter by session ID or search
+--filter-type tool       # Event type: tool, bash, file
+--errors-only            # Show only errors
+--time-range 24h         # Time range: 1h, 7d, 30d, today, yesterday
+```
+
+### Export Formats
+
+```bash
+conductor observe export --format json --output metrics.json
+conductor observe export --format markdown --output report.md
+conductor observe export --format csv --output data.csv
+```
+
+### Analytics Features
+
+**Pattern Detection**: Identifies common tool sequences and bash command patterns.
+
+**Failure Prediction**: Predicts task failure probability based on:
+- Tool failure rates
+- Similar session outcomes
+- High-risk tool combinations
+
+**Performance Scoring**: Multi-dimensional agent scoring:
+- Success (40%): Task completion rate
+- Cost Efficiency (25%): Token usage vs baseline
+- Speed (20%): Duration vs baseline
+- Error Recovery (15%): Recovery from errors
+
+**Anomaly Detection**: Statistical outliers using standard deviation thresholds.
+
+**Behavior Clustering**: K-means clustering of similar sessions.
+
+### Key Packages
+
+- `internal/behavioral/` - Core models, filtering, export, analytics
+- `internal/cmd/observe*.go` - CLI commands
+- `internal/learning/` - Database integration
+
+### Data Flow
+
+```
+~/.claude/projects/ → JSONL Parser → SQLite DB → observe commands → Analysis/Export
+```
+
+### Documentation
+
+- [Full Documentation](docs/AGENT_WATCH.md)
+- [Usage Examples](docs/examples/agent-watch-usage.md)
+- [Filtering Guide](docs/examples/agent-watch-filtering.md)
+- [Analytics Features](docs/examples/agent-watch-analytics.md)

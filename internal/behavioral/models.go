@@ -65,6 +65,33 @@ func (bm *BehavioralMetrics) Validate() error {
 	if bm.TotalCost < 0 {
 		return errors.New("total cost cannot be negative")
 	}
+
+	// Validate tool executions
+	for i, te := range bm.ToolExecutions {
+		if err := te.Validate(); err != nil {
+			return errors.New("invalid tool execution at index " + string(rune(i+'0')) + ": " + err.Error())
+		}
+	}
+
+	// Validate bash commands
+	for i, bc := range bm.BashCommands {
+		if err := bc.Validate(); err != nil {
+			return errors.New("invalid bash command at index " + string(rune(i+'0')) + ": " + err.Error())
+		}
+	}
+
+	// Validate file operations
+	for i, fo := range bm.FileOperations {
+		if err := fo.Validate(); err != nil {
+			return errors.New("invalid file operation at index " + string(rune(i+'0')) + ": " + err.Error())
+		}
+	}
+
+	// Validate token usage
+	if err := bm.TokenUsage.Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -251,4 +278,58 @@ func (tu *TokenUsage) CalculateCost() {
 	inputCost := (float64(tu.InputTokens) / 1_000_000) * inputCostPerMillion
 	outputCost := (float64(tu.OutputTokens) / 1_000_000) * outputCostPerMillion
 	tu.CostUSD = inputCost + outputCost
+}
+
+// AggregateMetrics combines multiple BehavioralMetrics into summary statistics
+// Returns aggregated data including tool usage, cost, duration, and error rates
+func AggregateMetrics(metrics []BehavioralMetrics) map[string]interface{} {
+	if len(metrics) == 0 {
+		return map[string]interface{}{}
+	}
+
+	totalCost := 0.0
+	var totalDuration time.Duration
+	totalErrors := 0
+	toolCounts := make(map[string]int)
+	var totalInputTokens int64
+	var totalOutputTokens int64
+	totalSessions := 0
+	agentPerformance := make(map[string]int)
+
+	for _, m := range metrics {
+		totalCost += m.CalculateTotalCost()
+		totalDuration += m.AverageDuration * time.Duration(m.TotalSessions)
+		totalErrors += m.TotalErrors
+		totalSessions += m.TotalSessions
+		totalInputTokens += m.TokenUsage.InputTokens
+		totalOutputTokens += m.TokenUsage.OutputTokens
+
+		// Aggregate tool usage
+		for _, tool := range m.ToolExecutions {
+			toolCounts[tool.Name] += tool.Count
+		}
+
+		// Aggregate agent performance
+		for agent, count := range m.AgentPerformance {
+			agentPerformance[agent] += count
+		}
+	}
+
+	avgDuration := time.Duration(0)
+	if totalSessions > 0 {
+		avgDuration = totalDuration / time.Duration(totalSessions)
+	}
+
+	return map[string]interface{}{
+		"session_count":        totalSessions,
+		"total_cost_usd":       totalCost,
+		"avg_cost_usd":         totalCost / float64(len(metrics)),
+		"total_duration":       totalDuration,
+		"avg_duration":         avgDuration,
+		"total_errors":         totalErrors,
+		"tool_usage_counts":    toolCounts,
+		"total_input_tokens":   totalInputTokens,
+		"total_output_tokens":  totalOutputTokens,
+		"agent_performance":    agentPerformance,
+	}
 }

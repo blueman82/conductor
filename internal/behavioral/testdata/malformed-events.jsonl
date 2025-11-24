@@ -1,0 +1,10 @@
+{"type":"session_start","session_id":"malformed-test-uuid","project":"test","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":true}
+{this is not valid json - missing quotes around key}
+{"type":"tool_call","timestamp":"2024-01-15T10:01:00Z","tool_name":"Read","success":true,"duration":100}
+{"type":"tool_call","timestamp":"2024-01-15T10:02:00Z","tool_name":""
+{"type":"bash_command","timestamp":"2024-01-15T10:03:00Z","command":"ls","exit_code":0,"success":true,"duration":10}
+{"type":"unknown_event_type","timestamp":"2024-01-15T10:04:00Z","data":"should be skipped"}
+{"type":"file_operation","timestamp":"2024-01-15T10:05:00Z","operation":"read","path":"/test.go","success":true,"size_bytes":-100,"duration":10}
+{"type":"token_usage","timestamp":"2024-01-15T10:06:00Z","input_tokens":-500,"output_tokens":200,"cost_usd":0.01}
+just a plain text line that is not JSON at all
+{"type":"tool_call","timestamp":"2024-01-15T10:07:00Z","tool_name":"Valid","success":true,"duration":50}

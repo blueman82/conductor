@@ -98,23 +98,21 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// initSchema executes the embedded SQL schema
+// initSchema initializes the database schema using migrations
 func (s *Store) initSchema() error {
-	_, err := s.db.Exec(schemaSQL)
-	if err != nil {
-		return fmt.Errorf("execute schema: %w", err)
+	ctx := context.Background()
+
+	// Apply all pending migrations
+	if err := s.ApplyMigrations(ctx); err != nil {
+		return fmt.Errorf("apply migrations: %w", err)
 	}
+
 	return nil
 }
 
-// getSchemaVersion retrieves the current schema version
+// getSchemaVersion retrieves the current schema version (delegates to GetLatestVersion)
 func (s *Store) getSchemaVersion() (int, error) {
-	var version int
-	err := s.db.QueryRow("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").Scan(&version)
-	if err != nil {
-		return 0, fmt.Errorf("query schema version: %w", err)
-	}
-	return version, nil
+	return s.GetLatestVersion()
 }
 
 // tableExists checks if a table exists in the database
@@ -406,4 +404,405 @@ func (s *Store) QueryRows(query string, args ...interface{}) (*sql.Rows, error) 
 // Exec executes a query that doesn't return rows (INSERT, UPDATE, DELETE)
 func (s *Store) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return s.db.Exec(query, args...)
+}
+
+// BehavioralSessionData represents data for a behavioral session with metrics
+type BehavioralSessionData struct {
+	TaskExecutionID      int64
+	SessionStart         time.Time
+	SessionEnd           *time.Time
+	TotalDurationSecs    int64
+	TotalToolCalls       int
+	TotalBashCommands    int
+	TotalFileOperations  int
+	TotalTokensUsed      int64
+	ContextWindowUsed    int
+}
+
+// BehavioralSessionMetrics represents complete session metrics with execution context
+type BehavioralSessionMetrics struct {
+	SessionID            int64
+	TaskExecutionID      int64
+	SessionStart         time.Time
+	SessionEnd           *time.Time
+	TotalDurationSecs    int64
+	TotalToolCalls       int
+	TotalBashCommands    int
+	TotalFileOperations  int
+	TotalTokensUsed      int64
+	ContextWindowUsed    int
+	// Execution context
+	TaskNumber           string
+	TaskName             string
+	Agent                string
+	Success              bool
+}
+
+// ToolExecutionData represents a tool execution record
+type ToolExecutionData struct {
+	SessionID      int64
+	ToolName       string
+	Parameters     string
+	DurationMs     int64
+	Success        bool
+	ErrorMessage   string
+}
+
+// BashCommandData represents a bash command execution
+type BashCommandData struct {
+	SessionID      int64
+	Command        string
+	DurationMs     int64
+	ExitCode       int
+	StdoutLength   int
+	StderrLength   int
+	Success        bool
+}
+
+// FileOperationData represents a file operation
+type FileOperationData struct {
+	SessionID      int64
+	OperationType  string
+	FilePath       string
+	DurationMs     int64
+	BytesAffected  int64
+	Success        bool
+	ErrorMessage   string
+}
+
+// TokenUsageData represents token usage measurement
+type TokenUsageData struct {
+	SessionID          int64
+	InputTokens        int64
+	OutputTokens       int64
+	TotalTokens        int64
+	ContextWindowSize  int
+}
+
+// RecordSessionMetrics records a behavioral session and its metrics in a transaction.
+// This is an atomic operation that inserts the session and all related metrics.
+func (s *Store) RecordSessionMetrics(ctx context.Context, sessionData *BehavioralSessionData,
+	tools []ToolExecutionData, bashCmds []BashCommandData,
+	fileOps []FileOperationData, tokenUsage []TokenUsageData) (int64, error) {
+
+	// Start transaction
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Insert behavioral session
+	sessionQuery := `INSERT INTO behavioral_sessions
+		(task_execution_id, session_start, session_end, total_duration_seconds,
+		 total_tool_calls, total_bash_commands, total_file_operations,
+		 total_tokens_used, context_window_used)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	result, err := tx.ExecContext(ctx, sessionQuery,
+		sessionData.TaskExecutionID,
+		sessionData.SessionStart,
+		sessionData.SessionEnd,
+		sessionData.TotalDurationSecs,
+		sessionData.TotalToolCalls,
+		sessionData.TotalBashCommands,
+		sessionData.TotalFileOperations,
+		sessionData.TotalTokensUsed,
+		sessionData.ContextWindowUsed,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert behavioral session: %w", err)
+	}
+
+	sessionID, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("get session id: %w", err)
+	}
+
+	// Insert tool executions
+	if len(tools) > 0 {
+		toolStmt, err := tx.PrepareContext(ctx, `INSERT INTO tool_executions
+			(session_id, tool_name, parameters, duration_ms, success, error_message)
+			VALUES (?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return 0, fmt.Errorf("prepare tool statement: %w", err)
+		}
+		defer toolStmt.Close()
+
+		for _, tool := range tools {
+			_, err := toolStmt.ExecContext(ctx, sessionID, tool.ToolName,
+				tool.Parameters, tool.DurationMs, tool.Success, tool.ErrorMessage)
+			if err != nil {
+				return 0, fmt.Errorf("insert tool execution: %w", err)
+			}
+		}
+	}
+
+	// Insert bash commands
+	if len(bashCmds) > 0 {
+		bashStmt, err := tx.PrepareContext(ctx, `INSERT INTO bash_commands
+			(session_id, command, duration_ms, exit_code, stdout_length, stderr_length, success)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return 0, fmt.Errorf("prepare bash statement: %w", err)
+		}
+		defer bashStmt.Close()
+
+		for _, bash := range bashCmds {
+			_, err := bashStmt.ExecContext(ctx, sessionID, bash.Command,
+				bash.DurationMs, bash.ExitCode, bash.StdoutLength, bash.StderrLength, bash.Success)
+			if err != nil {
+				return 0, fmt.Errorf("insert bash command: %w", err)
+			}
+		}
+	}
+
+	// Insert file operations
+	if len(fileOps) > 0 {
+		fileStmt, err := tx.PrepareContext(ctx, `INSERT INTO file_operations
+			(session_id, operation_type, file_path, duration_ms, bytes_affected, success, error_message)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return 0, fmt.Errorf("prepare file statement: %w", err)
+		}
+		defer fileStmt.Close()
+
+		for _, fileOp := range fileOps {
+			_, err := fileStmt.ExecContext(ctx, sessionID, fileOp.OperationType,
+				fileOp.FilePath, fileOp.DurationMs, fileOp.BytesAffected,
+				fileOp.Success, fileOp.ErrorMessage)
+			if err != nil {
+				return 0, fmt.Errorf("insert file operation: %w", err)
+			}
+		}
+	}
+
+	// Insert token usage
+	if len(tokenUsage) > 0 {
+		tokenStmt, err := tx.PrepareContext(ctx, `INSERT INTO token_usage
+			(session_id, input_tokens, output_tokens, total_tokens, context_window_size)
+			VALUES (?, ?, ?, ?, ?)`)
+		if err != nil {
+			return 0, fmt.Errorf("prepare token statement: %w", err)
+		}
+		defer tokenStmt.Close()
+
+		for _, token := range tokenUsage {
+			_, err := tokenStmt.ExecContext(ctx, sessionID, token.InputTokens,
+				token.OutputTokens, token.TotalTokens, token.ContextWindowSize)
+			if err != nil {
+				return 0, fmt.Errorf("insert token usage: %w", err)
+			}
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return sessionID, nil
+}
+
+// GetSessionMetrics retrieves behavioral metrics for a specific session
+func (s *Store) GetSessionMetrics(ctx context.Context, sessionID int64) (*BehavioralSessionMetrics, error) {
+	query := `SELECT
+		bs.id, bs.task_execution_id, bs.session_start, bs.session_end,
+		bs.total_duration_seconds, bs.total_tool_calls, bs.total_bash_commands,
+		bs.total_file_operations, bs.total_tokens_used, bs.context_window_used,
+		te.task_number, te.task_name, te.agent, te.success
+		FROM behavioral_sessions bs
+		JOIN task_executions te ON bs.task_execution_id = te.id
+		WHERE bs.id = ?`
+
+	row := s.db.QueryRowContext(ctx, query, sessionID)
+
+	metrics := &BehavioralSessionMetrics{}
+	var sessionEnd sql.NullTime
+
+	err := row.Scan(
+		&metrics.SessionID,
+		&metrics.TaskExecutionID,
+		&metrics.SessionStart,
+		&sessionEnd,
+		&metrics.TotalDurationSecs,
+		&metrics.TotalToolCalls,
+		&metrics.TotalBashCommands,
+		&metrics.TotalFileOperations,
+		&metrics.TotalTokensUsed,
+		&metrics.ContextWindowUsed,
+		&metrics.TaskNumber,
+		&metrics.TaskName,
+		&metrics.Agent,
+		&metrics.Success,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("session not found: %d", sessionID)
+		}
+		return nil, fmt.Errorf("query session metrics: %w", err)
+	}
+
+	if sessionEnd.Valid {
+		metrics.SessionEnd = &sessionEnd.Time
+	}
+
+	return metrics, nil
+}
+
+// GetTaskBehavior retrieves aggregated behavioral metrics for a specific task
+func (s *Store) GetTaskBehavior(ctx context.Context, taskNumber string) (map[string]interface{}, error) {
+	query := `SELECT
+		COUNT(bs.id) as session_count,
+		AVG(bs.total_duration_seconds) as avg_duration,
+		AVG(bs.total_tool_calls) as avg_tool_calls,
+		AVG(bs.total_bash_commands) as avg_bash_commands,
+		AVG(bs.total_file_operations) as avg_file_operations,
+		SUM(bs.total_tokens_used) as total_tokens,
+		AVG(bs.context_window_used) as avg_context_window
+		FROM behavioral_sessions bs
+		JOIN task_executions te ON bs.task_execution_id = te.id
+		WHERE te.task_number = ?`
+
+	var sessionCount int
+	var avgDuration, avgToolCalls, avgBashCmds, avgFileOps, avgContextWindow sql.NullFloat64
+	var totalTokens sql.NullInt64
+
+	err := s.db.QueryRowContext(ctx, query, taskNumber).Scan(
+		&sessionCount,
+		&avgDuration,
+		&avgToolCalls,
+		&avgBashCmds,
+		&avgFileOps,
+		&totalTokens,
+		&avgContextWindow,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query task behavior: %w", err)
+	}
+
+	result := map[string]interface{}{
+		"session_count": sessionCount,
+		"avg_duration_seconds": 0.0,
+		"avg_tool_calls": 0.0,
+		"avg_bash_commands": 0.0,
+		"avg_file_operations": 0.0,
+		"total_tokens": int64(0),
+		"avg_context_window": 0.0,
+	}
+
+	if avgDuration.Valid {
+		result["avg_duration_seconds"] = avgDuration.Float64
+	}
+	if avgToolCalls.Valid {
+		result["avg_tool_calls"] = avgToolCalls.Float64
+	}
+	if avgBashCmds.Valid {
+		result["avg_bash_commands"] = avgBashCmds.Float64
+	}
+	if avgFileOps.Valid {
+		result["avg_file_operations"] = avgFileOps.Float64
+	}
+	if totalTokens.Valid {
+		result["total_tokens"] = totalTokens.Int64
+	}
+	if avgContextWindow.Valid {
+		result["avg_context_window"] = avgContextWindow.Float64
+	}
+
+	return result, nil
+}
+
+// GetProjectBehavior retrieves aggregated behavioral metrics for a project
+func (s *Store) GetProjectBehavior(ctx context.Context, project string) (map[string]interface{}, error) {
+	query := `SELECT
+		COUNT(bs.id) as session_count,
+		AVG(bs.total_duration_seconds) as avg_duration,
+		SUM(bs.total_tool_calls) as total_tool_calls,
+		SUM(bs.total_bash_commands) as total_bash_commands,
+		SUM(bs.total_file_operations) as total_file_operations,
+		SUM(bs.total_tokens_used) as total_tokens,
+		AVG(bs.context_window_used) as avg_context_window,
+		COUNT(CASE WHEN te.success = 1 THEN 1 END) as success_count
+		FROM behavioral_sessions bs
+		JOIN task_executions te ON bs.task_execution_id = te.id
+		WHERE te.plan_file LIKE ?`
+
+	var sessionCount, successCount int
+	var totalToolCalls, totalBashCmds, totalFileOps, totalTokens sql.NullInt64
+	var avgDuration, avgContextWindow sql.NullFloat64
+
+	err := s.db.QueryRowContext(ctx, query, "%"+project+"%").Scan(
+		&sessionCount,
+		&avgDuration,
+		&totalToolCalls,
+		&totalBashCmds,
+		&totalFileOps,
+		&totalTokens,
+		&avgContextWindow,
+		&successCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query project behavior: %w", err)
+	}
+
+	result := map[string]interface{}{
+		"session_count": sessionCount,
+		"success_count": successCount,
+		"avg_duration_seconds": 0.0,
+		"total_tool_calls": int64(0),
+		"total_bash_commands": int64(0),
+		"total_file_operations": int64(0),
+		"total_tokens": int64(0),
+		"avg_context_window": 0.0,
+		"success_rate": 0.0,
+	}
+
+	if avgDuration.Valid {
+		result["avg_duration_seconds"] = avgDuration.Float64
+	}
+	if totalToolCalls.Valid {
+		result["total_tool_calls"] = totalToolCalls.Int64
+	}
+	if totalBashCmds.Valid {
+		result["total_bash_commands"] = totalBashCmds.Int64
+	}
+	if totalFileOps.Valid {
+		result["total_file_operations"] = totalFileOps.Int64
+	}
+	if totalTokens.Valid {
+		result["total_tokens"] = totalTokens.Int64
+	}
+	if avgContextWindow.Valid {
+		result["avg_context_window"] = avgContextWindow.Float64
+	}
+	if sessionCount > 0 {
+		result["success_rate"] = float64(successCount) / float64(sessionCount)
+	}
+
+	return result, nil
+}
+
+// DeleteOldBehavioralData removes behavioral data older than the specified duration.
+// This is useful for cleanup and maintaining database size.
+func (s *Store) DeleteOldBehavioralData(ctx context.Context, olderThan time.Time) (int64, error) {
+	// Delete cascades to child tables via foreign key constraints
+	query := `DELETE FROM behavioral_sessions
+		WHERE id IN (
+			SELECT bs.id FROM behavioral_sessions bs
+			JOIN task_executions te ON bs.task_execution_id = te.id
+			WHERE te.timestamp < ?
+		)`
+
+	result, err := s.db.ExecContext(ctx, query, olderThan)
+	if err != nil {
+		return 0, fmt.Errorf("delete old behavioral data: %w", err)
+	}
+
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
+
+	return deleted, nil
 }

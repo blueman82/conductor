@@ -1,0 +1,16 @@
+{"type":"session_start","session_id":"full-example-uuid-1234-5678-90abcdef1234","project":"conductor","timestamp":"2024-01-15T10:00:00Z","status":"completed","agent_name":"code-reviewer","duration":180000,"success":true,"error_count":0}
+{"type":"tool_call","timestamp":"2024-01-15T10:01:00Z","tool_name":"Read","parameters":{"file_path":"/main.go"},"result":"package main...","success":true,"duration":50}
+{"type":"tool_call","timestamp":"2024-01-15T10:02:00Z","tool_name":"Read","parameters":{"file_path":"/internal/parser/parser.go"},"result":"package parser...","success":true,"duration":45}
+{"type":"tool_call","timestamp":"2024-01-15T10:03:00Z","tool_name":"Grep","parameters":{"pattern":"TODO","path":"/"},"result":"found 3 matches","success":true,"duration":120}
+{"type":"tool_call","timestamp":"2024-01-15T10:04:00Z","tool_name":"Write","parameters":{"file_path":"/internal/feature/new.go","content":"package feature"},"success":true,"duration":80}
+{"type":"tool_call","timestamp":"2024-01-15T10:05:00Z","tool_name":"Edit","parameters":{"file_path":"/main.go","old_string":"v1","new_string":"v2"},"success":true,"duration":60}
+{"type":"bash_command","timestamp":"2024-01-15T10:06:00Z","command":"go build ./...","exit_code":0,"output":"","output_length":0,"duration":2500,"success":true}
+{"type":"bash_command","timestamp":"2024-01-15T10:07:00Z","command":"go test ./...","exit_code":0,"output":"PASS\nok  \tgithub.com/harrison/conductor\t0.123s","output_length":48,"duration":5000,"success":true}
+{"type":"bash_command","timestamp":"2024-01-15T10:08:00Z","command":"go vet ./...","exit_code":0,"output":"","output_length":0,"duration":1500,"success":true}
+{"type":"file_operation","timestamp":"2024-01-15T10:09:00Z","operation":"read","path":"/go.mod","success":true,"size_bytes":256,"duration":5}
+{"type":"file_operation","timestamp":"2024-01-15T10:10:00Z","operation":"read","path":"/go.sum","success":true,"size_bytes":4096,"duration":8}
+{"type":"file_operation","timestamp":"2024-01-15T10:11:00Z","operation":"write","path":"/internal/feature/new.go","success":true,"size_bytes":1024,"duration":15}
+{"type":"file_operation","timestamp":"2024-01-15T10:12:00Z","operation":"edit","path":"/main.go","success":true,"size_bytes":512,"duration":10}
+{"type":"file_operation","timestamp":"2024-01-15T10:13:00Z","operation":"read","path":"/README.md","success":true,"size_bytes":2048,"duration":6}
+{"type":"token_usage","timestamp":"2024-01-15T10:14:00Z","input_tokens":15000,"output_tokens":8000,"cost_usd":0.165,"model_name":"claude-sonnet-4-5"}
+{"type":"token_usage","timestamp":"2024-01-15T10:15:00Z","input_tokens":5000,"output_tokens":2000,"cost_usd":0.045,"model_name":"claude-sonnet-4-5"}

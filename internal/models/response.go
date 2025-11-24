@@ -4,12 +4,13 @@ import "fmt"
 
 // AgentResponse represents structured JSON output from an agent execution
 type AgentResponse struct {
-	Status   string                 `json:"status"`         // "success" or "failed"
-	Summary  string                 `json:"summary"`        // Brief description
-	Output   string                 `json:"output"`         // Full execution output
-	Errors   []string               `json:"errors"`         // Error messages
-	Files    []string               `json:"files_modified"` // Modified file paths
-	Metadata map[string]interface{} `json:"metadata"`       // Additional data
+	Status    string                 `json:"status"`                  // "success" or "failed"
+	Summary   string                 `json:"summary"`                 // Brief description
+	Output    string                 `json:"output"`                  // Full execution output
+	Errors    []string               `json:"errors"`                  // Error messages
+	Files     []string               `json:"files_modified"`          // Modified file paths
+	Metadata  map[string]interface{} `json:"metadata"`                // Additional data
+	SessionID string                 `json:"session_id,omitempty"`    // Claude CLI session ID
 }
 
 // Validate checks if required fields are present

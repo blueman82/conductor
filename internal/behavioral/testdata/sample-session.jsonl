@@ -1,0 +1,9 @@
+{"type":"session_start","timestamp":"2024-01-15T10:30:00Z","session_id":"test-session-123","project_path":"/Users/test/project"}
+{"type":"session_metadata","timestamp":"2024-01-15T10:30:01Z","metadata":{"claude_version":"1.2.3","os":"darwin","cwd":"/Users/test/project"}}
+{"type":"tool_call","timestamp":"2024-01-15T10:30:15Z","tool":"Read","parameters":{"file_path":"/Users/test/project/main.go"},"duration_ms":45}
+{"type":"bash_command","timestamp":"2024-01-15T10:31:00Z","command":"go test ./...","exit_code":0,"duration_ms":1234}
+{"type":"file_operation","timestamp":"2024-01-15T10:32:00Z","operation":"write","path":"internal/new_feature.go","size_bytes":2048}
+{"type":"tool_execution","timestamp":"2024-01-15T10:32:30Z","tool":"Edit","parameters":{"file_path":"main.go","old_string":"func main()","new_string":"func main() // updated"},"duration_ms":67}
+{"type":"token_usage","timestamp":"2024-01-15T10:33:00Z","input_tokens":1500,"output_tokens":800,"cache_read_tokens":200,"cache_creation_tokens":50}
+{"type":"bash_command","timestamp":"2024-01-15T10:34:00Z","command":"go build","exit_code":1,"duration_ms":890}
+{"type":"file_operation","timestamp":"2024-01-15T10:35:00Z","operation":"read","path":"config.yaml","size_bytes":512}

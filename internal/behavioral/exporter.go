@@ -165,8 +165,76 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
+// CSVExporter exports behavioral data in CSV format
+type CSVExporter struct{}
+
+// Export converts BehavioralMetrics to CSV string
+func (ce *CSVExporter) Export(metrics *BehavioralMetrics) (string, error) {
+	if metrics == nil {
+		return "", fmt.Errorf("metrics cannot be nil")
+	}
+
+	if err := metrics.Validate(); err != nil {
+		return "", fmt.Errorf("invalid metrics: %w", err)
+	}
+
+	var sb strings.Builder
+
+	// Header
+	sb.WriteString("Type,Name,Value\n")
+
+	// Summary metrics
+	sb.WriteString(fmt.Sprintf("Summary,TotalSessions,%d\n", metrics.TotalSessions))
+	sb.WriteString(fmt.Sprintf("Summary,SuccessRate,%.4f\n", metrics.SuccessRate))
+	sb.WriteString(fmt.Sprintf("Summary,ErrorRate,%.4f\n", metrics.ErrorRate))
+	sb.WriteString(fmt.Sprintf("Summary,TotalErrors,%d\n", metrics.TotalErrors))
+	sb.WriteString(fmt.Sprintf("Summary,AverageDuration,%s\n", metrics.AverageDuration))
+	sb.WriteString(fmt.Sprintf("Summary,TotalCost,%.4f\n", metrics.TotalCost))
+
+	// Token usage
+	sb.WriteString(fmt.Sprintf("TokenUsage,InputTokens,%d\n", metrics.TokenUsage.InputTokens))
+	sb.WriteString(fmt.Sprintf("TokenUsage,OutputTokens,%d\n", metrics.TokenUsage.OutputTokens))
+	sb.WriteString(fmt.Sprintf("TokenUsage,TotalTokens,%d\n", metrics.TokenUsage.TotalTokens()))
+	sb.WriteString(fmt.Sprintf("TokenUsage,ModelName,%s\n", metrics.TokenUsage.ModelName))
+	sb.WriteString(fmt.Sprintf("TokenUsage,CostUSD,%.4f\n", metrics.TokenUsage.CostUSD))
+
+	// Agent performance
+	for agent, count := range metrics.AgentPerformance {
+		sb.WriteString(fmt.Sprintf("AgentPerformance,%s,%d\n", escapeCSV(agent), count))
+	}
+
+	// Tool executions
+	for _, tool := range metrics.ToolExecutions {
+		sb.WriteString(fmt.Sprintf("ToolExecution,%s,Count:%d|SuccessRate:%.4f|ErrorRate:%.4f|AvgDuration:%s\n",
+			escapeCSV(tool.Name), tool.Count, tool.SuccessRate, tool.ErrorRate, tool.AvgDuration))
+	}
+
+	// Bash commands
+	for _, cmd := range metrics.BashCommands {
+		sb.WriteString(fmt.Sprintf("BashCommand,%s,ExitCode:%d|Success:%t|Duration:%s|OutputLength:%d\n",
+			escapeCSV(cmd.Command), cmd.ExitCode, cmd.Success, cmd.Duration, cmd.OutputLength))
+	}
+
+	// File operations
+	for _, file := range metrics.FileOperations {
+		sb.WriteString(fmt.Sprintf("FileOperation,%s,Type:%s|Success:%t|SizeBytes:%d|Duration:%d\n",
+			escapeCSV(file.Path), file.Type, file.Success, file.SizeBytes, file.Duration))
+	}
+
+	return sb.String(), nil
+}
+
+// escapeCSV escapes special characters in CSV fields
+func escapeCSV(s string) string {
+	if strings.ContainsAny(s, ",\"\n\r") {
+		s = strings.ReplaceAll(s, "\"", "\"\"")
+		return "\"" + s + "\""
+	}
+	return s
+}
+
 // ExportToFile exports metrics to a file in the specified format
-// Supports format values: "json", "markdown", "md"
+// Supports format values: "json", "markdown", "md", "csv"
 func ExportToFile(metrics *BehavioralMetrics, path string, format string) error {
 	if metrics == nil {
 		return fmt.Errorf("metrics cannot be nil")
@@ -192,8 +260,10 @@ func ExportToFile(metrics *BehavioralMetrics, path string, format string) error 
 		exporter = &JSONExporter{Pretty: true}
 	case "markdown":
 		exporter = &MarkdownExporter{IncludeTimestamp: true}
+	case "csv":
+		exporter = &CSVExporter{}
 	default:
-		return fmt.Errorf("unsupported format: %s (supported: json, markdown)", format)
+		return fmt.Errorf("unsupported format: %s (supported: json, markdown, csv)", format)
 	}
 
 	// Export to string
@@ -244,8 +314,10 @@ func ExportToString(metrics *BehavioralMetrics, format string) (string, error) {
 		exporter = &JSONExporter{Pretty: true}
 	case "markdown":
 		exporter = &MarkdownExporter{IncludeTimestamp: true}
+	case "csv":
+		exporter = &CSVExporter{}
 	default:
-		return "", fmt.Errorf("unsupported format: %s (supported: json, markdown)", format)
+		return "", fmt.Errorf("unsupported format: %s (supported: json, markdown, csv)", format)
 	}
 
 	return exporter.Export(metrics)

@@ -25,12 +25,14 @@ type InvocationResult struct {
 	Duration      time.Duration
 	Error         error
 	AgentResponse *models.AgentResponse
+	SessionID     string
 }
 
 // ClaudeOutput represents the JSON output structure from claude CLI
 type ClaudeOutput struct {
-	Content string `json:"content"`
-	Error   string `json:"error"`
+	Content   string `json:"content"`
+	Error     string `json:"error"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // NewInvoker creates a new Invoker with default settings
@@ -299,8 +301,22 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// Parse agent response from output
 	parsedOutput, parseErr := ParseClaudeOutput(string(output))
 	if parseErr == nil && parsedOutput.Content != "" {
+		// Extract session_id from Claude CLI output
+		result.SessionID = parsedOutput.SessionID
+
+		// Log session_id if present
+		if result.SessionID != "" {
+			fmt.Fprintf(os.Stderr, "📊 Session ID: %s\n", result.SessionID)
+		} else {
+			fmt.Fprintf(os.Stderr, "⚠️  Warning: No session_id in Claude CLI output\n")
+		}
+
 		// Parse the content as AgentResponse JSON
 		agentResp, _ := parseAgentJSON(parsedOutput.Content)
+		if agentResp != nil {
+			// Set session_id in AgentResponse as well
+			agentResp.SessionID = result.SessionID
+		}
 		result.AgentResponse = agentResp
 	} else {
 		// Fallback: parse raw output as AgentResponse
@@ -332,6 +348,13 @@ func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
 
 	// Build result with both content and error fields
 	result := &ClaudeOutput{}
+
+	// Check for "session_id" field (available in Claude CLI output)
+	if sessionIDField, ok := jsonMap["session_id"]; ok {
+		if sessionIDStr, ok := sessionIDField.(string); ok {
+			result.SessionID = sessionIDStr
+		}
+	}
 
 	// Check for "result" field (used by some agents like conductor-qc)
 	// This takes precedence as it's a custom field used by our agents
