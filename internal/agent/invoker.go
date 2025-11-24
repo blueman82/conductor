@@ -114,11 +114,11 @@ func parseAgentJSON(output string) (*models.AgentResponse, error) {
 }
 
 // BuildCommandArgs constructs the command-line arguments for invoking claude CLI
-// Enforces JSON-structured responses using --json-schema flag with AgentResponseSchema
+// Enforces JSON-structured responses using --json-schema flag
 //
 // Argument order:
 //  1. --agents (if agent specified and found in registry)
-//  2. --json-schema (enforces AgentResponse structure via JSON schema)
+//  2. --json-schema (enforces response structure via JSON schema - can be custom or default AgentResponseSchema)
 //  3. -p (prompt without JSON instructions)
 //  4. --permission-mode bypassPermissions
 //  5. --settings (disableAllHooks)
@@ -128,6 +128,7 @@ func parseAgentJSON(output string) (*models.AgentResponse, error) {
 //   - If task.Agent is specified AND exists in registry: adds --agents flag with JSON definition
 //   - If task.Agent is specified but not found: falls back to plain prompt (no agent)
 //   - If task.Agent is empty: plain prompt (no agent flags)
+//   - If task.JSONSchema is set: uses custom schema; otherwise uses AgentResponseSchema
 //   - --json-schema enforces the response structure, eliminating need for prompt-based JSON instructions
 func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	args := []string{}
@@ -144,9 +145,12 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 		}
 	}
 
-	// Add JSON schema for structured agent responses
-	// This enforces the AgentResponse JSON structure at the CLI level
-	schemaJSON := models.AgentResponseSchema()
+	// Add JSON schema for structured responses
+	// If task specifies custom JSONSchema, use it; otherwise use default AgentResponseSchema
+	schemaJSON := task.JSONSchema
+	if schemaJSON == "" {
+		schemaJSON = models.AgentResponseSchema()
+	}
 	args = append(args, "--json-schema", schemaJSON)
 
 	// Build prompt with formatting instructions

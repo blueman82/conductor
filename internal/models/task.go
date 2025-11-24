@@ -41,6 +41,9 @@ type Task struct {
 	Type                string   `yaml:"type,omitempty" json:"type,omitempty"`                                 // Task type: regular or integration
 	IntegrationCriteria []string `yaml:"integration_criteria,omitempty" json:"integration_criteria,omitempty"` // Criteria for integration tasks
 
+	// JSON Schema enforcement (v2.8+)
+	JSONSchema string `yaml:"json_schema,omitempty" json:"json_schema,omitempty"` // Custom JSON schema for response validation
+
 	// Execution metadata for enhanced console output
 	ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`
 	ExecutionEndTime   time.Time     `json:"execution_end_time,omitempty" yaml:"execution_end_time,omitempty"`

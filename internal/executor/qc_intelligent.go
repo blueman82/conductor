@@ -175,9 +175,10 @@ func (is *IntelligentSelector) invokeClaudeForSelection(ctx context.Context, pro
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, is.Timeout)
 	defer cancel()
 
-	// Build command args - minimal flags for quick selection
+	// Build command args with JSON schema enforcement
 	args := []string{
 		"-p", prompt,
+		"--json-schema", models.IntelligentSelectionSchema(),
 		"--output-format", "json",
 		"--settings", `{"disableAllHooks": true}`,
 	}
@@ -200,62 +201,13 @@ func (is *IntelligentSelector) invokeClaudeForSelection(ctx context.Context, pro
 		return nil, fmt.Errorf("empty response from claude")
 	}
 
-	// Strip markdown code fences if present
-	content = stripCodeFences(content)
-
-	// Parse as recommendation
+	// Parse as recommendation - schema guarantees valid JSON
 	var recommendation IntelligentAgentRecommendation
 	if err := json.Unmarshal([]byte(content), &recommendation); err != nil {
-		return nil, fmt.Errorf("failed to parse recommendation JSON: %w (content: %s)", err, content)
+		return nil, fmt.Errorf("schema enforcement failed: %w (content: %s)", err, content)
 	}
 
 	return &recommendation, nil
-}
-
-// stripCodeFences removes markdown code fences from JSON response.
-// Handles thinking text and content before/after fences by searching for JSON markers anywhere.
-// Supports case-insensitive fence detection (```json, ```JSON, ```Json, etc).
-// Two-pass strategy: First tries ```json specifically, then falls back to plain ``` markers.
-func stripCodeFences(content string) string {
-	trimmed := strings.TrimSpace(content)
-
-	// Look for ```json...``` pattern ANYWHERE in content (case-insensitive)
-	// This handles both ```json and ```JSON variants, including thinking text before/after
-	lowerContent := strings.ToLower(trimmed)
-	if strings.Contains(lowerContent, "```json") {
-		// Find opening fence (case-insensitive)
-		start := strings.Index(lowerContent, "```json")
-		if start != -1 {
-			// Move past the opening fence and any newline
-			start += len("```json")
-			if start < len(trimmed) && trimmed[start] == '\n' {
-				start++
-			}
-
-			// Find closing fence after the opening
-			remaining := trimmed[start:]
-			end := strings.Index(remaining, "```")
-			if end > 0 {
-				return strings.TrimSpace(remaining[:end])
-			}
-		}
-	}
-
-	// Fallback: look for any ``` markers at START of content
-	if strings.HasPrefix(trimmed, "```") {
-		start := strings.Index(trimmed, "```") + 3
-		// Skip any language identifier on same line
-		if newlineIdx := strings.Index(trimmed[start:], "\n"); newlineIdx != -1 {
-			start += newlineIdx + 1
-		}
-
-		end := strings.LastIndex(trimmed, "```")
-		if end > start {
-			return strings.TrimSpace(trimmed[start:end])
-		}
-	}
-
-	return content
 }
 
 // applyGuardrails validates and constrains the agent selection
