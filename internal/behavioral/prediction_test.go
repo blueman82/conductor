@@ -597,7 +597,7 @@ func TestGenerateRecommendations(t *testing.T) {
 			expectedMin: 2,
 		},
 		{
-			name: "heavy bash usage",
+			name:        "heavy bash usage",
 			riskFactors: []string{},
 			toolUsage: func() []string {
 				tools := make([]string, 15)

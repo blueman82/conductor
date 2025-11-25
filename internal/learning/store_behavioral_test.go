@@ -11,13 +11,13 @@ import (
 
 func TestRecordSessionMetrics(t *testing.T) {
 	tests := []struct {
-		name          string
-		sessionData   *BehavioralSessionData
-		tools         []ToolExecutionData
-		bashCmds      []BashCommandData
-		fileOps       []FileOperationData
-		tokenUsage    []TokenUsageData
-		wantErr       bool
+		name        string
+		sessionData *BehavioralSessionData
+		tools       []ToolExecutionData
+		bashCmds    []BashCommandData
+		fileOps     []FileOperationData
+		tokenUsage  []TokenUsageData
+		wantErr     bool
 	}{
 		{
 			name: "records complete session with all metrics",

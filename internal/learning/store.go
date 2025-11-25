@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -77,15 +78,19 @@ func openAndInitStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	// Configure SQLite for concurrent access (WAL mode)
+	// Configure SQLite for concurrent access with retry logic.
+	// Set busy_timeout FIRST so subsequent operations wait on locks.
+	// Use retry with backoff for "database is locked" errors that can occur
+	// during concurrent initialization of the same database file.
 	pragmas := []string{
+		"PRAGMA busy_timeout=5000", // Must be first
 		"PRAGMA journal_mode=WAL",
-		"PRAGMA busy_timeout=5000",
 		"PRAGMA synchronous=NORMAL",
 		"PRAGMA cache_size=-64000", // 64MB cache
 	}
+
 	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
+		if err := execWithRetry(db, pragma, 5, 10*time.Millisecond); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("set %s: %w", pragma, err)
 		}
@@ -102,6 +107,28 @@ func openAndInitStore(dbPath string) (*Store, error) {
 	}
 
 	return store, nil
+}
+
+// execWithRetry executes a SQL statement with exponential backoff retry on lock errors.
+func execWithRetry(db *sql.DB, sql string, maxRetries int, baseDelay time.Duration) error {
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		_, err := db.Exec(sql)
+		if err == nil {
+			return nil
+		}
+
+		// Only retry on "database is locked" errors
+		if !strings.Contains(err.Error(), "database is locked") {
+			return err
+		}
+
+		lastErr = err
+		// Exponential backoff with jitter
+		delay := baseDelay * time.Duration(1<<attempt)
+		time.Sleep(delay)
+	}
+	return lastErr
 }
 
 // Close closes the database connection
@@ -422,75 +449,75 @@ func (s *Store) Exec(query string, args ...interface{}) (sql.Result, error) {
 
 // BehavioralSessionData represents data for a behavioral session with metrics
 type BehavioralSessionData struct {
-	TaskExecutionID      int64
-	SessionStart         time.Time
-	SessionEnd           *time.Time
-	TotalDurationSecs    int64
-	TotalToolCalls       int
-	TotalBashCommands    int
-	TotalFileOperations  int
-	TotalTokensUsed      int64
-	ContextWindowUsed    int
+	TaskExecutionID     int64
+	SessionStart        time.Time
+	SessionEnd          *time.Time
+	TotalDurationSecs   int64
+	TotalToolCalls      int
+	TotalBashCommands   int
+	TotalFileOperations int
+	TotalTokensUsed     int64
+	ContextWindowUsed   int
 }
 
 // BehavioralSessionMetrics represents complete session metrics with execution context
 type BehavioralSessionMetrics struct {
-	SessionID            int64
-	TaskExecutionID      int64
-	SessionStart         time.Time
-	SessionEnd           *time.Time
-	TotalDurationSecs    int64
-	TotalToolCalls       int
-	TotalBashCommands    int
-	TotalFileOperations  int
-	TotalTokensUsed      int64
-	ContextWindowUsed    int
+	SessionID           int64
+	TaskExecutionID     int64
+	SessionStart        time.Time
+	SessionEnd          *time.Time
+	TotalDurationSecs   int64
+	TotalToolCalls      int
+	TotalBashCommands   int
+	TotalFileOperations int
+	TotalTokensUsed     int64
+	ContextWindowUsed   int
 	// Execution context
-	TaskNumber           string
-	TaskName             string
-	Agent                string
-	Success              bool
+	TaskNumber string
+	TaskName   string
+	Agent      string
+	Success    bool
 }
 
 // ToolExecutionData represents a tool execution record
 type ToolExecutionData struct {
-	SessionID      int64
-	ToolName       string
-	Parameters     string
-	DurationMs     int64
-	Success        bool
-	ErrorMessage   string
+	SessionID    int64
+	ToolName     string
+	Parameters   string
+	DurationMs   int64
+	Success      bool
+	ErrorMessage string
 }
 
 // BashCommandData represents a bash command execution
 type BashCommandData struct {
-	SessionID      int64
-	Command        string
-	DurationMs     int64
-	ExitCode       int
-	StdoutLength   int
-	StderrLength   int
-	Success        bool
+	SessionID    int64
+	Command      string
+	DurationMs   int64
+	ExitCode     int
+	StdoutLength int
+	StderrLength int
+	Success      bool
 }
 
 // FileOperationData represents a file operation
 type FileOperationData struct {
-	SessionID      int64
-	OperationType  string
-	FilePath       string
-	DurationMs     int64
-	BytesAffected  int64
-	Success        bool
-	ErrorMessage   string
+	SessionID     int64
+	OperationType string
+	FilePath      string
+	DurationMs    int64
+	BytesAffected int64
+	Success       bool
+	ErrorMessage  string
 }
 
 // TokenUsageData represents token usage measurement
 type TokenUsageData struct {
-	SessionID          int64
-	InputTokens        int64
-	OutputTokens       int64
-	TotalTokens        int64
-	ContextWindowSize  int
+	SessionID         int64
+	InputTokens       int64
+	OutputTokens      int64
+	TotalTokens       int64
+	ContextWindowSize int
 }
 
 // RecordSessionMetrics records a behavioral session and its metrics in a transaction.
@@ -696,13 +723,13 @@ func (s *Store) GetTaskBehavior(ctx context.Context, taskNumber string) (map[str
 	}
 
 	result := map[string]interface{}{
-		"session_count": sessionCount,
+		"session_count":        sessionCount,
 		"avg_duration_seconds": 0.0,
-		"avg_tool_calls": 0.0,
-		"avg_bash_commands": 0.0,
-		"avg_file_operations": 0.0,
-		"total_tokens": int64(0),
-		"avg_context_window": 0.0,
+		"avg_tool_calls":       0.0,
+		"avg_bash_commands":    0.0,
+		"avg_file_operations":  0.0,
+		"total_tokens":         int64(0),
+		"avg_context_window":   0.0,
 	}
 
 	if avgDuration.Valid {
@@ -761,15 +788,15 @@ func (s *Store) GetProjectBehavior(ctx context.Context, project string) (map[str
 	}
 
 	result := map[string]interface{}{
-		"session_count": sessionCount,
-		"success_count": successCount,
-		"avg_duration_seconds": 0.0,
-		"total_tool_calls": int64(0),
-		"total_bash_commands": int64(0),
+		"session_count":         sessionCount,
+		"success_count":         successCount,
+		"avg_duration_seconds":  0.0,
+		"total_tool_calls":      int64(0),
+		"total_bash_commands":   int64(0),
 		"total_file_operations": int64(0),
-		"total_tokens": int64(0),
-		"avg_context_window": 0.0,
-		"success_rate": 0.0,
+		"total_tokens":          int64(0),
+		"avg_context_window":    0.0,
+		"success_rate":          0.0,
 	}
 
 	if avgDuration.Valid {
@@ -1737,6 +1764,74 @@ func (s *Store) UpdateSessionAggregates(ctx context.Context,
 	}
 
 	return nil
+}
+
+// GetSessionByExternalID looks up a session by its Claude external session ID.
+// Returns nil, nil if session not found (not an error - just not ingested yet).
+func (s *Store) GetSessionByExternalID(ctx context.Context, externalID string) (*BehavioralSessionMetrics, error) {
+	query := `SELECT
+		bs.id, bs.task_execution_id, bs.session_start, bs.session_end,
+		bs.total_duration_seconds, bs.total_tool_calls, bs.total_bash_commands,
+		bs.total_file_operations, bs.total_tokens_used, bs.context_window_used,
+		bs.external_session_id, bs.project_path, bs.agent_type
+		FROM behavioral_sessions bs
+		WHERE bs.external_session_id = ?`
+
+	row := s.db.QueryRowContext(ctx, query, externalID)
+
+	metrics := &BehavioralSessionMetrics{}
+	var sessionEnd sql.NullTime
+	var totalDuration, totalToolCalls, totalBashCmds, totalFileOps, totalTokens, contextWindow sql.NullInt64
+	var externalSessionID, projectPath, agentType sql.NullString
+
+	err := row.Scan(
+		&metrics.SessionID,
+		&metrics.TaskExecutionID,
+		&metrics.SessionStart,
+		&sessionEnd,
+		&totalDuration,
+		&totalToolCalls,
+		&totalBashCmds,
+		&totalFileOps,
+		&totalTokens,
+		&contextWindow,
+		&externalSessionID,
+		&projectPath,
+		&agentType,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Not found - not an error
+		}
+		return nil, fmt.Errorf("query session by external id: %w", err)
+	}
+
+	if sessionEnd.Valid {
+		metrics.SessionEnd = &sessionEnd.Time
+	}
+	if totalDuration.Valid {
+		metrics.TotalDurationSecs = totalDuration.Int64
+	}
+	if totalToolCalls.Valid {
+		metrics.TotalToolCalls = int(totalToolCalls.Int64)
+	}
+	if totalBashCmds.Valid {
+		metrics.TotalBashCommands = int(totalBashCmds.Int64)
+	}
+	if totalFileOps.Valid {
+		metrics.TotalFileOperations = int(totalFileOps.Int64)
+	}
+	if totalTokens.Valid {
+		metrics.TotalTokensUsed = totalTokens.Int64
+	}
+	if contextWindow.Valid {
+		metrics.ContextWindowUsed = int(contextWindow.Int64)
+	}
+	if agentType.Valid {
+		metrics.Agent = agentType.String
+	}
+
+	return metrics, nil
 }
 
 // ListFileOffsets retrieves all tracked file offsets.

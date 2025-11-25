@@ -2,7 +2,9 @@ package learning
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -191,15 +193,24 @@ type MigrationVersion struct {
 	AppliedAt time.Time
 }
 
-// ApplyMigrations applies all pending migrations to the database
+// ApplyMigrations applies all pending migrations to the database.
+// Uses EXCLUSIVE transaction to serialize concurrent initialization.
 func (s *Store) ApplyMigrations(ctx context.Context) error {
-	// Ensure schema_version table exists
-	if err := s.ensureSchemaVersionTable(); err != nil {
+	// Start EXCLUSIVE transaction to serialize concurrent migrations.
+	// This ensures only one connection can run migrations at a time.
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return fmt.Errorf("begin exclusive transaction: %w", err)
+	}
+	defer tx.Rollback() // no-op if committed
+
+	// Ensure schema_version table exists (within transaction)
+	if err := s.ensureSchemaVersionTableTx(tx); err != nil {
 		return fmt.Errorf("ensure schema_version table: %w", err)
 	}
 
 	// Get currently applied versions
-	appliedVersions, err := s.GetAppliedVersions()
+	appliedVersions, err := s.getAppliedVersionsTx(tx)
 	if err != nil {
 		return fmt.Errorf("get applied versions: %w", err)
 	}
@@ -218,22 +229,26 @@ func (s *Store) ApplyMigrations(ctx context.Context) error {
 
 		// Handle migration 4 special case: add columns idempotently
 		if migration.Version == 4 {
-			if err := s.applyMigration4(ctx); err != nil {
+			if err := s.applyMigration4Tx(ctx, tx); err != nil {
 				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
 			}
 		}
 
 		// Execute migration SQL (indexes are IF NOT EXISTS, safe to re-run)
 		if migration.SQL != "" {
-			if _, err := s.db.ExecContext(ctx, migration.SQL); err != nil {
+			if _, err := tx.ExecContext(ctx, migration.SQL); err != nil {
 				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
 			}
 		}
 
 		// Record migration as applied
-		if err := s.recordMigration(ctx, migration.Version); err != nil {
+		if err := s.recordMigrationTx(ctx, tx, migration.Version); err != nil {
 			return fmt.Errorf("record migration %d: %w", migration.Version, err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migrations: %w", err)
 	}
 
 	return nil
@@ -261,6 +276,7 @@ func (s *Store) applyMigration4(ctx context.Context) error {
 }
 
 // addColumnIfNotExists adds a column to a table if it doesn't already exist.
+// This is idempotent - concurrent calls are safe (duplicate column errors are ignored).
 func (s *Store) addColumnIfNotExists(ctx context.Context, table, column, definition string) error {
 	// Check if column exists using PRAGMA table_info
 	query := fmt.Sprintf("PRAGMA table_info(%s)", table)
@@ -289,8 +305,13 @@ func (s *Store) addColumnIfNotExists(ctx context.Context, table, column, definit
 	}
 
 	// Column doesn't exist, add it
+	// Handle race condition: if another goroutine added it between our check and now,
+	// SQLite returns "duplicate column name" which we treat as success
 	alterSQL := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)
 	if _, err := s.db.ExecContext(ctx, alterSQL); err != nil {
+		if strings.Contains(err.Error(), "duplicate column name") {
+			return nil // Column was added by concurrent operation - success
+		}
 		return fmt.Errorf("alter table: %w", err)
 	}
 
@@ -367,4 +388,117 @@ func (s *Store) GetLatestVersion() (int, error) {
 		return 0, fmt.Errorf("query latest version: %w", err)
 	}
 	return version, nil
+}
+
+// Transaction-aware versions for ApplyMigrations
+
+// ensureSchemaVersionTableTx ensures the schema_version table exists (within transaction)
+func (s *Store) ensureSchemaVersionTableTx(tx *sql.Tx) error {
+	sqlStr := `
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+`
+	_, err := tx.Exec(sqlStr)
+	if err != nil {
+		return fmt.Errorf("create schema_version table: %w", err)
+	}
+	return nil
+}
+
+// getAppliedVersionsTx retrieves all applied migration versions (within transaction)
+func (s *Store) getAppliedVersionsTx(tx *sql.Tx) ([]*MigrationVersion, error) {
+	query := `SELECT version, applied_at FROM schema_version ORDER BY version ASC`
+	rows, err := tx.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query schema versions: %w", err)
+	}
+	defer rows.Close()
+
+	var versions []*MigrationVersion
+	for rows.Next() {
+		v := &MigrationVersion{}
+		if err := rows.Scan(&v.Version, &v.AppliedAt); err != nil {
+			return nil, fmt.Errorf("scan version: %w", err)
+		}
+		versions = append(versions, v)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate versions: %w", err)
+	}
+
+	return versions, nil
+}
+
+// recordMigrationTx records that a migration has been applied (within transaction)
+func (s *Store) recordMigrationTx(ctx context.Context, tx *sql.Tx, version int) error {
+	query := `INSERT OR IGNORE INTO schema_version (version) VALUES (?)`
+	_, err := tx.ExecContext(ctx, query, version)
+	if err != nil {
+		return fmt.Errorf("insert migration version: %w", err)
+	}
+	return nil
+}
+
+// applyMigration4Tx adds columns for external session correlation idempotently (within transaction).
+func (s *Store) applyMigration4Tx(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		def  string
+	}{
+		{"external_session_id", "TEXT"},
+		{"project_path", "TEXT"},
+		{"agent_type", "TEXT"},
+	}
+
+	for _, col := range columns {
+		if err := s.addColumnIfNotExistsTx(ctx, tx, "behavioral_sessions", col.name, col.def); err != nil {
+			return fmt.Errorf("add column %s: %w", col.name, err)
+		}
+	}
+
+	return nil
+}
+
+// addColumnIfNotExistsTx adds a column to a table if it doesn't already exist (within transaction).
+func (s *Store) addColumnIfNotExistsTx(ctx context.Context, tx *sql.Tx, table, column, definition string) error {
+	// Check if column exists using PRAGMA table_info
+	query := fmt.Sprintf("PRAGMA table_info(%s)", table)
+	rows, err := tx.QueryContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("query table info: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dfltValue interface{}
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return fmt.Errorf("scan table info: %w", err)
+		}
+		if name == column {
+			// Column already exists
+			return nil
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate table info: %w", err)
+	}
+
+	// Column doesn't exist, add it
+	alterSQL := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)
+	if _, err := tx.ExecContext(ctx, alterSQL); err != nil {
+		// Within a serialized transaction, this shouldn't race, but handle anyway
+		if strings.Contains(err.Error(), "duplicate column name") {
+			return nil
+		}
+		return fmt.Errorf("alter table: %w", err)
+	}
+
+	return nil
 }

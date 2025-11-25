@@ -111,19 +111,77 @@ func indexOf(s, substr string) int {
 }
 
 // GetLearningDBPath returns the absolute path to the learning database
-// Always returns: $CONDUCTOR_HOME/learning/executions.db
+// Priority order:
+//  1. Config file's learning.db_path (if absolute path)
+//  2. Config file's learning.db_path resolved relative to cwd (if relative)
+//  3. Falls back to $CONDUCTOR_HOME/learning/executions.db
 func GetLearningDBPath() (string, error) {
 	return GetLearningDBPathWithRoot(buildTimeRepoRoot)
 }
 
 // GetLearningDBPathWithRoot is the testable version that accepts the build-time root
+// When buildTimeRoot is provided (for testing), it's used directly without config lookup
 func GetLearningDBPathWithRoot(buildTimeRoot string) (string, error) {
-	home, err := GetConductorHomeWithRoot(buildTimeRoot)
-	if err != nil {
-		return "", err
+	// If buildTimeRoot is explicitly provided (testing), use it directly
+	if buildTimeRoot != "" {
+		home, err := GetConductorHomeWithRoot(buildTimeRoot)
+		if err != nil {
+			return "", err
+		}
+		dbPath := filepath.Join(home, "learning", "executions.db")
+		dir := filepath.Dir(dbPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return "", fmt.Errorf("create learning directory: %w", err)
+		}
+		return dbPath, nil
 	}
 
-	return filepath.Join(home, "learning", "executions.db"), nil
+	// Check CONDUCTOR_HOME env var first
+	if envHome := os.Getenv("CONDUCTOR_HOME"); envHome != "" {
+		dbPath := filepath.Join(envHome, "learning", "executions.db")
+		dir := filepath.Dir(dbPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return "", fmt.Errorf("create learning directory: %w", err)
+		}
+		return dbPath, nil
+	}
+
+	// Try to load config to get learning.db_path
+	cwd, _ := os.Getwd()
+	configPath := filepath.Join(cwd, ".conductor", "config.yaml")
+
+	// Check if config file exists and has db_path set
+	if cfg, err := LoadConfig(configPath); err == nil && cfg.Learning.DBPath != "" {
+		dbPath := cfg.Learning.DBPath
+
+		// Expand ~ to home directory
+		if len(dbPath) > 0 && dbPath[0] == '~' {
+			if home, err := os.UserHomeDir(); err == nil {
+				dbPath = filepath.Join(home, dbPath[1:])
+			}
+		}
+
+		// If absolute path, use it directly
+		if filepath.IsAbs(dbPath) {
+			// Ensure parent directory exists
+			dir := filepath.Dir(dbPath)
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return "", fmt.Errorf("create learning directory: %w", err)
+			}
+			return dbPath, nil
+		}
+
+		// Relative path - resolve from cwd
+		absPath := filepath.Join(cwd, dbPath)
+		dir := filepath.Dir(absPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return "", fmt.Errorf("create learning directory: %w", err)
+		}
+		return absPath, nil
+	}
+
+	// No config found - return error
+	return "", fmt.Errorf("learning database path not configured: set CONDUCTOR_HOME or create .conductor/config.yaml with learning.db_path")
 }
 
 // GetLearningDir returns the learning directory path

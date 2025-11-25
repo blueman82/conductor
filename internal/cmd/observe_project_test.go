@@ -30,11 +30,11 @@ func TestFormatProjectAnalysis(t *testing.T) {
 			name:    "basic project analysis",
 			project: "myapp",
 			summary: &learning.SummaryStats{
-				TotalSessions:      42,
-				TotalAgents:        5,
-				SuccessRate:        0.875,
-				AvgDurationSeconds: 300,
-				TotalTokens:        10000,
+				TotalSessions:       42,
+				TotalAgents:         5,
+				SuccessRate:         0.875,
+				AvgDurationSeconds:  300,
+				TotalTokens:         10000,
 				AvgTokensPerSession: 238.0,
 			},
 			projectStats: &behavioral.ProjectStats{

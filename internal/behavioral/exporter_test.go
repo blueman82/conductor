@@ -397,9 +397,9 @@ func TestTruncateString(t *testing.T) {
 
 func TestCSVExporter_Export(t *testing.T) {
 	tests := []struct {
-		name        string
-		metrics     *BehavioralMetrics
-		wantErr     bool
+		name         string
+		metrics      *BehavioralMetrics
+		wantErr      bool
 		wantContains []string
 	}{
 		{

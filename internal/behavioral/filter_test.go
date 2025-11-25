@@ -7,10 +7,10 @@ import (
 
 func TestFilterCriteria_Validate(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		criteria FilterCriteria
-		wantErr bool
-		errMsg  string
+		wantErr  bool
+		errMsg   string
 	}{
 		{
 			name:     "empty criteria is valid",

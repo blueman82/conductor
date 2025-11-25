@@ -7,17 +7,17 @@ import (
 
 // AggregateStats contains summary statistics from behavioral metrics
 type AggregateStats struct {
-	TotalAgents      int              `json:"total_agents"`
-	TotalOperations  int              `json:"total_operations"`
-	TotalCost        float64          `json:"total_cost"`
-	TotalSessions    int              `json:"total_sessions"`
-	SuccessRate      float64          `json:"success_rate"`
-	ErrorRate        float64          `json:"error_rate"`
-	AverageDuration  time.Duration    `json:"average_duration"`
-	TotalInputTokens int64            `json:"total_input_tokens"`
-	TotalOutputTokens int64           `json:"total_output_tokens"`
-	TopTools         []ToolStatSummary `json:"top_tools"`
-	AgentBreakdown   map[string]int   `json:"agent_breakdown"`
+	TotalAgents       int               `json:"total_agents"`
+	TotalOperations   int               `json:"total_operations"`
+	TotalCost         float64           `json:"total_cost"`
+	TotalSessions     int               `json:"total_sessions"`
+	SuccessRate       float64           `json:"success_rate"`
+	ErrorRate         float64           `json:"error_rate"`
+	AverageDuration   time.Duration     `json:"average_duration"`
+	TotalInputTokens  int64             `json:"total_input_tokens"`
+	TotalOutputTokens int64             `json:"total_output_tokens"`
+	TopTools          []ToolStatSummary `json:"top_tools"`
+	AgentBreakdown    map[string]int    `json:"agent_breakdown"`
 }
 
 // ToolStatSummary contains summary statistics for a tool

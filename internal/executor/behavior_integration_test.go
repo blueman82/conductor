@@ -2,8 +2,6 @@ package executor
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -20,12 +18,12 @@ func TestNewBehaviorCollector(t *testing.T) {
 		wantErr    bool
 	}{
 		{
-			name:       "with explicit session dir",
+			name:       "with explicit session dir (ignored)",
 			sessionDir: "/tmp/sessions",
 			wantErr:    false,
 		},
 		{
-			name:       "with empty session dir defaults to ~/.claude/sessions",
+			name:       "with empty session dir",
 			sessionDir: "",
 			wantErr:    false,
 		},
@@ -40,103 +38,71 @@ func TestNewBehaviorCollector(t *testing.T) {
 			collector := NewBehaviorCollector(store, tt.sessionDir)
 			assert.NotNil(t, collector)
 			assert.NotNil(t, collector.store)
-			if tt.sessionDir != "" {
-				assert.Equal(t, tt.sessionDir, collector.sessionDir)
-			}
+			// sessionDir parameter is kept for backward compatibility but no longer stored
 		})
 	}
 }
 
 func TestBehaviorCollector_LoadSessionMetrics(t *testing.T) {
-	tests := []struct {
-		name             string
-		sessionContent   string
-		expectedError    bool
-		expectedSessions int
-		expectedTools    int
-	}{
-		{
-			name: "valid session with tool calls",
-			sessionContent: `{"type":"session_start","session_id":"test-123","project":"conductor","timestamp":"2025-01-24T10:00:00Z","status":"completed","agent_name":"golang-pro","duration":5000,"success":true,"error_count":0}
-{"type":"tool_call","timestamp":"2025-01-24T10:00:01Z","tool_name":"Read","parameters":{"file_path":"test.go"},"result":"success","success":true,"duration":100}
-{"type":"tool_call","timestamp":"2025-01-24T10:00:02Z","tool_name":"Write","parameters":{"file_path":"test.go"},"result":"success","success":true,"duration":200}
-`,
-			expectedError:    false,
-			expectedSessions: 1,
-			expectedTools:    2,
-		},
-		{
-			name: "session with bash commands",
-			sessionContent: `{"type":"session_metadata","session_id":"test-456","project":"conductor","timestamp":"2025-01-24T10:00:00Z","status":"completed","agent_name":"golang-pro","duration":3000,"success":true,"error_count":0}
-{"type":"bash_command","timestamp":"2025-01-24T10:00:01Z","command":"go test","exit_code":0,"output":"PASS","output_length":100,"duration":1500,"success":true}
-`,
-			expectedError:    false,
-			expectedSessions: 1,
-			expectedTools:    0,
-		},
-		{
-			name: "session with file operations",
-			sessionContent: `{"type":"session_start","id":"test-789","project":"conductor","timestamp":"2025-01-24T10:00:00Z","status":"completed","agent_name":"golang-pro","duration":2000,"success":true,"error_count":0}
-{"type":"file_operation","timestamp":"2025-01-24T10:00:01Z","operation":"write","path":"test.go","success":true,"size_bytes":1024,"duration":50}
-`,
-			expectedError:    false,
-			expectedSessions: 1,
-			expectedTools:    0,
-		},
-		{
-			name: "session with token usage",
-			sessionContent: `{"type":"session_start","session_id":"test-abc","project":"conductor","timestamp":"2025-01-24T10:00:00Z","status":"completed","agent_name":"golang-pro","duration":4000,"success":true,"error_count":0}
-{"type":"token_usage","timestamp":"2025-01-24T10:00:01Z","input_tokens":1000,"output_tokens":500,"cost_usd":0.05,"model_name":"claude-sonnet-4-5"}
-`,
-			expectedError:    false,
-			expectedSessions: 1,
-			expectedTools:    0,
-		},
-	}
+	t.Run("session found in database", func(t *testing.T) {
+		// Create store and collector
+		store, err := learning.NewStore(":memory:")
+		require.NoError(t, err)
+		defer store.Close()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create temporary session file
-			tmpDir := t.TempDir()
-			sessionFile := filepath.Join(tmpDir, "test-123.jsonl")
-			err := os.WriteFile(sessionFile, []byte(tt.sessionContent), 0644)
-			require.NoError(t, err)
+		ctx := context.Background()
 
-			// Create store and collector
-			store, err := learning.NewStore(":memory:")
-			require.NoError(t, err)
-			defer store.Close()
+		// Insert a session into the database
+		sessionID, _, err := store.UpsertClaudeSession(ctx, "test-external-123", "/project/path", "golang-pro")
+		require.NoError(t, err)
 
-			collector := NewBehaviorCollector(store, tmpDir)
+		// Update session aggregates to have some data
+		err = store.UpdateSessionAggregates(ctx, sessionID, 1000, 60)
+		require.NoError(t, err)
 
-			// Load session metrics
-			metrics, err := collector.LoadSessionMetrics("test-123")
+		collector := NewBehaviorCollector(store, "")
 
-			if tt.expectedError {
-				assert.Error(t, err)
-				return
-			}
+		// Load session metrics by external ID
+		metrics, err := collector.LoadSessionMetrics("test-external-123")
 
-			require.NoError(t, err)
-			assert.NotNil(t, metrics)
-			assert.Equal(t, tt.expectedSessions, metrics.TotalSessions)
-			assert.Equal(t, tt.expectedTools, len(metrics.ToolExecutions))
-		})
-	}
+		require.NoError(t, err)
+		assert.NotNil(t, metrics)
+		assert.Equal(t, 1, metrics.TotalSessions)
+		assert.Equal(t, time.Duration(60)*time.Second, metrics.AverageDuration)
+	})
+
+	t.Run("session with agent tracking", func(t *testing.T) {
+		store, err := learning.NewStore(":memory:")
+		require.NoError(t, err)
+		defer store.Close()
+
+		ctx := context.Background()
+
+		// Insert session with agent type
+		_, _, err = store.UpsertClaudeSession(ctx, "test-agent-456", "/project", "rust-engineer")
+		require.NoError(t, err)
+
+		collector := NewBehaviorCollector(store, "")
+		metrics, err := collector.LoadSessionMetrics("test-agent-456")
+
+		require.NoError(t, err)
+		assert.NotNil(t, metrics)
+		assert.Contains(t, metrics.AgentPerformance, "rust-engineer")
+	})
 }
 
 func TestBehaviorCollector_LoadSessionMetrics_NotFound(t *testing.T) {
-	tmpDir := t.TempDir()
 	store, err := learning.NewStore(":memory:")
 	require.NoError(t, err)
 	defer store.Close()
 
-	collector := NewBehaviorCollector(store, tmpDir)
+	collector := NewBehaviorCollector(store, "")
 
-	// Try to load non-existent session
-	_, err = collector.LoadSessionMetrics("nonexistent-session")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "session file not found")
+	// Try to load non-existent session - should return empty metrics, not error
+	metrics, err := collector.LoadSessionMetrics("nonexistent-session")
+	require.NoError(t, err)
+	assert.NotNil(t, metrics)
+	assert.Equal(t, 0, metrics.TotalSessions) // Empty metrics indicate not ingested yet
 }
 
 func TestBehaviorCollector_AggregateMetrics(t *testing.T) {
@@ -399,10 +365,12 @@ func TestBehaviorCollector_GracefulDegradation(t *testing.T) {
 	err = store.RecordExecution(ctx, taskExec)
 	require.NoError(t, err)
 
-	// Create collector with non-existent session directory
+	// Create collector (session directory parameter is now ignored)
 	collector := NewBehaviorCollector(store, "/nonexistent/sessions")
 
-	// Try to load session - should return error but not panic
-	_, err = collector.LoadSessionMetrics("nonexistent-session")
-	assert.Error(t, err)
+	// Try to load session - should return empty metrics (not error) since we now use DB
+	metrics, err := collector.LoadSessionMetrics("nonexistent-session")
+	require.NoError(t, err)
+	assert.NotNil(t, metrics)
+	assert.Equal(t, 0, metrics.TotalSessions) // Empty metrics indicate not ingested yet
 }

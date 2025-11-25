@@ -390,8 +390,8 @@ func TestGracefulShutdown(t *testing.T) {
 	cfg := IngestionConfig{
 		RootDir:      tmpDir,
 		Pattern:      "*.jsonl",
-		BatchSize:    1000,                    // Large batch to ensure events are pending
-		BatchTimeout: 10 * time.Second,        // Long timeout so we test flush on shutdown
+		BatchSize:    1000,             // Large batch to ensure events are pending
+		BatchTimeout: 10 * time.Second, // Long timeout so we test flush on shutdown
 		LockFile:     filepath.Join(tmpDir, "test.lock"),
 	}
 

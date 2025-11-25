@@ -1642,12 +1642,12 @@ func TestGetRecentSessions(t *testing.T) {
 
 	// Record behavioral session using RecordSessionMetrics
 	sessionData := &BehavioralSessionData{
-		TaskExecutionID:      exec.ID,
-		SessionStart:         exec.Timestamp,
-		TotalDurationSecs:    120,
-		TotalToolCalls:       5,
-		TotalBashCommands:    3,
-		TotalFileOperations:  2,
+		TaskExecutionID:     exec.ID,
+		SessionStart:        exec.Timestamp,
+		TotalDurationSecs:   120,
+		TotalToolCalls:      5,
+		TotalBashCommands:   3,
+		TotalFileOperations: 2,
 	}
 	_, err = store.RecordSessionMetrics(ctx, sessionData, nil, nil, nil, nil)
 	require.NoError(t, err)
@@ -1687,9 +1687,9 @@ func TestGetRecentSessions(t *testing.T) {
 			require.NoError(t, err)
 
 			sessionData := &BehavioralSessionData{
-				TaskExecutionID:     exec.ID,
-				SessionStart:        exec.Timestamp,
-				TotalDurationSecs:   int64(60 * i),
+				TaskExecutionID:   exec.ID,
+				SessionStart:      exec.Timestamp,
+				TotalDurationSecs: int64(60 * i),
 			}
 			_, err = store.RecordSessionMetrics(ctx, sessionData, nil, nil, nil, nil)
 			require.NoError(t, err)

@@ -19,14 +19,14 @@ var ModelCosts = map[string]struct {
 
 // Session represents a Claude Code agent session extracted from JSONL files
 type Session struct {
-	ID          string    `json:"id"`           // Session UUID
-	Project     string    `json:"project"`      // Project name
-	Timestamp   time.Time `json:"timestamp"`    // Session start time
-	Status      string    `json:"status"`       // Session status: completed, failed, in_progress
-	AgentName   string    `json:"agent_name"`   // Name of the agent used
-	Duration    int64     `json:"duration"`     // Session duration in milliseconds
-	Success     bool      `json:"success"`      // Overall session success
-	ErrorCount  int       `json:"error_count"`  // Number of errors encountered
+	ID         string    `json:"id"`          // Session UUID
+	Project    string    `json:"project"`     // Project name
+	Timestamp  time.Time `json:"timestamp"`   // Session start time
+	Status     string    `json:"status"`      // Session status: completed, failed, in_progress
+	AgentName  string    `json:"agent_name"`  // Name of the agent used
+	Duration   int64     `json:"duration"`    // Session duration in milliseconds
+	Success    bool      `json:"success"`     // Overall session success
+	ErrorCount int       `json:"error_count"` // Number of errors encountered
 }
 
 // Validate checks if the session has all required fields
@@ -50,17 +50,17 @@ func (s *Session) GetDuration() time.Duration {
 
 // BehavioralMetrics represents aggregate metrics extracted from agent sessions
 type BehavioralMetrics struct {
-	TotalSessions    int              `json:"total_sessions"`
-	SuccessRate      float64          `json:"success_rate"`
-	AverageDuration  time.Duration    `json:"average_duration"`
-	TotalCost        float64          `json:"total_cost"`
-	ToolExecutions   []ToolExecution  `json:"tool_executions"`
-	BashCommands     []BashCommand    `json:"bash_commands"`
-	FileOperations   []FileOperation  `json:"file_operations"`
-	TokenUsage       TokenUsage       `json:"token_usage"`
-	ErrorRate        float64          `json:"error_rate"`
-	TotalErrors      int              `json:"total_errors"`
-	AgentPerformance map[string]int   `json:"agent_performance"` // Agent name -> success count
+	TotalSessions    int             `json:"total_sessions"`
+	SuccessRate      float64         `json:"success_rate"`
+	AverageDuration  time.Duration   `json:"average_duration"`
+	TotalCost        float64         `json:"total_cost"`
+	ToolExecutions   []ToolExecution `json:"tool_executions"`
+	BashCommands     []BashCommand   `json:"bash_commands"`
+	FileOperations   []FileOperation `json:"file_operations"`
+	TokenUsage       TokenUsage      `json:"token_usage"`
+	ErrorRate        float64         `json:"error_rate"`
+	TotalErrors      int             `json:"total_errors"`
+	AgentPerformance map[string]int  `json:"agent_performance"` // Agent name -> success count
 }
 
 // Validate checks if the behavioral metrics are valid
@@ -333,15 +333,15 @@ func AggregateMetrics(metrics []BehavioralMetrics) map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"session_count":        totalSessions,
-		"total_cost_usd":       totalCost,
-		"avg_cost_usd":         totalCost / float64(len(metrics)),
-		"total_duration":       totalDuration,
-		"avg_duration":         avgDuration,
-		"total_errors":         totalErrors,
-		"tool_usage_counts":    toolCounts,
-		"total_input_tokens":   totalInputTokens,
-		"total_output_tokens":  totalOutputTokens,
-		"agent_performance":    agentPerformance,
+		"session_count":       totalSessions,
+		"total_cost_usd":      totalCost,
+		"avg_cost_usd":        totalCost / float64(len(metrics)),
+		"total_duration":      totalDuration,
+		"avg_duration":        avgDuration,
+		"total_errors":        totalErrors,
+		"tool_usage_counts":   toolCounts,
+		"total_input_tokens":  totalInputTokens,
+		"total_output_tokens": totalOutputTokens,
+		"agent_performance":   agentPerformance,
 	}
 }

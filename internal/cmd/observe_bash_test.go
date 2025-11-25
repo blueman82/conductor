@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 
 	"github.com/harrison/conductor/internal/learning"
@@ -85,39 +86,49 @@ func TestFormatBashAnalysisTable(t *testing.T) {
 	}
 }
 
-func TestDisplayBashAnalysis_MissingDatabase(t *testing.T) {
-	// This test verifies that the function properly handles a missing database
-	// In actual usage, this would fail due to missing config, which is expected
+func TestDisplayBashAnalysis_NoData(t *testing.T) {
+	// This test verifies that the function handles an empty database gracefully
+	// LoadConfigFromDir now returns defaults, and NewStore creates db if missing
+	// So we test that it succeeds with empty results
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	os.Chdir(tmpDir)
+
+	// Create minimal config
+	os.MkdirAll(".conductor", 0755)
+	os.WriteFile(".conductor/config.yaml", []byte("learning:\n  db_path: .conductor/learning/test.db\n"), 0644)
+
 	err := DisplayBashAnalysis("", 20)
-	if err == nil {
-		t.Error("Expected error for missing database, got nil")
+	if err != nil {
+		t.Errorf("Expected success with empty results, got error: %v", err)
 	}
 }
 
 func TestBashStatsCalculations(t *testing.T) {
 	tests := []struct {
-		name          string
-		callCount     int
-		successCount  int
-		expectedRate  float64
+		name         string
+		callCount    int
+		successCount int
+		expectedRate float64
 	}{
 		{
-			name:          "100% success",
-			callCount:     20,
-			successCount:  20,
-			expectedRate:  1.0,
+			name:         "100% success",
+			callCount:    20,
+			successCount: 20,
+			expectedRate: 1.0,
 		},
 		{
-			name:          "80% success",
-			callCount:     10,
-			successCount:  8,
-			expectedRate:  0.8,
+			name:         "80% success",
+			callCount:    10,
+			successCount: 8,
+			expectedRate: 0.8,
 		},
 		{
-			name:          "0% success",
-			callCount:     5,
-			successCount:  0,
-			expectedRate:  0.0,
+			name:         "0% success",
+			callCount:    5,
+			successCount: 0,
+			expectedRate: 0.0,
 		},
 	}
 

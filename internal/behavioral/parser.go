@@ -292,21 +292,21 @@ func parseEventLine(line string) ([]Event, error) {
 
 // ClaudeCodeEvent represents the actual Claude Code JSONL format
 type ClaudeCodeEvent struct {
-	Type       string          `json:"type"`
-	Timestamp  string          `json:"timestamp"`
-	SessionID  string          `json:"sessionId"`
-	AgentID    string          `json:"agentId,omitempty"`
-	AgentType  string          `json:"agentType,omitempty"`
-	IsSidechain bool           `json:"isSidechain,omitempty"`
-	Message    json.RawMessage `json:"message"`
+	Type        string          `json:"type"`
+	Timestamp   string          `json:"timestamp"`
+	SessionID   string          `json:"sessionId"`
+	AgentID     string          `json:"agentId,omitempty"`
+	AgentType   string          `json:"agentType,omitempty"`
+	IsSidechain bool            `json:"isSidechain,omitempty"`
+	Message     json.RawMessage `json:"message"`
 }
 
 // ClaudeMessage represents the message structure in Claude Code JSONL
 type ClaudeMessage struct {
-	Role    string            `json:"role"`
-	Model   string            `json:"model,omitempty"`
-	Content json.RawMessage   `json:"content"`
-	Usage   *ClaudeUsage      `json:"usage,omitempty"`
+	Role    string          `json:"role"`
+	Model   string          `json:"model,omitempty"`
+	Content json.RawMessage `json:"content"`
+	Usage   *ClaudeUsage    `json:"usage,omitempty"`
 }
 
 // ClaudeUsage represents token usage in Claude Code format

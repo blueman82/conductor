@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -118,12 +119,19 @@ func TestFormatErrorAnalysisTable(t *testing.T) {
 	}
 }
 
-func TestDisplayErrorAnalysis_MissingDatabase(t *testing.T) {
-	// This test verifies that the function properly handles a missing database
-	// In actual usage, this would fail due to missing config, which is expected
+func TestDisplayErrorAnalysis_NoData(t *testing.T) {
+	// Test handles empty database gracefully (config defaults now used)
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	os.Chdir(tmpDir)
+
+	os.MkdirAll(".conductor", 0755)
+	os.WriteFile(".conductor/config.yaml", []byte("learning:\n  db_path: .conductor/learning/test.db\n"), 0644)
+
 	err := DisplayErrorAnalysis("", 20)
-	if err == nil {
-		t.Error("Expected error for missing database, got nil")
+	if err != nil {
+		t.Errorf("Expected success with empty results, got error: %v", err)
 	}
 }
 

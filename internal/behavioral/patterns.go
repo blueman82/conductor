@@ -22,53 +22,53 @@ func NewPatternDetector(sessions []Session, metrics []BehavioralMetrics) *Patter
 
 // ToolSequence represents a common sequence of tool executions
 type ToolSequence struct {
-	Tools     []string  `json:"tools"`      // Ordered list of tools
-	Frequency int       `json:"frequency"`  // How often this sequence appears
-	AvgTime   time.Duration `json:"avg_time"` // Average time for sequence
-	SuccessRate float64 `json:"success_rate"` // Success rate of sessions with this sequence
+	Tools       []string      `json:"tools"`        // Ordered list of tools
+	Frequency   int           `json:"frequency"`    // How often this sequence appears
+	AvgTime     time.Duration `json:"avg_time"`     // Average time for sequence
+	SuccessRate float64       `json:"success_rate"` // Success rate of sessions with this sequence
 }
 
 // CommandPattern represents a common bash command pattern
 type CommandPattern struct {
-	Pattern     string  `json:"pattern"`      // Command pattern (e.g., "git *", "go test *")
-	Frequency   int     `json:"frequency"`    // How often this pattern appears
-	SuccessRate float64 `json:"success_rate"` // Success rate of this command
+	Pattern     string        `json:"pattern"`      // Command pattern (e.g., "git *", "go test *")
+	Frequency   int           `json:"frequency"`    // How often this pattern appears
+	SuccessRate float64       `json:"success_rate"` // Success rate of this command
 	AvgDuration time.Duration `json:"avg_duration"` // Average execution time
 }
 
 // Anomaly represents a detected anomalous behavior
 type Anomaly struct {
-	Type        string    `json:"type"`         // Type: duration, error_rate, tool_usage, command_failure
-	Description string    `json:"description"`  // Human-readable description
-	Severity    string    `json:"severity"`     // low, medium, high
-	SessionID   string    `json:"session_id"`   // Session where anomaly occurred
-	Timestamp   time.Time `json:"timestamp"`    // When anomaly occurred
-	Value       float64   `json:"value"`        // Anomalous value
-	Expected    float64   `json:"expected"`     // Expected value
-	Deviation   float64   `json:"deviation"`    // Standard deviations from mean
+	Type        string    `json:"type"`        // Type: duration, error_rate, tool_usage, command_failure
+	Description string    `json:"description"` // Human-readable description
+	Severity    string    `json:"severity"`    // low, medium, high
+	SessionID   string    `json:"session_id"`  // Session where anomaly occurred
+	Timestamp   time.Time `json:"timestamp"`   // When anomaly occurred
+	Value       float64   `json:"value"`       // Anomalous value
+	Expected    float64   `json:"expected"`    // Expected value
+	Deviation   float64   `json:"deviation"`   // Standard deviations from mean
 }
 
 // BehaviorCluster represents a group of similar sessions
 type BehaviorCluster struct {
-	ClusterID   int       `json:"cluster_id"`    // Cluster identifier
-	SessionIDs  []string  `json:"session_ids"`   // Sessions in this cluster
-	Centroid    []float64 `json:"centroid"`      // Cluster center (feature vector)
-	Description string    `json:"description"`   // Human-readable cluster description
-	Size        int       `json:"size"`          // Number of sessions in cluster
+	ClusterID   int       `json:"cluster_id"`  // Cluster identifier
+	SessionIDs  []string  `json:"session_ids"` // Sessions in this cluster
+	Centroid    []float64 `json:"centroid"`    // Cluster center (feature vector)
+	Description string    `json:"description"` // Human-readable cluster description
+	Size        int       `json:"size"`        // Number of sessions in cluster
 }
 
 // PatternEvolution tracks how a pattern changes over time
 type PatternEvolution struct {
-	Pattern    string              `json:"pattern"`     // Pattern identifier
-	Snapshots  []PatternSnapshot   `json:"snapshots"`   // Time-based snapshots
-	Trend      string              `json:"trend"`       // increasing, decreasing, stable
+	Pattern   string            `json:"pattern"`   // Pattern identifier
+	Snapshots []PatternSnapshot `json:"snapshots"` // Time-based snapshots
+	Trend     string            `json:"trend"`     // increasing, decreasing, stable
 }
 
 // PatternSnapshot represents a pattern's metrics at a point in time
 type PatternSnapshot struct {
-	Timestamp  time.Time `json:"timestamp"`  // When snapshot was taken
-	Frequency  int       `json:"frequency"`  // Pattern frequency
-	SuccessRate float64  `json:"success_rate"` // Pattern success rate
+	Timestamp   time.Time `json:"timestamp"`    // When snapshot was taken
+	Frequency   int       `json:"frequency"`    // Pattern frequency
+	SuccessRate float64   `json:"success_rate"` // Pattern success rate
 }
 
 // DetectToolSequences identifies common sequences of tool executions
@@ -347,11 +347,11 @@ type commandPatternData struct {
 }
 
 type baselineStats struct {
-	avgDuration  float64
-	stdDuration  float64
-	avgErrors    float64
-	stdErrors    float64
-	successRate  float64
+	avgDuration float64
+	stdDuration float64
+	avgErrors   float64
+	stdErrors   float64
+	successRate float64
 }
 
 func makeSequenceKey(tools []string) string {
@@ -546,7 +546,7 @@ func generateClusterDescription(cluster *BehaviorCluster, centroid []float64) st
 		return "Unknown pattern"
 	}
 
-	duration := centroid[0]        // seconds
+	duration := centroid[0] // seconds
 	errorCount := centroid[1]
 	successRate := centroid[2]
 

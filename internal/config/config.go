@@ -670,12 +670,37 @@ func LoadConfigFromRootWithBuildTime(buildTimeRoot string) (*Config, error) {
 	return LoadConfig(configPath)
 }
 
-// LoadConfigFromDir loads configuration from .conductor/config.yaml in the conductor repo root
-// Uses the build-time injected root (set via SetBuildTimeRepoRoot)
-// The dir parameter is IGNORED - kept for backward compatibility only
-// If the directory or file doesn't exist, returns default configuration without error
+// LoadConfigFromDir loads configuration from .conductor/config.yaml
+// Priority order:
+//  1. If dir is provided and config exists at {dir}/.conductor/config.yaml, use it
+//  2. If "." is passed, use current working directory
+//  3. Try build-time injected root if available
+//  4. Return default configuration if no config file found
 func LoadConfigFromDir(dir string) (*Config, error) {
-	return LoadConfigFromRootWithBuildTime(buildTimeRepoRoot)
+	// Handle "." as current directory
+	if dir == "." {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return DefaultConfig(), nil
+		}
+		dir = cwd
+	}
+
+	// Try config at provided/resolved directory
+	if dir != "" {
+		configPath := filepath.Join(dir, ".conductor", "config.yaml")
+		if _, err := os.Stat(configPath); err == nil {
+			return LoadConfig(configPath)
+		}
+	}
+
+	// Try build-time root as fallback
+	if buildTimeRepoRoot != "" {
+		return LoadConfigFromRootWithBuildTime(buildTimeRepoRoot)
+	}
+
+	// Return defaults if no config found
+	return DefaultConfig(), nil
 }
 
 // MergeWithFlags merges CLI flags into the configuration

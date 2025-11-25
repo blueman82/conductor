@@ -111,12 +111,12 @@ func createTestSessionFile(filePath string) error {
 
 	// Write token usage event
 	tokenEvent := map[string]interface{}{
-		"type":           "token_usage",
-		"timestamp":      time.Now().Format(time.RFC3339),
-		"input_tokens":   1000,
-		"output_tokens":  500,
-		"cost_usd":       0.015,
-		"model_name":     "claude-sonnet-4-5",
+		"type":          "token_usage",
+		"timestamp":     time.Now().Format(time.RFC3339),
+		"input_tokens":  1000,
+		"output_tokens": 500,
+		"cost_usd":      0.015,
+		"model_name":    "claude-sonnet-4-5",
 	}
 	tokenBytes, _ := json.Marshal(tokenEvent)
 	file.Write(tokenBytes)
@@ -211,4 +211,3 @@ func BenchmarkImport(b *testing.B) {
 		recordSessionData(ctx, store, sessionData, sessionInfo)
 	}
 }
-

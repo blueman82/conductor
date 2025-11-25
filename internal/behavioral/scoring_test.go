@@ -55,13 +55,13 @@ func TestSetWeights(t *testing.T) {
 
 func TestScoreAgent(t *testing.T) {
 	tests := []struct {
-		name              string
-		sessions          []Session
-		metrics           []BehavioralMetrics
-		agentName         string
+		name               string
+		sessions           []Session
+		metrics            []BehavioralMetrics
+		agentName          string
 		expectedSampleSize int
-		minCompositeScore float64
-		maxCompositeScore float64
+		minCompositeScore  float64
+		maxCompositeScore  float64
 	}{
 		{
 			name: "perfect agent",
@@ -72,9 +72,9 @@ func TestScoreAgent(t *testing.T) {
 			},
 			metrics: []BehavioralMetrics{
 				{
-					TotalSessions: 3,
+					TotalSessions:    3,
 					AgentPerformance: map[string]int{"perfect-agent": 3},
-					TokenUsage: TokenUsage{CostUSD: 0.01},
+					TokenUsage:       TokenUsage{CostUSD: 0.01},
 				},
 			},
 			agentName:          "perfect-agent",
@@ -90,9 +90,9 @@ func TestScoreAgent(t *testing.T) {
 			},
 			metrics: []BehavioralMetrics{
 				{
-					TotalSessions: 2,
+					TotalSessions:    2,
 					AgentPerformance: map[string]int{"failing-agent": 0},
-					TokenUsage: TokenUsage{CostUSD: 1.0},
+					TokenUsage:       TokenUsage{CostUSD: 1.0},
 				},
 			},
 			agentName:          "failing-agent",
@@ -109,9 +109,9 @@ func TestScoreAgent(t *testing.T) {
 			},
 			metrics: []BehavioralMetrics{
 				{
-					TotalSessions: 3,
+					TotalSessions:    3,
 					AgentPerformance: map[string]int{"recovery-agent": 2},
-					TokenUsage: TokenUsage{CostUSD: 0.05},
+					TokenUsage:       TokenUsage{CostUSD: 0.05},
 				},
 			},
 			agentName:          "recovery-agent",
@@ -425,9 +425,9 @@ func TestCollectAgentStats(t *testing.T) {
 
 	metrics := []BehavioralMetrics{
 		{
-			TotalSessions: 4,
+			TotalSessions:    4,
 			AgentPerformance: map[string]int{"test-agent": 2},
-			TokenUsage: TokenUsage{CostUSD: 0.10},
+			TokenUsage:       TokenUsage{CostUSD: 0.10},
 		},
 	}
 
@@ -459,11 +459,11 @@ func TestCalculateGlobalAverageCost(t *testing.T) {
 	metrics := []BehavioralMetrics{
 		{
 			TotalSessions: 5,
-			TokenUsage: TokenUsage{CostUSD: 0.10},
+			TokenUsage:    TokenUsage{CostUSD: 0.10},
 		},
 		{
 			TotalSessions: 5,
-			TokenUsage: TokenUsage{CostUSD: 0.20},
+			TokenUsage:    TokenUsage{CostUSD: 0.20},
 		},
 	}
 
@@ -577,9 +577,9 @@ func BenchmarkScoreAgent(b *testing.B) {
 
 	metrics := []BehavioralMetrics{
 		{
-			TotalSessions: 1000,
+			TotalSessions:    1000,
 			AgentPerformance: map[string]int{"benchmark-agent": 500},
-			TokenUsage: TokenUsage{CostUSD: 10.0},
+			TokenUsage:       TokenUsage{CostUSD: 10.0},
 		},
 	}
 

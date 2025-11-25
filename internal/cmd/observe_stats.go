@@ -269,15 +269,15 @@ func displayStreamHeader(lastSeenID int) {
 
 // SessionUpdate represents a new session detected
 type SessionUpdate struct {
-	ID              int
-	TaskName        string
-	Agent           string
-	Timestamp       time.Time
-	Success         bool
-	Duration        time.Duration
-	ToolCalls       int
-	BashCommands    int
-	FileOperations  int
+	ID             int
+	TaskName       string
+	Agent          string
+	Timestamp      time.Time
+	Success        bool
+	Duration       time.Duration
+	ToolCalls      int
+	BashCommands   int
+	FileOperations int
 }
 
 // watchNewSessions queries for sessions added since lastSeenID in chronological order

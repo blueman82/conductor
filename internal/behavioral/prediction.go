@@ -9,38 +9,38 @@ import (
 
 // FailurePredictor predicts task failure based on historical patterns
 type FailurePredictor struct {
-	sessions          []Session
-	metrics           []BehavioralMetrics
-	patternDetector   *PatternDetector
-	toolFailureRates  map[string]float64
+	sessions           []Session
+	metrics            []BehavioralMetrics
+	patternDetector    *PatternDetector
+	toolFailureRates   map[string]float64
 	minHistorySessions int
 	highRiskThreshold  float64
 }
 
 // PredictionResult contains failure prediction analysis
 type PredictionResult struct {
-	Probability  float64  `json:"probability"`  // Failure probability (0.0 to 1.0)
-	Confidence   float64  `json:"confidence"`   // Confidence in prediction (0.0 to 1.0)
-	RiskLevel    string   `json:"risk_level"`   // low, medium, high
-	Explanation  string   `json:"explanation"`  // Human-readable explanation
-	RiskFactors  []string `json:"risk_factors"` // Specific risk factors identified
+	Probability     float64  `json:"probability"`     // Failure probability (0.0 to 1.0)
+	Confidence      float64  `json:"confidence"`      // Confidence in prediction (0.0 to 1.0)
+	RiskLevel       string   `json:"risk_level"`      // low, medium, high
+	Explanation     string   `json:"explanation"`     // Human-readable explanation
+	RiskFactors     []string `json:"risk_factors"`    // Specific risk factors identified
 	Recommendations []string `json:"recommendations"` // Suggested mitigations
 }
 
 // ToolRisk represents risk metrics for a specific tool
 type ToolRisk struct {
-	ToolName     string  `json:"tool_name"`
-	FailureRate  float64 `json:"failure_rate"`
-	UsageCount   int     `json:"usage_count"`
-	RiskScore    float64 `json:"risk_score"`
+	ToolName    string  `json:"tool_name"`
+	FailureRate float64 `json:"failure_rate"`
+	UsageCount  int     `json:"usage_count"`
+	RiskScore   float64 `json:"risk_score"`
 }
 
 // NewFailurePredictor creates a new failure predictor
 func NewFailurePredictor(sessions []Session, metrics []BehavioralMetrics) *FailurePredictor {
 	return &FailurePredictor{
-		sessions:          sessions,
-		metrics:           metrics,
-		patternDetector:   NewPatternDetector(sessions, metrics),
+		sessions:           sessions,
+		metrics:            metrics,
+		patternDetector:    NewPatternDetector(sessions, metrics),
 		minHistorySessions: 5,
 		highRiskThreshold:  0.7,
 	}

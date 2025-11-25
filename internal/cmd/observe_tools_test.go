@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 
 	"github.com/harrison/conductor/internal/learning"
@@ -86,39 +87,46 @@ func TestFormatToolAnalysisTable(t *testing.T) {
 	}
 }
 
-func TestDisplayToolAnalysis_MissingDatabase(t *testing.T) {
-	// This test verifies that the function properly handles a missing database
-	// In actual usage, this would fail due to missing config, which is expected
+func TestDisplayToolAnalysis_NoData(t *testing.T) {
+	// Test handles empty database gracefully (config defaults now used)
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	os.Chdir(tmpDir)
+
+	os.MkdirAll(".conductor", 0755)
+	os.WriteFile(".conductor/config.yaml", []byte("learning:\n  db_path: .conductor/learning/test.db\n"), 0644)
+
 	err := DisplayToolAnalysis("", 20)
-	if err == nil {
-		t.Error("Expected error for missing database, got nil")
+	if err != nil {
+		t.Errorf("Expected success with empty results, got error: %v", err)
 	}
 }
 
 func TestToolStatsCalculations(t *testing.T) {
 	tests := []struct {
-		name          string
-		callCount     int
-		successCount  int
-		expectedRate  float64
+		name         string
+		callCount    int
+		successCount int
+		expectedRate float64
 	}{
 		{
-			name:          "100% success",
-			callCount:     10,
-			successCount:  10,
-			expectedRate:  1.0,
+			name:         "100% success",
+			callCount:    10,
+			successCount: 10,
+			expectedRate: 1.0,
 		},
 		{
-			name:          "50% success",
-			callCount:     10,
-			successCount:  5,
-			expectedRate:  0.5,
+			name:         "50% success",
+			callCount:    10,
+			successCount: 5,
+			expectedRate: 0.5,
 		},
 		{
-			name:          "0% success",
-			callCount:     10,
-			successCount:  0,
-			expectedRate:  0.0,
+			name:         "0% success",
+			callCount:    10,
+			successCount: 0,
+			expectedRate: 0.0,
 		},
 	}
 

@@ -63,6 +63,7 @@ type IngestionEngine struct {
 
 	// Statistics
 	stats struct {
+		filesTracked    int64
 		eventsProcessed int64
 		sessionsCreated int64
 		errors          int64
@@ -133,9 +134,74 @@ func (e *IngestionEngine) Start(ctx context.Context) error {
 	e.ctx, e.cancel = context.WithCancel(ctx)
 	e.stats.startTime = time.Now()
 
-	// Start processing goroutines
+	// Scan existing files first (for one-time import and initial catch-up)
+	if err := e.scanExistingFiles(); err != nil {
+		return fmt.Errorf("scan existing files: %w", err)
+	}
+
+	// Start processing goroutines for new file events
 	go e.processFileEvents()
 	go e.flushTimer()
+
+	return nil
+}
+
+// scanExistingFiles finds and processes all existing JSONL files
+func (e *IngestionEngine) scanExistingFiles() error {
+	var files []string
+
+	err := filepath.Walk(e.config.RootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) || os.IsPermission(err) {
+				return nil // Skip inaccessible paths
+			}
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		// Match pattern
+		if matched, _ := filepath.Match(e.config.Pattern, filepath.Base(path)); matched {
+			files = append(files, path)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("walk directory: %w", err)
+	}
+
+	// Track file count
+	e.mu.Lock()
+	e.stats.filesTracked = int64(len(files))
+	e.mu.Unlock()
+
+	// Process each file
+	for _, filePath := range files {
+		select {
+		case <-e.ctx.Done():
+			return e.ctx.Err()
+		default:
+		}
+
+		if err := e.readNewLines(filePath); err != nil {
+			e.mu.Lock()
+			e.stats.errors++
+			e.mu.Unlock()
+			// Continue processing other files
+			continue
+		}
+	}
+
+	// Flush any remaining events
+	e.mu.Lock()
+	if len(e.pendingEvents) > 0 {
+		e.flushBatchLocked()
+	}
+	e.mu.Unlock()
 
 	return nil
 }
@@ -177,7 +243,7 @@ func (e *IngestionEngine) Stats() IngestionStats {
 	}
 
 	return IngestionStats{
-		FilesTracked:    len(e.sessionCache),
+		FilesTracked:    int(e.stats.filesTracked),
 		EventsProcessed: e.stats.eventsProcessed,
 		EventsPending:   len(e.pendingEvents),
 		SessionsCreated: e.stats.sessionsCreated,

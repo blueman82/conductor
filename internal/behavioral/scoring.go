@@ -14,22 +14,22 @@ type PerformanceScorer struct {
 
 // ScoreWeights defines how to weight different scoring dimensions
 type ScoreWeights struct {
-	Success      float64 // Weight for success rate
-	CostEff      float64 // Weight for cost efficiency
-	Speed        float64 // Weight for speed
-	ErrorRecov   float64 // Weight for error recovery
+	Success    float64 // Weight for success rate
+	CostEff    float64 // Weight for cost efficiency
+	Speed      float64 // Weight for speed
+	ErrorRecov float64 // Weight for error recovery
 }
 
 // AgentScore represents multi-dimensional performance score for an agent
 type AgentScore struct {
-	AgentName        string  `json:"agent_name"`
-	SuccessScore     float64 `json:"success_score"`      // 0-1 scale
-	CostEffScore     float64 `json:"cost_eff_score"`     // 0-1 scale
-	SpeedScore       float64 `json:"speed_score"`        // 0-1 scale
-	ErrorRecovScore  float64 `json:"error_recov_score"`  // 0-1 scale
-	CompositeScore   float64 `json:"composite_score"`    // Weighted combination
-	SampleSize       int     `json:"sample_size"`        // Number of sessions
-	Domain           string  `json:"domain"`             // Agent domain (e.g., "backend", "frontend")
+	AgentName       string  `json:"agent_name"`
+	SuccessScore    float64 `json:"success_score"`     // 0-1 scale
+	CostEffScore    float64 `json:"cost_eff_score"`    // 0-1 scale
+	SpeedScore      float64 `json:"speed_score"`       // 0-1 scale
+	ErrorRecovScore float64 `json:"error_recov_score"` // 0-1 scale
+	CompositeScore  float64 `json:"composite_score"`   // Weighted combination
+	SampleSize      int     `json:"sample_size"`       // Number of sessions
+	Domain          string  `json:"domain"`            // Agent domain (e.g., "backend", "frontend")
 }
 
 // RankedAgent represents an agent with its rank
@@ -41,12 +41,12 @@ type RankedAgent struct {
 
 // agentStats holds aggregate statistics for an agent
 type agentStats struct {
-	totalSessions   int
-	successCount    int
-	totalCost       float64
-	totalDuration   int64
-	recoveryCount   int  // Sessions that recovered from errors
-	errorCount      int
+	totalSessions int
+	successCount  int
+	totalCost     float64
+	totalDuration int64
+	recoveryCount int // Sessions that recovered from errors
+	errorCount    int
 }
 
 // NewPerformanceScorer creates a new performance scorer with default weights
@@ -351,6 +351,6 @@ func (ps *PerformanceScorer) adjustForSampleSize(score float64, sampleSize int) 
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) &&
 		(s == substr ||
-		 len(s) > len(substr) &&
-		 (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr))
+			len(s) > len(substr) &&
+				(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr))
 }

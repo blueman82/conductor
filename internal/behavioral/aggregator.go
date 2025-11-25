@@ -156,17 +156,17 @@ func (a *Aggregator) ListSessionsFiltered(project string, criteria FilterCriteri
 
 // AggregateProjectMetrics aggregates metrics across all sessions in a project
 type AggregateProjectMetrics struct {
-	Project          string                 `json:"project"`
-	TotalSessions    int                    `json:"total_sessions"`
-	SuccessRate      float64                `json:"success_rate"`
-	AverageDuration  time.Duration          `json:"average_duration"`
-	TotalCost        float64                `json:"total_cost"`
-	TotalErrors      int                    `json:"total_errors"`
-	ErrorRate        float64                `json:"error_rate"`
-	ToolUsageCounts  map[string]int         `json:"tool_usage_counts"`
-	AgentPerformance map[string]int         `json:"agent_performance"`
-	TokenUsage       TokenUsage             `json:"token_usage"`
-	Sessions         []SessionInfo          `json:"sessions"`
+	Project          string         `json:"project"`
+	TotalSessions    int            `json:"total_sessions"`
+	SuccessRate      float64        `json:"success_rate"`
+	AverageDuration  time.Duration  `json:"average_duration"`
+	TotalCost        float64        `json:"total_cost"`
+	TotalErrors      int            `json:"total_errors"`
+	ErrorRate        float64        `json:"error_rate"`
+	ToolUsageCounts  map[string]int `json:"tool_usage_counts"`
+	AgentPerformance map[string]int `json:"agent_performance"`
+	TokenUsage       TokenUsage     `json:"token_usage"`
+	Sessions         []SessionInfo  `json:"sessions"`
 }
 
 // GetProjectMetrics aggregates metrics across all sessions in a project

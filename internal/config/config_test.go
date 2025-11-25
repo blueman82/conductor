@@ -2419,9 +2419,9 @@ func TestDefaultCostModelConfig(t *testing.T) {
 	cfg := DefaultCostModelConfig()
 
 	tests := []struct {
-		name     string
-		got      float64
-		want     float64
+		name string
+		got  float64
+		want float64
 	}{
 		{"SonnetInput", cfg.SonnetInput, 3.0},
 		{"SonnetOutput", cfg.SonnetOutput, 15.0},
