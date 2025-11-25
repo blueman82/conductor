@@ -162,6 +162,9 @@ func ParseSessionFile(filepath string) (*SessionData, error) {
 	}
 
 	scanner := bufio.NewScanner(file)
+	// Increase buffer size for long lines (some JSONL lines can be very long)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 10*1024*1024) // 10MB max line size
 	lineNum := 0
 	sessionSeen := false
 
@@ -173,7 +176,7 @@ func ParseSessionFile(filepath string) (*SessionData, error) {
 			continue
 		}
 
-		// Check if this is session metadata
+		// Check if this is explicit session metadata (test format)
 		if isSessionMetadata(line) {
 			if err := parseSessionMetadata(line, &sessionData.Session); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to parse session metadata at line %d: %v\n", lineNum, err)
@@ -183,30 +186,48 @@ func ParseSessionFile(filepath string) (*SessionData, error) {
 			continue
 		}
 
-		event, err := parseEventLine(line)
+		// Don't try to parse every line as session metadata - only session start lines contain
+		// session metadata. Event lines like tool_call with "success":true would corrupt the
+		// session.Success flag.
+
+		events, err := parseEventLine(line)
 		if err != nil {
 			// Log warning but continue parsing - graceful degradation
 			fmt.Fprintf(os.Stderr, "Warning: skipping malformed event at line %d: %v\n", lineNum, err)
 			continue
 		}
 
-		sessionData.Events = append(sessionData.Events, event)
+		// Skip nil/empty events (known non-event types like summary, file-history-snapshot)
+		if len(events) == 0 {
+			continue
+		}
+
+		sessionData.Events = append(sessionData.Events, events...)
 	}
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading session file: %w", err)
 	}
 
-	// Validate session metadata was found
-	if !sessionSeen || sessionData.Session.ID == "" {
-		return nil, errors.New("session metadata not found in JSONL file")
+	// For real Claude sessions, session ID might be in any line with sessionId field
+	// Be lenient - only error if we have absolutely no session info
+	if !sessionSeen && sessionData.Session.ID == "" {
+		// If file is completely empty, that's OK (return empty session)
+		// But if we parsed events without session metadata, that's an error
+		if len(sessionData.Events) > 0 {
+			return nil, fmt.Errorf("events found but no session metadata provided")
+		}
+		// Empty file is OK
+		return sessionData, nil
 	}
 
 	return sessionData, nil
 }
 
-// parseEventLine parses a single JSONL line into an Event
-func parseEventLine(line string) (Event, error) {
+// parseEventLine parses a single JSONL line into multiple Events
+// Supports both simplified test format and actual Claude Code JSONL format
+// Returns ALL events from a line (multiple tool_use blocks + token_usage)
+func parseEventLine(line string) ([]Event, error) {
 	// First parse to get event type
 	var base BaseEvent
 	if err := json.Unmarshal([]byte(line), &base); err != nil {
@@ -223,7 +244,7 @@ func parseEventLine(line string) (Event, error) {
 		if err := event.Validate(); err != nil {
 			return nil, err
 		}
-		return &event, nil
+		return []Event{&event}, nil
 
 	case "bash_command":
 		var event BashCommandEvent
@@ -233,7 +254,7 @@ func parseEventLine(line string) (Event, error) {
 		if err := event.Validate(); err != nil {
 			return nil, err
 		}
-		return &event, nil
+		return []Event{&event}, nil
 
 	case "file_operation":
 		var event FileOperationEvent
@@ -243,7 +264,7 @@ func parseEventLine(line string) (Event, error) {
 		if err := event.Validate(); err != nil {
 			return nil, err
 		}
-		return &event, nil
+		return []Event{&event}, nil
 
 	case "token_usage":
 		var event TokenUsageEvent
@@ -253,39 +274,275 @@ func parseEventLine(line string) (Event, error) {
 		if err := event.Validate(); err != nil {
 			return nil, err
 		}
-		return &event, nil
+		return []Event{&event}, nil
+
+	case "assistant", "user":
+		// Real Claude Code JSONL format - extract ALL nested events
+		return parseClaudeCodeEvents(line, base.Type)
+
+	case "summary", "file-history-snapshot", "queue-operation", "init", "system":
+		// Known non-event types in Claude Code JSONL - skip silently
+		return nil, nil
 
 	default:
+		// Unknown event types - skip with warning
 		return nil, fmt.Errorf("unknown event type: %s", base.Type)
 	}
 }
 
-// isSessionMetadata checks if the line contains session metadata
+// ClaudeCodeEvent represents the actual Claude Code JSONL format
+type ClaudeCodeEvent struct {
+	Type       string          `json:"type"`
+	Timestamp  string          `json:"timestamp"`
+	SessionID  string          `json:"sessionId"`
+	AgentID    string          `json:"agentId,omitempty"`
+	AgentType  string          `json:"agentType,omitempty"`
+	IsSidechain bool           `json:"isSidechain,omitempty"`
+	Message    json.RawMessage `json:"message"`
+}
+
+// ClaudeMessage represents the message structure in Claude Code JSONL
+type ClaudeMessage struct {
+	Role    string            `json:"role"`
+	Model   string            `json:"model,omitempty"`
+	Content json.RawMessage   `json:"content"`
+	Usage   *ClaudeUsage      `json:"usage,omitempty"`
+}
+
+// ClaudeUsage represents token usage in Claude Code format
+type ClaudeUsage struct {
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+}
+
+// ToolUseBlock represents a tool_use block in Claude content
+type ToolUseBlock struct {
+	Type  string          `json:"type"`
+	ID    string          `json:"id"`
+	Name  string          `json:"name"`
+	Input json.RawMessage `json:"input"`
+}
+
+// parseClaudeCodeEvents extracts ALL events from actual Claude Code JSONL format
+// Returns multiple events: all tool_use blocks + token_usage if present
+func parseClaudeCodeEvents(line string, eventType string) ([]Event, error) {
+	var event ClaudeCodeEvent
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return nil, fmt.Errorf("failed to parse Claude Code event: %w", err)
+	}
+
+	// Parse timestamp
+	ts, _ := time.Parse(time.RFC3339, event.Timestamp)
+
+	// Parse message
+	var msg ClaudeMessage
+	if err := json.Unmarshal(event.Message, &msg); err != nil {
+		return nil, fmt.Errorf("failed to parse message: %w", err)
+	}
+
+	var events []Event
+
+	// For assistant messages, extract ALL tool calls AND token usage
+	if eventType == "assistant" {
+		// Extract ALL tool_use blocks from content
+		toolEvents := extractAllToolsFromContent(msg.Content, ts, msg.Model)
+		events = append(events, toolEvents...)
+
+		// Also extract token usage (always include if present)
+		if msg.Usage != nil && (msg.Usage.InputTokens > 0 || msg.Usage.OutputTokens > 0) {
+			events = append(events, &TokenUsageEvent{
+				BaseEvent: BaseEvent{
+					Type:      "token_usage",
+					Timestamp: ts,
+				},
+				InputTokens:  msg.Usage.InputTokens,
+				OutputTokens: msg.Usage.OutputTokens,
+				ModelName:    msg.Model,
+			})
+		}
+	}
+
+	// For user messages, extract tool_result information
+	if eventType == "user" {
+		// User messages contain tool results - extract them for completion tracking
+		toolResults := extractToolResultsFromContent(msg.Content, ts)
+		events = append(events, toolResults...)
+	}
+
+	return events, nil
+}
+
+// extractAllToolsFromContent extracts ALL tool_use blocks from message content
+// Returns slice of Events for all tool invocations in this message
+func extractAllToolsFromContent(content json.RawMessage, ts time.Time, model string) []Event {
+	var events []Event
+
+	// Try to parse as array of content blocks
+	var blocks []json.RawMessage
+	if err := json.Unmarshal(content, &blocks); err != nil {
+		return events
+	}
+
+	for _, block := range blocks {
+		var toolBlock ToolUseBlock
+		if err := json.Unmarshal(block, &toolBlock); err != nil {
+			continue
+		}
+
+		if toolBlock.Type == "tool_use" && toolBlock.Name != "" {
+			// Convert input to map
+			var params map[string]interface{}
+			json.Unmarshal(toolBlock.Input, &params)
+
+			// Check if this is a Bash command - extract command details
+			if toolBlock.Name == "Bash" {
+				if cmd, ok := params["command"].(string); ok {
+					events = append(events, &BashCommandEvent{
+						BaseEvent: BaseEvent{
+							Type:      "bash_command",
+							Timestamp: ts,
+						},
+						Command: cmd,
+						Success: true, // Will be updated from tool_result
+					})
+					continue
+				}
+			}
+
+			// Check if this is a file operation (Read, Write, Edit)
+			if toolBlock.Name == "Read" || toolBlock.Name == "Write" || toolBlock.Name == "Edit" {
+				filePath := ""
+				if fp, ok := params["file_path"].(string); ok {
+					filePath = fp
+				} else if fp, ok := params["path"].(string); ok {
+					filePath = fp
+				}
+				if filePath != "" {
+					events = append(events, &FileOperationEvent{
+						BaseEvent: BaseEvent{
+							Type:      "file_operation",
+							Timestamp: ts,
+						},
+						Operation: toolBlock.Name,
+						Path:      filePath,
+						Success:   true, // Will be updated from tool_result
+					})
+					continue
+				}
+			}
+
+			// Generic tool call
+			events = append(events, &ToolCallEvent{
+				BaseEvent: BaseEvent{
+					Type:      "tool_call",
+					Timestamp: ts,
+				},
+				ToolName:   toolBlock.Name,
+				Parameters: params,
+				Success:    true, // Default to success
+			})
+		}
+	}
+
+	return events
+}
+
+// ToolResultBlock represents a tool_result block in Claude content
+type ToolResultBlock struct {
+	Type      string `json:"type"`
+	ToolUseID string `json:"tool_use_id"`
+	Content   string `json:"content,omitempty"`
+	IsError   bool   `json:"is_error,omitempty"`
+}
+
+// extractToolResultsFromContent extracts tool_result blocks from user messages
+// This provides completion status for tool calls
+func extractToolResultsFromContent(content json.RawMessage, ts time.Time) []Event {
+	var events []Event
+
+	// Try to parse as array of content blocks
+	var blocks []json.RawMessage
+	if err := json.Unmarshal(content, &blocks); err != nil {
+		return events
+	}
+
+	for _, block := range blocks {
+		var resultBlock ToolResultBlock
+		if err := json.Unmarshal(block, &resultBlock); err != nil {
+			continue
+		}
+
+		if resultBlock.Type == "tool_result" {
+			// Record tool result as an event for tracking success/failure
+			errorMsg := ""
+			if resultBlock.IsError {
+				errorMsg = resultBlock.Content
+			}
+			events = append(events, &ToolCallEvent{
+				BaseEvent: BaseEvent{
+					Type:      "tool_result",
+					Timestamp: ts,
+				},
+				ToolName: resultBlock.ToolUseID, // Use tool_use_id to correlate
+				Result:   resultBlock.Content,
+				Success:  !resultBlock.IsError,
+				Error:    errorMsg,
+			})
+		}
+	}
+
+	return events
+}
+
+// isSessionMetadata checks if the line contains ONLY session metadata (not event data)
+// Supports both test format (session_start/session_metadata) and real Claude Code format
 func isSessionMetadata(line string) bool {
 	var raw map[string]interface{}
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
 		return false
 	}
+	// Test format - explicit metadata types
 	eventType, ok := raw["type"].(string)
-	return ok && (eventType == "session_start" || eventType == "session_metadata")
+	if ok && (eventType == "session_start" || eventType == "session_metadata") {
+		return true
+	}
+	// Don't treat Claude "assistant"/"user" events as metadata - they contain actual event data
+	if ok && (eventType == "assistant" || eventType == "user") {
+		return false
+	}
+	return false
 }
 
 // parseSessionMetadata extracts session metadata from a session event line
+// Supports both test format and real Claude Code format
 func parseSessionMetadata(line string, session *Session) error {
 	var raw map[string]interface{}
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
 		return fmt.Errorf("failed to parse session metadata: %w", err)
 	}
 
-	// Extract fields from the raw map
-	if id, ok := raw["session_id"].(string); ok {
-		session.ID = id
-	} else if id, ok := raw["id"].(string); ok {
-		session.ID = id
+	// Extract session ID (test format: session_id/id, real: sessionId)
+	// Only set if not already set (we scan all lines)
+	if session.ID == "" {
+		if id, ok := raw["session_id"].(string); ok {
+			session.ID = id
+		} else if id, ok := raw["id"].(string); ok {
+			session.ID = id
+		} else if id, ok := raw["sessionId"].(string); ok {
+			// Real Claude Code format
+			session.ID = id
+		}
 	}
 
-	if project, ok := raw["project"].(string); ok {
-		session.Project = project
+	// Extract project (test format: project, real: extract from cwd)
+	// Only set if not already set
+	if session.Project == "" {
+		if project, ok := raw["project"].(string); ok {
+			session.Project = project
+		} else if cwd, ok := raw["cwd"].(string); ok {
+			// Real Claude Code format - extract project from cwd path
+			session.Project = extractProjectFromPath(cwd)
+		}
 	}
 
 	if timestampStr, ok := raw["timestamp"].(string); ok {
@@ -296,10 +553,24 @@ func parseSessionMetadata(line string, session *Session) error {
 
 	if status, ok := raw["status"].(string); ok {
 		session.Status = status
+	} else {
+		// Default status for real Claude Code sessions
+		session.Status = "active"
 	}
 
-	if agentName, ok := raw["agent_name"].(string); ok {
+	// Extract agent name - agentType (human-readable) takes precedence over agentId
+	if agentName, ok := raw["agent_name"].(string); ok && session.AgentName == "" {
 		session.AgentName = agentName
+	}
+	// agentType is the human-readable name - always use it if found (overrides agent-xxx)
+	if agentType, ok := raw["agentType"].(string); ok && agentType != "" {
+		session.AgentName = agentType
+	}
+	// Fallback to agentId only if no agent name yet
+	if session.AgentName == "" {
+		if agentID, ok := raw["agentId"].(string); ok {
+			session.AgentName = "agent-" + agentID
+		}
 	}
 
 	if duration, ok := raw["duration"].(float64); ok {
@@ -309,10 +580,30 @@ func parseSessionMetadata(line string, session *Session) error {
 	if success, ok := raw["success"].(bool); ok {
 		session.Success = success
 	}
+	// Don't set a default - only update if the field exists
 
 	if errorCount, ok := raw["error_count"].(float64); ok {
 		session.ErrorCount = int(errorCount)
 	}
 
+	// Skip validation for real Claude sessions (they may have minimal metadata)
+	if session.ID != "" {
+		return nil
+	}
 	return session.Validate()
+}
+
+// extractProjectFromPath extracts project name from cwd path
+func extractProjectFromPath(cwd string) string {
+	// Get base directory name
+	if cwd == "" {
+		return ""
+	}
+	// Find last path component
+	for i := len(cwd) - 1; i >= 0; i-- {
+		if cwd[i] == '/' {
+			return cwd[i+1:]
+		}
+	}
+	return cwd
 }

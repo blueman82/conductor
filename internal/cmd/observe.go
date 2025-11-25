@@ -2,17 +2,20 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 )
 
 // Global flags for observe commands
 var (
-	observeProject    string
-	observeSession    string
-	observeFilterType string
-	observeErrorsOnly bool
-	observeTimeRange  string
+	observeProject      string
+	observeSession      string
+	observeFilterType   string
+	observeErrorsOnly   bool
+	observeTimeRange    string
+	observePollInterval string
+	observeLimit        int
 )
 
 // NewObserveCommand creates the 'conductor observe' parent command
@@ -34,8 +37,11 @@ execution history.`,
 	cmd.PersistentFlags().StringVar(&observeFilterType, "filter-type", "", "Filter by type (tool, bash, file)")
 	cmd.PersistentFlags().BoolVar(&observeErrorsOnly, "errors-only", false, "Show only errors")
 	cmd.PersistentFlags().StringVar(&observeTimeRange, "time-range", "", "Time range (e.g., '24h', '7d', '30d')")
+	cmd.PersistentFlags().StringVar(&observePollInterval, "poll-interval", "2s", "Poll interval for streaming (default: 2s)")
+	cmd.PersistentFlags().IntVarP(&observeLimit, "limit", "n", 20, "Limit number of results (0 for all)")
 
 	// Add subcommands
+	cmd.AddCommand(NewObserveImportCmd())
 	cmd.AddCommand(NewObserveProjectCmd())
 	cmd.AddCommand(NewObserveSessionCmd())
 	cmd.AddCommand(NewObserveToolsCmd())
@@ -67,6 +73,7 @@ func observeInteractive(cmd *cobra.Command, args []string) error {
 	// TODO: After project selection, show session selection or project summary
 	fmt.Println()
 	fmt.Println("Available subcommands:")
+	fmt.Println("  import    - Import behavioral data from JSONL files")
 	fmt.Println("  project   - View project-level metrics")
 	fmt.Println("  session   - Analyze specific session")
 	fmt.Println("  tools     - Tool usage analysis")
@@ -134,9 +141,7 @@ func NewObserveToolsCmd() *cobra.Command {
 - Most/least used tools
 - Tool usage trends over time`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Implement tool usage analysis
-			fmt.Println("Tool usage analysis not yet implemented")
-			return nil
+			return DisplayToolAnalysis(observeProject, observeLimit)
 		},
 	}
 	return cmd
@@ -154,9 +159,7 @@ func NewObserveBashCmd() *cobra.Command {
 - Failed commands
 - Output patterns`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Implement bash command analysis
-			fmt.Println("Bash command analysis not yet implemented")
-			return nil
+			return DisplayBashAnalysis(observeProject, observeLimit)
 		},
 	}
 	return cmd
@@ -174,9 +177,7 @@ func NewObserveFilesCmd() *cobra.Command {
 - Operation success rates
 - File modification patterns`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Implement file operation analysis
-			fmt.Println("File operation analysis not yet implemented")
-			return nil
+			return DisplayFileAnalysis(observeProject, observeLimit)
 		},
 	}
 	return cmd
@@ -194,9 +195,7 @@ func NewObserveErrorsCmd() *cobra.Command {
 - Tool/bash errors breakdown
 - Failed operations summary`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Implement error analysis
-			fmt.Println("Error analysis not yet implemented")
-			return nil
+			return DisplayErrorAnalysis(observeProject, observeLimit)
 		},
 	}
 	return cmd
@@ -212,10 +211,9 @@ func NewObserveStatsCmd() *cobra.Command {
 - Success and error rates
 - Average duration
 - Token usage and cost
-- Top tools by usage
-- Agent performance breakdown`,
+- Agent performance breakdown grouped by agent type`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return DisplayStats(observeProject)
+			return DisplayStats(observeProject, observeLimit)
 		},
 	}
 	return cmd
@@ -226,12 +224,25 @@ func NewObserveStreamCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stream",
 		Short: "Stream real-time activity",
-		Long: `Watch and display agent activity in real-time.
-Polls the behavioral database for new sessions and displays them as they occur.`,
+		Long: `Watch and display agent activity in real-time, like 'tail -f'.
+Polls the behavioral database for new sessions and displays them as they occur.
+Only shows activity that occurs after the command starts.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			return StreamActivity(ctx, observeProject)
+
+			// Parse poll interval
+			pollInterval, err := parsePollInterval(observePollInterval)
+			if err != nil {
+				return fmt.Errorf("invalid poll-interval: %w", err)
+			}
+
+			return StreamActivity(ctx, observeProject, pollInterval)
 		},
 	}
 	return cmd
+}
+
+// parsePollInterval parses a duration string like "2s", "500ms", "1m"
+func parsePollInterval(s string) (time.Duration, error) {
+	return time.ParseDuration(s)
 }

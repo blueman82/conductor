@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/harrison/conductor/internal/behavioral"
+	"github.com/harrison/conductor/internal/learning"
 )
 
 func TestFormatDuration(t *testing.T) {
@@ -46,27 +46,24 @@ func TestFormatDuration(t *testing.T) {
 }
 
 func TestFormatStatsTable(t *testing.T) {
-	stats := &behavioral.AggregateStats{
-		TotalSessions:     10,
-		TotalAgents:       3,
-		TotalOperations:   100,
-		SuccessRate:       0.85,
-		ErrorRate:         0.15,
-		AverageDuration:   45 * time.Second,
-		TotalCost:         2.5,
-		TotalInputTokens:  5000,
-		TotalOutputTokens: 2500,
-		TopTools: []behavioral.ToolStatSummary{
-			{Name: "Read", Count: 50, SuccessRate: 0.96, ErrorRate: 0.04},
-			{Name: "Write", Count: 30, SuccessRate: 0.90, ErrorRate: 0.10},
-		},
-		AgentBreakdown: map[string]int{
-			"agent1": 5,
-			"agent2": 3,
-		},
+	summary := &learning.SummaryStats{
+		TotalSessions:      10,
+		TotalAgents:        3,
+		TotalSuccesses:     8,
+		TotalFailures:      2,
+		SuccessRate:        0.85,
+		AvgDurationSeconds: 45,
+		TotalInputTokens:   5000,
+		TotalOutputTokens:  2500,
+		TotalTokens:        7500,
 	}
 
-	result := formatStatsTable(stats)
+	agents := []learning.AgentTypeStats{
+		{AgentType: "agent1", SuccessCount: 5, FailureCount: 0, TotalSessions: 5, AvgDurationSeconds: 45},
+		{AgentType: "agent2", SuccessCount: 3, FailureCount: 2, TotalSessions: 5, AvgDurationSeconds: 45},
+	}
+
+	result := formatStatsTable(summary, agents, 20)
 
 	// Check that key information is present
 	if result == "" {
@@ -83,29 +80,24 @@ func TestFormatStatsTable(t *testing.T) {
 		t.Error("expected Total Sessions field")
 	}
 
-	// Should contain cost
-	if !contains(result, "Total Cost:") {
-		t.Error("expected Total Cost field")
-	}
-
-	// Should contain tool section
-	if !contains(result, "Top Tools") {
-		t.Error("expected Top Tools section")
-	}
-
 	// Should contain agent section
 	if !contains(result, "Agent Performance") {
 		t.Error("expected Agent Performance section")
 	}
+
+	// Should contain agent names
+	if !contains(result, "agent1") {
+		t.Error("expected agent1 in output")
+	}
 }
 
 func TestFormatStatsTable_Empty(t *testing.T) {
-	stats := &behavioral.AggregateStats{
-		TopTools:       []behavioral.ToolStatSummary{},
-		AgentBreakdown: map[string]int{},
+	summary := &learning.SummaryStats{
+		TotalSessions: 0,
+		TotalAgents:   0,
 	}
 
-	result := formatStatsTable(stats)
+	result := formatStatsTable(summary, []learning.AgentTypeStats{}, 20)
 
 	// Should still produce valid output with zero values
 	if result == "" {

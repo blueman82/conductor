@@ -21,8 +21,10 @@ type SessionInfo struct {
 }
 
 var (
-	// Pattern for valid session files: agent-{uuid}.jsonl
-	sessionFilePattern = regexp.MustCompile(`^agent-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.jsonl$`)
+	// Pattern for agent session files: agent-{short-id}.jsonl (e.g., agent-000bd1b9.jsonl)
+	agentFilePattern = regexp.MustCompile(`^agent-([0-9a-fA-F]+)\.jsonl$`)
+	// Pattern for main session files: {uuid}.jsonl (e.g., 003c44c7-e568-46e5-8f00-c234961493cc.jsonl)
+	uuidFilePattern = regexp.MustCompile(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.jsonl$`)
 )
 
 // DiscoverSessions scans the base directory for all Claude session JSONL files
@@ -142,16 +144,22 @@ func DiscoverProjectSessions(baseDir, project string) ([]SessionInfo, error) {
 
 // isValidSessionFile checks if filename matches the agent-{uuid}.jsonl pattern
 func isValidSessionFile(filename string) bool {
-	return sessionFilePattern.MatchString(filename)
+	// Match either agent-{id}.jsonl or {uuid}.jsonl patterns
+	return agentFilePattern.MatchString(filename) || uuidFilePattern.MatchString(filename)
 }
 
-// extractSessionID extracts the UUID from a session filename
+// extractSessionID extracts the session ID from a session filename
+// Handles both agent-{id}.jsonl and {uuid}.jsonl patterns
 func extractSessionID(filename string) (string, error) {
-	matches := sessionFilePattern.FindStringSubmatch(filename)
-	if len(matches) != 2 {
-		return "", fmt.Errorf("filename does not match session pattern: %s", filename)
+	// Try agent pattern first (agent-000bd1b9.jsonl)
+	if matches := agentFilePattern.FindStringSubmatch(filename); len(matches) == 2 {
+		return matches[1], nil
 	}
-	return matches[1], nil
+	// Try UUID pattern ({uuid}.jsonl)
+	if matches := uuidFilePattern.FindStringSubmatch(filename); len(matches) == 2 {
+		return matches[1], nil
+	}
+	return "", fmt.Errorf("filename does not match session pattern: %s", filename)
 }
 
 // parseSessionPath parses a full file path into SessionInfo

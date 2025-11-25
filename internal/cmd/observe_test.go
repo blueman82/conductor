@@ -43,14 +43,14 @@ func TestObserveCommand_Subcommands(t *testing.T) {
 		t.Fatal("Observe command should be registered")
 	}
 
-	// Verify all 9 subcommands are registered
+	// Verify all 10 subcommands are registered
 	subcommands := observeCmd.Commands()
-	if len(subcommands) != 9 {
-		t.Errorf("Expected 9 subcommands, got %d", len(subcommands))
+	if len(subcommands) != 10 {
+		t.Errorf("Expected 10 subcommands, got %d", len(subcommands))
 	}
 
 	// Verify specific subcommands exist
-	expectedSubcommands := []string{"project", "session", "tools", "bash", "files", "errors", "stats", "stream", "export"}
+	expectedSubcommands := []string{"import", "project", "session", "tools", "bash", "files", "errors", "stats", "stream", "export"}
 	for _, expectedName := range expectedSubcommands {
 		found := false
 		for _, subcmd := range subcommands {

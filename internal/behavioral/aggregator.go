@@ -80,6 +80,11 @@ func (a *Aggregator) LoadSession(filePath string) (*BehavioralMetrics, error) {
 		return nil, fmt.Errorf("failed to parse session file: %w", err)
 	}
 
+	// Validate that we got usable session data
+	if sessionData == nil || (sessionData.Session.ID == "" && len(sessionData.Events) == 0) {
+		return nil, fmt.Errorf("no valid session data found in file")
+	}
+
 	metrics := ExtractMetrics(sessionData)
 
 	// Store in cache with write lock

@@ -500,9 +500,9 @@ func TestFilterIntegration(t *testing.T) {
 		agentName string
 		success   bool
 	}{
-		{"11111111-1111-1111-1111-111111111111", now.Add(-72 * time.Hour), "code-reviewer", true},
-		{"22222222-2222-2222-2222-222222222222", now.Add(-24 * time.Hour), "test-automator", true},
-		{"33333333-3333-3333-3333-333333333333", now.Add(-1 * time.Hour), "code-reviewer", false},
+		{"11111111", now.Add(-72 * time.Hour), "code-reviewer", true},
+		{"22222222", now.Add(-24 * time.Hour), "test-automator", true},
+		{"33333333", now.Add(-1 * time.Hour), "code-reviewer", false},
 	}
 
 	for _, s := range sessions {
@@ -1273,9 +1273,9 @@ func TestMetricsAggregationAccuracy(t *testing.T) {
 		toolCalls    int
 		success      bool
 	}{
-		{"aaaa1111-1111-1111-1111-111111111111", 10000, 5000, 0.105, 5, true},
-		{"bbbb2222-2222-2222-2222-222222222222", 20000, 10000, 0.210, 10, true},
-		{"cccc3333-3333-3333-3333-333333333333", 5000, 2500, 0.0525, 2, false},
+		{"aaaa1111", 10000, 5000, 0.105, 5, true},
+		{"bbbb2222", 20000, 10000, 0.210, 10, true},
+		{"cccc3333", 5000, 2500, 0.0525, 2, false},
 	}
 
 	expectedTotalInput := int64(0)
@@ -1361,9 +1361,9 @@ func TestDatabaseStorageIntegration(t *testing.T) {
 		tools   int
 		cost    float64
 	}{
-		{"db111111-1111-1111-1111-111111111111", "backend-developer", true, 5, 0.08},
-		{"db222222-2222-2222-2222-222222222222", "test-automator", true, 8, 0.12},
-		{"db333333-3333-3333-3333-333333333333", "code-reviewer", false, 3, 0.05},
+		{"db111111", "backend-developer", true, 5, 0.08},
+		{"db222222", "test-automator", true, 8, 0.12},
+		{"db333333", "code-reviewer", false, 3, 0.05},
 	}
 
 	for _, s := range sessions {
@@ -1474,7 +1474,7 @@ func TestPatternDetectionIntegration(t *testing.T) {
 		tools    []string
 	}{
 		{
-			uuid:     "pat11111-1111-1111-1111-111111111111",
+			uuid:     "pat11111",
 			agent:    "backend-developer",
 			duration: 30000,
 			success:  true,
@@ -1482,7 +1482,7 @@ func TestPatternDetectionIntegration(t *testing.T) {
 			tools:    []string{"Read", "Read", "Write", "Bash"},
 		},
 		{
-			uuid:     "pat22222-2222-2222-2222-222222222222",
+			uuid:     "pat22222",
 			agent:    "backend-developer",
 			duration: 35000,
 			success:  true,
@@ -1490,7 +1490,7 @@ func TestPatternDetectionIntegration(t *testing.T) {
 			tools:    []string{"Read", "Read", "Write", "Bash"},
 		},
 		{
-			uuid:     "pat33333-3333-3333-3333-333333333333",
+			uuid:     "pat33333",
 			agent:    "test-automator",
 			duration: 120000,
 			success:  false,
@@ -1498,7 +1498,7 @@ func TestPatternDetectionIntegration(t *testing.T) {
 			tools:    []string{"Read", "Bash", "Bash", "Bash"},
 		},
 		{
-			uuid:     "pat44444-4444-4444-4444-444444444444",
+			uuid:     "pat44444",
 			agent:    "backend-developer",
 			duration: 32000,
 			success:  true,
@@ -1577,7 +1577,7 @@ func TestPatternDetectionIntegration(t *testing.T) {
 		var foundDurationAnomaly bool
 		var foundFailureAnomaly bool
 		for _, a := range anomalies {
-			if a.Type == "duration" && a.SessionID == "pat33333-3333-3333-3333-333333333333" {
+			if a.Type == "duration" && a.SessionID == "pat33333" {
 				foundDurationAnomaly = true
 			}
 			if a.Type == "session_failure" {

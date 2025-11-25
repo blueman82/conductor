@@ -38,14 +38,16 @@ func TestParseSessionFile(t *testing.T) {
 			expectedTypes: []string{"tool_call", "bash_command"},
 		},
 		{
-			name:    "empty file",
-			content: "",
-			wantErr: true,
+			name:         "empty file",
+			content:      "",
+			wantErr:      false, // Empty file returns empty session data, not error
+			wantEventCnt: 0,
 		},
 		{
-			name:    "no valid events",
-			content: `{invalid}`,
-			wantErr: true,
+			name:         "no valid events",
+			content:      `{invalid}`,
+			wantErr:      false, // Invalid content is skipped, returns empty session
+			wantEventCnt: 0,
 		},
 	}
 
@@ -336,7 +338,7 @@ func TestParseEventLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			event, err := parseEventLine(tt.line)
+			events, err := parseEventLine(tt.line)
 
 			if tt.wantErr {
 				if err == nil {
@@ -350,6 +352,13 @@ func TestParseEventLine(t *testing.T) {
 				return
 			}
 
+			// parseEventLine now returns []Event, check first event
+			if len(events) == 0 {
+				t.Errorf("parseEventLine() returned no events")
+				return
+			}
+
+			event := events[0]
 			if event.GetType() != tt.wantType {
 				t.Errorf("parseEventLine() got type %s, want %s", event.GetType(), tt.wantType)
 			}

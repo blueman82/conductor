@@ -256,3 +256,64 @@ learning:
 # conductor:
 #   quality_control:
 #     retry_on_red: 3  # This overrides config.yaml setting
+
+# Agent Watch behavioral analytics configuration (v2.7+)
+# Provides observability into Claude Code agent sessions via `conductor observe` commands
+agent_watch:
+  # Enable or disable Agent Watch analytics (default: true)
+  enabled: true
+
+  # Base directory for discovering Claude Code session files
+  # Default: ~/.claude/projects
+  base_dir: "~/.claude/projects"
+
+  # Default number of sessions/entries to display in observe commands (default: 100)
+  default_limit: 100
+
+  # Poll interval in seconds for real-time activity streaming (default: 2)
+  poll_interval_secs: 2
+
+  # Auto-import new session data into learning database (default: false)
+  auto_import: false
+
+  # Maximum number of sessions to cache in memory - LRU cache (default: 50)
+  cache_size: 50
+
+  # Cost model pricing per 1M tokens (for cost calculations)
+  # Prices as of January 2025
+  cost_model:
+    sonnet_input: 3.0      # Claude Sonnet input tokens
+    sonnet_output: 15.0    # Claude Sonnet output tokens
+    haiku_input: 0.80      # Claude Haiku input tokens
+    haiku_output: 4.0      # Claude Haiku output tokens
+    opus_input: 15.0       # Claude Opus input tokens
+    opus_output: 75.0      # Claude Opus output tokens
+
+# Agent Watch Examples
+
+# Example: Disable Agent Watch
+# agent_watch:
+#   enabled: false
+
+# Example: Custom session directory
+# agent_watch:
+#   base_dir: "/custom/path/to/sessions"
+
+# Example: Increase cache size for large projects
+# agent_watch:
+#   cache_size: 200
+#   default_limit: 500
+
+# Example: Faster streaming updates
+# agent_watch:
+#   poll_interval_secs: 1
+
+# Example: Custom cost model (adjust for your pricing)
+# agent_watch:
+#   cost_model:
+#     sonnet_input: 3.0
+#     sonnet_output: 15.0
+#     haiku_input: 0.25
+#     haiku_output: 1.25
+#     opus_input: 15.0
+#     opus_output: 75.0

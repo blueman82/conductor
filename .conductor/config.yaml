@@ -102,3 +102,34 @@ learning:
   # Maximum execution records to keep per task (default: 100)
   # Prevents database from growing unbounded for frequently-run tasks
   max_executions_per_task: 100
+
+# Agent Watch behavioral analytics configuration (v2.7+)
+# Provides observability into Claude Code agent sessions
+agent_watch:
+  # Enable/disable Agent Watch analytics (default: true)
+  enabled: true
+
+  # Base directory for discovering Claude Code session files
+  # Default: ~/.claude/projects
+  base_dir: "~/.claude/projects"
+
+  # Default number of sessions/entries to display in observe commands
+  default_limit: 100
+
+  # Poll interval in seconds for real-time activity streaming
+  poll_interval_secs: 2
+
+  # Auto-import new session data into learning database
+  auto_import: false
+
+  # Maximum number of sessions to cache in memory (LRU cache)
+  cache_size: 50
+
+  # Cost model pricing per 1M tokens (for cost calculations)
+  cost_model:
+    sonnet_input: 3.0
+    sonnet_output: 15.0
+    haiku_input: 0.80
+    haiku_output: 4.0
+    opus_input: 15.0
+    opus_output: 75.0

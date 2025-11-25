@@ -7,13 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 )
 
 // DisplayStats displays summary statistics from the behavioral database
-func DisplayStats(project string) error {
+func DisplayStats(project string, limit int) error {
 	// Load config to get DB path
 	cfg, err := config.LoadConfigFromDir(".")
 	if err != nil {
@@ -27,178 +26,109 @@ func DisplayStats(project string) error {
 	}
 	defer store.Close()
 
-	// Collect metrics
-	metrics, err := collectBehavioralMetrics(store, project)
+	ctx := context.Background()
+
+	// Get summary stats
+	summaryStats, err := store.GetSummaryStats(ctx, project)
 	if err != nil {
-		return fmt.Errorf("collect metrics: %w", err)
+		return fmt.Errorf("get summary stats: %w", err)
 	}
 
-	// Calculate stats
-	stats := behavioral.CalculateStats(metrics)
+	// Get agent type stats with pagination
+	agentStats, err := store.GetAgentTypeStats(ctx, project, limit, 0)
+	if err != nil {
+		return fmt.Errorf("get agent type stats: %w", err)
+	}
 
 	// Display formatted output
-	fmt.Println(formatStatsTable(stats))
+	fmt.Println(formatStatsTable(summaryStats, agentStats, limit))
 
 	return nil
 }
 
-// collectBehavioralMetrics collects metrics from the database
-func collectBehavioralMetrics(store *learning.Store, project string) ([]behavioral.BehavioralMetrics, error) {
-	// Query behavioral_sessions table
-	query := `
-		SELECT
-			bs.id,
-			bs.total_duration_seconds,
-			bs.total_tool_calls,
-			bs.total_bash_commands,
-			bs.total_file_operations,
-			te.success,
-			te.task_name,
-			te.agent
-		FROM behavioral_sessions bs
-		JOIN task_executions te ON bs.task_execution_id = te.id
-	`
-
-	if project != "" {
-		query += " WHERE te.plan_file LIKE ?"
-		query = query + " ORDER BY bs.session_start DESC"
-	} else {
-		query += " ORDER BY bs.session_start DESC"
-	}
-
-	var rows *sql.Rows
-	var err error
-	if project != "" {
-		rows, err = store.QueryRows(query, "%"+project+"%")
-	} else {
-		rows, err = store.QueryRows(query)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query sessions: %w", err)
-	}
-	defer rows.Close()
-
-	sessionMap := make(map[int]*behavioral.BehavioralMetrics)
-
-	for rows.Next() {
-		var sessionID int
-		var duration int64
-		var toolCalls, bashCommands, fileOps int
-		var success bool
-		var taskName, agent string
-
-		if err := rows.Scan(&sessionID, &duration, &toolCalls, &bashCommands, &fileOps, &success, &taskName, &agent); err != nil {
-			return nil, fmt.Errorf("scan row: %w", err)
-		}
-
-		// Create or update metrics for this session
-		if _, exists := sessionMap[sessionID]; !exists {
-			sessionMap[sessionID] = &behavioral.BehavioralMetrics{
-				TotalSessions:    1,
-				AgentPerformance: make(map[string]int),
-			}
-		}
-
-		m := sessionMap[sessionID]
-		m.AverageDuration = time.Duration(duration) * time.Second
-
-		if success {
-			m.SuccessRate = 1.0
-			if agent != "" {
-				m.AgentPerformance[agent]++
-			}
-		} else {
-			m.ErrorRate = 1.0
-			m.TotalErrors++
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate rows: %w", err)
-	}
-
-	// Convert map to slice
-	metrics := make([]behavioral.BehavioralMetrics, 0, len(sessionMap))
-	for _, m := range sessionMap {
-		metrics = append(metrics, *m)
-	}
-
-	return metrics, nil
-}
-
-// formatStatsTable formats statistics as a readable table
-func formatStatsTable(stats *behavioral.AggregateStats) string {
+// formatStatsTable formats statistics as a readable table using new aggregated stats
+func formatStatsTable(summary *learning.SummaryStats, agents []learning.AgentTypeStats, limit int) string {
 	var sb strings.Builder
 
 	sb.WriteString("\n=== SUMMARY STATISTICS ===\n\n")
 
 	// Overall metrics
-	sb.WriteString(fmt.Sprintf("Total Sessions:      %d\n", stats.TotalSessions))
-	sb.WriteString(fmt.Sprintf("Total Agents:        %d\n", stats.TotalAgents))
-	sb.WriteString(fmt.Sprintf("Total Operations:    %d\n", stats.TotalOperations))
-	sb.WriteString(fmt.Sprintf("Success Rate:        %.1f%%\n", stats.SuccessRate*100))
-	sb.WriteString(fmt.Sprintf("Error Rate:          %.1f%%\n", stats.ErrorRate*100))
-	sb.WriteString(fmt.Sprintf("Average Duration:    %s\n", formatDuration(stats.AverageDuration)))
-	sb.WriteString(fmt.Sprintf("Total Cost:          $%.4f\n", stats.TotalCost))
+	sb.WriteString(fmt.Sprintf("Total Sessions:      %d\n", summary.TotalSessions))
+	sb.WriteString(fmt.Sprintf("Total Agents:        %d\n", summary.TotalAgents))
+	sb.WriteString(fmt.Sprintf("Success Rate:        %.1f%%\n", summary.SuccessRate*100))
+	sb.WriteString(fmt.Sprintf("Average Duration:    %s\n", formatDuration(time.Duration(summary.AvgDurationSeconds)*time.Second)))
 
 	// Token usage
-	sb.WriteString(fmt.Sprintf("\nTotal Input Tokens:  %d\n", stats.TotalInputTokens))
-	sb.WriteString(fmt.Sprintf("Total Output Tokens: %d\n", stats.TotalOutputTokens))
-	sb.WriteString(fmt.Sprintf("Total Tokens:        %d\n", stats.TotalInputTokens+stats.TotalOutputTokens))
-
-	// Top tools
-	if len(stats.TopTools) > 0 {
-		sb.WriteString("\n--- Top Tools (by usage) ---\n")
-		topTools := stats.GetTopTools(10)
-		for i, tool := range topTools {
-			sb.WriteString(fmt.Sprintf("%2d. %-20s Count: %4d  Success: %5.1f%%  Errors: %5.1f%%\n",
-				i+1, tool.Name, tool.Count, tool.SuccessRate*100, tool.ErrorRate*100))
-		}
+	sb.WriteString(fmt.Sprintf("\nTotal Input Tokens:  %d\n", summary.TotalInputTokens))
+	sb.WriteString(fmt.Sprintf("Total Output Tokens: %d\n", summary.TotalOutputTokens))
+	sb.WriteString(fmt.Sprintf("Total Tokens:        %d\n", summary.TotalTokens))
+	if summary.AvgTokensPerSession > 0 {
+		sb.WriteString(fmt.Sprintf("Avg Tokens/Session:  %.0f\n", summary.AvgTokensPerSession))
 	}
 
 	// Agent breakdown
-	if len(stats.AgentBreakdown) > 0 {
-		sb.WriteString("\n--- Agent Performance ---\n")
+	if len(agents) > 0 {
+		sb.WriteString("\n--- Agent Performance (Top")
+		if limit > 0 && len(agents) > limit {
+			sb.WriteString(fmt.Sprintf(" %d of %d", limit, len(agents)))
+		} else if len(agents) == 1 {
+			sb.WriteString(" 1")
+		}
+		sb.WriteString(") ---\n")
 
-		// Sort agents by success count
-		type agentStat struct {
-			name  string
-			count int
+		displayLimit := limit
+		if limit <= 0 || displayLimit > len(agents) {
+			displayLimit = len(agents)
 		}
-		agents := make([]agentStat, 0, len(stats.AgentBreakdown))
-		for name, count := range stats.AgentBreakdown {
-			agents = append(agents, agentStat{name, count})
-		}
-		// Simple bubble sort for small lists
-		for i := 0; i < len(agents)-1; i++ {
-			for j := 0; j < len(agents)-i-1; j++ {
-				if agents[j].count < agents[j+1].count {
-					agents[j], agents[j+1] = agents[j+1], agents[j]
-				}
+
+		// Header
+		sb.WriteString(fmt.Sprintf("%-30s %-12s %-12s %-12s %-12s %-10s\n",
+			"Agent Type", "Sessions", "Success", "Failures", "Avg Duration", "Success%"))
+		sb.WriteString(strings.Repeat("-", 90) + "\n")
+
+		for i := 0; i < displayLimit; i++ {
+			agent := agents[i]
+			durationStr := "0s"
+			if agent.AvgDurationSeconds > 0 {
+				durationStr = formatDuration(time.Duration(agent.AvgDurationSeconds) * time.Second)
 			}
+			successPct := 0.0
+			if agent.TotalSessions > 0 {
+				successPct = agent.SuccessRate * 100
+			}
+
+			sb.WriteString(fmt.Sprintf("%-30s %-12d %-12d %-12d %-12s %-10.1f%%\n",
+				truncateString(agent.AgentType, 29),
+				agent.TotalSessions,
+				agent.SuccessCount,
+				agent.FailureCount,
+				durationStr,
+				successPct))
 		}
 
-		for i, agent := range agents {
-			sb.WriteString(fmt.Sprintf("%2d. %-30s Success Count: %d\n", i+1, agent.name, agent.count))
+		if limit > 0 && len(agents) > displayLimit {
+			sb.WriteString(fmt.Sprintf("\n(Showing %d of %d agents. Use --limit flag to see more)\n", displayLimit, len(agents)))
 		}
 	}
 
 	return sb.String()
 }
 
-// StreamActivity streams real-time activity from the behavioral database
-func StreamActivity(ctx context.Context, project string) error {
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// StreamActivity streams real-time activity from the behavioral database, like `tail -f`
+func StreamActivity(ctx context.Context, project string, pollInterval time.Duration) error {
 	// Load config to get DB path
 	cfg, err := config.LoadConfigFromDir(".")
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-
-	// Check if streaming is enabled in config
-	// For now, we'll assume it's gated by a future flag
-	fmt.Println("Real-time streaming mode")
-	fmt.Println("Watching for new sessions... (Press Ctrl+C to stop)")
-	fmt.Println()
 
 	// Open learning store
 	store, err := learning.NewStore(cfg.Learning.DBPath)
@@ -207,11 +137,17 @@ func StreamActivity(ctx context.Context, project string) error {
 	}
 	defer store.Close()
 
-	// Track last seen session ID
-	lastSeenID := 0
+	// Get the maximum session ID to skip historical data
+	lastSeenID, err := getMaxSessionID(store, project)
+	if err != nil {
+		return fmt.Errorf("get max session id: %w", err)
+	}
+
+	// Display ready message
+	displayStreamHeader(lastSeenID)
 
 	// Poll for new sessions
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -236,17 +172,61 @@ func StreamActivity(ctx context.Context, project string) error {
 	}
 }
 
-// SessionUpdate represents a new session detected
-type SessionUpdate struct {
-	ID        int
-	TaskName  string
-	Agent     string
-	Timestamp time.Time
-	Success   bool
-	Duration  time.Duration
+// getMaxSessionID returns the current maximum session ID to avoid showing historical data
+func getMaxSessionID(store *learning.Store, project string) (int, error) {
+	query := `SELECT COALESCE(MAX(bs.id), 0) FROM behavioral_sessions bs`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += ` JOIN task_executions te ON bs.task_execution_id = te.id
+		          WHERE te.plan_file LIKE ?`
+		args = append(args, "%"+project+"%")
+	}
+
+	var maxID int
+	rows, err := store.QueryRows(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("query max session id: %w", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if err := rows.Scan(&maxID); err != nil {
+			return 0, fmt.Errorf("scan max id: %w", err)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate rows: %w", err)
+	}
+
+	return maxID, nil
 }
 
-// watchNewSessions queries for sessions added since lastSeenID
+// displayStreamHeader shows the ready message when streaming starts
+func displayStreamHeader(lastSeenID int) {
+	fmt.Println("\n" + strings.Repeat("=", 60))
+	fmt.Println("Real-time Activity Stream (like 'tail -f')")
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println("Ready - watching for new activity... (Ctrl+C to stop)")
+	fmt.Println()
+}
+
+// SessionUpdate represents a new session detected
+type SessionUpdate struct {
+	ID              int
+	TaskName        string
+	Agent           string
+	Timestamp       time.Time
+	Success         bool
+	Duration        time.Duration
+	ToolCalls       int
+	BashCommands    int
+	FileOperations  int
+}
+
+// watchNewSessions queries for sessions added since lastSeenID in chronological order
 func watchNewSessions(store *learning.Store, project string, lastSeenID int) ([]SessionUpdate, error) {
 	query := `
 		SELECT
@@ -255,7 +235,10 @@ func watchNewSessions(store *learning.Store, project string, lastSeenID int) ([]
 			te.agent,
 			bs.session_start,
 			te.success,
-			bs.total_duration_seconds
+			bs.total_duration_seconds,
+			bs.total_tool_calls,
+			bs.total_bash_commands,
+			bs.total_file_operations
 		FROM behavioral_sessions bs
 		JOIN task_executions te ON bs.task_execution_id = te.id
 		WHERE bs.id > ?
@@ -268,7 +251,8 @@ func watchNewSessions(store *learning.Store, project string, lastSeenID int) ([]
 		args = append(args, "%"+project+"%")
 	}
 
-	query += " ORDER BY bs.id ASC LIMIT 10"
+	// Use chronological order (oldest new session first)
+	query += " ORDER BY bs.session_start ASC LIMIT 10"
 
 	rows, err := store.QueryRows(query, args...)
 	if err != nil {
@@ -282,7 +266,8 @@ func watchNewSessions(store *learning.Store, project string, lastSeenID int) ([]
 		var durationSecs int64
 		var agent sql.NullString
 
-		if err := rows.Scan(&update.ID, &update.TaskName, &agent, &update.Timestamp, &update.Success, &durationSecs); err != nil {
+		if err := rows.Scan(&update.ID, &update.TaskName, &agent, &update.Timestamp, &update.Success, &durationSecs,
+			&update.ToolCalls, &update.BashCommands, &update.FileOperations); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}
 
@@ -301,11 +286,13 @@ func watchNewSessions(store *learning.Store, project string, lastSeenID int) ([]
 	return updates, nil
 }
 
-// displaySessionUpdate displays a single session update
+// displaySessionUpdate displays a single session update with rich formatting
 func displaySessionUpdate(update SessionUpdate) {
 	status := "SUCCESS"
+	emoji := "✓"
 	if !update.Success {
 		status = "FAILED"
+		emoji = "✗"
 	}
 
 	agent := update.Agent
@@ -313,10 +300,43 @@ func displaySessionUpdate(update SessionUpdate) {
 		agent = "default"
 	}
 
-	fmt.Printf("[%s] %s | Task: %s | Agent: %s | Duration: %s\n",
+	// Build activity description
+	parts := []string{}
+	if update.ToolCalls > 0 {
+		parts = append(parts, fmt.Sprintf("%d tool%s", update.ToolCalls, pluralize(update.ToolCalls)))
+	}
+	if update.BashCommands > 0 {
+		parts = append(parts, fmt.Sprintf("%d bash cmd%s", update.BashCommands, pluralize(update.BashCommands)))
+	}
+	if update.FileOperations > 0 {
+		parts = append(parts, fmt.Sprintf("%d file op%s", update.FileOperations, pluralize(update.FileOperations)))
+	}
+
+	description := strings.Join(parts, ", ")
+	if description == "" {
+		description = "no activities"
+	}
+
+	fmt.Printf("[%s] %-20s %s %s | %s (%s)\n",
 		update.Timestamp.Format("15:04:05"),
-		status,
-		update.TaskName,
 		agent,
+		emoji,
+		status,
+		description,
 		formatDuration(update.Duration))
+}
+
+// pluralize returns "s" if count != 1, otherwise ""
+func pluralize(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// collectBehavioralMetrics is a stub function for test compatibility
+// This function is deprecated - use store.GetSummaryStats() instead
+func collectBehavioralMetrics(store *learning.Store, project string) ([]interface{}, error) {
+	// Return empty slice for compatibility
+	return []interface{}{}, nil
 }

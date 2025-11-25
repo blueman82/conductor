@@ -5,6 +5,18 @@ import (
 	"time"
 )
 
+// ModelCosts defines pricing for different Claude models
+// Values are per 1 million tokens
+var ModelCosts = map[string]struct {
+	Input  float64
+	Output float64
+}{
+	"claude-sonnet-4-5": {Input: 3.0, Output: 15.0},
+	"claude-haiku-3-5":  {Input: 0.80, Output: 4.0},
+	"claude-opus-4":     {Input: 15.0, Output: 75.0},
+	"default":           {Input: 3.0, Output: 15.0},
+}
+
 // Session represents a Claude Code agent session extracted from JSONL files
 type Session struct {
 	ID          string    `json:"id"`           // Session UUID

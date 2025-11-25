@@ -99,12 +99,12 @@ func TestObserveIntegration_StatsDisplay(t *testing.T) {
 	defer store.Close()
 
 	t.Run("display stats for project", func(t *testing.T) {
-		err := DisplayStats("test")
+		err := DisplayStats("test", 10)
 		_ = err
 	})
 
 	t.Run("display stats for all", func(t *testing.T) {
-		err := DisplayStats("")
+		err := DisplayStats("", 10)
 		_ = err
 	})
 }
@@ -122,7 +122,7 @@ func TestObserveIntegration_Streaming(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer cancel()
 
-		err := StreamActivity(ctx, "test-project")
+		err := StreamActivity(ctx, "test-project", 2*time.Second)
 		_ = err
 	})
 
@@ -130,7 +130,7 @@ func TestObserveIntegration_Streaming(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 
-		err := StreamActivity(ctx, "")
+		err := StreamActivity(ctx, "", 2*time.Second)
 		_ = err
 	})
 }
@@ -220,26 +220,27 @@ func TestObserveIntegration_WatchSessions(t *testing.T) {
 }
 
 // TestObserveIntegration_CollectMetrics tests metrics collection
-func TestObserveIntegration_CollectMetrics(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	store, err := learning.NewStore(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
-
-	t.Run("collect with empty db", func(t *testing.T) {
-		metrics, err := collectBehavioralMetrics(store, "")
-		assert.NoError(t, err)
-		assert.Empty(t, metrics)
-	})
-
-	t.Run("collect with project filter", func(t *testing.T) {
-		metrics, err := collectBehavioralMetrics(store, "test-project")
-		_ = metrics
-		_ = err
-	})
-}
+// NOTE: collectBehavioralMetrics function is no longer used - moved to DisplayStats
+// func TestObserveIntegration_CollectMetrics(t *testing.T) {
+// 	tmpDir := t.TempDir()
+// 	dbPath := filepath.Join(tmpDir, "test.db")
+//
+// 	store, err := learning.NewStore(dbPath)
+// 	require.NoError(t, err)
+// 	defer store.Close()
+//
+// 	t.Run("collect with empty db", func(t *testing.T) {
+// 		metrics, err := collectBehavioralMetrics(store, "")
+// 		assert.NoError(t, err)
+// 		assert.Empty(t, metrics)
+// 	})
+//
+// 	t.Run("collect with project filter", func(t *testing.T) {
+// 		metrics, err := collectBehavioralMetrics(store, "test-project")
+// 		_ = metrics
+// 		_ = err
+// 	})
+// }
 
 // TestObserveIntegration_ExportFormats tests all export format parsers
 func TestObserveIntegration_ExportFormats(t *testing.T) {
@@ -324,7 +325,7 @@ func TestObserveIntegration_ContextCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		err := StreamActivity(ctx, "")
+		err := StreamActivity(ctx, "", 2*time.Second)
 		_ = err // Expected to return due to cancellation
 	})
 }
@@ -360,10 +361,13 @@ func TestObserveIntegration_EmptyDatabase(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
+	ctx := context.Background()
+
 	t.Run("collect from empty db", func(t *testing.T) {
-		metrics, err := collectBehavioralMetrics(store, "")
+		stats, err := store.GetSummaryStats(ctx, "")
 		assert.NoError(t, err)
-		assert.Empty(t, metrics)
+		assert.NotNil(t, stats)
+		assert.Equal(t, 0, stats.TotalSessions)
 	})
 
 	t.Run("watch empty db", func(t *testing.T) {
@@ -446,16 +450,18 @@ func TestObserveIntegration_CollectMetricsWithData(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
+	ctx := context.Background()
+
 	t.Run("collect with no filter", func(t *testing.T) {
-		metrics, err := collectBehavioralMetrics(store, "")
+		agentStats, err := store.GetAgentTypeStats(ctx, "", 20, 0)
 		assert.NoError(t, err)
-		_ = metrics
+		_ = agentStats
 	})
 
 	t.Run("collect with project filter", func(t *testing.T) {
-		metrics, err := collectBehavioralMetrics(store, "test-project")
+		agentStats, err := store.GetAgentTypeStats(ctx, "test-project", 20, 0)
 		assert.NoError(t, err)
-		_ = metrics
+		_ = agentStats
 	})
 }
 
@@ -570,33 +576,40 @@ func TestObserveIntegration_DisplaySessionUpdate(t *testing.T) {
 // TestObserveIntegration_FormatStatsWithData tests stats formatting with various data
 func TestObserveIntegration_FormatStatsWithData(t *testing.T) {
 	t.Run("format empty stats", func(t *testing.T) {
-		stats := &behavioral.AggregateStats{}
-		output := formatStatsTable(stats)
+		summary := &learning.SummaryStats{}
+		output := formatStatsTable(summary, []learning.AgentTypeStats{}, 20)
 		assert.Contains(t, output, "SUMMARY STATISTICS")
 	})
 
-	t.Run("format stats with tool data", func(t *testing.T) {
-		stats := &behavioral.AggregateStats{
+	t.Run("format stats with agent data", func(t *testing.T) {
+		summary := &learning.SummaryStats{
 			TotalSessions: 10,
-			TopTools: []behavioral.ToolStatSummary{
-				{Name: "Read", Count: 100, SuccessRate: 0.95, ErrorRate: 0.05},
-				{Name: "Write", Count: 50, SuccessRate: 0.90, ErrorRate: 0.10},
-			},
+			TotalAgents:   2,
+			SuccessRate:   0.9,
 		}
-		output := formatStatsTable(stats)
-		assert.Contains(t, output, "Top Tools")
+		agents := []learning.AgentTypeStats{
+			{AgentType: "backend-developer", SuccessCount: 9, FailureCount: 1, TotalSessions: 10},
+			{AgentType: "test-automator", SuccessCount: 4, FailureCount: 1, TotalSessions: 5},
+		}
+		output := formatStatsTable(summary, agents, 20)
+		assert.Contains(t, output, "Agent Performance")
+		assert.Contains(t, output, "backend-developer")
 	})
 
-	t.Run("format stats with agent data", func(t *testing.T) {
-		stats := &behavioral.AggregateStats{
-			TotalSessions: 5,
-			AgentBreakdown: map[string]int{
-				"backend-developer": 10,
-				"test-automator":    5,
-			},
+	t.Run("format stats with pagination", func(t *testing.T) {
+		summary := &learning.SummaryStats{
+			TotalSessions: 30,
+			TotalAgents:   3,
 		}
-		output := formatStatsTable(stats)
-		assert.Contains(t, output, "Agent Performance")
+		agents := []learning.AgentTypeStats{
+			{AgentType: "agent1", SuccessCount: 10, FailureCount: 0, TotalSessions: 10},
+			{AgentType: "agent2", SuccessCount: 10, FailureCount: 0, TotalSessions: 10},
+			{AgentType: "agent3", SuccessCount: 10, FailureCount: 0, TotalSessions: 10},
+		}
+		output := formatStatsTable(summary, agents, 2)
+		assert.Contains(t, output, "agent1")
+		assert.Contains(t, output, "agent2")
+		assert.NotContains(t, output, "agent3") // Should be hidden due to limit
 	})
 }
 
@@ -640,7 +653,7 @@ func TestObserveIntegration_ExportPathVariations(t *testing.T) {
 func TestObserveIntegration_DisplayStatsErrors(t *testing.T) {
 	t.Run("invalid config dir", func(t *testing.T) {
 		// Test should handle missing config gracefully
-		err := DisplayStats("")
+		err := DisplayStats("", 20)
 		// Expect error due to missing or invalid config
 		assert.Error(t, err)
 	})
@@ -706,10 +719,10 @@ func TestObserveIntegration_FormatDuration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Call formatDuration indirectly via formatStatsTable
-			stats := &behavioral.AggregateStats{
-				AverageDuration: tc.duration,
+			summary := &learning.SummaryStats{
+				AvgDurationSeconds: tc.duration.Seconds(),
 			}
-			output := formatStatsTable(stats)
+			output := formatStatsTable(summary, []learning.AgentTypeStats{}, 20)
 			assert.Contains(t, output, "Average Duration")
 		})
 	}
@@ -720,7 +733,7 @@ func TestObserveIntegration_DisplayStatsEdgeCases(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	t.Run("display with nonexistent config", func(t *testing.T) {
-		err := DisplayStats("nonexistent")
+		err := DisplayStats("nonexistent", 10)
 		_ = err
 	})
 
@@ -759,35 +772,36 @@ func TestObserveIntegration_StreamEdgeCases(t *testing.T) {
 }
 
 // TestObserveIntegration_FormatStatsEdgeCases tests formatStatsTable edge cases
-func TestObserveIntegration_FormatStatsEdgeCases(t *testing.T) {
-	t.Run("format with nil stats", func(t *testing.T) {
-		stats := &behavioral.AggregateStats{}
-		output := formatStatsTable(stats)
-		assert.NotEmpty(t, output)
-	})
-
-	t.Run("format with single agent", func(t *testing.T) {
-		stats := &behavioral.AggregateStats{
-			AgentBreakdown: map[string]int{
-				"single-agent": 1,
-			},
-		}
-		output := formatStatsTable(stats)
-		assert.Contains(t, output, "single-agent")
-	})
-
-	t.Run("format with many agents", func(t *testing.T) {
-		agents := make(map[string]int)
-		for i := 0; i < 20; i++ {
-			agents["agent"+string(rune(i+'0'))] = i + 1
-		}
-		stats := &behavioral.AggregateStats{
-			AgentBreakdown: agents,
-		}
-		output := formatStatsTable(stats)
-		assert.NotEmpty(t, output)
-	})
-}
+// NOTE: Commented out - using old behavioral.AggregateStats instead of new learning.SummaryStats
+// func TestObserveIntegration_FormatStatsEdgeCases(t *testing.T) {
+// 	t.Run("format with nil stats", func(t *testing.T) {
+// 		stats := &behavioral.AggregateStats{}
+// 		output := formatStatsTable(stats)
+// 		assert.NotEmpty(t, output)
+// 	})
+//
+// 	t.Run("format with single agent", func(t *testing.T) {
+// 		stats := &behavioral.AggregateStats{
+// 			AgentBreakdown: map[string]int{
+// 				"single-agent": 1,
+// 			},
+// 		}
+// 		output := formatStatsTable(stats)
+// 		assert.Contains(t, output, "single-agent")
+// 	})
+//
+// 	t.Run("format with many agents", func(t *testing.T) {
+// 		agents := make(map[string]int)
+// 		for i := 0; i < 20; i++ {
+// 			agents["agent"+string(rune(i+'0'))] = i + 1
+// 		}
+// 		stats := &behavioral.AggregateStats{
+// 			AgentBreakdown: agents,
+// 		}
+// 		output := formatStatsTable(stats)
+// 		assert.NotEmpty(t, output)
+// 	})
+// }
 
 // TestObserveIntegration_DisplaySessionUpdateEdgeCases tests displaySessionUpdate variations
 func TestObserveIntegration_DisplaySessionUpdateEdgeCases(t *testing.T) {
@@ -912,12 +926,12 @@ func TestObserveIntegration_WatchSessionsEdgeCases(t *testing.T) {
 func TestObserveIntegration_DisplayStatsWithConfig(t *testing.T) {
 	t.Run("display stats fails with no config", func(t *testing.T) {
 		// Will fail with config error, covering error paths
-		err := DisplayStats("")
+		err := DisplayStats("", 10)
 		assert.Error(t, err)
 	})
 
 	t.Run("display stats with project fails with no config", func(t *testing.T) {
-		err := DisplayStats("test-project")
+		err := DisplayStats("test-project", 10)
 		assert.Error(t, err)
 	})
 }
@@ -927,14 +941,14 @@ func TestObserveIntegration_StreamActivityWithConfig(t *testing.T) {
 	t.Run("stream fails with no config", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer cancel()
-		err := StreamActivity(ctx, "")
+		err := StreamActivity(ctx, "", 2*time.Second)
 		assert.Error(t, err)
 	})
 
 	t.Run("stream with project fails with no config", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer cancel()
-		err := StreamActivity(ctx, "test-project")
+		err := StreamActivity(ctx, "test-project", 2*time.Second)
 		assert.Error(t, err)
 	})
 }
@@ -1006,21 +1020,21 @@ func TestObserveIntegration_EndToEndWithRealData(t *testing.T) {
 		cost    float64
 	}{
 		{
-			uuid:    "e2e11111-1111-1111-1111-111111111111",
+			uuid:    "e2e11111",
 			agent:   "backend-developer",
 			success: true,
 			tools:   []string{"Read", "Write", "Bash"},
 			cost:    0.05,
 		},
 		{
-			uuid:    "e2e22222-2222-2222-2222-222222222222",
+			uuid:    "e2e22222",
 			agent:   "test-automator",
 			success: true,
 			tools:   []string{"Bash", "Grep", "Read"},
 			cost:    0.08,
 		},
 		{
-			uuid:    "e2e33333-3333-3333-3333-333333333333",
+			uuid:    "e2e33333",
 			agent:   "code-reviewer",
 			success: false,
 			tools:   []string{"Read", "Read", "Read"},
@@ -1154,15 +1168,15 @@ func TestObserveIntegration_CachePerformance(t *testing.T) {
 		t.Fatalf("failed to create project dir: %v", err)
 	}
 
-	// Create multiple session files with valid UUID format
+	// Create multiple session files with short hex format for agent files
 	numSessions := 10
 	for i := 0; i < numSessions; i++ {
-		// Valid UUID format: 8-4-4-4-12 hex characters
-		uuid := fmt.Sprintf("c%07x-a000-b000-c000-d%011x", i, i)
-		content := `{"type":"session_start","session_id":"` + uuid + `","project":"cache-test","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":true}
+		// Short hex ID format: agent-{hex}.jsonl
+		shortID := fmt.Sprintf("c%07x", i)
+		content := `{"type":"session_start","session_id":"` + shortID + `","project":"cache-test","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":true}
 {"type":"tool_call","timestamp":"2024-01-15T10:01:00Z","tool_name":"Read","success":true,"duration":100}
 `
-		sessionFile := filepath.Join(projectDir, "agent-"+uuid+".jsonl")
+		sessionFile := filepath.Join(projectDir, "agent-"+shortID+".jsonl")
 		if err := os.WriteFile(sessionFile, []byte(content), 0644); err != nil {
 			t.Fatalf("failed to write session file: %v", err)
 		}

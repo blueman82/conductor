@@ -806,3 +806,711 @@ func (s *Store) DeleteOldBehavioralData(ctx context.Context, olderThan time.Time
 
 	return deleted, nil
 }
+
+// AgentTypeStats represents aggregated statistics for an agent type
+type AgentTypeStats struct {
+	AgentType           string
+	SuccessCount        int
+	FailureCount        int
+	TotalSessions       int
+	AvgDurationSeconds  float64
+	TotalInputTokens    int64
+	TotalOutputTokens   int64
+	SuccessRate         float64
+	AvgTokensPerSession float64
+}
+
+// GetAgentTypeStats returns aggregated statistics grouped by agent type (from te.agent column)
+// Returns top agents by success count, with pagination support
+func (s *Store) GetAgentTypeStats(ctx context.Context, project string, limit, offset int) ([]AgentTypeStats, error) {
+	query := `
+		SELECT
+			COALESCE(te.agent, 'unknown') as agent_type,
+			COUNT(CASE WHEN te.success = 1 THEN 1 END) as success_count,
+			COUNT(CASE WHEN te.success = 0 THEN 1 END) as failure_count,
+			COUNT(bs.id) as total_sessions,
+			AVG(bs.total_duration_seconds) as avg_duration,
+			SUM(tu.input_tokens) as total_input_tokens,
+			SUM(tu.output_tokens) as total_output_tokens
+		FROM behavioral_sessions bs
+		JOIN task_executions te ON bs.task_execution_id = te.id
+		LEFT JOIN token_usage tu ON bs.id = tu.session_id
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " WHERE te.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	query += `
+		GROUP BY COALESCE(te.agent, 'unknown')
+		ORDER BY success_count DESC
+	`
+
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query agent type stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []AgentTypeStats
+	for rows.Next() {
+		var s AgentTypeStats
+		var avgDuration sql.NullFloat64
+		var totalInputTokens, totalOutputTokens sql.NullInt64
+
+		if err := rows.Scan(
+			&s.AgentType,
+			&s.SuccessCount,
+			&s.FailureCount,
+			&s.TotalSessions,
+			&avgDuration,
+			&totalInputTokens,
+			&totalOutputTokens,
+		); err != nil {
+			return nil, fmt.Errorf("scan agent type stats row: %w", err)
+		}
+
+		s.TotalSessions = s.SuccessCount + s.FailureCount
+		if s.TotalSessions > 0 {
+			s.SuccessRate = float64(s.SuccessCount) / float64(s.TotalSessions)
+		}
+
+		if avgDuration.Valid {
+			s.AvgDurationSeconds = avgDuration.Float64
+		}
+
+		if totalInputTokens.Valid {
+			s.TotalInputTokens = totalInputTokens.Int64
+		}
+		if totalOutputTokens.Valid {
+			s.TotalOutputTokens = totalOutputTokens.Int64
+		}
+
+		if s.TotalSessions > 0 && (s.TotalInputTokens > 0 || s.TotalOutputTokens > 0) {
+			s.AvgTokensPerSession = float64(s.TotalInputTokens+s.TotalOutputTokens) / float64(s.TotalSessions)
+		}
+
+		stats = append(stats, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate agent type stats: %w", err)
+	}
+
+	return stats, nil
+}
+
+// SummaryStats represents overall summary statistics
+type SummaryStats struct {
+	TotalAgents         int
+	TotalSessions       int
+	TotalSuccesses      int
+	TotalFailures       int
+	SuccessRate         float64
+	AvgDurationSeconds  float64
+	TotalInputTokens    int64
+	TotalOutputTokens   int64
+	TotalTokens         int64
+	AvgTokensPerSession float64
+}
+
+// GetSummaryStats returns overall summary statistics for a project
+func (s *Store) GetSummaryStats(ctx context.Context, project string) (*SummaryStats, error) {
+	query := `
+		SELECT
+			COUNT(DISTINCT COALESCE(te.agent, 'unknown')) as total_agents,
+			COUNT(bs.id) as total_sessions,
+			COUNT(CASE WHEN te.success = 1 THEN 1 END) as total_successes,
+			COUNT(CASE WHEN te.success = 0 THEN 1 END) as total_failures,
+			AVG(bs.total_duration_seconds) as avg_duration,
+			SUM(tu.input_tokens) as total_input_tokens,
+			SUM(tu.output_tokens) as total_output_tokens
+		FROM behavioral_sessions bs
+		JOIN task_executions te ON bs.task_execution_id = te.id
+		LEFT JOIN token_usage tu ON bs.id = tu.session_id
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " WHERE te.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	row := s.db.QueryRowContext(ctx, query, args...)
+
+	stats := &SummaryStats{}
+	var avgDuration sql.NullFloat64
+	var totalInputTokens, totalOutputTokens sql.NullInt64
+
+	if err := row.Scan(
+		&stats.TotalAgents,
+		&stats.TotalSessions,
+		&stats.TotalSuccesses,
+		&stats.TotalFailures,
+		&avgDuration,
+		&totalInputTokens,
+		&totalOutputTokens,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			// Return empty stats if no data found
+			return &SummaryStats{}, nil
+		}
+		return nil, fmt.Errorf("query summary stats: %w", err)
+	}
+
+	if stats.TotalSessions > 0 {
+		stats.SuccessRate = float64(stats.TotalSuccesses) / float64(stats.TotalSessions)
+	}
+
+	if avgDuration.Valid {
+		stats.AvgDurationSeconds = avgDuration.Float64
+	}
+
+	if totalInputTokens.Valid {
+		stats.TotalInputTokens = totalInputTokens.Int64
+	}
+	if totalOutputTokens.Valid {
+		stats.TotalOutputTokens = totalOutputTokens.Int64
+	}
+
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
+	if stats.TotalSessions > 0 {
+		stats.AvgTokensPerSession = float64(stats.TotalTokens) / float64(stats.TotalSessions)
+	}
+
+	return stats, nil
+}
+
+// ToolStats represents aggregated statistics for a specific tool
+type ToolStats struct {
+	ToolName      string
+	CallCount     int
+	SuccessCount  int
+	FailureCount  int
+	AvgDurationMs float64
+	SuccessRate   float64
+}
+
+// GetToolStats returns aggregated statistics grouped by tool name
+// Ordered by call count descending, with limit/offset support
+func (s *Store) GetToolStats(ctx context.Context, project string, limit, offset int) ([]ToolStats, error) {
+	query := `
+		SELECT
+			te.tool_name,
+			COUNT(*) as call_count,
+			COUNT(CASE WHEN te.success = 1 THEN 1 END) as success_count,
+			COUNT(CASE WHEN te.success = 0 THEN 1 END) as failure_count,
+			AVG(te.duration_ms) as avg_duration
+		FROM tool_executions te
+		JOIN behavioral_sessions bs ON te.session_id = bs.id
+		JOIN task_executions tex ON bs.task_execution_id = tex.id
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " WHERE tex.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	query += `
+		GROUP BY te.tool_name
+		ORDER BY call_count DESC
+	`
+
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query tool stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []ToolStats
+	for rows.Next() {
+		var ts ToolStats
+		var avgDuration sql.NullFloat64
+
+		if err := rows.Scan(
+			&ts.ToolName,
+			&ts.CallCount,
+			&ts.SuccessCount,
+			&ts.FailureCount,
+			&avgDuration,
+		); err != nil {
+			return nil, fmt.Errorf("scan tool stats row: %w", err)
+		}
+
+		if ts.CallCount > 0 {
+			ts.SuccessRate = float64(ts.SuccessCount) / float64(ts.CallCount)
+		}
+
+		if avgDuration.Valid {
+			ts.AvgDurationMs = avgDuration.Float64
+		}
+
+		stats = append(stats, ts)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate tool stats: %w", err)
+	}
+
+	return stats, nil
+}
+
+// BashStats represents aggregated statistics for bash commands
+type BashStats struct {
+	Command       string
+	CallCount     int
+	SuccessCount  int
+	FailureCount  int
+	AvgDurationMs float64
+	SuccessRate   float64
+}
+
+// GetBashStats returns aggregated statistics grouped by bash command
+// Ordered by call count descending, with limit/offset support
+func (s *Store) GetBashStats(ctx context.Context, project string, limit, offset int) ([]BashStats, error) {
+	query := `
+		SELECT
+			bc.command,
+			COUNT(*) as call_count,
+			COUNT(CASE WHEN bc.success = 1 THEN 1 END) as success_count,
+			COUNT(CASE WHEN bc.success = 0 THEN 1 END) as failure_count,
+			AVG(bc.duration_ms) as avg_duration
+		FROM bash_commands bc
+		JOIN behavioral_sessions bs ON bc.session_id = bs.id
+		JOIN task_executions te ON bs.task_execution_id = te.id
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " WHERE te.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	query += `
+		GROUP BY bc.command
+		ORDER BY call_count DESC
+	`
+
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query bash stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []BashStats
+	for rows.Next() {
+		var bs BashStats
+		var avgDuration sql.NullFloat64
+
+		if err := rows.Scan(
+			&bs.Command,
+			&bs.CallCount,
+			&bs.SuccessCount,
+			&bs.FailureCount,
+			&avgDuration,
+		); err != nil {
+			return nil, fmt.Errorf("scan bash stats row: %w", err)
+		}
+
+		if bs.CallCount > 0 {
+			bs.SuccessRate = float64(bs.SuccessCount) / float64(bs.CallCount)
+		}
+
+		if avgDuration.Valid {
+			bs.AvgDurationMs = avgDuration.Float64
+		}
+
+		stats = append(stats, bs)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bash stats: %w", err)
+	}
+
+	return stats, nil
+}
+
+// FileStats represents aggregated statistics for file operations
+type FileStats struct {
+	FilePath      string
+	OperationType string
+	OpCount       int
+	SuccessCount  int
+	FailureCount  int
+	AvgDurationMs float64
+	TotalBytes    int64
+	SuccessRate   float64
+}
+
+// GetFileStats returns aggregated statistics grouped by file path and operation type
+// Ordered by operation count descending, with limit/offset support
+func (s *Store) GetFileStats(ctx context.Context, project string, limit, offset int) ([]FileStats, error) {
+	query := `
+		SELECT
+			fo.file_path,
+			fo.operation_type,
+			COUNT(*) as op_count,
+			COUNT(CASE WHEN fo.success = 1 THEN 1 END) as success_count,
+			COUNT(CASE WHEN fo.success = 0 THEN 1 END) as failure_count,
+			AVG(fo.duration_ms) as avg_duration,
+			COALESCE(SUM(fo.bytes_affected), 0) as total_bytes
+		FROM file_operations fo
+		JOIN behavioral_sessions bs ON fo.session_id = bs.id
+		JOIN task_executions te ON bs.task_execution_id = te.id
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " WHERE te.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	query += `
+		GROUP BY fo.file_path, fo.operation_type
+		ORDER BY op_count DESC
+	`
+
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query file stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []FileStats
+	for rows.Next() {
+		var fs FileStats
+		var avgDuration sql.NullFloat64
+
+		if err := rows.Scan(
+			&fs.FilePath,
+			&fs.OperationType,
+			&fs.OpCount,
+			&fs.SuccessCount,
+			&fs.FailureCount,
+			&avgDuration,
+			&fs.TotalBytes,
+		); err != nil {
+			return nil, fmt.Errorf("scan file stats row: %w", err)
+		}
+
+		if fs.OpCount > 0 {
+			fs.SuccessRate = float64(fs.SuccessCount) / float64(fs.OpCount)
+		}
+
+		if avgDuration.Valid {
+			fs.AvgDurationMs = avgDuration.Float64
+		}
+
+		stats = append(stats, fs)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate file stats: %w", err)
+	}
+
+	return stats, nil
+}
+
+// ErrorPattern represents an error pattern with context
+type ErrorPattern struct {
+	ErrorType     string // "tool", "bash", "file"
+	ErrorMessage  string
+	Tool          string // For tool errors
+	Command       string // For bash errors
+	FilePath      string // For file errors
+	OperationType string // For file errors
+	Count         int
+	LastOccurred  time.Time
+}
+
+// GetErrorPatterns returns aggregated error statistics
+// Ordered by error count descending, with limit/offset support
+func (s *Store) GetErrorPatterns(ctx context.Context, project string, limit, offset int) ([]ErrorPattern, error) {
+	patterns := []ErrorPattern{}
+
+	// Get tool errors
+	toolErrors, err := s.getToolErrors(ctx, project, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("get tool errors: %w", err)
+	}
+	patterns = append(patterns, toolErrors...)
+
+	// Get bash errors
+	bashErrors, err := s.getBashErrors(ctx, project, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("get bash errors: %w", err)
+	}
+	patterns = append(patterns, bashErrors...)
+
+	// Get file operation errors
+	fileErrors, err := s.getFileErrors(ctx, project, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("get file errors: %w", err)
+	}
+	patterns = append(patterns, fileErrors...)
+
+	// Sort by count descending
+	sortErrorPatterns(patterns)
+
+	// Apply limit to combined results
+	if limit > 0 && len(patterns) > limit {
+		patterns = patterns[:limit]
+	}
+
+	return patterns, nil
+}
+
+// getToolErrors returns error patterns from tool executions
+func (s *Store) getToolErrors(ctx context.Context, project string, limit, offset int) ([]ErrorPattern, error) {
+	query := `
+		SELECT
+			te.tool_name,
+			te.error_message,
+			COUNT(*) as error_count,
+			MAX(te.execution_time) as last_occurred
+		FROM tool_executions te
+		JOIN behavioral_sessions bs ON te.session_id = bs.id
+		JOIN task_executions tex ON bs.task_execution_id = tex.id
+		WHERE te.success = 0 AND te.error_message IS NOT NULL
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " AND tex.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	query += `
+		GROUP BY te.tool_name, te.error_message
+		ORDER BY error_count DESC
+	`
+
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query tool errors: %w", err)
+	}
+	defer rows.Close()
+
+	var patterns []ErrorPattern
+	for rows.Next() {
+		var ep ErrorPattern
+		var lastOccurredStr sql.NullString
+
+		if err := rows.Scan(
+			&ep.Tool,
+			&ep.ErrorMessage,
+			&ep.Count,
+			&lastOccurredStr,
+		); err != nil {
+			return nil, fmt.Errorf("scan tool error row: %w", err)
+		}
+
+		ep.ErrorType = "tool"
+		if lastOccurredStr.Valid {
+			if t, err := time.Parse(time.RFC3339, lastOccurredStr.String); err == nil {
+				ep.LastOccurred = t
+			} else if t, err := time.Parse("2006-01-02 15:04:05", lastOccurredStr.String); err == nil {
+				ep.LastOccurred = t
+			}
+		}
+
+		patterns = append(patterns, ep)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate tool errors: %w", err)
+	}
+
+	return patterns, nil
+}
+
+// getBashErrors returns error patterns from bash commands
+func (s *Store) getBashErrors(ctx context.Context, project string, limit, offset int) ([]ErrorPattern, error) {
+	query := `
+		SELECT
+			bc.command,
+			bc.exit_code,
+			COUNT(*) as error_count,
+			MAX(bc.execution_time) as last_occurred
+		FROM bash_commands bc
+		JOIN behavioral_sessions bs ON bc.session_id = bs.id
+		JOIN task_executions te ON bs.task_execution_id = te.id
+		WHERE bc.success = 0
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " AND te.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	query += `
+		GROUP BY bc.command, bc.exit_code
+		ORDER BY error_count DESC
+	`
+
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query bash errors: %w", err)
+	}
+	defer rows.Close()
+
+	var patterns []ErrorPattern
+	for rows.Next() {
+		var ep ErrorPattern
+		var exitCode sql.NullInt64
+		var lastOccurredStr sql.NullString
+
+		if err := rows.Scan(
+			&ep.Command,
+			&exitCode,
+			&ep.Count,
+			&lastOccurredStr,
+		); err != nil {
+			return nil, fmt.Errorf("scan bash error row: %w", err)
+		}
+
+		ep.ErrorType = "bash"
+		if exitCode.Valid {
+			ep.ErrorMessage = fmt.Sprintf("exit code %d", exitCode.Int64)
+		}
+		if lastOccurredStr.Valid {
+			if t, err := time.Parse(time.RFC3339, lastOccurredStr.String); err == nil {
+				ep.LastOccurred = t
+			} else if t, err := time.Parse("2006-01-02 15:04:05", lastOccurredStr.String); err == nil {
+				ep.LastOccurred = t
+			}
+		}
+
+		patterns = append(patterns, ep)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bash errors: %w", err)
+	}
+
+	return patterns, nil
+}
+
+// getFileErrors returns error patterns from file operations
+func (s *Store) getFileErrors(ctx context.Context, project string, limit, offset int) ([]ErrorPattern, error) {
+	query := `
+		SELECT
+			fo.file_path,
+			fo.operation_type,
+			fo.error_message,
+			COUNT(*) as error_count,
+			MAX(fo.execution_time) as last_occurred
+		FROM file_operations fo
+		JOIN behavioral_sessions bs ON fo.session_id = bs.id
+		JOIN task_executions te ON bs.task_execution_id = te.id
+		WHERE fo.success = 0 AND fo.error_message IS NOT NULL
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " AND te.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	query += `
+		GROUP BY fo.file_path, fo.operation_type, fo.error_message
+		ORDER BY error_count DESC
+	`
+
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query file errors: %w", err)
+	}
+	defer rows.Close()
+
+	var patterns []ErrorPattern
+	for rows.Next() {
+		var ep ErrorPattern
+		var lastOccurredStr sql.NullString
+
+		if err := rows.Scan(
+			&ep.FilePath,
+			&ep.OperationType,
+			&ep.ErrorMessage,
+			&ep.Count,
+			&lastOccurredStr,
+		); err != nil {
+			return nil, fmt.Errorf("scan file error row: %w", err)
+		}
+
+		ep.ErrorType = "file"
+		if lastOccurredStr.Valid {
+			if t, err := time.Parse(time.RFC3339, lastOccurredStr.String); err == nil {
+				ep.LastOccurred = t
+			} else if t, err := time.Parse("2006-01-02 15:04:05", lastOccurredStr.String); err == nil {
+				ep.LastOccurred = t
+			}
+		}
+
+		patterns = append(patterns, ep)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate file errors: %w", err)
+	}
+
+	return patterns, nil
+}
+
+// sortErrorPatterns sorts error patterns by count descending
+func sortErrorPatterns(patterns []ErrorPattern) {
+	for i := 0; i < len(patterns); i++ {
+		for j := i + 1; j < len(patterns); j++ {
+			if patterns[j].Count > patterns[i].Count {
+				patterns[i], patterns[j] = patterns[j], patterns[i]
+			}
+		}
+	}
+}
