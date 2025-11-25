@@ -3,6 +3,7 @@ package learning
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -325,6 +326,40 @@ func TestMigrations_TableCreation(t *testing.T) {
 			assert.True(t, exists, "table %s should exist", table)
 		}
 	})
+
+	t.Run("migration 3 creates ingest_offsets table", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Apply all migrations
+		err := store.ApplyMigrations(ctx)
+		require.NoError(t, err)
+
+		// Verify ingest_offsets table exists
+		exists, err := store.tableExists("ingest_offsets")
+		require.NoError(t, err)
+		assert.True(t, exists, "ingest_offsets table should exist")
+
+		// Verify index exists
+		indexExists, err := store.indexExists("idx_ingest_offsets_path")
+		require.NoError(t, err)
+		assert.True(t, indexExists, "idx_ingest_offsets_path index should exist")
+
+		// Verify table structure by inserting test data
+		_, err = store.db.ExecContext(ctx, `
+			INSERT INTO ingest_offsets (file_path, byte_offset, inode, last_line_hash)
+			VALUES (?, ?, ?, ?)
+		`, "/test/file.jsonl", 1024, 12345, "abc123")
+		require.NoError(t, err)
+
+		// Verify unique constraint on file_path
+		_, err = store.db.ExecContext(ctx, `
+			INSERT INTO ingest_offsets (file_path, byte_offset)
+			VALUES (?, ?)
+		`, "/test/file.jsonl", 2048)
+		require.Error(t, err, "should fail on duplicate file_path")
+	})
 }
 
 func TestMigrations_IndexCreation(t *testing.T) {
@@ -351,6 +386,7 @@ func TestMigrations_IndexCreation(t *testing.T) {
 			"idx_file_operations_path",
 			"idx_token_usage_session_id",
 			"idx_token_usage_time",
+			"idx_ingest_offsets_path",
 		}
 
 		for _, index := range indexes {
@@ -422,5 +458,66 @@ func TestMigrations_FreshVsExisting(t *testing.T) {
 		exists, err := store2.tableExists("behavioral_sessions")
 		require.NoError(t, err)
 		assert.True(t, exists)
+	})
+}
+
+func TestWALMode_ConcurrentAccess(t *testing.T) {
+	t.Run("concurrent reads and writes succeed with WAL mode", func(t *testing.T) {
+		dbPath := filepath.Join(t.TempDir(), "wal_concurrent.db")
+		store, err := NewStore(dbPath)
+		require.NoError(t, err)
+		defer store.Close()
+
+		// Verify WAL mode is enabled
+		var journalMode string
+		err = store.db.QueryRow("PRAGMA journal_mode").Scan(&journalMode)
+		require.NoError(t, err)
+		assert.Equal(t, "wal", journalMode)
+
+		// Verify busy_timeout is set
+		var busyTimeout int
+		err = store.db.QueryRow("PRAGMA busy_timeout").Scan(&busyTimeout)
+		require.NoError(t, err)
+		assert.Equal(t, 5000, busyTimeout)
+
+		ctx := context.Background()
+		const iterations = 100
+		errCh := make(chan error, iterations*2)
+
+		// Writer goroutine
+		go func() {
+			for i := 0; i < iterations; i++ {
+				_, err := store.db.ExecContext(ctx, `
+					INSERT INTO task_executions (task_number, task_name, prompt, success)
+					VALUES (?, ?, ?, ?)
+				`, fmt.Sprintf("task_%d", i), "concurrent_test", "test prompt", true)
+				if err != nil {
+					errCh <- fmt.Errorf("write %d: %w", i, err)
+					return
+				}
+			}
+			errCh <- nil
+		}()
+
+		// Reader goroutine
+		go func() {
+			for i := 0; i < iterations; i++ {
+				var count int
+				err := store.db.QueryRowContext(ctx, `
+					SELECT COUNT(*) FROM task_executions WHERE task_name = ?
+				`, "concurrent_test").Scan(&count)
+				if err != nil {
+					errCh <- fmt.Errorf("read %d: %w", i, err)
+					return
+				}
+			}
+			errCh <- nil
+		}()
+
+		// Wait for both goroutines
+		for i := 0; i < 2; i++ {
+			err := <-errCh
+			require.NoError(t, err)
+		}
 	})
 }

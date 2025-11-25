@@ -1,9 +1,14 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/spf13/cobra"
 )
 
@@ -16,6 +21,7 @@ var (
 	observeTimeRange    string
 	observePollInterval string
 	observeLimit        int
+	observeWithIngest   bool
 )
 
 // NewObserveCommand creates the 'conductor observe' parent command
@@ -42,6 +48,7 @@ execution history.`,
 
 	// Add subcommands
 	cmd.AddCommand(NewObserveImportCmd())
+	cmd.AddCommand(NewObserveIngestCmd())
 	cmd.AddCommand(NewObserveProjectCmd())
 	cmd.AddCommand(NewObserveSessionCmd())
 	cmd.AddCommand(NewObserveToolsCmd())
@@ -70,22 +77,170 @@ func observeInteractive(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\nSelected project: %s\n", observeProject)
 	}
 
-	// TODO: After project selection, show session selection or project summary
-	fmt.Println()
-	fmt.Println("Available subcommands:")
-	fmt.Println("  import    - Import behavioral data from JSONL files")
-	fmt.Println("  project   - View project-level metrics")
-	fmt.Println("  session   - Analyze specific session")
-	fmt.Println("  tools     - Tool usage analysis")
-	fmt.Println("  bash      - Bash command analysis")
-	fmt.Println("  files     - File operation analysis")
-	fmt.Println("  errors    - Error analysis and patterns")
-	fmt.Println("  stats     - Display summary statistics")
-	fmt.Println("  stream    - Stream real-time activity")
-	fmt.Println()
-	fmt.Println("Use 'conductor observe <subcommand> --help' for more information")
+	// Run interactive session selection
+	return runInteractiveSessionSelection(observeProject)
+}
 
-	return nil
+// runInteractiveSessionSelection displays project summary and session selection menu
+func runInteractiveSessionSelection(project string) error {
+	return runInteractiveSessionSelectionWithReader(project, &DefaultMenuReader{
+		reader: bufio.NewReader(os.Stdin),
+	})
+}
+
+// runInteractiveSessionSelectionWithReader allows injection of reader for testing
+func runInteractiveSessionSelectionWithReader(project string, reader MenuReader) error {
+	aggregator := behavioral.NewAggregator(50)
+	cyan := color.New(color.FgCyan)
+	bold := color.New(color.Bold)
+	green := color.New(color.FgGreen)
+	yellow := color.New(color.FgYellow)
+	red := color.New(color.FgRed)
+
+	for {
+		// Get sessions for project
+		sessions, err := aggregator.ListSessions(project)
+		if err != nil {
+			return fmt.Errorf("failed to list sessions: %w", err)
+		}
+
+		// Show quick project summary
+		bold.Printf("\n=== Quick Summary ===\n")
+		successCount := 0
+		var lastActivity time.Time
+		for _, s := range sessions {
+			// Approximate success by checking file size (real success detection would require parsing)
+			if s.FileSize > 1000 {
+				successCount++
+			}
+			if s.CreatedAt.After(lastActivity) {
+				lastActivity = s.CreatedAt
+			}
+		}
+		successRate := 0.0
+		if len(sessions) > 0 {
+			successRate = float64(successCount) / float64(len(sessions)) * 100
+		}
+		lastActivityStr := "N/A"
+		if !lastActivity.IsZero() {
+			lastActivityStr = formatTimeAgo(lastActivity)
+		}
+		fmt.Printf("Sessions: %d | Success: %.0f%% | Last: %s\n", len(sessions), successRate, lastActivityStr)
+
+		if len(sessions) == 0 {
+			fmt.Println("\nNo sessions found for this project.")
+			return nil
+		}
+
+		// Show recent sessions (max 10)
+		bold.Printf("\n=== Recent Sessions ===\n")
+		fmt.Println(strings.Repeat("-", 60))
+		displayCount := 10
+		if len(sessions) < displayCount {
+			displayCount = len(sessions)
+		}
+
+		for i := 0; i < displayCount; i++ {
+			session := sessions[i]
+			// Estimate duration from file size (rough heuristic)
+			durationStr := estimateDuration(session.FileSize)
+			// Determine status based on file size (rough heuristic)
+			status := "success"
+			statusColor := green
+			if session.FileSize < 1000 {
+				status = "failed"
+				statusColor = red
+			}
+			timeStr := session.CreatedAt.Format("15:04")
+			shortID := session.SessionID
+			if len(shortID) > 8 {
+				shortID = shortID[:8]
+			}
+
+			fmt.Printf("  %s %-10s %8s  %s  %s\n",
+				yellow.Sprintf("[%d]", i+1),
+				shortID,
+				durationStr,
+				statusColor.Sprint(status),
+				timeStr,
+			)
+		}
+
+		if len(sessions) > displayCount {
+			fmt.Printf("  (showing %d of %d sessions)\n", displayCount, len(sessions))
+		}
+
+		fmt.Println(strings.Repeat("-", 60))
+		cyan.Print("\nEnter session number (or 'q' to quit): ")
+
+		// Read user input
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read input: %w", err)
+		}
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		if input == "q" {
+			fmt.Println("Exiting interactive mode.")
+			return nil
+		}
+
+		// Parse selection
+		var selection int
+		_, err = fmt.Sscanf(input, "%d", &selection)
+		if err != nil || selection < 1 || selection > displayCount {
+			red.Printf("Invalid selection. Please enter 1-%d or 'q' to quit.\n", displayCount)
+			continue
+		}
+
+		// Display selected session
+		selectedSession := sessions[selection-1]
+		fmt.Println()
+		if err := DisplaySessionAnalysis(selectedSession.SessionID, project); err != nil {
+			red.Printf("Error displaying session: %v\n", err)
+		}
+
+		// Prompt to continue
+		cyan.Print("\nPress Enter to return to session list (or 'q' to quit): ")
+		input, err = reader.ReadString('\n')
+		if err != nil {
+			return nil
+		}
+		input = strings.TrimSpace(strings.ToLower(input))
+		if input == "q" {
+			fmt.Println("Exiting interactive mode.")
+			return nil
+		}
+	}
+}
+
+// formatTimeAgo formats a time as "Xh ago", "Xm ago", etc.
+func formatTimeAgo(t time.Time) string {
+	diff := time.Since(t)
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		return fmt.Sprintf("%dm ago", int(diff.Minutes()))
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(diff.Hours()))
+	default:
+		days := int(diff.Hours() / 24)
+		return fmt.Sprintf("%dd ago", days)
+	}
+}
+
+// estimateDuration estimates session duration from file size (rough heuristic)
+func estimateDuration(fileSize int64) string {
+	// Rough estimate: ~1KB per second of activity
+	seconds := fileSize / 1024
+	if seconds < 60 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	if seconds < 3600 {
+		return fmt.Sprintf("%dm %ds", seconds/60, seconds%60)
+	}
+	return fmt.Sprintf("%dh %dm", seconds/3600, (seconds%3600)/60)
 }
 
 // NewObserveProjectCmd creates the 'conductor observe project' subcommand
@@ -100,9 +255,12 @@ func NewObserveProjectCmd() *cobra.Command {
 - Error rates and common issues
 - Agent performance comparison`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Implement project-level analysis
-			fmt.Println("Project-level analysis not yet implemented")
-			return nil
+			// Resolve project name: args[0] > --project flag
+			project := observeProject
+			if len(args) > 0 {
+				project = args[0]
+			}
+			return DisplayProjectAnalysis(project, observeLimit)
 		},
 	}
 	return cmd
@@ -121,9 +279,14 @@ func NewObserveSessionCmd() *cobra.Command {
 - Token usage and cost
 - Errors and issues`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Implement session analysis
-			fmt.Println("Session analysis not yet implemented")
-			return nil
+			// Session ID is required
+			if len(args) == 0 {
+				return fmt.Errorf("session ID is required")
+			}
+			sessionID := args[0]
+
+			// Project is optional (from --project flag)
+			return DisplaySessionAnalysis(sessionID, observeProject)
 		},
 	}
 	return cmd
@@ -226,7 +389,10 @@ func NewObserveStreamCmd() *cobra.Command {
 		Short: "Stream real-time activity",
 		Long: `Watch and display agent activity in real-time, like 'tail -f'.
 Polls the behavioral database for new sessions and displays them as they occur.
-Only shows activity that occurs after the command starts.`,
+Only shows activity that occurs after the command starts.
+
+With --with-ingest flag, spawns an ingestion daemon for real-time JSONL processing,
+enabling live data to appear in the stream as events occur.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
@@ -236,9 +402,13 @@ Only shows activity that occurs after the command starts.`,
 				return fmt.Errorf("invalid poll-interval: %w", err)
 			}
 
-			return StreamActivity(ctx, observeProject, pollInterval)
+			return StreamActivity(ctx, observeProject, pollInterval, observeWithIngest)
 		},
 	}
+
+	cmd.Flags().BoolVar(&observeWithIngest, "with-ingest", false,
+		"Spawn ingestion daemon for real-time JSONL processing")
+
 	return cmd
 }
 

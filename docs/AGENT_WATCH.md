@@ -8,6 +8,7 @@ Agent Watch provides comprehensive observability into Claude Code agent behavior
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Command Reference](#command-reference)
+- [Real-Time Streaming](#real-time-streaming)
 - [Filtering](#filtering)
 - [Export Formats](#export-formats)
 - [Analytics Features](#analytics-features)
@@ -196,9 +197,19 @@ Stream real-time activity.
 ```bash
 conductor observe stream
 conductor observe stream --project myapp
+conductor observe stream --with-ingest  # Spawn ingestion daemon for live data
 ```
 
 Polls the database every 2 seconds for new sessions and displays them as they occur.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--with-ingest` | | false | Spawn ingestion daemon for real-time JSONL processing |
+| `--poll-interval` | | 2s | Polling interval (e.g., 1s, 500ms) |
+
+With `--with-ingest`, the stream command spawns an ingestion daemon that processes JSONL files from `~/.claude/projects/` in real-time, so new agent activity appears immediately in the stream.
 
 ### `conductor observe export`
 
@@ -217,6 +228,77 @@ conductor observe export --format json  # Output to stdout
 |------|-------|---------|-------------|
 | `--format` | `-f` | json | Export format: json, markdown (or md), csv |
 | `--output` | `-o` | (stdout) | Output file path |
+
+## Real-Time Streaming
+
+Agent Watch supports real-time ingestion of JSONL files as they are written by Claude Code agents.
+
+### `conductor observe ingest`
+
+Run the ingestion daemon to continuously import JSONL files from `~/.claude/projects/`.
+
+```bash
+# One-time import of all existing files
+conductor observe ingest
+
+# Run as daemon, watching for new files and changes
+conductor observe ingest --watch
+
+# Custom batch size and flush interval
+conductor observe ingest --watch --batch-size 100 --batch-timeout 1s
+
+# Verbose output showing progress
+conductor observe ingest --watch --verbose
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--watch` | | false | Run as daemon (default: one-time import) |
+| `--batch-size` | | 50 | Events per batch before flush |
+| `--batch-timeout` | | 500ms | Maximum time between batch flushes |
+| `--root-dir` | | `~/.claude/projects` | Override Claude projects directory |
+| `--verbose` | `-v` | false | Show detailed progress |
+
+### How It Works
+
+The ingestion daemon:
+
+1. **File Discovery**: Scans `~/.claude/projects/` recursively for `*.jsonl` files
+2. **Offset Tracking**: Tracks byte offsets per file for incremental reads (never re-reads processed data)
+3. **Batched Writes**: Accumulates events and writes in batches for efficiency
+4. **File Watching**: Uses fsnotify to detect new files and modifications in real-time
+5. **Graceful Shutdown**: Flushes pending events on SIGINT/SIGTERM
+
+### Live Monitoring Workflow
+
+```bash
+# Terminal 1: Start the ingestion daemon
+conductor observe ingest --watch --verbose
+
+# Terminal 2: Stream real-time activity from ingested data
+conductor observe stream
+
+# Terminal 3: Run Claude Code - activity appears in real-time
+claude -p "implement a feature"
+```
+
+### Output Example
+
+```
+Ingestion daemon started, watching /Users/you/.claude/projects
+Press Ctrl+C to stop...
+
+==================================================
+Ingestion Summary
+==================================================
+Files Tracked:     42
+Events Processed:  1,847
+Sessions Created:  15
+Errors:            0
+Uptime:            5m32.100s
+```
 
 ## Filtering
 
@@ -456,6 +538,67 @@ Error: failed to write temporary file: permission denied
 ```
 
 **Solution**: Ensure write permissions to output directory or use stdout.
+
+### Ingestion Daemon Issues
+
+#### Lock File Errors
+
+```
+Error: failed to acquire lock: /path/to/.conductor/ingest.lock
+```
+
+**Solution**: Another ingestion daemon may be running. Check for existing processes:
+```bash
+ps aux | grep "conductor observe ingest"
+```
+If no process is found, the lock file may be stale. Remove it:
+```bash
+rm ~/.conductor/ingest.lock
+```
+
+#### Permission Errors on Claude Projects
+
+```
+Error: root directory does not exist: /Users/you/.claude/projects
+```
+
+**Solution**: Ensure Claude Code has been used at least once to create the projects directory. Run any Claude command first:
+```bash
+claude --version
+```
+
+#### No Events Processed
+
+If `Events Processed: 0` after running the ingestion daemon:
+
+1. **Check file pattern**: Ensure JSONL files exist in the target directory
+   ```bash
+   find ~/.claude/projects -name "*.jsonl" | head -5
+   ```
+
+2. **Check file permissions**: Ensure read access to JSONL files
+   ```bash
+   ls -la ~/.claude/projects/*/
+   ```
+
+3. **Enable verbose mode**: See what files are being discovered
+   ```bash
+   conductor observe ingest --verbose
+   ```
+
+#### Database Lock Errors (WAL Mode)
+
+```
+Error: database is locked
+```
+
+**Solution**: The SQLite database uses WAL (Write-Ahead Logging) mode for concurrent access. If you see lock errors:
+
+1. Ensure only one write process at a time (one ingestion daemon)
+2. Check for zombie processes holding locks
+3. Wait for other conductor commands to complete
+
+The database automatically recovers from most lock scenarios.
 
 ## Integration with QC
 

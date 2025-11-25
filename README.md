@@ -115,6 +115,8 @@ Conductor automates complex multi-step implementations by:
   - Pattern detection, failure prediction, performance scoring
   - Export to JSON/Markdown/CSV formats
   - Integration with learning system for comprehensive analytics
+  - **Real-time streaming** with `observe ingest --watch` daemon
+  - Incremental file processing with offset tracking
 - **JSON Schema Enforcement** (v2.8+): Guaranteed response structure
   - Uses Claude CLI `--json-schema` flag for agent/QC responses
   - Eliminates parse failures and retry logic
@@ -129,6 +131,21 @@ Conductor automates complex multi-step implementations by:
 - **Claude Code CLI** in your PATH (`claude` command available)
 - Claude Code authenticated and configured
 - **Go 1.21+** (optional, only needed for building from source)
+
+### Live Monitoring (Quick Start)
+
+Monitor Claude Code activity in real-time:
+
+```bash
+# Terminal 1: Start the ingestion daemon
+conductor observe ingest --watch
+
+# Terminal 2: Stream live activity
+conductor observe stream
+
+# Terminal 3: Use Claude Code normally
+claude -p "implement my feature"
+```
 
 ### Installation
 
@@ -841,6 +858,7 @@ Conductor is feature-complete with:
   - JSONL session parsing from `~/.claude/projects/`
   - Pattern detection and failure prediction
   - Export to JSON/Markdown/CSV
+  - Real-time ingestion daemon (`observe ingest --watch`)
 - **JSON schema enforcement** (v2.8)
   - Uses Claude CLI `--json-schema` flag
   - Guaranteed valid agent/QC responses

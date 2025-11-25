@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 )
@@ -123,7 +126,7 @@ func truncateString(s string, maxLen int) string {
 }
 
 // StreamActivity streams real-time activity from the behavioral database, like `tail -f`
-func StreamActivity(ctx context.Context, project string, pollInterval time.Duration) error {
+func StreamActivity(ctx context.Context, project string, pollInterval time.Duration, withIngest bool) error {
 	// Load config to get DB path
 	cfg, err := config.LoadConfigFromDir(".")
 	if err != nil {
@@ -136,6 +139,21 @@ func StreamActivity(ctx context.Context, project string, pollInterval time.Durat
 		return fmt.Errorf("open learning store: %w", err)
 	}
 	defer store.Close()
+
+	// Optionally start ingestion daemon
+	var engine *behavioral.IngestionEngine
+	if withIngest {
+		engine, err = startIngestionDaemon(ctx, store)
+		if err != nil {
+			return fmt.Errorf("start ingestion daemon: %w", err)
+		}
+		defer func() {
+			if stopErr := engine.Stop(); stopErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: error stopping ingestion engine: %v\n", stopErr)
+			}
+		}()
+		fmt.Println("Ingestion daemon started for live JSONL processing")
+	}
 
 	// Get the maximum session ID to skip historical data
 	lastSeenID, err := getMaxSessionID(store, project)
@@ -170,6 +188,42 @@ func StreamActivity(ctx context.Context, project string, pollInterval time.Durat
 			}
 		}
 	}
+}
+
+// startIngestionDaemon initializes and starts the ingestion engine
+func startIngestionDaemon(ctx context.Context, store *learning.Store) (*behavioral.IngestionEngine, error) {
+	// Determine root directory for JSONL files
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("get home directory: %w", err)
+	}
+	rootDir := filepath.Join(homeDir, ".claude", "projects")
+
+	// Verify root directory exists
+	if _, err := os.Stat(rootDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("root directory does not exist: %s", rootDir)
+	}
+
+	// Configure ingestion engine
+	cfg := behavioral.IngestionConfig{
+		RootDir:      rootDir,
+		Pattern:      "*.jsonl",
+		BatchSize:    50,
+		BatchTimeout: 500 * time.Millisecond,
+	}
+
+	// Create ingestion engine
+	engine, err := behavioral.NewIngestionEngine(store, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create ingestion engine: %w", err)
+	}
+
+	// Start the engine in a goroutine (non-blocking)
+	if err := engine.Start(ctx); err != nil {
+		return nil, fmt.Errorf("start ingestion engine: %w", err)
+	}
+
+	return engine, nil
 }
 
 // getMaxSessionID returns the current maximum session ID to avoid showing historical data

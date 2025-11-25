@@ -152,6 +152,37 @@ CREATE INDEX IF NOT EXISTS idx_token_usage_session_id ON token_usage(session_id)
 CREATE INDEX IF NOT EXISTS idx_token_usage_time ON token_usage(measurement_time DESC);
 `,
 	},
+	{
+		Version:     3,
+		Description: "Add ingest_offsets for JSONL file tracking",
+		SQL: `
+-- Ingest offsets table for tracking JSONL file read positions
+CREATE TABLE IF NOT EXISTS ingest_offsets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path TEXT NOT NULL UNIQUE,
+    byte_offset INTEGER NOT NULL DEFAULT 0,
+    inode INTEGER,
+    last_line_hash TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_offsets_path ON ingest_offsets(file_path);
+`,
+	},
+	{
+		Version:     4,
+		Description: "Add external_session_id for Claude session correlation",
+		// This migration adds columns to behavioral_sessions for incremental ingestion.
+		// The actual ALTER TABLE statements are handled by ApplyMigrations() using
+		// addColumnIfNotExists() to ensure idempotency.
+		SQL: `
+-- Create unique index for idempotent upserts by external session ID
+CREATE UNIQUE INDEX IF NOT EXISTS idx_behavioral_sessions_external_id ON behavioral_sessions(external_session_id);
+
+-- Index for project-based queries
+CREATE INDEX IF NOT EXISTS idx_behavioral_sessions_project ON behavioral_sessions(project_path);
+`,
+	},
 }
 
 // MigrationVersion represents a record of an applied migration
@@ -185,15 +216,82 @@ func (s *Store) ApplyMigrations(ctx context.Context) error {
 			continue
 		}
 
-		// Execute migration SQL
-		if _, err := s.db.ExecContext(ctx, migration.SQL); err != nil {
-			return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
+		// Handle migration 4 special case: add columns idempotently
+		if migration.Version == 4 {
+			if err := s.applyMigration4(ctx); err != nil {
+				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
+			}
+		}
+
+		// Execute migration SQL (indexes are IF NOT EXISTS, safe to re-run)
+		if migration.SQL != "" {
+			if _, err := s.db.ExecContext(ctx, migration.SQL); err != nil {
+				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
+			}
 		}
 
 		// Record migration as applied
 		if err := s.recordMigration(ctx, migration.Version); err != nil {
 			return fmt.Errorf("record migration %d: %w", migration.Version, err)
 		}
+	}
+
+	return nil
+}
+
+// applyMigration4 adds columns for external session correlation idempotently.
+// SQLite doesn't support ADD COLUMN IF NOT EXISTS, so we check first.
+func (s *Store) applyMigration4(ctx context.Context) error {
+	columns := []struct {
+		name string
+		def  string
+	}{
+		{"external_session_id", "TEXT"},
+		{"project_path", "TEXT"},
+		{"agent_type", "TEXT"},
+	}
+
+	for _, col := range columns {
+		if err := s.addColumnIfNotExists(ctx, "behavioral_sessions", col.name, col.def); err != nil {
+			return fmt.Errorf("add column %s: %w", col.name, err)
+		}
+	}
+
+	return nil
+}
+
+// addColumnIfNotExists adds a column to a table if it doesn't already exist.
+func (s *Store) addColumnIfNotExists(ctx context.Context, table, column, definition string) error {
+	// Check if column exists using PRAGMA table_info
+	query := fmt.Sprintf("PRAGMA table_info(%s)", table)
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("query table info: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dfltValue interface{}
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return fmt.Errorf("scan table info: %w", err)
+		}
+		if name == column {
+			// Column already exists
+			return nil
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate table info: %w", err)
+	}
+
+	// Column doesn't exist, add it
+	alterSQL := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)
+	if _, err := s.db.ExecContext(ctx, alterSQL); err != nil {
+		return fmt.Errorf("alter table: %w", err)
 	}
 
 	return nil

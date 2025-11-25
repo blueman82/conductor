@@ -77,6 +77,20 @@ func openAndInitStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
+	// Configure SQLite for concurrent access (WAL mode)
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA cache_size=-64000", // 64MB cache
+	}
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("set %s: %w", pragma, err)
+		}
+	}
+
 	store := &Store{
 		db:     db,
 		dbPath: dbPath,
@@ -1513,4 +1527,338 @@ func sortErrorPatterns(patterns []ErrorPattern) {
 			}
 		}
 	}
+}
+
+// IngestOffset tracks read position for a JSONL file
+type IngestOffset struct {
+	ID           int64
+	FilePath     string
+	ByteOffset   int64
+	Inode        uint64
+	LastLineHash string
+	UpdatedAt    time.Time
+}
+
+// GetFileOffset retrieves the tracking offset for a specific file.
+// Returns (nil, nil) if the file is not being tracked.
+func (s *Store) GetFileOffset(ctx context.Context, filePath string) (*IngestOffset, error) {
+	query := `SELECT id, file_path, byte_offset, inode, last_line_hash, updated_at
+		FROM ingest_offsets WHERE file_path = ?`
+
+	row := s.db.QueryRowContext(ctx, query, filePath)
+
+	offset := &IngestOffset{}
+	var inode sql.NullInt64
+	var lastLineHash sql.NullString
+
+	err := row.Scan(
+		&offset.ID,
+		&offset.FilePath,
+		&offset.ByteOffset,
+		&inode,
+		&lastLineHash,
+		&offset.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query file offset: %w", err)
+	}
+
+	if inode.Valid {
+		offset.Inode = uint64(inode.Int64)
+	}
+	if lastLineHash.Valid {
+		offset.LastLineHash = lastLineHash.String
+	}
+
+	return offset, nil
+}
+
+// SetFileOffset creates or updates the tracking offset for a file.
+// Uses INSERT OR REPLACE for atomic upsert based on UNIQUE file_path constraint.
+func (s *Store) SetFileOffset(ctx context.Context, offset *IngestOffset) error {
+	query := `INSERT OR REPLACE INTO ingest_offsets
+		(file_path, byte_offset, inode, last_line_hash, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
+
+	result, err := s.db.ExecContext(ctx, query,
+		offset.FilePath,
+		offset.ByteOffset,
+		offset.Inode,
+		offset.LastLineHash,
+	)
+	if err != nil {
+		return fmt.Errorf("set file offset: %w", err)
+	}
+
+	// Get the inserted/updated ID
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("get last insert id: %w", err)
+	}
+	offset.ID = id
+
+	return nil
+}
+
+// DeleteFileOffset removes the tracking offset for a specific file.
+func (s *Store) DeleteFileOffset(ctx context.Context, filePath string) error {
+	query := `DELETE FROM ingest_offsets WHERE file_path = ?`
+
+	_, err := s.db.ExecContext(ctx, query, filePath)
+	if err != nil {
+		return fmt.Errorf("delete file offset: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertClaudeSession creates or updates a session by external ID.
+// Returns internal session_id and whether a new session was created.
+// Uses INSERT OR IGNORE + SELECT pattern for idempotent upserts.
+func (s *Store) UpsertClaudeSession(ctx context.Context,
+	externalID string,
+	projectPath string,
+	agentType string,
+) (sessionID int64, isNew bool, err error) {
+	// Try to insert new session (will be ignored if external_session_id already exists)
+	insertQuery := `INSERT OR IGNORE INTO behavioral_sessions
+		(external_session_id, project_path, agent_type, session_start, task_execution_id,
+		 total_tool_calls, total_bash_commands, total_file_operations, total_tokens_used, context_window_used)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0, 0, 0, 0, 0, 0)`
+
+	result, err := s.db.ExecContext(ctx, insertQuery, externalID, projectPath, agentType)
+	if err != nil {
+		return 0, false, fmt.Errorf("insert session: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, false, fmt.Errorf("get rows affected: %w", err)
+	}
+	isNew = rowsAffected > 0
+
+	// Always SELECT to get the session ID (whether just inserted or existing)
+	selectQuery := `SELECT id FROM behavioral_sessions WHERE external_session_id = ?`
+	err = s.db.QueryRowContext(ctx, selectQuery, externalID).Scan(&sessionID)
+	if err != nil {
+		return 0, false, fmt.Errorf("get session id: %w", err)
+	}
+
+	return sessionID, isNew, nil
+}
+
+// AppendToolExecution adds a tool execution to an existing session.
+// Single INSERT, no transaction needed.
+func (s *Store) AppendToolExecution(ctx context.Context,
+	sessionID int64,
+	tool ToolExecutionData,
+) error {
+	query := `INSERT INTO tool_executions
+		(session_id, tool_name, parameters, duration_ms, success, error_message)
+		VALUES (?, ?, ?, ?, ?, ?)`
+
+	_, err := s.db.ExecContext(ctx, query,
+		sessionID, tool.ToolName, tool.Parameters,
+		tool.DurationMs, tool.Success, tool.ErrorMessage)
+	if err != nil {
+		return fmt.Errorf("append tool execution: %w", err)
+	}
+
+	return nil
+}
+
+// AppendBashCommand adds a bash command to an existing session.
+// Single INSERT, no transaction needed.
+func (s *Store) AppendBashCommand(ctx context.Context,
+	sessionID int64,
+	bash BashCommandData,
+) error {
+	query := `INSERT INTO bash_commands
+		(session_id, command, duration_ms, exit_code, stdout_length, stderr_length, success)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	_, err := s.db.ExecContext(ctx, query,
+		sessionID, bash.Command, bash.DurationMs,
+		bash.ExitCode, bash.StdoutLength, bash.StderrLength, bash.Success)
+	if err != nil {
+		return fmt.Errorf("append bash command: %w", err)
+	}
+
+	return nil
+}
+
+// AppendFileOperation adds a file operation to an existing session.
+// Single INSERT, no transaction needed.
+func (s *Store) AppendFileOperation(ctx context.Context,
+	sessionID int64,
+	fileOp FileOperationData,
+) error {
+	query := `INSERT INTO file_operations
+		(session_id, operation_type, file_path, duration_ms, bytes_affected, success, error_message)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	_, err := s.db.ExecContext(ctx, query,
+		sessionID, fileOp.OperationType, fileOp.FilePath,
+		fileOp.DurationMs, fileOp.BytesAffected, fileOp.Success, fileOp.ErrorMessage)
+	if err != nil {
+		return fmt.Errorf("append file operation: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateSessionAggregates updates session totals (tokens, duration).
+// Increments existing values atomically.
+func (s *Store) UpdateSessionAggregates(ctx context.Context,
+	sessionID int64,
+	tokens int64,
+	duration int64,
+) error {
+	query := `UPDATE behavioral_sessions SET
+		total_tokens_used = total_tokens_used + ?,
+		total_duration_seconds = COALESCE(total_duration_seconds, 0) + ?
+		WHERE id = ?`
+
+	result, err := s.db.ExecContext(ctx, query, tokens, duration, sessionID)
+	if err != nil {
+		return fmt.Errorf("update session aggregates: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("session not found: %d", sessionID)
+	}
+
+	return nil
+}
+
+// ListFileOffsets retrieves all tracked file offsets.
+func (s *Store) ListFileOffsets(ctx context.Context) ([]*IngestOffset, error) {
+	query := `SELECT id, file_path, byte_offset, inode, last_line_hash, updated_at
+		FROM ingest_offsets ORDER BY file_path ASC`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query file offsets: %w", err)
+	}
+	defer rows.Close()
+
+	var offsets []*IngestOffset
+	for rows.Next() {
+		offset := &IngestOffset{}
+		var inode sql.NullInt64
+		var lastLineHash sql.NullString
+
+		err := rows.Scan(
+			&offset.ID,
+			&offset.FilePath,
+			&offset.ByteOffset,
+			&inode,
+			&lastLineHash,
+			&offset.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan file offset row: %w", err)
+		}
+
+		if inode.Valid {
+			offset.Inode = uint64(inode.Int64)
+		}
+		if lastLineHash.Valid {
+			offset.LastLineHash = lastLineHash.String
+		}
+
+		offsets = append(offsets, offset)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate file offset rows: %w", err)
+	}
+
+	return offsets, nil
+}
+
+// RecentSession represents a recent session entry for display
+type RecentSession struct {
+	ID           int64
+	TaskName     string
+	Agent        string
+	Success      bool
+	DurationSecs int64
+	Timestamp    time.Time
+}
+
+// GetRecentSessions returns recent sessions for a project, ordered by timestamp descending
+func (s *Store) GetRecentSessions(ctx context.Context, project string, limit, offset int) ([]RecentSession, error) {
+	query := `
+		SELECT
+			bs.id,
+			te.task_name,
+			te.agent,
+			te.success,
+			bs.total_duration_seconds,
+			bs.session_start
+		FROM behavioral_sessions bs
+		JOIN task_executions te ON bs.task_execution_id = te.id
+	`
+
+	args := []interface{}{}
+
+	if project != "" {
+		query += " WHERE te.plan_file LIKE ?"
+		args = append(args, "%"+project+"%")
+	}
+
+	query += " ORDER BY bs.session_start DESC"
+
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query recent sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []RecentSession
+	for rows.Next() {
+		var rs RecentSession
+		var agent sql.NullString
+		var durationSecs sql.NullInt64
+
+		if err := rows.Scan(
+			&rs.ID,
+			&rs.TaskName,
+			&agent,
+			&rs.Success,
+			&durationSecs,
+			&rs.Timestamp,
+		); err != nil {
+			return nil, fmt.Errorf("scan recent session row: %w", err)
+		}
+
+		if agent.Valid {
+			rs.Agent = agent.String
+		}
+		if durationSecs.Valid {
+			rs.DurationSecs = durationSecs.Int64
+		}
+
+		sessions = append(sessions, rs)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recent sessions: %w", err)
+	}
+
+	return sessions, nil
 }

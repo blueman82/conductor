@@ -294,7 +294,25 @@ conductor observe files        # File operation analysis
 conductor observe errors       # Error pattern analysis
 conductor observe project      # Project-level metrics
 conductor observe session      # Session-specific analysis
+conductor observe ingest       # Real-time JSONL ingestion daemon
 ```
+
+### Real-Time Ingestion
+
+```bash
+conductor observe ingest                      # One-time import of all files
+conductor observe ingest --watch              # Run as daemon, watch for changes
+conductor observe ingest --watch --verbose    # Verbose daemon mode
+conductor observe ingest --batch-size 100     # Custom batch size
+conductor observe ingest --batch-timeout 1s   # Custom flush interval
+```
+
+The ingestion daemon:
+- Watches `~/.claude/projects/` for JSONL files
+- Tracks byte offsets for incremental reads (never re-reads data)
+- Uses batched writes for efficient database operations
+- Handles graceful shutdown (flushes pending events)
+- Uses WAL mode for concurrent read/write access
 
 ### Filtering
 

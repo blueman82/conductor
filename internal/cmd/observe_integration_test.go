@@ -122,7 +122,7 @@ func TestObserveIntegration_Streaming(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer cancel()
 
-		err := StreamActivity(ctx, "test-project", 2*time.Second)
+		err := StreamActivity(ctx, "test-project", 2*time.Second, false)
 		_ = err
 	})
 
@@ -130,7 +130,7 @@ func TestObserveIntegration_Streaming(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 
-		err := StreamActivity(ctx, "", 2*time.Second)
+		err := StreamActivity(ctx, "", 2*time.Second, false)
 		_ = err
 	})
 }
@@ -325,7 +325,7 @@ func TestObserveIntegration_ContextCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		err := StreamActivity(ctx, "", 2*time.Second)
+		err := StreamActivity(ctx, "", 2*time.Second, false)
 		_ = err // Expected to return due to cancellation
 	})
 }
@@ -615,11 +615,13 @@ func TestObserveIntegration_FormatStatsWithData(t *testing.T) {
 
 // TestObserveIntegration_ObserveInteractiveWithProject tests interactive mode variations
 func TestObserveIntegration_ObserveInteractiveWithProject(t *testing.T) {
-	t.Run("interactive with project flag", func(t *testing.T) {
-		observeProject = "test-project"
+	t.Run("interactive with nonexistent project flag expects error", func(t *testing.T) {
+		observeProject = "test-project-nonexistent"
 		cmd := &cobra.Command{}
 		err := observeInteractive(cmd, []string{})
-		assert.NoError(t, err)
+		// With interactive session selection, nonexistent project returns error
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to list sessions")
 		observeProject = ""
 	})
 }
@@ -941,14 +943,14 @@ func TestObserveIntegration_StreamActivityWithConfig(t *testing.T) {
 	t.Run("stream fails with no config", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer cancel()
-		err := StreamActivity(ctx, "", 2*time.Second)
+		err := StreamActivity(ctx, "", 2*time.Second, false)
 		assert.Error(t, err)
 	})
 
 	t.Run("stream with project fails with no config", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer cancel()
-		err := StreamActivity(ctx, "test-project", 2*time.Second)
+		err := StreamActivity(ctx, "test-project", 2*time.Second, false)
 		assert.Error(t, err)
 	})
 }
