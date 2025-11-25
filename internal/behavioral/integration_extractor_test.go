@@ -177,8 +177,8 @@ func TestExtractMetricsWithDiscovery(t *testing.T) {
 	}
 
 	// Create test session file
-	sessionFile := filepath.Join(projectDir, "agent-12345678-1234-1234-1234-123456789abc.jsonl")
-	content := `{"type":"session_metadata","id":"12345678-1234-1234-1234-123456789abc","project":"test-project","timestamp":"2024-01-01T12:00:00Z","status":"completed","agent_name":"general-agent","duration":10000,"success":true,"error_count":0}
+	sessionFile := filepath.Join(projectDir, "agent-12345678.jsonl")
+	content := `{"type":"session_metadata","id":"12345678","project":"test-project","timestamp":"2024-01-01T12:00:00Z","status":"completed","agent_name":"general-agent","duration":10000,"success":true,"error_count":0}
 {"type":"tool_call","timestamp":"2024-01-01T12:00:01Z","tool_name":"Read","parameters":{},"result":"success","success":true,"duration":100}
 {"type":"token_usage","timestamp":"2024-01-01T12:00:02Z","input_tokens":1000,"output_tokens":500,"cost_usd":0.0105,"model_name":"claude-sonnet-4-5"}
 `
@@ -198,8 +198,8 @@ func TestExtractMetricsWithDiscovery(t *testing.T) {
 	}
 
 	session := sessions[0]
-	if session.SessionID != "12345678-1234-1234-1234-123456789abc" {
-		t.Errorf("expected session ID '12345678-1234-1234-1234-123456789abc', got %s", session.SessionID)
+	if session.SessionID != "12345678" {
+		t.Errorf("expected session ID '12345678', got %s", session.SessionID)
 	}
 
 	// Parse the discovered session

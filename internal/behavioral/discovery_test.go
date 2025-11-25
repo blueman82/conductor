@@ -14,13 +14,13 @@ func TestIsValidSessionFile(t *testing.T) {
 		want     bool
 	}{
 		{
-			name:     "valid session file",
-			filename: "agent-12345678-1234-1234-1234-123456789abc.jsonl",
+			name:     "valid session file short hex",
+			filename: "agent-12345678.jsonl",
 			want:     true,
 		},
 		{
-			name:     "valid session file uppercase UUID",
-			filename: "agent-ABCDEF12-ABCD-ABCD-ABCD-ABCDEFABCDEF.jsonl",
+			name:     "valid session file uppercase hex",
+			filename: "agent-ABCDEF12.jsonl",
 			want:     true,
 		},
 		{
@@ -29,18 +29,18 @@ func TestIsValidSessionFile(t *testing.T) {
 			want:     false,
 		},
 		{
-			name:     "invalid UUID format",
-			filename: "agent-12345678-1234-1234-123456789abc.jsonl",
+			name:     "invalid hex format",
+			filename: "agent-12345678-invalid.jsonl",
 			want:     false,
 		},
 		{
 			name:     "wrong extension",
-			filename: "agent-12345678-1234-1234-1234-123456789abc.json",
+			filename: "agent-12345678.json",
 			want:     false,
 		},
 		{
 			name:     "no extension",
-			filename: "agent-12345678-1234-1234-1234-123456789abc",
+			filename: "agent-12345678",
 			want:     false,
 		},
 		{
@@ -73,15 +73,15 @@ func TestExtractSessionID(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "valid lowercase UUID",
-			filename: "agent-12345678-1234-1234-1234-123456789abc.jsonl",
-			want:     "12345678-1234-1234-1234-123456789abc",
+			name:     "valid lowercase hex",
+			filename: "agent-12345678.jsonl",
+			want:     "12345678",
 			wantErr:  false,
 		},
 		{
-			name:     "valid uppercase UUID",
-			filename: "agent-ABCDEF12-ABCD-ABCD-ABCD-ABCDEFABCDEF.jsonl",
-			want:     "ABCDEF12-ABCD-ABCD-ABCD-ABCDEFABCDEF",
+			name:     "valid uppercase hex",
+			filename: "agent-ABCDEF12.jsonl",
+			want:     "ABCDEF12",
 			wantErr:  false,
 		},
 		{
@@ -92,7 +92,7 @@ func TestExtractSessionID(t *testing.T) {
 		},
 		{
 			name:     "wrong prefix",
-			filename: "session-12345678-1234-1234-1234-123456789abc.jsonl",
+			filename: "session-12345678.jsonl",
 			want:     "",
 			wantErr:  true,
 		},
@@ -172,7 +172,7 @@ func TestParseSessionPath(t *testing.T) {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
 
-	filename := "agent-12345678-1234-1234-1234-123456789abc.jsonl"
+	filename := "agent-12345678.jsonl"
 	testFile := filepath.Join(projectDir, filename)
 
 	// Create test file
@@ -199,8 +199,8 @@ func TestParseSessionPath(t *testing.T) {
 	if sessionInfo.Filename != filename {
 		t.Errorf("Filename = %v, want %v", sessionInfo.Filename, filename)
 	}
-	if sessionInfo.SessionID != "12345678-1234-1234-1234-123456789abc" {
-		t.Errorf("SessionID = %v, want 12345678-1234-1234-1234-123456789abc", sessionInfo.SessionID)
+	if sessionInfo.SessionID != "12345678" {
+		t.Errorf("SessionID = %v, want 12345678", sessionInfo.SessionID)
 	}
 	if sessionInfo.FileSize != 4 {
 		t.Errorf("FileSize = %v, want 4", sessionInfo.FileSize)
@@ -223,9 +223,9 @@ func TestDiscoverProjectSessions(t *testing.T) {
 
 	// Create test session files
 	sessions := []string{
-		"agent-11111111-1111-1111-1111-111111111111.jsonl",
-		"agent-22222222-2222-2222-2222-222222222222.jsonl",
-		"agent-33333333-3333-3333-3333-333333333333.jsonl",
+		"agent-11111111.jsonl",
+		"agent-22222222.jsonl",
+		"agent-33333333.jsonl",
 	}
 
 	for i, session := range sessions {
@@ -245,7 +245,7 @@ func TestDiscoverProjectSessions(t *testing.T) {
 	invalidFiles := []string{
 		"README.md",
 		"invalid.jsonl",
-		"session-12345678-1234-1234-1234-123456789abc.jsonl",
+		"session-12345678.jsonl",
 	}
 	for _, invalid := range invalidFiles {
 		testFile := filepath.Join(projectDir, invalid)
@@ -313,7 +313,7 @@ func TestDiscoverSessions(t *testing.T) {
 		// Create 2 session files per project
 		for i := 1; i <= 2; i++ {
 			validFilename := filepath.Join(projectDir,
-				"agent-12345678-1234-1234-1234-12345678900"+string(rune('0'+i))+".jsonl")
+				"agent-1234567"+string(rune('0'+i))+".jsonl")
 			if err := os.WriteFile(validFilename, []byte("test"), 0644); err != nil {
 				t.Fatalf("Failed to create test file: %v", err)
 			}

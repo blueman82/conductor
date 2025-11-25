@@ -317,10 +317,10 @@ func TestAggregator_GetProjectMetrics(t *testing.T) {
 		t.Fatalf("failed to create project dir: %v", err)
 	}
 
-	// Create multiple session files with valid UUID filenames
+	// Create multiple session files with valid hex filenames
 	sessions := []string{
-		"agent-11111111-1111-1111-1111-111111111111.jsonl",
-		"agent-22222222-2222-2222-2222-222222222222.jsonl",
+		"agent-11111111.jsonl",
+		"agent-22222222.jsonl",
 	}
 
 	for i, filename := range sessions {
@@ -329,7 +329,7 @@ func TestAggregator_GetProjectMetrics(t *testing.T) {
 		if i == 1 {
 			success = "false"
 		}
-		sessionContent := `{"type":"session_start","session_id":"` + filename[6:42] + `","project":"test-project","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":` + success + `}
+		sessionContent := `{"type":"session_start","session_id":"` + filename[6:14] + `","project":"test-project","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":` + success + `}
 {"type":"tool_call","tool_name":"Read","timestamp":"2024-01-15T10:01:00Z","success":true,"duration":100}
 {"type":"token_usage","timestamp":"2024-01-15T10:02:00Z","input_tokens":1000,"output_tokens":500,"cost_usd":0.01}
 `
@@ -366,7 +366,7 @@ func TestAggregator_GetSessionMetrics(t *testing.T) {
 		t.Fatalf("failed to create project dir: %v", err)
 	}
 
-	sessionID := "11111111-1111-1111-1111-111111111111"
+	sessionID := "11111111"
 	sessionFile := filepath.Join(projectDir, "agent-"+sessionID+".jsonl")
 	sessionContent := `{"type":"session_start","session_id":"` + sessionID + `","project":"test-project","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":true}
 {"type":"tool_call","tool_name":"Read","timestamp":"2024-01-15T10:01:00Z","success":true,"duration":100}
@@ -394,10 +394,10 @@ func TestAggregator_ListSessions(t *testing.T) {
 		t.Fatalf("failed to create project dir: %v", err)
 	}
 
-	// Create session files with valid UUID filenames
+	// Create session files with valid hex filenames
 	sessions := []string{
-		"agent-11111111-1111-1111-1111-111111111111.jsonl",
-		"agent-22222222-2222-2222-2222-222222222222.jsonl",
+		"agent-11111111.jsonl",
+		"agent-22222222.jsonl",
 	}
 
 	for _, filename := range sessions {
@@ -447,15 +447,15 @@ func TestAggregator_ListSessionsFiltered(t *testing.T) {
 		filename  string
 		timestamp time.Time
 	}{
-		{"agent-11111111-1111-1111-1111-111111111111.jsonl", now.Add(-48 * time.Hour)}, // 2 days ago
-		{"agent-22222222-2222-2222-2222-222222222222.jsonl", now.Add(-24 * time.Hour)}, // 1 day ago
-		{"agent-33333333-3333-3333-3333-333333333333.jsonl", now.Add(-1 * time.Hour)},  // 1 hour ago
+		{"agent-11111111.jsonl", now.Add(-48 * time.Hour)}, // 2 days ago
+		{"agent-22222222.jsonl", now.Add(-24 * time.Hour)}, // 1 day ago
+		{"agent-33333333.jsonl", now.Add(-1 * time.Hour)},  // 1 hour ago
 	}
 
 	for _, s := range sessions {
 		sessionFile := filepath.Join(projectDir, s.filename)
 		ts := s.timestamp.Format(time.RFC3339)
-		sessionContent := `{"type":"session_start","session_id":"` + s.filename[6:42] + `","project":"test-project","timestamp":"` + ts + `","status":"completed","success":true}
+		sessionContent := `{"type":"session_start","session_id":"` + s.filename[6:14] + `","project":"test-project","timestamp":"` + ts + `","status":"completed","success":true}
 `
 		if err := os.WriteFile(sessionFile, []byte(sessionContent), 0644); err != nil {
 			t.Fatalf("failed to write test file: %v", err)
@@ -514,15 +514,15 @@ func TestAggregator_GetProjectMetricsFiltered(t *testing.T) {
 		agentName string
 		timestamp time.Time
 	}{
-		{"agent-11111111-1111-1111-1111-111111111111.jsonl", "code-reviewer", now.Add(-48 * time.Hour)},
-		{"agent-22222222-2222-2222-2222-222222222222.jsonl", "test-automator", now.Add(-24 * time.Hour)},
-		{"agent-33333333-3333-3333-3333-333333333333.jsonl", "code-reviewer", now.Add(-1 * time.Hour)},
+		{"agent-11111111.jsonl", "code-reviewer", now.Add(-48 * time.Hour)},
+		{"agent-22222222.jsonl", "test-automator", now.Add(-24 * time.Hour)},
+		{"agent-33333333.jsonl", "code-reviewer", now.Add(-1 * time.Hour)},
 	}
 
 	for _, s := range sessions {
 		sessionFile := filepath.Join(projectDir, s.filename)
 		ts := s.timestamp.Format(time.RFC3339)
-		sessionContent := `{"type":"session_start","session_id":"` + s.filename[6:42] + `","project":"test-project","timestamp":"` + ts + `","status":"completed","success":true,"agent_name":"` + s.agentName + `"}
+		sessionContent := `{"type":"session_start","session_id":"` + s.filename[6:14] + `","project":"test-project","timestamp":"` + ts + `","status":"completed","success":true,"agent_name":"` + s.agentName + `"}
 {"type":"token_usage","timestamp":"` + ts + `","input_tokens":1000,"output_tokens":500,"cost_usd":0.01}
 `
 		if err := os.WriteFile(sessionFile, []byte(sessionContent), 0644); err != nil {

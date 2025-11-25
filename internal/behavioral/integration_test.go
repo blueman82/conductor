@@ -1,6 +1,7 @@
 package behavioral
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,8 +24,8 @@ func TestFullSessionFlow(t *testing.T) {
 		content  string
 	}{
 		{
-			filename: "agent-11111111-1111-1111-1111-111111111111.jsonl",
-			content: `{"type":"session_start","session_id":"11111111-1111-1111-1111-111111111111","project":"test-project","timestamp":"2024-01-15T10:00:00Z","status":"completed","agent_name":"code-reviewer","duration":60000,"success":true,"error_count":0}
+			filename: "agent-11111111.jsonl",
+			content: `{"type":"session_start","session_id":"11111111","project":"test-project","timestamp":"2024-01-15T10:00:00Z","status":"completed","agent_name":"code-reviewer","duration":60000,"success":true,"error_count":0}
 {"type":"tool_call","timestamp":"2024-01-15T10:01:00Z","tool_name":"Read","parameters":{"file_path":"/main.go"},"success":true,"duration":50}
 {"type":"tool_call","timestamp":"2024-01-15T10:02:00Z","tool_name":"Read","parameters":{"file_path":"/test.go"},"success":true,"duration":45}
 {"type":"bash_command","timestamp":"2024-01-15T10:03:00Z","command":"go test ./...","exit_code":0,"output":"PASS","output_length":4,"duration":1500,"success":true}
@@ -33,8 +34,8 @@ func TestFullSessionFlow(t *testing.T) {
 `,
 		},
 		{
-			filename: "agent-22222222-2222-2222-2222-222222222222.jsonl",
-			content: `{"type":"session_start","session_id":"22222222-2222-2222-2222-222222222222","project":"test-project","timestamp":"2024-01-15T11:00:00Z","status":"completed","agent_name":"test-automator","duration":120000,"success":true,"error_count":1}
+			filename: "agent-22222222.jsonl",
+			content: `{"type":"session_start","session_id":"22222222","project":"test-project","timestamp":"2024-01-15T11:00:00Z","status":"completed","agent_name":"test-automator","duration":120000,"success":true,"error_count":1}
 {"type":"tool_call","timestamp":"2024-01-15T11:01:00Z","tool_name":"Write","parameters":{"file_path":"/test_new.go"},"success":true,"duration":100}
 {"type":"tool_call","timestamp":"2024-01-15T11:02:00Z","tool_name":"Edit","parameters":{"file_path":"/main.go"},"success":false,"duration":200,"error":"file not found"}
 {"type":"bash_command","timestamp":"2024-01-15T11:03:00Z","command":"go build","exit_code":1,"output":"error: undefined","output_length":16,"duration":2000,"success":false}
@@ -43,8 +44,8 @@ func TestFullSessionFlow(t *testing.T) {
 `,
 		},
 		{
-			filename: "agent-33333333-3333-3333-3333-333333333333.jsonl",
-			content: `{"type":"session_start","session_id":"33333333-3333-3333-3333-333333333333","project":"test-project","timestamp":"2024-01-15T12:00:00Z","status":"failed","agent_name":"code-reviewer","duration":30000,"success":false,"error_count":2}
+			filename: "agent-33333333.jsonl",
+			content: `{"type":"session_start","session_id":"33333333","project":"test-project","timestamp":"2024-01-15T12:00:00Z","status":"failed","agent_name":"code-reviewer","duration":30000,"success":false,"error_count":2}
 {"type":"tool_call","timestamp":"2024-01-15T12:01:00Z","tool_name":"Bash","parameters":{"command":"ls"},"success":false,"duration":50,"error":"permission denied"}
 {"type":"bash_command","timestamp":"2024-01-15T12:02:00Z","command":"rm -rf /","exit_code":1,"output":"Permission denied","output_length":17,"duration":10,"success":false}
 {"type":"token_usage","timestamp":"2024-01-15T12:03:00Z","input_tokens":1000,"output_tokens":500,"cost_usd":0.0105,"model_name":"claude-sonnet-4-5"}
@@ -591,7 +592,7 @@ func TestEdgeCases(t *testing.T) {
 		}
 
 		// Create one valid session
-		validFile := filepath.Join(projectDir, "agent-11111111-1111-1111-1111-111111111111.jsonl")
+		validFile := filepath.Join(projectDir, "agent-11111111.jsonl")
 		content := `{"type":"session_start","session_id":"test","project":"test","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":true}`
 		if err := os.WriteFile(validFile, []byte(content), 0644); err != nil {
 			t.Fatalf("failed to write valid file: %v", err)
@@ -775,7 +776,7 @@ func BenchmarkAggregatorCache(b *testing.B) {
 	}
 
 	// Create session file
-	sessionFile := filepath.Join(projectDir, "agent-11111111-1111-1111-1111-111111111111.jsonl")
+	sessionFile := filepath.Join(projectDir, "agent-11111111.jsonl")
 	content := `{"type":"session_start","session_id":"bench-123","project":"bench","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":true}
 {"type":"tool_call","timestamp":"2024-01-15T10:01:00Z","tool_name":"Read","success":true,"duration":100}
 `
@@ -836,12 +837,11 @@ func BenchmarkConcurrentCacheAccess(b *testing.B) {
 	})
 }
 
-// generateTestUUID generates a deterministic test UUID based on index
+// generateTestUUID generates a deterministic test short hex ID based on index
+// This format matches the agent-{hex}.jsonl discovery pattern
 func generateTestUUID(i int) string {
-	// Generate deterministic UUIDs for testing
-	hex := "0123456789abcdef"
-	c := hex[i%16]
-	return string([]byte{c, c, c, c, c, c, c, c, '-', c, c, c, c, '-', c, c, c, c, '-', c, c, c, c, '-', c, c, c, c, c, c, c, c, c, c, c, c})
+	// Generate short hex IDs that match agent file pattern
+	return fmt.Sprintf("%08x", i)
 }
 
 // TestEndToEndBehavioralWorkflow tests the complete behavioral workflow with real JSONL data
@@ -855,8 +855,8 @@ func TestEndToEndBehavioralWorkflow(t *testing.T) {
 	}{
 		"conductor": {
 			{
-				uuid: "aaa11111-1111-1111-1111-111111111111",
-				content: `{"type":"session_start","session_id":"aaa11111-1111-1111-1111-111111111111","project":"conductor","timestamp":"2024-01-15T10:00:00Z","status":"completed","agent_name":"backend-developer","duration":300000,"success":true,"error_count":0}
+				uuid: "aaa11111",
+				content: `{"type":"session_start","session_id":"aaa11111","project":"conductor","timestamp":"2024-01-15T10:00:00Z","status":"completed","agent_name":"backend-developer","duration":300000,"success":true,"error_count":0}
 {"type":"tool_call","timestamp":"2024-01-15T10:01:00Z","tool_name":"Read","parameters":{"file_path":"/internal/executor/task.go"},"success":true,"duration":50}
 {"type":"tool_call","timestamp":"2024-01-15T10:02:00Z","tool_name":"Grep","parameters":{"pattern":"func Execute"},"success":true,"duration":120}
 {"type":"tool_call","timestamp":"2024-01-15T10:03:00Z","tool_name":"Write","parameters":{"file_path":"/internal/executor/wave.go"},"success":true,"duration":80}
@@ -868,8 +868,8 @@ func TestEndToEndBehavioralWorkflow(t *testing.T) {
 `,
 			},
 			{
-				uuid: "bbb22222-2222-2222-2222-222222222222",
-				content: `{"type":"session_start","session_id":"bbb22222-2222-2222-2222-222222222222","project":"conductor","timestamp":"2024-01-15T11:00:00Z","status":"completed","agent_name":"test-automator","duration":180000,"success":true,"error_count":0}
+				uuid: "bbb22222",
+				content: `{"type":"session_start","session_id":"bbb22222","project":"conductor","timestamp":"2024-01-15T11:00:00Z","status":"completed","agent_name":"test-automator","duration":180000,"success":true,"error_count":0}
 {"type":"tool_call","timestamp":"2024-01-15T11:01:00Z","tool_name":"Read","parameters":{"file_path":"/internal/executor/task_test.go"},"success":true,"duration":45}
 {"type":"tool_call","timestamp":"2024-01-15T11:02:00Z","tool_name":"Edit","parameters":{"file_path":"/internal/executor/task_test.go"},"success":true,"duration":100}
 {"type":"bash_command","timestamp":"2024-01-15T11:03:00Z","command":"go test ./internal/executor/... -v","exit_code":0,"output":"PASS","output_length":1024,"duration":8000,"success":true}
@@ -880,8 +880,8 @@ func TestEndToEndBehavioralWorkflow(t *testing.T) {
 		},
 		"other-project": {
 			{
-				uuid: "ccc33333-3333-3333-3333-333333333333",
-				content: `{"type":"session_start","session_id":"ccc33333-3333-3333-3333-333333333333","project":"other-project","timestamp":"2024-01-15T12:00:00Z","status":"failed","agent_name":"code-reviewer","duration":60000,"success":false,"error_count":3}
+				uuid: "ccc33333",
+				content: `{"type":"session_start","session_id":"ccc33333","project":"other-project","timestamp":"2024-01-15T12:00:00Z","status":"failed","agent_name":"code-reviewer","duration":60000,"success":false,"error_count":3}
 {"type":"tool_call","timestamp":"2024-01-15T12:01:00Z","tool_name":"Read","parameters":{"file_path":"/main.go"},"success":true,"duration":30}
 {"type":"tool_call","timestamp":"2024-01-15T12:02:00Z","tool_name":"Edit","parameters":{"file_path":"/main.go"},"success":false,"duration":150,"error":"file is read-only"}
 {"type":"bash_command","timestamp":"2024-01-15T12:03:00Z","command":"go build","exit_code":1,"output":"compile error","output_length":512,"duration":2000,"success":false}
@@ -1206,7 +1206,7 @@ func TestAggregatorCacheInvalidation(t *testing.T) {
 		t.Fatalf("failed to create project dir: %v", err)
 	}
 
-	sessionFile := filepath.Join(projectDir, "agent-11111111-1111-1111-1111-111111111111.jsonl")
+	sessionFile := filepath.Join(projectDir, "agent-11111111.jsonl")
 	originalContent := `{"type":"session_start","session_id":"test-123","project":"test","timestamp":"2024-01-15T10:00:00Z","status":"completed","success":true}
 {"type":"tool_call","timestamp":"2024-01-15T10:01:00Z","tool_name":"Read","success":true,"duration":100}
 `
