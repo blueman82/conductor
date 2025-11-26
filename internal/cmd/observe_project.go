@@ -17,14 +17,14 @@ func DisplayProjectAnalysis(project string, limit int) error {
 		return fmt.Errorf("project name is required (use --project flag or provide as argument)")
 	}
 
-	// Load config to get DB path
-	cfg, err := config.LoadConfigFromDir(".")
+	// Get learning DB path (uses build-time injected root)
+	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("get learning db path: %w", err)
 	}
 
 	// Open learning store for DB-backed stats
-	store, err := learning.NewStore(cfg.Learning.DBPath)
+	store, err := learning.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("open learning store: %w", err)
 	}
@@ -131,8 +131,8 @@ func formatProjectAnalysis(
 
 		for i := 0; i < displayCount; i++ {
 			tool := toolStats[i]
-			sb.WriteString(fmt.Sprintf("%-20s %10d %9.1f%%\n",
-				truncateString(tool.ToolName, 19),
+			sb.WriteString(fmt.Sprintf("%-30s %10d %9.1f%%\n",
+				tool.ToolName,
 				tool.CallCount,
 				tool.SuccessRate*100))
 		}
@@ -159,8 +159,8 @@ func formatProjectAnalysis(
 			if agent.AvgDurationSeconds > 0 {
 				durationStr = formatDuration(time.Duration(agent.AvgDurationSeconds) * time.Second)
 			}
-			sb.WriteString(fmt.Sprintf("%-25s %10d %9.1f%% %12s\n",
-				truncateString(agent.AgentType, 24),
+			sb.WriteString(fmt.Sprintf("%-30s %10d %9.1f%% %12s\n",
+				agent.AgentType,
 				agent.TotalSessions,
 				agent.SuccessRate*100,
 				durationStr))
@@ -186,15 +186,11 @@ func formatProjectAnalysis(
 			if agent == "" {
 				agent = "default"
 			}
-			taskName := session.TaskName
-			if len(taskName) > 25 {
-				taskName = taskName[:22] + "..."
-			}
-			sb.WriteString(fmt.Sprintf("%-20s %12s %8s %s\n",
-				truncateString(agent, 19),
+			sb.WriteString(fmt.Sprintf("%-30s %12s %8s %s\n",
+				agent,
 				formatDuration(time.Duration(session.DurationSecs)*time.Second),
 				status,
-				taskName))
+				session.TaskName))
 		}
 	}
 
@@ -219,4 +215,58 @@ func formatBytes(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
+}
+
+// DisplayProjectList displays a list of available projects
+func DisplayProjectList(limit int) error {
+	// Get projects from JSONL files
+	projects, err := behavioral.ListProjects()
+	if err != nil {
+		return fmt.Errorf("list projects: %w", err)
+	}
+
+	// Display formatted output
+	fmt.Println(formatProjectListTable(projects, limit))
+
+	return nil
+}
+
+// formatProjectListTable formats project list as a readable table
+func formatProjectListTable(projects []behavioral.ProjectInfo, limit int) string {
+	var sb strings.Builder
+
+	sb.WriteString("\n=== Available Projects ===\n\n")
+
+	if len(projects) == 0 {
+		sb.WriteString("No projects found in ~/.claude/projects\n")
+		return sb.String()
+	}
+
+	// Header
+	sb.WriteString(fmt.Sprintf("%-12s %-10s %s\n",
+		"Sessions", "Size", "Project"))
+	sb.WriteString(strings.Repeat("-", 50) + "\n")
+
+	// Apply limit
+	displayCount := len(projects)
+	if limit > 0 && limit < displayCount {
+		displayCount = limit
+	}
+
+	// Display rows
+	for i := 0; i < displayCount; i++ {
+		project := projects[i]
+		sb.WriteString(fmt.Sprintf("%-12d %-10s %s\n",
+			project.SessionCount,
+			formatBytes(project.TotalSize),
+			project.Name))
+	}
+
+	if limit > 0 && len(projects) > displayCount {
+		sb.WriteString(fmt.Sprintf("\n(Showing %d of %d projects. Use --limit/-n to see more)\n", displayCount, len(projects)))
+	}
+
+	sb.WriteString("\nUse 'conductor observe project <name>' for detailed analysis.\n")
+
+	return sb.String()
 }

@@ -64,11 +64,11 @@ func AgentResponseSchema() string {
 // It requires 'verdict' and 'feedback' fields, uses enum constraints for verdict.
 func QCResponseSchema(hasSuccessCriteria bool) string {
 	baseSchema := map[string]interface{}{
-		"$schema":      "http://json-schema.org/draft-07/schema#",
-		"title":        "QC Response",
-		"description":  "Structured JSON output from Quality Control review",
-		"type":         "object",
-		"required":     []string{"verdict", "feedback"},
+		"$schema":     "http://json-schema.org/draft-07/schema#",
+		"title":       "QC Response",
+		"description": "Structured JSON output from Quality Control review",
+		"type":        "object",
+		"required":    []string{"verdict", "feedback"},
 		"properties": map[string]interface{}{
 			"verdict": map[string]interface{}{
 				"type":        "string",
@@ -82,7 +82,7 @@ func QCResponseSchema(hasSuccessCriteria bool) string {
 			"issues": map[string]interface{}{
 				"type": "array",
 				"items": map[string]interface{}{
-					"type": "object",
+					"type":     "object",
 					"required": []string{"severity", "description"},
 					"properties": map[string]interface{}{
 						"severity": map[string]interface{}{
@@ -128,7 +128,7 @@ func QCResponseSchema(hasSuccessCriteria bool) string {
 		props["criteria_results"] = map[string]interface{}{
 			"type": "array",
 			"items": map[string]interface{}{
-				"type": "object",
+				"type":     "object",
 				"required": []string{"index", "criterion", "passed"},
 				"properties": map[string]interface{}{
 					"index": map[string]interface{}{
@@ -167,11 +167,11 @@ func QCResponseSchema(hasSuccessCriteria bool) string {
 // It requires both 'agents' (array of strings) and 'rationale' (string) fields.
 func IntelligentSelectionSchema() string {
 	schema := map[string]interface{}{
-		"$schema":      "http://json-schema.org/draft-07/schema#",
-		"title":        "Intelligent Agent Selection",
-		"description":  "Claude's recommended QC agents for task review based on context",
-		"type":         "object",
-		"required":     []string{"agents", "rationale"},
+		"$schema":     "http://json-schema.org/draft-07/schema#",
+		"title":       "Intelligent Agent Selection",
+		"description": "Claude's recommended QC agents for task review based on context",
+		"type":        "object",
+		"required":    []string{"agents", "rationale"},
 		"properties": map[string]interface{}{
 			"agents": map[string]interface{}{
 				"type": "array",

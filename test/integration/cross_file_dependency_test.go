@@ -14,8 +14,9 @@ import (
 // TestCrossFileDependency_SimpleLinearChain verifies that cross-file dependencies
 // work correctly in a simple linear chain pattern across two files.
 // Test structure:
-//   foundation.yaml: tasks 1-3 (no dependencies)
-//   features.yaml: tasks 4-6 (task 4 depends on task 2 from foundation.yaml)
+//
+//	foundation.yaml: tasks 1-3 (no dependencies)
+//	features.yaml: tasks 4-6 (task 4 depends on task 2 from foundation.yaml)
 func TestCrossFileDependency_SimpleLinearChain(t *testing.T) {
 	foundationPath := filepath.Join("fixtures", "cross-file", "linear", "foundation.yaml")
 	featuresPath := filepath.Join("fixtures", "cross-file", "linear", "features.yaml")
@@ -94,9 +95,10 @@ func TestCrossFileDependency_SimpleLinearChain(t *testing.T) {
 // TestCrossFileDependency_DiamondPattern verifies diamond dependency pattern
 // across multiple files with parallel execution and join points.
 // Test structure:
-//   setup.yaml: task 1 (no dependencies)
-//   branches.yaml: tasks 2, 3 (both depend on task 1)
-//   join.yaml: task 4 (depends on both tasks 2 and 3)
+//
+//	setup.yaml: task 1 (no dependencies)
+//	branches.yaml: tasks 2, 3 (both depend on task 1)
+//	join.yaml: task 4 (depends on both tasks 2 and 3)
 func TestCrossFileDependency_DiamondPattern(t *testing.T) {
 	setupPath := filepath.Join("fixtures", "cross-file", "diamond", "setup.yaml")
 	branchesPath := filepath.Join("fixtures", "cross-file", "diamond", "branches.yaml")
@@ -310,8 +312,8 @@ func TestCrossFileDependency_MixedFormat(t *testing.T) {
 	}
 
 	expectedDeps := map[string]bool{
-		"4":                           false,
-		"file:part1.yaml:task:2":      false,
+		"4":                      false,
+		"file:part1.yaml:task:2": false,
 	}
 
 	for _, dep := range task5.DependsOn {

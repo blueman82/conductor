@@ -21,7 +21,6 @@ var (
 	observeTimeRange    string
 	observePollInterval string
 	observeLimit        int
-	observeWithIngest   bool
 )
 
 // NewObserveCommand creates the 'conductor observe' parent command
@@ -56,8 +55,9 @@ execution history.`,
 	cmd.AddCommand(NewObserveFilesCmd())
 	cmd.AddCommand(NewObserveErrorsCmd())
 	cmd.AddCommand(NewObserveStatsCmd())
-	cmd.AddCommand(NewObserveStreamCmd())
 	cmd.AddCommand(NewObserveExportCmd())
+	cmd.AddCommand(NewObserveTranscriptCmd())
+	cmd.AddCommand(NewObserveLiveCmd())
 
 	return cmd
 }
@@ -247,19 +247,27 @@ func estimateDuration(fileSize int64) string {
 func NewObserveProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project [project-name]",
-		Short: "View project-level behavioral metrics",
+		Short: "View project-level behavioral metrics or list projects",
 		Long: `Display aggregated metrics for a specific project including:
 - Session count and success rate
 - Tool usage patterns
 - File operation statistics
 - Error rates and common issues
-- Agent performance comparison`,
+- Agent performance comparison
+
+If no project name is provided, lists available projects from ~/.claude/projects.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Resolve project name: args[0] > --project flag
 			project := observeProject
 			if len(args) > 0 {
 				project = args[0]
 			}
+
+			// If no project specified, list available projects
+			if project == "" {
+				return DisplayProjectList(observeLimit)
+			}
+
 			return DisplayProjectAnalysis(project, observeLimit)
 		},
 	}
@@ -270,18 +278,20 @@ func NewObserveProjectCmd() *cobra.Command {
 func NewObserveSessionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "session [session-id]",
-		Short: "Analyze a specific agent session",
+		Short: "Analyze a specific agent session or list recent sessions",
 		Long: `Display detailed metrics for a specific session including:
 - Session metadata (duration, status, agent used)
 - Tool execution timeline
 - Bash command history
 - File operations
 - Token usage and cost
-- Errors and issues`,
+- Errors and issues
+
+If no session ID is provided, lists recent sessions (use --limit/-n to control count).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Session ID is required
+			// If no session ID provided, list recent sessions
 			if len(args) == 0 {
-				return fmt.Errorf("session ID is required")
+				return DisplayRecentSessions(observeProject, observeLimit)
 			}
 			sessionID := args[0]
 
@@ -379,36 +389,6 @@ func NewObserveStatsCmd() *cobra.Command {
 			return DisplayStats(observeProject, observeLimit)
 		},
 	}
-	return cmd
-}
-
-// NewObserveStreamCmd creates the 'conductor observe stream' subcommand
-func NewObserveStreamCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "stream",
-		Short: "Stream real-time activity",
-		Long: `Watch and display agent activity in real-time, like 'tail -f'.
-Polls the behavioral database for new sessions and displays them as they occur.
-Only shows activity that occurs after the command starts.
-
-With --with-ingest flag, spawns an ingestion daemon for real-time JSONL processing,
-enabling live data to appear in the stream as events occur.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-
-			// Parse poll interval
-			pollInterval, err := parsePollInterval(observePollInterval)
-			if err != nil {
-				return fmt.Errorf("invalid poll-interval: %w", err)
-			}
-
-			return StreamActivity(ctx, observeProject, pollInterval, observeWithIngest)
-		},
-	}
-
-	cmd.Flags().BoolVar(&observeWithIngest, "with-ingest", false,
-		"Spawn ingestion daemon for real-time JSONL processing")
-
 	return cmd
 }
 

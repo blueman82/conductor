@@ -11,14 +11,14 @@ import (
 
 // DisplayFileAnalysis displays file operation analysis from the learning database
 func DisplayFileAnalysis(project string, limit int) error {
-	// Load config to get DB path
-	cfg, err := config.LoadConfigFromDir(".")
+	// Get learning DB path (uses build-time injected root)
+	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("get learning db path: %w", err)
 	}
 
 	// Open learning store
-	store, err := learning.NewStore(cfg.Learning.DBPath)
+	store, err := learning.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("open learning store: %w", err)
 	}
@@ -50,9 +50,9 @@ func formatFileAnalysisTable(files []learning.FileStats, limit int) string {
 	}
 
 	// Header
-	sb.WriteString(fmt.Sprintf("%-50s %-12s %-10s %-12s %-12s %-15s %-12s\n",
-		"File", "Op Type", "Calls", "Success", "Failures", "Avg Duration", "Total Bytes"))
-	sb.WriteString(strings.Repeat("-", 125) + "\n")
+	sb.WriteString(fmt.Sprintf("%-12s %-10s %-12s %-12s %-15s %-12s %s\n",
+		"Op Type", "Calls", "Success", "Failures", "Avg Duration", "Total Bytes", "File"))
+	sb.WriteString(strings.Repeat("-", 90) + "\n")
 
 	// Display rows
 	displayLimit := len(files)
@@ -67,14 +67,14 @@ func formatFileAnalysisTable(files []learning.FileStats, limit int) string {
 			durationStr = formatMs(file.AvgDurationMs)
 		}
 
-		sb.WriteString(fmt.Sprintf("%-50s %-12s %-10d %-12d %-12d %-15s %-12d\n",
-			truncateString(file.FilePath, 49),
+		sb.WriteString(fmt.Sprintf("%-12s %-10d %-12d %-12d %-15s %-12d %s\n",
 			file.OperationType,
 			file.OpCount,
 			file.SuccessCount,
 			file.FailureCount,
 			durationStr,
-			file.TotalBytes))
+			file.TotalBytes,
+			file.FilePath))
 	}
 
 	if limit > 0 && len(files) > displayLimit {

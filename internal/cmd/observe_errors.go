@@ -11,14 +11,14 @@ import (
 
 // DisplayErrorAnalysis displays error pattern analysis from the learning database
 func DisplayErrorAnalysis(project string, limit int) error {
-	// Load config to get DB path
-	cfg, err := config.LoadConfigFromDir(".")
+	// Get learning DB path (uses build-time injected root)
+	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("get learning db path: %w", err)
 	}
 
 	// Open learning store
-	store, err := learning.NewStore(cfg.Learning.DBPath)
+	store, err := learning.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("open learning store: %w", err)
 	}
@@ -50,9 +50,9 @@ func formatErrorAnalysisTable(patterns []learning.ErrorPattern, limit int) strin
 	}
 
 	// Header
-	sb.WriteString(fmt.Sprintf("%-15s %-50s %-50s %-12s %-20s\n",
-		"Type", "Component", "Error Message", "Count", "Last Occurred"))
-	sb.WriteString(strings.Repeat("-", 150) + "\n")
+	sb.WriteString(fmt.Sprintf("%-15s %-12s %-20s %s\n",
+		"Type", "Count", "Last Occurred", "Component / Error"))
+	sb.WriteString(strings.Repeat("-", 80) + "\n")
 
 	// Display rows
 	displayLimit := len(patterns)
@@ -85,12 +85,14 @@ func formatErrorAnalysisTable(patterns []learning.ErrorPattern, limit int) strin
 			lastOccurred = pattern.LastOccurred.Format("2006-01-02 15:04:05")
 		}
 
-		sb.WriteString(fmt.Sprintf("%-15s %-50s %-50s %-12d %-20s\n",
+		sb.WriteString(fmt.Sprintf("%-15s %-12d %-20s %s\n",
 			pattern.ErrorType,
-			truncateString(component, 49),
-			truncateString(pattern.ErrorMessage, 49),
 			pattern.Count,
-			lastOccurred))
+			lastOccurred,
+			component))
+		if pattern.ErrorMessage != "" {
+			sb.WriteString(fmt.Sprintf("%-15s %-12s %-20s   → %s\n", "", "", "", pattern.ErrorMessage))
+		}
 	}
 
 	if limit > 0 && len(patterns) > displayLimit {

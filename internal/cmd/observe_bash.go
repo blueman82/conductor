@@ -11,14 +11,14 @@ import (
 
 // DisplayBashAnalysis displays bash command analysis from the learning database
 func DisplayBashAnalysis(project string, limit int) error {
-	// Load config to get DB path
-	cfg, err := config.LoadConfigFromDir(".")
+	// Get learning DB path (uses build-time injected root)
+	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("get learning db path: %w", err)
 	}
 
 	// Open learning store
-	store, err := learning.NewStore(cfg.Learning.DBPath)
+	store, err := learning.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("open learning store: %w", err)
 	}
@@ -49,10 +49,10 @@ func formatBashAnalysisTable(commands []learning.BashStats, limit int) string {
 		return sb.String()
 	}
 
-	// Header
-	sb.WriteString(fmt.Sprintf("%-50s %-10s %-12s %-12s %-15s %-10s\n",
-		"Command", "Calls", "Success", "Failures", "Avg Duration", "Success%"))
-	sb.WriteString(strings.Repeat("-", 110) + "\n")
+	// Header - Command at end for full display
+	sb.WriteString(fmt.Sprintf("%-10s %-10s %-10s %-12s %-8s %s\n",
+		"Calls", "Success", "Failures", "Duration", "Rate", "Command"))
+	sb.WriteString(strings.Repeat("-", 80) + "\n")
 
 	// Display rows
 	displayLimit := len(commands)
@@ -71,13 +71,13 @@ func formatBashAnalysisTable(commands []learning.BashStats, limit int) string {
 			successPct = cmd.SuccessRate * 100
 		}
 
-		sb.WriteString(fmt.Sprintf("%-50s %-10d %-12d %-12d %-15s %-10.1f%%\n",
-			truncateString(cmd.Command, 49),
+		sb.WriteString(fmt.Sprintf("%-10d %-10d %-10d %-12s %6.1f%%  %s\n",
 			cmd.CallCount,
 			cmd.SuccessCount,
 			cmd.FailureCount,
 			durationStr,
-			successPct))
+			successPct,
+			cmd.Command))
 	}
 
 	if limit > 0 && len(commands) > displayLimit {

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -46,6 +47,13 @@ type IngestionStats struct {
 	Uptime          time.Duration // Time since engine started
 }
 
+// sessionTimeData tracks timestamp and model info for duration calculation
+type sessionTimeData struct {
+	firstTimestamp time.Time
+	lastTimestamp  time.Time
+	model          string
+}
+
 // IngestionEngine coordinates real-time JSONL ingestion
 type IngestionEngine struct {
 	watcher *FileWatcher
@@ -53,9 +61,10 @@ type IngestionEngine struct {
 	config  IngestionConfig
 
 	// Internal state
-	pendingEvents []eventWithMeta
-	sessionCache  map[string]int64 // externalID -> internal sessionID
-	mu            sync.Mutex
+	pendingEvents    []eventWithMeta
+	sessionCache     map[string]int64           // externalID -> internal sessionID
+	sessionTimeCache map[int64]*sessionTimeData // sessionID -> timestamp tracking
+	mu               sync.Mutex
 
 	// Lock file handling
 	lockFile *os.File
@@ -111,13 +120,14 @@ func NewIngestionEngine(store *learning.Store, cfg IngestionConfig) (*IngestionE
 	}
 
 	e := &IngestionEngine{
-		watcher:       watcher,
-		store:         store,
-		config:        cfg,
-		pendingEvents: make([]eventWithMeta, 0, cfg.BatchSize),
-		sessionCache:  make(map[string]int64),
-		done:          make(chan struct{}),
-		lockPath:      cfg.LockFile,
+		watcher:          watcher,
+		store:            store,
+		config:           cfg,
+		pendingEvents:    make([]eventWithMeta, 0, cfg.BatchSize),
+		sessionCache:     make(map[string]int64),
+		sessionTimeCache: make(map[int64]*sessionTimeData),
+		done:             make(chan struct{}),
+		lockPath:         cfg.LockFile,
 	}
 
 	return e, nil
@@ -504,9 +514,30 @@ func (e *IngestionEngine) flushBatchLocked() {
 		e.stats.eventsProcessed++
 	}
 
+	// Flush session timestamps to database
+	e.flushSessionTimestamps(ctx)
+
 	// Clear pending events
 	e.pendingEvents = e.pendingEvents[:0]
 	e.stats.lastFlush = time.Now()
+}
+
+// flushSessionTimestamps updates all tracked sessions with their calculated durations
+func (e *IngestionEngine) flushSessionTimestamps(ctx context.Context) {
+	for sessionID, data := range e.sessionTimeCache {
+		// Calculate duration in seconds
+		duration := int64(0)
+		if !data.firstTimestamp.IsZero() && !data.lastTimestamp.IsZero() {
+			duration = int64(data.lastTimestamp.Sub(data.firstTimestamp).Seconds())
+		}
+
+		// Update session with timestamps and duration
+		if err := e.store.UpdateSessionTimestamps(ctx, sessionID, data.firstTimestamp, data.lastTimestamp, duration, data.model); err != nil {
+			fmt.Fprintf(os.Stderr, "error updating session timestamps: %v\n", err)
+		}
+	}
+	// Clear the cache after flushing
+	e.sessionTimeCache = make(map[int64]*sessionTimeData)
 }
 
 // processEvent writes a single event to the database
@@ -515,6 +546,14 @@ func (e *IngestionEngine) processEvent(ctx context.Context, em eventWithMeta) er
 	sessionID, err := e.getOrCreateSession(ctx, em.sessionID, em.filePath)
 	if err != nil {
 		return fmt.Errorf("get/create session: %w", err)
+	}
+
+	// Track timestamp for duration calculation
+	if baseEvent, ok := em.event.(interface{ GetTimestamp() time.Time }); ok {
+		ts := baseEvent.GetTimestamp()
+		if !ts.IsZero() {
+			e.updateSessionTimestamp(sessionID, ts, "")
+		}
 	}
 
 	// Write event based on type
@@ -551,6 +590,10 @@ func (e *IngestionEngine) processEvent(ctx context.Context, em eventWithMeta) er
 		})
 
 	case *TokenUsageEvent:
+		// Track model name for cost calculation
+		if evt.ModelName != "" {
+			e.updateSessionTimestamp(sessionID, evt.Timestamp, evt.ModelName)
+		}
 		tokens := evt.InputTokens + evt.OutputTokens
 		return e.store.UpdateSessionAggregates(ctx, sessionID, tokens, 0)
 
@@ -560,8 +603,49 @@ func (e *IngestionEngine) processEvent(ctx context.Context, em eventWithMeta) er
 	}
 }
 
+// updateSessionTimestamp updates the first/last timestamp for a session
+func (e *IngestionEngine) updateSessionTimestamp(sessionID int64, ts time.Time, model string) {
+	data, exists := e.sessionTimeCache[sessionID]
+	if !exists {
+		data = &sessionTimeData{
+			firstTimestamp: ts,
+			lastTimestamp:  ts,
+		}
+		e.sessionTimeCache[sessionID] = data
+	}
+
+	// Update first timestamp if this is earlier
+	if ts.Before(data.firstTimestamp) {
+		data.firstTimestamp = ts
+	}
+	// Update last timestamp if this is later
+	if ts.After(data.lastTimestamp) {
+		data.lastTimestamp = ts
+	}
+	// Update model if provided
+	if model != "" {
+		data.model = model
+	}
+}
+
 // getOrCreateSession returns internal session ID, creating if needed
 func (e *IngestionEngine) getOrCreateSession(ctx context.Context, externalID, filePath string) (int64, error) {
+	// For agent files (agent-XXXXX.jsonl), use filename as unique identifier
+	// because agent subprocesses share their parent's sessionId
+	baseName := filepath.Base(filePath)
+	if strings.HasPrefix(baseName, "agent-") && strings.HasSuffix(baseName, ".jsonl") {
+		// Extract agent ID from filename: agent-e3672e13.jsonl -> e3672e13
+		agentID := strings.TrimSuffix(strings.TrimPrefix(baseName, "agent-"), ".jsonl")
+		if agentID != "" {
+			// Use parent sessionId + agent ID for uniqueness
+			if externalID != "" {
+				externalID = externalID + "-agent-" + agentID
+			} else {
+				externalID = "agent-" + agentID
+			}
+		}
+	}
+
 	if externalID == "" {
 		// Use file path as fallback session ID
 		externalID = filePath

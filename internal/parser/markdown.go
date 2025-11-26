@@ -21,6 +21,24 @@ type MarkdownParser struct {
 	markdown goldmark.Markdown
 }
 
+// injectFilesIntoPrompt prepends the target files section to the prompt content
+// This ensures agents know exactly which files they MUST create/modify
+func injectFilesIntoPrompt(content string, files []string) string {
+	if len(files) == 0 {
+		return content
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## Target Files (REQUIRED)\n\n")
+	sb.WriteString("**You MUST create/modify these exact files:**\n")
+	for _, file := range files {
+		fmt.Fprintf(&sb, "- `%s`\n", file)
+	}
+	sb.WriteString("\n⚠️ Do NOT create files with different names or paths. Use the exact paths listed above.\n\n")
+	sb.WriteString(content)
+	return sb.String()
+}
+
 // conductorConfig represents the optional conductor configuration in frontmatter
 type conductorConfig struct {
 	DefaultAgent   string              `yaml:"default_agent"`
@@ -184,7 +202,7 @@ func extractTasksLineByLine(content []byte) ([]models.Task, error) {
 			if currentTask != nil {
 				content := taskContent.String()
 				parseTaskMetadata(currentTask, content)
-				currentTask.Prompt = content
+				currentTask.Prompt = injectFilesIntoPrompt(content, currentTask.Files)
 				tasks = append(tasks, *currentTask)
 			}
 
@@ -204,7 +222,7 @@ func extractTasksLineByLine(content []byte) ([]models.Task, error) {
 				// This is another section, stop current task
 				content := taskContent.String()
 				parseTaskMetadata(currentTask, content)
-				currentTask.Prompt = content
+				currentTask.Prompt = injectFilesIntoPrompt(content, currentTask.Files)
 				tasks = append(tasks, *currentTask)
 				currentTask = nil
 				taskContent.Reset()
@@ -221,7 +239,7 @@ func extractTasksLineByLine(content []byte) ([]models.Task, error) {
 	if currentTask != nil {
 		content := taskContent.String()
 		parseTaskMetadata(currentTask, content)
-		currentTask.Prompt = content
+		currentTask.Prompt = injectFilesIntoPrompt(content, currentTask.Files)
 		tasks = append(tasks, *currentTask)
 	}
 

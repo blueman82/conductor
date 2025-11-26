@@ -69,13 +69,13 @@ func inferDomainChecks(files []string) string {
 // QualityController manages quality control reviews using Claude Code agents
 type QualityController struct {
 	Invoker             InvokerInterface
-	ReviewAgent         string               // DEPRECATED: Agent name for single-agent QC (backward compat)
-	AgentConfig         models.QCAgentConfig // Multi-agent QC configuration (v2.2+)
-	Registry            *agent.Registry      // Agent registry for auto-selection (v2.2+)
-	MaxRetries          int                  // Maximum number of retry attempts for RED responses
-	LearningStore       *learning.Store      // Learning store for historical context (optional)
-	Logger              QCLogger             // Logger for QC events (optional, can be nil)
-	IntelligentSelector *IntelligentSelector // Intelligent selector for mode="intelligent" (v2.4+)
+	ReviewAgent         string                     // DEPRECATED: Agent name for single-agent QC (backward compat)
+	AgentConfig         models.QCAgentConfig       // Multi-agent QC configuration (v2.2+)
+	Registry            *agent.Registry            // Agent registry for auto-selection (v2.2+)
+	MaxRetries          int                        // Maximum number of retry attempts for RED responses
+	LearningStore       *learning.Store            // Learning store for historical context (optional)
+	Logger              QCLogger                   // Logger for QC events (optional, can be nil)
+	IntelligentSelector *IntelligentSelector       // Intelligent selector for mode="intelligent" (v2.4+)
 	BehavioralMetrics   *BehavioralMetricsProvider // Provider for behavioral metrics context (v2.7+)
 }
 
@@ -207,14 +207,17 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
-	// Add expected file paths for verification
+	// Add expected file paths for verification - CRITICAL for agent compliance
 	if len(task.Files) > 0 {
-		sb.WriteString("## EXPECTED FILE PATHS - VERIFY EXACT MATCH\n")
-		sb.WriteString("Agent output must show files_modified matching these paths:\n")
+		sb.WriteString("## EXPECTED FILE PATHS - CRITICAL VERIFICATION\n")
+		sb.WriteString("⚠️ **MANDATORY**: Agent MUST create/modify these EXACT file paths:\n")
 		for _, file := range task.Files {
-			sb.WriteString(fmt.Sprintf("- [ ] %s\n", file))
+			sb.WriteString(fmt.Sprintf("- [ ] `%s`\n", file))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("\n**Verdict Rules:**\n")
+		sb.WriteString("- If agent created files with DIFFERENT paths/names → **RED** (wrong files)\n")
+		sb.WriteString("- If expected files are missing → **RED** (incomplete)\n")
+		sb.WriteString("- Only GREEN if ALL expected files exist at EXACT paths\n\n")
 	}
 
 	// Add domain-specific review criteria based on file extensions
@@ -243,7 +246,6 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 
 	return sb.String()
 }
-
 
 // ParseReviewResponse extracts the QC flag and feedback from agent output
 func ParseReviewResponse(output string) (flag string, feedback string) {

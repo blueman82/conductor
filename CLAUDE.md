@@ -8,6 +8,15 @@ Conductor is an autonomous multi-agent orchestration CLI built in Go that execut
 
 **Current Status**: Production-ready v2.5.2 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, and auto-incrementing version management.
 
+## Codebase Search
+
+**Use docvec first** for semantic search, then fallback to Glob/Grep:
+```
+mcp__docvec__search("how does QC validation work")  # Semantic search
+mcp__docvec__search_with_filters("parser", {"source_file": "internal/parser"})
+```
+Codebase is indexed (145 files, 5106 chunks). Docvec finds conceptually related code even without exact keyword matches.
+
 ## Development Commands
 
 ### Build & Run
@@ -295,6 +304,8 @@ conductor observe errors       # Error pattern analysis
 conductor observe project      # Project-level metrics
 conductor observe session      # Session-specific analysis
 conductor observe ingest       # Real-time JSONL ingestion daemon
+conductor observe live         # Real-time watching of new JSONL events
+conductor observe transcript   # Formatted transcript of session events
 ```
 
 ### Real-Time Ingestion

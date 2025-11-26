@@ -15,6 +15,7 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [conductor validate](#conductor-validate)
   - [conductor run](#conductor-run)
   - [Learning Commands](#learning-commands)
+  - [Observe Commands](#observe-commands-agent-watch)
 - [Configuration](#configuration)
   - [Quality Control Settings](#quality-control)
   - [Feedback Storage Settings](#dual-feedback-storage-v210)
@@ -846,6 +847,116 @@ $ conductor learning export my-plan.md --format json
 # Export to CSV file
 $ conductor learning export my-plan.md --format csv --output data.csv
 ✓ Exported 15 records to data.csv
+```
+
+### Observe Commands (Agent Watch)
+
+Conductor provides behavioral observability for Claude Code agents via the `observe` command family. These commands analyze session JSONL files in `~/.claude/projects/`.
+
+#### `conductor observe`
+
+Interactive mode with project selection.
+
+```bash
+conductor observe
+```
+
+#### `conductor observe stats`
+
+Display summary statistics for agent sessions.
+
+```bash
+conductor observe stats [--project <name>] [--time-range 24h]
+```
+
+#### `conductor observe session`
+
+Session-specific analysis.
+
+```bash
+conductor observe session <session-id>
+```
+
+#### `conductor observe live`
+
+Real-time watching of new JSONL events. Shows only new content after startup.
+
+```bash
+conductor observe live [--project <name>]
+```
+
+**Features:**
+- Skips historical data on startup
+- Shows "New Agent Started" banner when subagents spawn
+- Displays Edit tool diffs with full old/new strings
+- Color-coded output (assistant, user, tools, errors)
+
+#### `conductor observe transcript`
+
+Formatted transcript of session events.
+
+```bash
+conductor observe transcript <session-id> [--no-color] [--compact]
+```
+
+#### `conductor observe tools`
+
+Tool usage analysis.
+
+```bash
+conductor observe tools [--project <name>]
+```
+
+#### `conductor observe bash`
+
+Bash command patterns analysis.
+
+```bash
+conductor observe bash [--project <name>]
+```
+
+#### `conductor observe files`
+
+File operation analysis.
+
+```bash
+conductor observe files [--project <name>]
+```
+
+#### `conductor observe errors`
+
+Error pattern analysis.
+
+```bash
+conductor observe errors [--project <name>] [--errors-only]
+```
+
+#### `conductor observe project`
+
+Project-level metrics.
+
+```bash
+conductor observe project <project-name>
+```
+
+#### `conductor observe export`
+
+Export data to JSON, Markdown, or CSV.
+
+```bash
+conductor observe export --format json --output metrics.json
+conductor observe export --format markdown --output report.md
+conductor observe export --format csv --output data.csv
+```
+
+#### `conductor observe ingest`
+
+Real-time JSONL ingestion daemon.
+
+```bash
+conductor observe ingest                      # One-time import
+conductor observe ingest --watch              # Run as daemon
+conductor observe ingest --watch --verbose    # Verbose daemon mode
 ```
 
 ### Other Commands

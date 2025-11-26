@@ -282,6 +282,159 @@ func TestTokenUsageEvent_Validate(t *testing.T) {
 	}
 }
 
+func TestTextEvent_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		event   *TextEvent
+		wantErr bool
+	}{
+		{
+			name: "valid text event with content",
+			event: &TextEvent{
+				BaseEvent: BaseEvent{Type: "text", Timestamp: time.Now()},
+				Text:      "Hello, I'll help you with that.",
+				Role:      "assistant",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid text event empty text",
+			event: &TextEvent{
+				BaseEvent: BaseEvent{Type: "text", Timestamp: time.Now()},
+				Text:      "",
+				Role:      "assistant",
+			},
+			wantErr: false, // Text can be empty per Validate()
+		},
+		{
+			name: "valid user text event",
+			event: &TextEvent{
+				BaseEvent: BaseEvent{Type: "text", Timestamp: time.Now()},
+				Text:      "Please help me with this code",
+				Role:      "user",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing type",
+			event: &TextEvent{
+				BaseEvent: BaseEvent{Type: "", Timestamp: time.Now()},
+				Text:      "Some text",
+				Role:      "assistant",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing timestamp",
+			event: &TextEvent{
+				BaseEvent: BaseEvent{Type: "text"},
+				Text:      "Some text",
+				Role:      "assistant",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.event.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("TextEvent.Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExtractTextFromContent(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		role      string
+		wantCount int
+		wantTexts []string
+	}{
+		{
+			name:      "single text block",
+			content:   `[{"type":"text","text":"Hello world"}]`,
+			role:      "assistant",
+			wantCount: 1,
+			wantTexts: []string{"Hello world"},
+		},
+		{
+			name:      "multiple text blocks",
+			content:   `[{"type":"text","text":"First message"},{"type":"text","text":"Second message"}]`,
+			role:      "assistant",
+			wantCount: 2,
+			wantTexts: []string{"First message", "Second message"},
+		},
+		{
+			name:      "mixed content with tool_use",
+			content:   `[{"type":"text","text":"Let me read that file"},{"type":"tool_use","id":"123","name":"Read","input":{}}]`,
+			role:      "assistant",
+			wantCount: 1,
+			wantTexts: []string{"Let me read that file"},
+		},
+		{
+			name:      "empty text blocks skipped",
+			content:   `[{"type":"text","text":""},{"type":"text","text":"Non-empty"}]`,
+			role:      "assistant",
+			wantCount: 1,
+			wantTexts: []string{"Non-empty"},
+		},
+		{
+			name:      "user role preserved",
+			content:   `[{"type":"text","text":"User message"}]`,
+			role:      "user",
+			wantCount: 1,
+			wantTexts: []string{"User message"},
+		},
+		{
+			name:      "invalid json returns empty",
+			content:   `{invalid}`,
+			role:      "assistant",
+			wantCount: 0,
+		},
+		{
+			name:      "non-array returns empty",
+			content:   `{"type":"text","text":"Not an array"}`,
+			role:      "assistant",
+			wantCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := time.Now()
+			events := extractTextFromContent([]byte(tt.content), ts, tt.role)
+
+			if len(events) != tt.wantCount {
+				t.Errorf("extractTextFromContent() got %d events, want %d", len(events), tt.wantCount)
+				return
+			}
+
+			for i, event := range events {
+				textEvent, ok := event.(*TextEvent)
+				if !ok {
+					t.Errorf("Event %d: expected *TextEvent, got %T", i, event)
+					continue
+				}
+
+				if textEvent.Role != tt.role {
+					t.Errorf("Event %d: got role %q, want %q", i, textEvent.Role, tt.role)
+				}
+
+				if i < len(tt.wantTexts) && textEvent.Text != tt.wantTexts[i] {
+					t.Errorf("Event %d: got text %q, want %q", i, textEvent.Text, tt.wantTexts[i])
+				}
+
+				if textEvent.GetType() != "text" {
+					t.Errorf("Event %d: got type %q, want %q", i, textEvent.GetType(), "text")
+				}
+			}
+		})
+	}
+}
+
 func TestParseEventLine(t *testing.T) {
 	tests := []struct {
 		name      string

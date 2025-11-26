@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -18,14 +19,14 @@ func DisplaySessionAnalysis(sessionID, project string) error {
 		return fmt.Errorf("session ID is required")
 	}
 
-	// Load config to get DB path
-	cfg, err := config.LoadConfigFromDir(".")
+	// Get learning DB path (uses build-time injected root)
+	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("get learning db path: %w", err)
 	}
 
 	// Open learning store for DB-backed stats
-	store, err := learning.NewStore(cfg.Learning.DBPath)
+	store, err := learning.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("open learning store: %w", err)
 	}
@@ -68,6 +69,13 @@ func DisplaySessionAnalysis(sessionID, project string) error {
 
 	if metrics == nil && sessionInfo == nil {
 		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	// Verify session file still exists (may have been deleted since listing)
+	if sessionInfo != nil {
+		if _, err := os.Stat(sessionInfo.FilePath); os.IsNotExist(err) {
+			return fmt.Errorf("session file no longer exists (may have been cleaned up): %s", sessionID)
+		}
 	}
 
 	// Display output
@@ -189,9 +197,7 @@ func formatSessionAnalysis(sessionID, project string, info *behavioral.SessionIn
 					})
 				}
 				durationStr := formatMillis(e.Duration)
-				// Truncate tool name for display
-				toolName := truncateString(e.ToolName, 12)
-				sb.WriteString(fmt.Sprintf("%s  %-12s %8s  %s\n", ts, toolName, status, durationStr))
+				sb.WriteString(fmt.Sprintf("%s  %-20s %8s  %s\n", ts, e.ToolName, status, durationStr))
 
 			case *behavioral.BashCommandEvent:
 				status := "success"
@@ -204,8 +210,7 @@ func formatSessionAnalysis(sessionID, project string, info *behavioral.SessionIn
 					})
 				}
 				durationStr := formatMillis(e.Duration)
-				cmd := truncateString(e.Command, 30)
-				sb.WriteString(fmt.Sprintf("%s  %-12s %8s  %s  %s\n", ts, "Bash", status, durationStr, cmd))
+				sb.WriteString(fmt.Sprintf("%s  %-20s %8s  %s  %s\n", ts, "Bash", status, durationStr, e.Command))
 
 			case *behavioral.FileOperationEvent:
 				status := "success"
@@ -218,8 +223,7 @@ func formatSessionAnalysis(sessionID, project string, info *behavioral.SessionIn
 					})
 				}
 				durationStr := formatMillis(e.Duration)
-				path := truncateString(e.Path, 30)
-				sb.WriteString(fmt.Sprintf("%s  %-12s %8s  %s  %s\n", ts, e.Operation, status, durationStr, path))
+				sb.WriteString(fmt.Sprintf("%s  %-20s %8s  %s  %s\n", ts, e.Operation, status, durationStr, e.Path))
 			}
 		}
 
@@ -239,8 +243,8 @@ func formatSessionAnalysis(sessionID, project string, info *behavioral.SessionIn
 			sb.WriteString(strings.Repeat("-", 42) + "\n")
 
 			for _, tool := range metrics.ToolExecutions {
-				sb.WriteString(fmt.Sprintf("%-20s %10d %9.1f%%\n",
-					truncateString(tool.Name, 19),
+				sb.WriteString(fmt.Sprintf("%-30s %10d %9.1f%%\n",
+					tool.Name,
 					tool.Count,
 					tool.SuccessRate*100))
 			}
@@ -283,11 +287,22 @@ func formatDBSessionAnalysis(metrics *learning.BehavioralSessionMetrics) string 
 	sb.WriteString(fmt.Sprintf("Bash Commands:   %d\n", metrics.TotalBashCommands))
 	sb.WriteString(fmt.Sprintf("File Operations: %d\n", metrics.TotalFileOperations))
 
-	if metrics.TotalTokensUsed > 0 {
+	if metrics.TotalTokensUsed > 0 || metrics.ModelName != "" {
 		sb.WriteString("\n--- Token Usage ---\n")
+		if metrics.ModelName != "" {
+			sb.WriteString(fmt.Sprintf("Model:           %s\n", metrics.ModelName))
+		}
 		sb.WriteString(fmt.Sprintf("Total Tokens:    %s\n", formatNumber(metrics.TotalTokensUsed)))
 		if metrics.ContextWindowUsed > 0 {
 			sb.WriteString(fmt.Sprintf("Context Window:  %d%%\n", metrics.ContextWindowUsed))
+		}
+		// Calculate estimated cost using default Sonnet pricing
+		if metrics.TotalTokensUsed > 0 {
+			// Estimate ~30% input, 70% output based on typical usage
+			inputTokens := int64(float64(metrics.TotalTokensUsed) * 0.3)
+			outputTokens := metrics.TotalTokensUsed - inputTokens
+			cost := behavioral.CalculateCost(metrics.ModelName, inputTokens, outputTokens)
+			sb.WriteString(fmt.Sprintf("Est. Cost:       $%.4f\n", cost))
 		}
 	}
 

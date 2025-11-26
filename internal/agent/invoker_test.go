@@ -627,7 +627,6 @@ func TestClaudeOutputMarshaling(t *testing.T) {
 	}
 }
 
-
 func TestParseAgentJSON(t *testing.T) {
 	tests := []struct {
 		name    string

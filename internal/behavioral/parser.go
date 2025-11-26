@@ -128,6 +128,42 @@ type TokenUsageEvent struct {
 	ModelName    string  `json:"model_name"`
 }
 
+// TextEvent represents assistant or user text messages from JSONL
+type TextEvent struct {
+	BaseEvent
+	Text string `json:"text"`
+	Role string `json:"role"` // assistant or user
+}
+
+// Validate checks if text event is valid
+func (e *TextEvent) Validate() error {
+	if e.Type == "" {
+		return errors.New("event type is required")
+	}
+	if e.Timestamp.IsZero() {
+		return errors.New("timestamp is required")
+	}
+	// Text can be empty (e.g., for tool-only assistant messages)
+	return nil
+}
+
+// SessionStartEvent represents a new agent session being discovered
+type SessionStartEvent struct {
+	BaseEvent
+	SessionID   string `json:"session_id"`
+	AgentType   string `json:"agent_type"`
+	ProjectName string `json:"project_name"`
+	FilePath    string `json:"file_path"`
+}
+
+// Validate checks if session start event is valid
+func (e *SessionStartEvent) Validate() error {
+	if e.Type == "" {
+		return errors.New("event type is required")
+	}
+	return nil
+}
+
 // Validate checks if token usage event is valid
 func (e *TokenUsageEvent) Validate() error {
 	if e.Type == "" {
@@ -186,9 +222,21 @@ func ParseSessionFile(filepath string) (*SessionData, error) {
 			continue
 		}
 
-		// Don't try to parse every line as session metadata - only session start lines contain
-		// session metadata. Event lines like tool_call with "success":true would corrupt the
-		// session.Success flag.
+		// Try to extract session ID from any line that has it (real Claude Code format)
+		// This handles assistant/user events which contain sessionId
+		if sessionData.Session.ID == "" {
+			if sid := extractSessionIDFromLine(line); sid != "" {
+				sessionData.Session.ID = sid
+				sessionSeen = true
+			}
+		}
+
+		// Also extract agent info from assistant/user events
+		if sessionData.Session.AgentName == "" {
+			if agent := extractAgentFromLine(line); agent != "" {
+				sessionData.Session.AgentName = agent
+			}
+		}
 
 		events, err := parseEventLine(line)
 		if err != nil {
@@ -342,11 +390,15 @@ func parseClaudeCodeEvents(line string, eventType string) ([]Event, error) {
 
 	var events []Event
 
-	// For assistant messages, extract ALL tool calls AND token usage
+	// For assistant messages, extract ALL tool calls, text blocks, AND token usage
 	if eventType == "assistant" {
 		// Extract ALL tool_use blocks from content
 		toolEvents := extractAllToolsFromContent(msg.Content, ts, msg.Model)
 		events = append(events, toolEvents...)
+
+		// Extract text blocks from content
+		textEvents := extractTextFromContent(msg.Content, ts, "assistant")
+		events = append(events, textEvents...)
 
 		// Also extract token usage (always include if present)
 		if msg.Usage != nil && (msg.Usage.InputTokens > 0 || msg.Usage.OutputTokens > 0) {
@@ -362,11 +414,15 @@ func parseClaudeCodeEvents(line string, eventType string) ([]Event, error) {
 		}
 	}
 
-	// For user messages, extract tool_result information
+	// For user messages, extract tool_result information and text blocks
 	if eventType == "user" {
 		// User messages contain tool results - extract them for completion tracking
 		toolResults := extractToolResultsFromContent(msg.Content, ts)
 		events = append(events, toolResults...)
+
+		// Extract text blocks from user messages
+		textEvents := extractTextFromContent(msg.Content, ts, "user")
+		events = append(events, textEvents...)
 	}
 
 	return events, nil
@@ -409,8 +465,9 @@ func extractAllToolsFromContent(content json.RawMessage, ts time.Time, model str
 				}
 			}
 
-			// Check if this is a file operation (Read, Write, Edit)
-			if toolBlock.Name == "Read" || toolBlock.Name == "Write" || toolBlock.Name == "Edit" {
+			// Check if this is a file operation (Read, Write) - NOT Edit
+			// Edit needs full parameters for diff display, so let it be a ToolCallEvent
+			if toolBlock.Name == "Read" || toolBlock.Name == "Write" {
 				filePath := ""
 				if fp, ok := params["file_path"].(string); ok {
 					filePath = fp
@@ -440,6 +497,44 @@ func extractAllToolsFromContent(content json.RawMessage, ts time.Time, model str
 				ToolName:   toolBlock.Name,
 				Parameters: params,
 				Success:    true, // Default to success
+			})
+		}
+	}
+
+	return events
+}
+
+// TextBlock represents a text block in Claude content
+type TextBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// extractTextFromContent extracts text blocks from message content
+// Returns slice of TextEvents for all text blocks in this message
+func extractTextFromContent(content json.RawMessage, ts time.Time, role string) []Event {
+	var events []Event
+
+	// Try to parse as array of content blocks
+	var blocks []json.RawMessage
+	if err := json.Unmarshal(content, &blocks); err != nil {
+		return events
+	}
+
+	for _, block := range blocks {
+		var textBlock TextBlock
+		if err := json.Unmarshal(block, &textBlock); err != nil {
+			continue
+		}
+
+		if textBlock.Type == "text" && textBlock.Text != "" {
+			events = append(events, &TextEvent{
+				BaseEvent: BaseEvent{
+					Type:      "text",
+					Timestamp: ts,
+				},
+				Text: textBlock.Text,
+				Role: role,
 			})
 		}
 	}
@@ -606,4 +701,20 @@ func extractProjectFromPath(cwd string) string {
 		}
 	}
 	return cwd
+}
+
+// extractAgentFromLine extracts agent type/name from any JSONL line
+func extractAgentFromLine(line string) string {
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return ""
+	}
+	// Prefer agentType (human-readable) over agentId
+	if agentType, ok := raw["agentType"].(string); ok && agentType != "" {
+		return agentType
+	}
+	if agentID, ok := raw["agentId"].(string); ok && agentID != "" {
+		return agentID
+	}
+	return ""
 }

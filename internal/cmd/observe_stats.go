@@ -2,28 +2,24 @@ package cmd
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 )
 
 // DisplayStats displays summary statistics from the behavioral database
 func DisplayStats(project string, limit int) error {
-	// Load config to get DB path
-	cfg, err := config.LoadConfigFromDir(".")
+	// Get learning DB path (uses build-time injected root)
+	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("get learning db path: %w", err)
 	}
 
 	// Open learning store
-	store, err := learning.NewStore(cfg.Learning.DBPath)
+	store, err := learning.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("open learning store: %w", err)
 	}
@@ -61,12 +57,15 @@ func formatStatsTable(summary *learning.SummaryStats, agents []learning.AgentTyp
 	sb.WriteString(fmt.Sprintf("Success Rate:        %.1f%%\n", summary.SuccessRate*100))
 	sb.WriteString(fmt.Sprintf("Average Duration:    %s\n", formatDuration(time.Duration(summary.AvgDurationSeconds)*time.Second)))
 
-	// Token usage
+	// Token usage and cost
 	sb.WriteString(fmt.Sprintf("\nTotal Input Tokens:  %d\n", summary.TotalInputTokens))
 	sb.WriteString(fmt.Sprintf("Total Output Tokens: %d\n", summary.TotalOutputTokens))
 	sb.WriteString(fmt.Sprintf("Total Tokens:        %d\n", summary.TotalTokens))
 	if summary.AvgTokensPerSession > 0 {
 		sb.WriteString(fmt.Sprintf("Avg Tokens/Session:  %.0f\n", summary.AvgTokensPerSession))
+	}
+	if summary.TotalCostUSD > 0 {
+		sb.WriteString(fmt.Sprintf("Estimated Cost:      $%.2f (Sonnet pricing)\n", summary.TotalCostUSD))
 	}
 
 	// Agent breakdown
@@ -84,9 +83,9 @@ func formatStatsTable(summary *learning.SummaryStats, agents []learning.AgentTyp
 			displayLimit = len(agents)
 		}
 
-		// Header
-		sb.WriteString(fmt.Sprintf("%-30s %-12s %-12s %-12s %-12s %-10s\n",
-			"Agent Type", "Sessions", "Success", "Failures", "Avg Duration", "Success%"))
+		// Header - Agent Type at end for full display
+		sb.WriteString(fmt.Sprintf("%-10s %-10s %-10s %-12s %-8s %s\n",
+			"Sessions", "Success", "Failures", "Duration", "Rate", "Agent Type"))
 		sb.WriteString(strings.Repeat("-", 90) + "\n")
 
 		for i := 0; i < displayLimit; i++ {
@@ -100,13 +99,13 @@ func formatStatsTable(summary *learning.SummaryStats, agents []learning.AgentTyp
 				successPct = agent.SuccessRate * 100
 			}
 
-			sb.WriteString(fmt.Sprintf("%-30s %-12d %-12d %-12d %-12s %-10.1f%%\n",
-				truncateString(agent.AgentType, 29),
+			sb.WriteString(fmt.Sprintf("%-10d %-10d %-10d %-12s %6.1f%%  %s\n",
 				agent.TotalSessions,
 				agent.SuccessCount,
 				agent.FailureCount,
 				durationStr,
-				successPct))
+				successPct,
+				agent.AgentType))
 		}
 
 		if limit > 0 && len(agents) > displayLimit {
@@ -117,280 +116,77 @@ func formatStatsTable(summary *learning.SummaryStats, agents []learning.AgentTyp
 	return sb.String()
 }
 
-// truncateString truncates a string to maxLen characters
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}
-
-// StreamActivity streams real-time activity from the behavioral database, like `tail -f`
-func StreamActivity(ctx context.Context, project string, pollInterval time.Duration, withIngest bool) error {
-	// Load config to get DB path
-	cfg, err := config.LoadConfigFromDir(".")
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	// Open learning store
-	store, err := learning.NewStore(cfg.Learning.DBPath)
-	if err != nil {
-		return fmt.Errorf("open learning store: %w", err)
-	}
-	defer store.Close()
-
-	// Optionally start ingestion daemon
-	var engine *behavioral.IngestionEngine
-	if withIngest {
-		engine, err = startIngestionDaemon(ctx, store)
-		if err != nil {
-			return fmt.Errorf("start ingestion daemon: %w", err)
-		}
-		defer func() {
-			if stopErr := engine.Stop(); stopErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: error stopping ingestion engine: %v\n", stopErr)
-			}
-		}()
-		fmt.Println("Ingestion daemon started for live JSONL processing")
-	}
-
-	// Get the maximum session ID to skip historical data
-	lastSeenID, err := getMaxSessionID(store, project)
-	if err != nil {
-		return fmt.Errorf("get max session id: %w", err)
-	}
-
-	// Display ready message
-	displayStreamHeader(lastSeenID)
-
-	// Poll for new sessions
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-ticker.C:
-			// Query for new sessions
-			updates, err := watchNewSessions(store, project, lastSeenID)
-			if err != nil {
-				return fmt.Errorf("watch sessions: %w", err)
-			}
-
-			// Display new sessions
-			for _, update := range updates {
-				displaySessionUpdate(update)
-				if update.ID > lastSeenID {
-					lastSeenID = update.ID
-				}
-			}
-		}
-	}
-}
-
-// startIngestionDaemon initializes and starts the ingestion engine
-func startIngestionDaemon(ctx context.Context, store *learning.Store) (*behavioral.IngestionEngine, error) {
-	// Determine root directory for JSONL files
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("get home directory: %w", err)
-	}
-	rootDir := filepath.Join(homeDir, ".claude", "projects")
-
-	// Verify root directory exists
-	if _, err := os.Stat(rootDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("root directory does not exist: %s", rootDir)
-	}
-
-	// Configure ingestion engine
-	cfg := behavioral.IngestionConfig{
-		RootDir:      rootDir,
-		Pattern:      "*.jsonl",
-		BatchSize:    50,
-		BatchTimeout: 500 * time.Millisecond,
-	}
-
-	// Create ingestion engine
-	engine, err := behavioral.NewIngestionEngine(store, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create ingestion engine: %w", err)
-	}
-
-	// Start the engine in a goroutine (non-blocking)
-	if err := engine.Start(ctx); err != nil {
-		return nil, fmt.Errorf("start ingestion engine: %w", err)
-	}
-
-	return engine, nil
-}
-
-// getMaxSessionID returns the current maximum session ID to avoid showing historical data
-func getMaxSessionID(store *learning.Store, project string) (int, error) {
-	query := `SELECT COALESCE(MAX(bs.id), 0) FROM behavioral_sessions bs`
-
-	args := []interface{}{}
-
-	if project != "" {
-		query += ` JOIN task_executions te ON bs.task_execution_id = te.id
-		          WHERE te.plan_file LIKE ?`
-		args = append(args, "%"+project+"%")
-	}
-
-	var maxID int
-	rows, err := store.QueryRows(query, args...)
-	if err != nil {
-		return 0, fmt.Errorf("query max session id: %w", err)
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		if err := rows.Scan(&maxID); err != nil {
-			return 0, fmt.Errorf("scan max id: %w", err)
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("iterate rows: %w", err)
-	}
-
-	return maxID, nil
-}
-
-// displayStreamHeader shows the ready message when streaming starts
-func displayStreamHeader(lastSeenID int) {
-	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("Real-time Activity Stream (like 'tail -f')")
-	fmt.Println(strings.Repeat("=", 60))
-	fmt.Println("Ready - watching for new activity... (Ctrl+C to stop)")
-	fmt.Println()
-}
-
-// SessionUpdate represents a new session detected
-type SessionUpdate struct {
-	ID             int
-	TaskName       string
-	Agent          string
-	Timestamp      time.Time
-	Success        bool
-	Duration       time.Duration
-	ToolCalls      int
-	BashCommands   int
-	FileOperations int
-}
-
-// watchNewSessions queries for sessions added since lastSeenID in chronological order
-func watchNewSessions(store *learning.Store, project string, lastSeenID int) ([]SessionUpdate, error) {
-	query := `
-		SELECT
-			bs.id,
-			te.task_name,
-			te.agent,
-			bs.session_start,
-			te.success,
-			bs.total_duration_seconds,
-			bs.total_tool_calls,
-			bs.total_bash_commands,
-			bs.total_file_operations
-		FROM behavioral_sessions bs
-		JOIN task_executions te ON bs.task_execution_id = te.id
-		WHERE bs.id > ?
-	`
-
-	args := []interface{}{lastSeenID}
-
-	if project != "" {
-		query += " AND te.plan_file LIKE ?"
-		args = append(args, "%"+project+"%")
-	}
-
-	// Use chronological order (oldest new session first)
-	query += " ORDER BY bs.session_start ASC LIMIT 10"
-
-	rows, err := store.QueryRows(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query new sessions: %w", err)
-	}
-	defer rows.Close()
-
-	var updates []SessionUpdate
-	for rows.Next() {
-		var update SessionUpdate
-		var durationSecs int64
-		var agent sql.NullString
-
-		if err := rows.Scan(&update.ID, &update.TaskName, &agent, &update.Timestamp, &update.Success, &durationSecs,
-			&update.ToolCalls, &update.BashCommands, &update.FileOperations); err != nil {
-			return nil, fmt.Errorf("scan session: %w", err)
-		}
-
-		if agent.Valid {
-			update.Agent = agent.String
-		}
-		update.Duration = time.Duration(durationSecs) * time.Second
-
-		updates = append(updates, update)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate sessions: %w", err)
-	}
-
-	return updates, nil
-}
-
-// displaySessionUpdate displays a single session update with rich formatting
-func displaySessionUpdate(update SessionUpdate) {
-	status := "SUCCESS"
-	emoji := "✓"
-	if !update.Success {
-		status = "FAILED"
-		emoji = "✗"
-	}
-
-	agent := update.Agent
-	if agent == "" {
-		agent = "default"
-	}
-
-	// Build activity description
-	parts := []string{}
-	if update.ToolCalls > 0 {
-		parts = append(parts, fmt.Sprintf("%d tool%s", update.ToolCalls, pluralize(update.ToolCalls)))
-	}
-	if update.BashCommands > 0 {
-		parts = append(parts, fmt.Sprintf("%d bash cmd%s", update.BashCommands, pluralize(update.BashCommands)))
-	}
-	if update.FileOperations > 0 {
-		parts = append(parts, fmt.Sprintf("%d file op%s", update.FileOperations, pluralize(update.FileOperations)))
-	}
-
-	description := strings.Join(parts, ", ")
-	if description == "" {
-		description = "no activities"
-	}
-
-	fmt.Printf("[%s] %-20s %s %s | %s (%s)\n",
-		update.Timestamp.Format("15:04:05"),
-		agent,
-		emoji,
-		status,
-		description,
-		formatDuration(update.Duration))
-}
-
-// pluralize returns "s" if count != 1, otherwise ""
-func pluralize(count int) string {
-	if count == 1 {
-		return ""
-	}
-	return "s"
-}
-
 // collectBehavioralMetrics is a stub function for test compatibility
 // This function is deprecated - use store.GetSummaryStats() instead
 func collectBehavioralMetrics(store *learning.Store, project string) ([]interface{}, error) {
 	// Return empty slice for compatibility
 	return []interface{}{}, nil
+}
+
+// DisplayRecentSessions displays a list of recent sessions
+func DisplayRecentSessions(project string, limit int) error {
+	// Get learning DB path (uses build-time injected root)
+	dbPath, err := config.GetLearningDBPath()
+	if err != nil {
+		return fmt.Errorf("get learning db path: %w", err)
+	}
+
+	// Open learning store
+	store, err := learning.NewStore(dbPath)
+	if err != nil {
+		return fmt.Errorf("open learning store: %w", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Get recent sessions
+	sessions, err := store.GetRecentSessions(ctx, project, limit, 0)
+	if err != nil {
+		return fmt.Errorf("get recent sessions: %w", err)
+	}
+
+	// Display formatted output
+	fmt.Println(formatRecentSessionsTable(sessions, limit))
+
+	return nil
+}
+
+// formatRecentSessionsTable formats recent sessions as a readable table
+func formatRecentSessionsTable(sessions []learning.RecentSession, limit int) string {
+	var sb strings.Builder
+
+	sb.WriteString("\n=== Recent Sessions ===\n\n")
+
+	if len(sessions) == 0 {
+		sb.WriteString("No sessions found\n")
+		return sb.String()
+	}
+
+	// Header - Task and Agent at end for full display
+	sb.WriteString(fmt.Sprintf("%-8s %-10s %-12s %-20s %-20s %s\n",
+		"ID", "Status", "Duration", "Started", "Agent", "Task"))
+	sb.WriteString(strings.Repeat("-", 100) + "\n")
+
+	// Display rows
+	for _, session := range sessions {
+		status := "SUCCESS"
+		if !session.Success {
+			status = "FAILED"
+		}
+		durationStr := formatDuration(time.Duration(session.DurationSecs) * time.Second)
+
+		sb.WriteString(fmt.Sprintf("%-8d %-10s %-12s %-20s %-20s %s\n",
+			session.ID,
+			status,
+			durationStr,
+			session.Timestamp.Format("2006-01-02 15:04:05"),
+			session.Agent,
+			session.TaskName))
+	}
+
+	sb.WriteString(fmt.Sprintf("\n(Showing %d sessions. Use --limit/-n to see more)\n", len(sessions)))
+	sb.WriteString("Use 'conductor observe session <ID>' for detailed analysis.\n")
+
+	return sb.String()
 }

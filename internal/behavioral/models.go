@@ -6,15 +6,39 @@ import (
 )
 
 // ModelCosts defines pricing for different Claude models
-// Values are per 1 million tokens
+// Values are per 1 million tokens (USD)
 var ModelCosts = map[string]struct {
 	Input  float64
 	Output float64
 }{
-	"claude-sonnet-4-5": {Input: 3.0, Output: 15.0},
-	"claude-haiku-3-5":  {Input: 0.80, Output: 4.0},
-	"claude-opus-4":     {Input: 15.0, Output: 75.0},
-	"default":           {Input: 3.0, Output: 15.0},
+	// Sonnet variants
+	"claude-sonnet-4-5":          {Input: 3.0, Output: 15.0},
+	"claude-sonnet-4-5-20250929": {Input: 3.0, Output: 15.0},
+	"sonnet-4-5":                 {Input: 3.0, Output: 15.0},
+	"claude-3-5-sonnet-20241022": {Input: 3.0, Output: 15.0},
+	"claude-3-5-sonnet":          {Input: 3.0, Output: 15.0},
+	// Haiku variants
+	"claude-haiku-3-5":          {Input: 0.80, Output: 4.0},
+	"claude-haiku-4-5-20251001": {Input: 0.80, Output: 4.0},
+	"claude-3-5-haiku-20241022": {Input: 0.80, Output: 4.0},
+	// Opus variants
+	"claude-opus-4":            {Input: 15.0, Output: 75.0},
+	"claude-opus-4-5-20251101": {Input: 15.0, Output: 75.0},
+	"claude-3-opus-20240229":   {Input: 15.0, Output: 75.0},
+	// Default fallback
+	"default": {Input: 3.0, Output: 15.0},
+}
+
+// CalculateCost calculates the cost in USD based on model and token usage
+func CalculateCost(model string, inputTokens, outputTokens int64) float64 {
+	costs, ok := ModelCosts[model]
+	if !ok {
+		costs = ModelCosts["default"]
+	}
+	// Convert to millions of tokens
+	inputCost := float64(inputTokens) / 1_000_000 * costs.Input
+	outputCost := float64(outputTokens) / 1_000_000 * costs.Output
+	return inputCost + outputCost
 }
 
 // Session represents a Claude Code agent session extracted from JSONL files

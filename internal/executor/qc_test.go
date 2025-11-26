@@ -2443,6 +2443,7 @@ func contains(s, substr string) bool {
 			return false
 		}())
 }
+
 // TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON tests that invalid JSON responses fail immediately
 // With --json-schema flag enforcement, invalid JSON should not reach this point, but we test failure handling.
 func TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON(t *testing.T) {
@@ -2937,7 +2938,7 @@ func TestInjectBehaviorContext_StructuredPrompt(t *testing.T) {
 			TotalSessions:   5,
 			SuccessRate:     0.8,
 			AverageDuration: 1 * time.Minute,
-			TotalCost:       1.5, // High cost - should trigger anomaly
+			TotalCost:       1.5,  // High cost - should trigger anomaly
 			ErrorRate:       0.25, // High error rate - should trigger anomaly
 			BashCommands: []behavioral.BashCommand{
 				{Command: "cmd1", Success: false},

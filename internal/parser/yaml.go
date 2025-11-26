@@ -399,6 +399,16 @@ func buildPromptFromYAML(yt *yamlTask) string {
 	taskNum, _ := convertToString(yt.TaskNumber)
 	fmt.Fprintf(&prompt, "# Task %s: %s\n\n", taskNum, yt.Name)
 
+	// Target files - CRITICAL: tells agent exactly which files to create/modify
+	if len(yt.Files) > 0 {
+		fmt.Fprintf(&prompt, "## Target Files (REQUIRED)\n\n")
+		fmt.Fprintf(&prompt, "**You MUST create/modify these exact files:**\n")
+		for _, file := range yt.Files {
+			fmt.Fprintf(&prompt, "- `%s`\n", file)
+		}
+		fmt.Fprintf(&prompt, "\n⚠️ Do NOT create files with different names or paths. Use the exact paths listed above.\n\n")
+	}
+
 	// Description
 	if yt.Description != "" {
 		fmt.Fprintf(&prompt, "## Description\n\n%s\n\n", strings.TrimSpace(yt.Description))

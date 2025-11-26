@@ -477,6 +477,7 @@ type BehavioralSessionMetrics struct {
 	TaskName   string
 	Agent      string
 	Success    bool
+	ModelName  string // Claude model used (e.g., claude-opus-4-5-20251101)
 }
 
 // ToolExecutionData represents a tool execution record
@@ -651,9 +652,13 @@ func (s *Store) GetSessionMetrics(ctx context.Context, sessionID int64) (*Behavi
 		bs.id, bs.task_execution_id, bs.session_start, bs.session_end,
 		bs.total_duration_seconds, bs.total_tool_calls, bs.total_bash_commands,
 		bs.total_file_operations, bs.total_tokens_used, bs.context_window_used,
-		te.task_number, te.task_name, te.agent, te.success
+		COALESCE(te.task_number, SUBSTR(bs.external_session_id, 1, 8)),
+		COALESCE(te.task_name, 'Agent Session: ' || SUBSTR(bs.external_session_id, 1, 8)),
+		COALESCE(te.agent, bs.agent_type),
+		COALESCE(te.success, 1),
+		COALESCE(bs.model_name, '')
 		FROM behavioral_sessions bs
-		JOIN task_executions te ON bs.task_execution_id = te.id
+		LEFT JOIN task_executions te ON bs.task_execution_id = te.id AND bs.task_execution_id > 0
 		WHERE bs.id = ?`
 
 	row := s.db.QueryRowContext(ctx, query, sessionID)
@@ -676,6 +681,7 @@ func (s *Store) GetSessionMetrics(ctx context.Context, sessionID int64) (*Behavi
 		&metrics.TaskName,
 		&metrics.Agent,
 		&metrics.Success,
+		&metrics.ModelName,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -866,28 +872,28 @@ type AgentTypeStats struct {
 func (s *Store) GetAgentTypeStats(ctx context.Context, project string, limit, offset int) ([]AgentTypeStats, error) {
 	query := `
 		SELECT
-			COALESCE(te.agent, 'unknown') as agent_type,
-			COUNT(CASE WHEN te.success = 1 THEN 1 END) as success_count,
-			COUNT(CASE WHEN te.success = 0 THEN 1 END) as failure_count,
+			COALESCE(te.agent, bs.agent_type, 'unknown') as agent_type,
+			COUNT(CASE WHEN COALESCE(te.success, 1) = 1 THEN 1 END) as success_count,
+			COUNT(CASE WHEN COALESCE(te.success, 1) = 0 THEN 1 END) as failure_count,
 			COUNT(bs.id) as total_sessions,
 			AVG(bs.total_duration_seconds) as avg_duration,
 			SUM(tu.input_tokens) as total_input_tokens,
 			SUM(tu.output_tokens) as total_output_tokens
 		FROM behavioral_sessions bs
-		JOIN task_executions te ON bs.task_execution_id = te.id
+		LEFT JOIN task_executions te ON bs.task_execution_id = te.id AND bs.task_execution_id > 0
 		LEFT JOIN token_usage tu ON bs.id = tu.session_id
 	`
 
 	args := []interface{}{}
 
 	if project != "" {
-		query += " WHERE te.plan_file LIKE ?"
-		args = append(args, "%"+project+"%")
+		query += " WHERE (te.plan_file LIKE ? OR bs.project_path LIKE ?)"
+		args = append(args, "%"+project+"%", "%"+project+"%")
 	}
 
 	query += `
-		GROUP BY COALESCE(te.agent, 'unknown')
-		ORDER BY success_count DESC
+		GROUP BY COALESCE(te.agent, bs.agent_type, 'unknown')
+		ORDER BY total_sessions DESC
 	`
 
 	if limit > 0 {
@@ -961,29 +967,30 @@ type SummaryStats struct {
 	TotalOutputTokens   int64
 	TotalTokens         int64
 	AvgTokensPerSession float64
+	TotalCostUSD        float64 // Estimated cost based on default model pricing
 }
 
 // GetSummaryStats returns overall summary statistics for a project
 func (s *Store) GetSummaryStats(ctx context.Context, project string) (*SummaryStats, error) {
 	query := `
 		SELECT
-			COUNT(DISTINCT COALESCE(te.agent, 'unknown')) as total_agents,
+			COUNT(DISTINCT COALESCE(te.agent, bs.agent_type, 'unknown')) as total_agents,
 			COUNT(bs.id) as total_sessions,
-			COUNT(CASE WHEN te.success = 1 THEN 1 END) as total_successes,
-			COUNT(CASE WHEN te.success = 0 THEN 1 END) as total_failures,
+			COUNT(CASE WHEN COALESCE(te.success, 1) = 1 THEN 1 END) as total_successes,
+			COUNT(CASE WHEN COALESCE(te.success, 1) = 0 THEN 1 END) as total_failures,
 			AVG(bs.total_duration_seconds) as avg_duration,
 			SUM(tu.input_tokens) as total_input_tokens,
 			SUM(tu.output_tokens) as total_output_tokens
 		FROM behavioral_sessions bs
-		JOIN task_executions te ON bs.task_execution_id = te.id
+		LEFT JOIN task_executions te ON bs.task_execution_id = te.id AND bs.task_execution_id > 0
 		LEFT JOIN token_usage tu ON bs.id = tu.session_id
 	`
 
 	args := []interface{}{}
 
 	if project != "" {
-		query += " WHERE te.plan_file LIKE ?"
-		args = append(args, "%"+project+"%")
+		query += " WHERE (te.plan_file LIKE ? OR bs.project_path LIKE ?)"
+		args = append(args, "%"+project+"%", "%"+project+"%")
 	}
 
 	row := s.db.QueryRowContext(ctx, query, args...)
@@ -1027,6 +1034,11 @@ func (s *Store) GetSummaryStats(ctx context.Context, project string) (*SummarySt
 	if stats.TotalSessions > 0 {
 		stats.AvgTokensPerSession = float64(stats.TotalTokens) / float64(stats.TotalSessions)
 	}
+
+	// Calculate estimated cost using default Sonnet pricing ($3/1M input, $15/1M output)
+	inputCost := float64(stats.TotalInputTokens) / 1_000_000 * 3.0
+	outputCost := float64(stats.TotalOutputTokens) / 1_000_000 * 15.0
+	stats.TotalCostUSD = inputCost + outputCost
 
 	return stats, nil
 }
@@ -1678,7 +1690,7 @@ func (s *Store) UpsertClaudeSession(ctx context.Context,
 }
 
 // AppendToolExecution adds a tool execution to an existing session.
-// Single INSERT, no transaction needed.
+// Inserts the tool record and increments the session's tool call counter.
 func (s *Store) AppendToolExecution(ctx context.Context,
 	sessionID int64,
 	tool ToolExecutionData,
@@ -1694,11 +1706,18 @@ func (s *Store) AppendToolExecution(ctx context.Context,
 		return fmt.Errorf("append tool execution: %w", err)
 	}
 
+	// Increment session's tool call counter
+	updateQuery := `UPDATE behavioral_sessions SET total_tool_calls = total_tool_calls + 1 WHERE id = ?`
+	_, err = s.db.ExecContext(ctx, updateQuery, sessionID)
+	if err != nil {
+		return fmt.Errorf("increment tool call counter: %w", err)
+	}
+
 	return nil
 }
 
 // AppendBashCommand adds a bash command to an existing session.
-// Single INSERT, no transaction needed.
+// Inserts the bash record and increments the session's bash command counter.
 func (s *Store) AppendBashCommand(ctx context.Context,
 	sessionID int64,
 	bash BashCommandData,
@@ -1714,11 +1733,18 @@ func (s *Store) AppendBashCommand(ctx context.Context,
 		return fmt.Errorf("append bash command: %w", err)
 	}
 
+	// Increment session's bash command counter
+	updateQuery := `UPDATE behavioral_sessions SET total_bash_commands = total_bash_commands + 1 WHERE id = ?`
+	_, err = s.db.ExecContext(ctx, updateQuery, sessionID)
+	if err != nil {
+		return fmt.Errorf("increment bash command counter: %w", err)
+	}
+
 	return nil
 }
 
 // AppendFileOperation adds a file operation to an existing session.
-// Single INSERT, no transaction needed.
+// Inserts the file op record and increments the session's file operations counter.
 func (s *Store) AppendFileOperation(ctx context.Context,
 	sessionID int64,
 	fileOp FileOperationData,
@@ -1732,6 +1758,13 @@ func (s *Store) AppendFileOperation(ctx context.Context,
 		fileOp.DurationMs, fileOp.BytesAffected, fileOp.Success, fileOp.ErrorMessage)
 	if err != nil {
 		return fmt.Errorf("append file operation: %w", err)
+	}
+
+	// Increment session's file operations counter
+	updateQuery := `UPDATE behavioral_sessions SET total_file_operations = total_file_operations + 1 WHERE id = ?`
+	_, err = s.db.ExecContext(ctx, updateQuery, sessionID)
+	if err != nil {
+		return fmt.Errorf("increment file operations counter: %w", err)
 	}
 
 	return nil
@@ -1761,6 +1794,41 @@ func (s *Store) UpdateSessionAggregates(ctx context.Context,
 
 	if rowsAffected == 0 {
 		return fmt.Errorf("session not found: %d", sessionID)
+	}
+
+	return nil
+}
+
+// UpdateSessionTimestamps updates a session's start/end times, duration, and model.
+func (s *Store) UpdateSessionTimestamps(ctx context.Context,
+	sessionID int64,
+	startTime time.Time,
+	endTime time.Time,
+	durationSeconds int64,
+	model string,
+) error {
+	// Build dynamic query based on what fields we have
+	query := `UPDATE behavioral_sessions SET
+		session_start = COALESCE(?, session_start),
+		session_end = COALESCE(?, session_end),
+		total_duration_seconds = ?,
+		model_name = COALESCE(?, model_name)
+		WHERE id = ?`
+
+	var startVal, endVal, modelVal interface{}
+	if !startTime.IsZero() {
+		startVal = startTime
+	}
+	if !endTime.IsZero() {
+		endVal = endTime
+	}
+	if model != "" {
+		modelVal = model
+	}
+
+	_, err := s.db.ExecContext(ctx, query, startVal, endVal, durationSeconds, modelVal, sessionID)
+	if err != nil {
+		return fmt.Errorf("update session timestamps: %w", err)
 	}
 
 	return nil
@@ -1895,20 +1963,20 @@ func (s *Store) GetRecentSessions(ctx context.Context, project string, limit, of
 	query := `
 		SELECT
 			bs.id,
-			te.task_name,
-			te.agent,
-			te.success,
+			COALESCE(te.task_name, 'Agent Session: ' || SUBSTR(bs.external_session_id, 1, 8)),
+			COALESCE(te.agent, bs.agent_type),
+			COALESCE(te.success, 1),
 			bs.total_duration_seconds,
 			bs.session_start
 		FROM behavioral_sessions bs
-		JOIN task_executions te ON bs.task_execution_id = te.id
+		LEFT JOIN task_executions te ON bs.task_execution_id = te.id AND bs.task_execution_id > 0
 	`
 
 	args := []interface{}{}
 
 	if project != "" {
-		query += " WHERE te.plan_file LIKE ?"
-		args = append(args, "%"+project+"%")
+		query += " WHERE (te.plan_file LIKE ? OR bs.project_path LIKE ?)"
+		args = append(args, "%"+project+"%", "%"+project+"%")
 	}
 
 	query += " ORDER BY bs.session_start DESC"

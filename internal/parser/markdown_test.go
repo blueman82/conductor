@@ -340,6 +340,17 @@ Write tests first
 	if !strings.Contains(task.Prompt, "Test First") {
 		t.Error("Prompt should contain 'Test First' section")
 	}
+
+	// Verify file injection is present
+	if !strings.Contains(task.Prompt, "Target Files (REQUIRED)") {
+		t.Error("Prompt should contain 'Target Files (REQUIRED)' section")
+	}
+	if !strings.Contains(task.Prompt, "test.go") {
+		t.Error("Prompt should contain the file 'test.go'")
+	}
+	if !strings.Contains(task.Prompt, "MUST create/modify these exact files") {
+		t.Error("Prompt should contain file injection instructions")
+	}
 }
 
 func TestParseMarkdownIgnoresHeadingsInCodeBlocks(t *testing.T) {
@@ -1246,6 +1257,75 @@ func TestParseMarkdownCrossFileDependencies(t *testing.T) {
 				}
 				if task.DependsOn[i] != expected {
 					t.Errorf("dependency %d: expected %q, got %q", i, expected, task.DependsOn[i])
+				}
+			}
+		})
+	}
+}
+
+func TestInjectFilesIntoPrompt(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		files   []string
+		wantHas []string
+		wantNot []string
+	}{
+		{
+			name:    "no files - no injection",
+			content: "Original content",
+			files:   nil,
+			wantHas: []string{"Original content"},
+			wantNot: []string{"Target Files", "MUST create"},
+		},
+		{
+			name:    "empty files - no injection",
+			content: "Original content",
+			files:   []string{},
+			wantHas: []string{"Original content"},
+			wantNot: []string{"Target Files", "MUST create"},
+		},
+		{
+			name:    "single file - injection",
+			content: "Original content",
+			files:   []string{"src/main.go"},
+			wantHas: []string{
+				"Target Files (REQUIRED)",
+				"MUST create/modify these exact files",
+				"`src/main.go`",
+				"Do NOT create files with different names",
+				"Original content",
+			},
+			wantNot: nil,
+		},
+		{
+			name:    "multiple files - injection",
+			content: "Task description here",
+			files:   []string{"file1.go", "file2.go", "pkg/util.go"},
+			wantHas: []string{
+				"Target Files (REQUIRED)",
+				"`file1.go`",
+				"`file2.go`",
+				"`pkg/util.go`",
+				"Task description here",
+			},
+			wantNot: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := injectFilesIntoPrompt(tt.content, tt.files)
+
+			for _, want := range tt.wantHas {
+				if !strings.Contains(result, want) {
+					t.Errorf("expected result to contain %q, got:\n%s", want, result)
+				}
+			}
+
+			for _, notWant := range tt.wantNot {
+				if strings.Contains(result, notWant) {
+					t.Errorf("expected result NOT to contain %q, got:\n%s", notWant, result)
 				}
 			}
 		})

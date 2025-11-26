@@ -270,9 +270,9 @@ func TestFormatColorizedBehavioralMetrics_AllMetrics(t *testing.T) {
 
 func TestFormatColorizedBehavioralMetrics_MixedTypes(t *testing.T) {
 	metadata := map[string]interface{}{
-		"tool_count":      5.0,   // float64
-		"bash_count":      3,     // int
-		"file_operations": 7.0,   // float64
+		"tool_count":      5.0,    // float64
+		"bash_count":      3,      // int
+		"file_operations": 7.0,    // float64
 		"cost":            0.1234, // float64
 	}
 

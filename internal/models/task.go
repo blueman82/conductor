@@ -9,8 +9,8 @@ import (
 
 // CrossFileDependency represents a dependency on a task in a different plan file
 type CrossFileDependency struct {
-	File   string `yaml:"file" json:"file"`   // Filename (e.g., "plan-01-foundation.yaml")
-	TaskID string `yaml:"task" json:"task"`   // Task number in that file
+	File   string `yaml:"file" json:"file"` // Filename (e.g., "plan-01-foundation.yaml")
+	TaskID string `yaml:"task" json:"task"` // Task number in that file
 }
 
 // String returns a standardized string representation of a cross-file dependency

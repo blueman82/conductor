@@ -466,7 +466,9 @@ func TestIngestionEngineFlushOnTimeout(t *testing.T) {
 func TestIngestionEngineIncrementalRead(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	store, err := learning.NewStore(":memory:")
+	// Use file-based DB (not :memory:) to ensure goroutines share the same database
+	dbPath := filepath.Join(tmpDir, "test.db")
+	store, err := learning.NewStore(dbPath)
 	require.NoError(t, err)
 	defer store.Close()
 

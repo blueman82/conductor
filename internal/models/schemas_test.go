@@ -272,11 +272,11 @@ func TestSchemaCompactness(t *testing.T) {
 
 func TestSchemasValidateResponses(t *testing.T) {
 	tests := []struct {
-		name            string
-		schemaFn        func() string
-		validJSON       string
-		invalidJSON     string
-		description     string
+		name        string
+		schemaFn    func() string
+		validJSON   string
+		invalidJSON string
+		description string
 	}{
 		{
 			name:      "AgentResponse",

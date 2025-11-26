@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -253,23 +254,28 @@ func TestFormatMillis(t *testing.T) {
 }
 
 func TestNewObserveSessionCmd(t *testing.T) {
+	// Set up temp directory with config for test
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	os.Chdir(tmpDir)
+	os.MkdirAll(".conductor", 0755)
+	os.WriteFile(".conductor/config.yaml", []byte("learning:\n  db_path: .conductor/learning/test.db\n"), 0644)
+
 	cmd := NewObserveSessionCmd()
 
 	if cmd.Use != "session [session-id]" {
 		t.Errorf("unexpected Use: %s", cmd.Use)
 	}
 
-	if cmd.Short != "Analyze a specific agent session" {
+	if cmd.Short != "Analyze a specific agent session or list recent sessions" {
 		t.Errorf("unexpected Short: %s", cmd.Short)
 	}
 
-	// Test that session ID is required
+	// Test that no session ID now lists recent sessions (no error)
 	cmd.SetArgs([]string{})
 	err := cmd.Execute()
-	if err == nil {
-		t.Error("expected error when no session ID provided")
-	}
-	if !containsStr(err.Error(), "session ID is required") {
-		t.Errorf("unexpected error: %v", err)
+	if err != nil {
+		t.Errorf("expected success when no session ID provided (lists sessions), got error: %v", err)
 	}
 }

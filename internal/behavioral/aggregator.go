@@ -122,10 +122,20 @@ func (a *Aggregator) GetSessionMetrics(project, sessionID string) (*BehavioralMe
 		return nil, fmt.Errorf("failed to expand base directory: %w", err)
 	}
 
-	filename := fmt.Sprintf("agent-%s.jsonl", sessionID)
-	filePath := filepath.Join(expandedDir, project, filename)
+	// Try both file formats: agent-{id}.jsonl and {uuid}.jsonl
+	filenames := []string{
+		fmt.Sprintf("agent-%s.jsonl", sessionID),
+		fmt.Sprintf("%s.jsonl", sessionID),
+	}
 
-	return a.LoadSession(filePath)
+	for _, filename := range filenames {
+		filePath := filepath.Join(expandedDir, project, filename)
+		if _, err := os.Stat(filePath); err == nil {
+			return a.LoadSession(filePath)
+		}
+	}
+
+	return nil, fmt.Errorf("session file not found for ID: %s", sessionID)
 }
 
 // ListSessions returns all discovered sessions for a project

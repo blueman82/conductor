@@ -110,34 +110,6 @@ func TestFormatStatsTable_Empty(t *testing.T) {
 	}
 }
 
-func TestDisplaySessionUpdate(t *testing.T) {
-	update := SessionUpdate{
-		ID:        1,
-		TaskName:  "Test Task",
-		Agent:     "test-agent",
-		Timestamp: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
-		Success:   true,
-		Duration:  30 * time.Second,
-	}
-
-	// This function prints to stdout, so we just verify it doesn't panic
-	displaySessionUpdate(update)
-}
-
-func TestDisplaySessionUpdate_Failed(t *testing.T) {
-	update := SessionUpdate{
-		ID:        2,
-		TaskName:  "Failed Task",
-		Agent:     "",
-		Timestamp: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
-		Success:   false,
-		Duration:  15 * time.Second,
-	}
-
-	// This function prints to stdout, so we just verify it doesn't panic
-	displaySessionUpdate(update)
-}
-
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))

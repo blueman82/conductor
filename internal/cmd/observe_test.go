@@ -44,14 +44,14 @@ func TestObserveCommand_Subcommands(t *testing.T) {
 		t.Fatal("Observe command should be registered")
 	}
 
-	// Verify all 11 subcommands are registered
+	// Verify all 12 subcommands are registered (stream removed in favor of live)
 	subcommands := observeCmd.Commands()
-	if len(subcommands) != 11 {
-		t.Errorf("Expected 11 subcommands, got %d", len(subcommands))
+	if len(subcommands) != 12 {
+		t.Errorf("Expected 12 subcommands, got %d", len(subcommands))
 	}
 
 	// Verify specific subcommands exist
-	expectedSubcommands := []string{"import", "ingest", "project", "session", "tools", "bash", "files", "errors", "stats", "stream", "export"}
+	expectedSubcommands := []string{"import", "ingest", "project", "session", "tools", "bash", "files", "errors", "stats", "export", "transcript", "live"}
 	for _, expectedName := range expectedSubcommands {
 		found := false
 		for _, subcmd := range subcommands {
@@ -206,7 +206,7 @@ func TestObserveToolsCmd_Help(t *testing.T) {
 	}
 }
 
-func TestObserveStreamCmd_WithIngestFlag(t *testing.T) {
+func TestObserveLiveCmd_RawFlag(t *testing.T) {
 	rootCmd := NewRootCommand()
 	if rootCmd == nil {
 		t.Fatal("Root command should not be nil")
@@ -217,41 +217,33 @@ func TestObserveStreamCmd_WithIngestFlag(t *testing.T) {
 		t.Fatal("Observe command should be registered")
 	}
 
-	streamCmd := findCommand(observeCmd, "stream")
-	if streamCmd == nil {
-		t.Fatal("Stream subcommand should be registered")
+	liveCmd := findCommand(observeCmd, "live")
+	if liveCmd == nil {
+		t.Fatal("Live subcommand should be registered")
 	}
 
-	// Verify --with-ingest flag is registered
-	flag := streamCmd.Flags().Lookup("with-ingest")
+	// Verify --raw flag is registered
+	flag := liveCmd.Flags().Lookup("raw")
 	if flag == nil {
-		t.Fatal("Expected --with-ingest flag not found")
+		t.Fatal("Expected --raw flag not found")
 	}
 
 	// Verify flag properties
 	if flag.DefValue != "false" {
-		t.Errorf("Expected --with-ingest default to be 'false', got '%s'", flag.DefValue)
+		t.Errorf("Expected --raw default to be 'false', got '%s'", flag.DefValue)
 	}
 
-	if flag.Usage == "" {
-		t.Error("Expected --with-ingest flag to have usage description")
-	}
-
-	// Verify help text mentions --with-ingest
+	// Verify help text mentions --raw
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"observe", "stream", "--help"})
+	rootCmd.SetArgs([]string{"observe", "live", "--help"})
 
 	_ = rootCmd.Execute()
 	output := buf.String()
 
-	if !strings.Contains(output, "with-ingest") {
-		t.Errorf("Stream command help should mention 'with-ingest', got: %s", output)
-	}
-
-	if !strings.Contains(output, "ingestion daemon") {
-		t.Errorf("Stream command help should mention 'ingestion daemon', got: %s", output)
+	if !strings.Contains(output, "raw") {
+		t.Errorf("Live command help should mention 'raw', got: %s", output)
 	}
 }
 

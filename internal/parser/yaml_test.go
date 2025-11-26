@@ -52,6 +52,20 @@ plan:
 	if task.Files[0] != "file1.go" {
 		t.Errorf("Expected first file 'file1.go', got '%s'", task.Files[0])
 	}
+
+	// Verify files appear in prompt (critical for agent compliance)
+	if !strings.Contains(task.Prompt, "Target Files (REQUIRED)") {
+		t.Error("Prompt should contain 'Target Files (REQUIRED)' section")
+	}
+	if !strings.Contains(task.Prompt, "file1.go") {
+		t.Error("Prompt should contain file1.go")
+	}
+	if !strings.Contains(task.Prompt, "file2.go") {
+		t.Error("Prompt should contain file2.go")
+	}
+	if !strings.Contains(task.Prompt, "MUST create/modify these exact files") {
+		t.Error("Prompt should contain instruction about exact file paths")
+	}
 }
 
 func TestParseYAMLWithDependencies(t *testing.T) {
@@ -884,12 +898,12 @@ plan:
 
 func TestParseYAMLWithCrossFileDependencies(t *testing.T) {
 	tests := []struct {
-		name                  string
-		yamlContent           string
-		expectedTaskNum       string
-		expectedDependsOn     []string
-		shouldError           bool
-		errorContains         string
+		name              string
+		yamlContent       string
+		expectedTaskNum   string
+		expectedDependsOn []string
+		shouldError       bool
+		errorContains     string
 	}{
 		{
 			name: "simple cross-file dependency",

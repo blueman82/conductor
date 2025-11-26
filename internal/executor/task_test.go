@@ -422,7 +422,7 @@ func TestPostTaskHook_NoDuplicatesAfterRetry(t *testing.T) {
 			{
 				PlanFile:   "test-plan.md",
 				TaskNumber: "1",
-				QCVerdict:  models.StatusGreen,  // Same as what postTaskHook will write
+				QCVerdict:  models.StatusGreen, // Same as what postTaskHook will write
 				RunNumber:  1,
 			},
 		},

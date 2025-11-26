@@ -109,32 +109,6 @@ func TestObserveIntegration_StatsDisplay(t *testing.T) {
 	})
 }
 
-// TestObserveIntegration_Streaming tests streaming workflow
-func TestObserveIntegration_Streaming(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "stream.db")
-
-	store, err := learning.NewStore(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
-
-	t.Run("stream with timeout", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-		defer cancel()
-
-		err := StreamActivity(ctx, "test-project", 2*time.Second, false)
-		_ = err
-	})
-
-	t.Run("stream without project filter", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-		defer cancel()
-
-		err := StreamActivity(ctx, "", 2*time.Second, false)
-		_ = err
-	})
-}
-
 // TestObserveIntegration_AllSubcommands tests all subcommands execute
 func TestObserveIntegration_AllSubcommands(t *testing.T) {
 	subcommands := []struct {
@@ -148,8 +122,8 @@ func TestObserveIntegration_AllSubcommands(t *testing.T) {
 		{"files", NewObserveFilesCmd},
 		{"errors", NewObserveErrorsCmd},
 		{"stats", NewObserveStatsCmd},
-		{"stream", NewObserveStreamCmd},
 		{"export", NewObserveExportCmd},
+		{"live", NewObserveLiveCmd},
 	}
 
 	for _, sc := range subcommands {
@@ -193,28 +167,6 @@ func TestObserveIntegration_MenuNavigation(t *testing.T) {
 	t.Run("empty input", func(t *testing.T) {
 		reader := &MockMenuReader{inputs: []string{"", "q"}}
 		_, err := DisplayProjectMenuWithReader(reader)
-		_ = err
-	})
-}
-
-// TestObserveIntegration_WatchSessions tests session watching
-func TestObserveIntegration_WatchSessions(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	store, err := learning.NewStore(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
-
-	t.Run("watch with no sessions", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-
-	t.Run("watch with project filter", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "test-project", 0)
-		_ = updates
 		_ = err
 	})
 }
@@ -319,21 +271,10 @@ func TestObserveIntegration_ErrorHandling(t *testing.T) {
 	})
 }
 
-// TestObserveIntegration_ContextCancellation tests context handling
-func TestObserveIntegration_ContextCancellation(t *testing.T) {
-	t.Run("streaming cancels properly", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancel immediately
-
-		err := StreamActivity(ctx, "", 2*time.Second, false)
-		_ = err // Expected to return due to cancellation
-	})
-}
-
 // TestObserveIntegration_HelpCommands tests help text for all subcommands
 func TestObserveIntegration_HelpCommands(t *testing.T) {
 	subcommands := []string{
-		"project", "session", "tools", "bash", "files", "errors", "stats", "stream", "export",
+		"project", "session", "tools", "bash", "files", "errors", "stats", "export", "live",
 	}
 
 	for _, subcmd := range subcommands {
@@ -370,11 +311,6 @@ func TestObserveIntegration_EmptyDatabase(t *testing.T) {
 		assert.Equal(t, 0, stats.TotalSessions)
 	})
 
-	t.Run("watch empty db", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
 }
 
 // TestObserveIntegration_FilterCombinations tests various filter combinations
@@ -464,28 +400,6 @@ func TestObserveIntegration_CollectMetricsWithData(t *testing.T) {
 	})
 }
 
-// TestObserveIntegration_WatchSessionsWithData tests session watching with data
-func TestObserveIntegration_WatchSessionsWithData(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	store, err := learning.NewStore(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
-
-	t.Run("watch new sessions", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 0)
-		assert.NoError(t, err)
-		_ = updates
-	})
-
-	t.Run("watch with project filter", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "plan", 0)
-		assert.NoError(t, err)
-		_ = updates
-	})
-}
-
 // TestObserveIntegration_ExportStdout tests export to stdout
 func TestObserveIntegration_ExportStdout(t *testing.T) {
 	t.Run("export json to stdout", func(t *testing.T) {
@@ -543,33 +457,6 @@ func TestObserveIntegration_ExportWithAllFilters(t *testing.T) {
 			observeTimeRange = ""
 		})
 	}
-}
-
-// TestObserveIntegration_DisplaySessionUpdate tests session update display
-func TestObserveIntegration_DisplaySessionUpdate(t *testing.T) {
-	t.Run("display success update", func(t *testing.T) {
-		update := SessionUpdate{
-			ID:        1,
-			TaskName:  "test-task",
-			Agent:     "test-agent",
-			Timestamp: time.Now(),
-			Success:   true,
-			Duration:  5 * time.Second,
-		}
-		displaySessionUpdate(update)
-	})
-
-	t.Run("display failure update", func(t *testing.T) {
-		update := SessionUpdate{
-			ID:        2,
-			TaskName:  "failed-task",
-			Agent:     "",
-			Timestamp: time.Now(),
-			Success:   false,
-			Duration:  10 * time.Second,
-		}
-		displaySessionUpdate(update)
-	})
 }
 
 // TestObserveIntegration_FormatStatsWithData tests stats formatting with various data
@@ -689,28 +576,6 @@ func TestObserveIntegration_CollectMetricsFullCoverage(t *testing.T) {
 	})
 }
 
-// TestObserveIntegration_StreamActivityFullCoverage tests streaming with database updates
-func TestObserveIntegration_StreamActivityFullCoverage(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "stream.db")
-
-	store, err := learning.NewStore(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
-
-	t.Run("stream with empty database", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-
-	t.Run("stream with project filter no matches", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "nonexistent", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-}
-
 // TestObserveIntegration_FormatDuration tests duration formatting
 func TestObserveIntegration_FormatDuration(t *testing.T) {
 	testCases := []struct {
@@ -757,28 +622,6 @@ func TestObserveIntegration_DisplayStatsEdgeCases(t *testing.T) {
 	})
 }
 
-// TestObserveIntegration_StreamEdgeCases tests StreamActivity edge cases
-func TestObserveIntegration_StreamEdgeCases(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "stream.db")
-
-	store, err := learning.NewStore(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
-
-	t.Run("watch with empty last seen ID", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-
-	t.Run("watch with high last seen ID", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 99999)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-}
-
 // TestObserveIntegration_FormatStatsEdgeCases tests formatStatsTable edge cases
 // NOTE: Commented out - using old behavioral.AggregateStats instead of new learning.SummaryStats
 // func TestObserveIntegration_FormatStatsEdgeCases(t *testing.T) {
@@ -810,33 +653,6 @@ func TestObserveIntegration_StreamEdgeCases(t *testing.T) {
 // 		assert.NotEmpty(t, output)
 // 	})
 // }
-
-// TestObserveIntegration_DisplaySessionUpdateEdgeCases tests displaySessionUpdate variations
-func TestObserveIntegration_DisplaySessionUpdateEdgeCases(t *testing.T) {
-	t.Run("display with empty agent", func(t *testing.T) {
-		update := SessionUpdate{
-			ID:        1,
-			TaskName:  "task",
-			Agent:     "",
-			Timestamp: time.Now(),
-			Success:   true,
-			Duration:  0,
-		}
-		displaySessionUpdate(update)
-	})
-
-	t.Run("display with long duration", func(t *testing.T) {
-		update := SessionUpdate{
-			ID:        2,
-			TaskName:  "long-task",
-			Agent:     "agent",
-			Timestamp: time.Now(),
-			Success:   false,
-			Duration:  2 * time.Hour,
-		}
-		displaySessionUpdate(update)
-	})
-}
 
 // TestObserveIntegration_HandleExportCommand tests HandleExportCommand coverage
 func TestObserveIntegration_HandleExportCommand(t *testing.T) {
@@ -901,34 +717,6 @@ func TestObserveIntegration_CollectMetricsEdgeCases(t *testing.T) {
 	})
 }
 
-// TestObserveIntegration_WatchSessionsEdgeCases tests watchNewSessions edge cases
-func TestObserveIntegration_WatchSessionsEdgeCases(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	store, err := learning.NewStore(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
-
-	t.Run("watch with zero lastSeenID", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-
-	t.Run("watch with project filter", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "project", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-
-	t.Run("watch with high lastSeenID", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 999999)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-}
-
 // TestObserveIntegration_DisplayStatsWithConfig tests DisplayStats coverage
 func TestObserveIntegration_DisplayStatsWithConfig(t *testing.T) {
 	t.Run("display stats with config returns success", func(t *testing.T) {
@@ -958,40 +746,6 @@ func TestObserveIntegration_DisplayStatsWithConfig(t *testing.T) {
 	})
 }
 
-// TestObserveIntegration_StreamActivityWithConfig tests StreamActivity coverage
-func TestObserveIntegration_StreamActivityWithConfig(t *testing.T) {
-	t.Run("stream with config succeeds until context timeout", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		origDir, _ := os.Getwd()
-		defer os.Chdir(origDir)
-		os.Chdir(tmpDir)
-
-		os.MkdirAll(".conductor", 0755)
-		os.WriteFile(".conductor/config.yaml", []byte("learning:\n  db_path: .conductor/learning/test.db\n"), 0644)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-		defer cancel()
-		err := StreamActivity(ctx, "", 50*time.Millisecond, false)
-		// Context timeout is expected, not an error condition
-		_ = err
-	})
-
-	t.Run("stream with project and config", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		origDir, _ := os.Getwd()
-		defer os.Chdir(origDir)
-		os.Chdir(tmpDir)
-
-		os.MkdirAll(".conductor", 0755)
-		os.WriteFile(".conductor/config.yaml", []byte("learning:\n  db_path: .conductor/learning/test.db\n"), 0644)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-		defer cancel()
-		err := StreamActivity(ctx, "test-project", 50*time.Millisecond, false)
-		_ = err
-	})
-}
-
 // TestObserveIntegration_CollectBehavioralMetrics tests metrics collection logic
 func TestObserveIntegration_CollectBehavioralMetrics(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -1011,34 +765,6 @@ func TestObserveIntegration_CollectBehavioralMetrics(t *testing.T) {
 		metrics, err := collectBehavioralMetrics(store, "no-such-project")
 		assert.NoError(t, err)
 		assert.Empty(t, metrics)
-	})
-}
-
-// TestObserveIntegration_WatchNewSessionsLogic tests session watching logic
-func TestObserveIntegration_WatchNewSessionsLogic(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	store, err := learning.NewStore(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
-
-	t.Run("watch from beginning", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-
-	t.Run("watch with project no results", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "no-project", 0)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
-	})
-
-	t.Run("watch from high watermark", func(t *testing.T) {
-		updates, err := watchNewSessions(store, "", 99999)
-		assert.NoError(t, err)
-		assert.Empty(t, updates)
 	})
 }
 
@@ -1319,4 +1045,301 @@ func boolToStr(b bool) string {
 
 func floatToString(f float64) string {
 	return fmt.Sprintf("%.4f", f)
+}
+
+// TestObserveTranscriptIntegration tests the transcript command end-to-end
+func TestObserveTranscriptIntegration(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create project directory structure matching Claude Code layout
+	projectDir := filepath.Join(tmpDir, "test-project")
+	require.NoError(t, os.MkdirAll(projectDir, 0755))
+
+	// Create test fixture JSONL with proper Claude Code format
+	fixtureContent := `{"type":"session_start","session_id":"test-transcript-123","project":"test-project","timestamp":"2024-01-15T10:00:00Z","status":"active","agent_name":"backend-developer"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"text","text":"I'll help you implement the feature."}]},"timestamp":"2024-01-15T10:00:01Z"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"Read","input":{"file_path":"/src/main.go"}}]},"timestamp":"2024-01-15T10:00:05Z"}
+{"type":"user","sessionId":"test-transcript-123","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":"package main"}]},"timestamp":"2024-01-15T10:00:06Z"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_02","name":"Bash","input":{"command":"go test ./..."}}]},"timestamp":"2024-01-15T10:00:20Z"}
+{"type":"user","sessionId":"test-transcript-123","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_02","content":"FAIL: tests failed","is_error":true}]},"timestamp":"2024-01-15T10:00:25Z"}
+`
+	sessionFile := filepath.Join(projectDir, "agent-test-transcript-123.jsonl")
+	require.NoError(t, os.WriteFile(sessionFile, []byte(fixtureContent), 0644))
+
+	t.Run("parse and display transcript", func(t *testing.T) {
+		// Parse the session file directly
+		sessionData, err := behavioral.ParseSessionFile(sessionFile)
+		require.NoError(t, err)
+		require.NotNil(t, sessionData)
+
+		// Verify session metadata
+		assert.Equal(t, "test-transcript-123", sessionData.Session.ID)
+
+		// Verify events were parsed
+		assert.NotEmpty(t, sessionData.Events)
+
+		// Format transcript
+		opts := behavioral.TranscriptOptions{
+			ColorOutput:    false,
+			TruncateLength: 500,
+			ShowTimestamps: true,
+		}
+		transcript := behavioral.FormatTranscript(sessionData.Events, opts)
+
+		// Verify transcript contains expected elements
+		assert.Contains(t, transcript, "💬") // Assistant text emoji
+		assert.Contains(t, transcript, "🔧") // Tool emoji (for successful tool calls)
+	})
+
+	t.Run("transcript displays tool calls and bash commands", func(t *testing.T) {
+		sessionData, err := behavioral.ParseSessionFile(sessionFile)
+		require.NoError(t, err)
+
+		opts := behavioral.TranscriptOptions{
+			ColorOutput:    false,
+			TruncateLength: 500,
+			ShowTimestamps: false,
+		}
+		transcript := behavioral.FormatTranscript(sessionData.Events, opts)
+
+		// Verify tool calls are displayed (Read and Bash)
+		assert.Contains(t, transcript, "Read")
+		assert.Contains(t, transcript, "Bash")
+		assert.Contains(t, transcript, "go test")
+	})
+
+	t.Run("transcript raw mode disables colors", func(t *testing.T) {
+		sessionData, err := behavioral.ParseSessionFile(sessionFile)
+		require.NoError(t, err)
+
+		opts := behavioral.TranscriptOptions{
+			ColorOutput:    false, // Raw mode
+			TruncateLength: 500,
+			ShowTimestamps: true,
+		}
+		transcript := behavioral.FormatTranscript(sessionData.Events, opts)
+
+		// Should still contain content even without colors
+		assert.NotEmpty(t, transcript)
+		assert.NotContains(t, transcript, "No events")
+	})
+}
+
+// TestObserveLiveIntegration tests the live watcher with temp file writes
+func TestObserveLiveIntegration(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "live-test")
+	require.NoError(t, os.MkdirAll(projectDir, 0755))
+
+	t.Run("watcher detects new file content", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		// Create watcher
+		watcher := behavioral.NewLiveWatcher(tmpDir, "live-test")
+		watcher.SetPollInterval(50 * time.Millisecond)
+
+		// Start watcher in background
+		go func() {
+			_ = watcher.Start(ctx)
+		}()
+
+		// Give watcher time to initialize
+		time.Sleep(100 * time.Millisecond)
+
+		// Write initial content
+		initialContent := `{"type":"session_start","session_id":"live-test-001","project":"live-test","timestamp":"2024-01-15T10:00:00Z","status":"active"}
+{"type":"assistant","sessionId":"live-test-001","message":{"role":"assistant","content":[{"type":"text","text":"Starting work"}]},"timestamp":"2024-01-15T10:00:01Z"}
+`
+		sessionFile := filepath.Join(projectDir, "agent-live001.jsonl")
+		require.NoError(t, os.WriteFile(sessionFile, []byte(initialContent), 0644))
+
+		// Collect events
+		var events []behavioral.Event
+		timeout := time.After(1 * time.Second)
+	collectLoop:
+		for {
+			select {
+			case event, ok := <-watcher.Events():
+				if !ok {
+					break collectLoop
+				}
+				events = append(events, event)
+				if len(events) >= 1 {
+					break collectLoop
+				}
+			case <-timeout:
+				break collectLoop
+			}
+		}
+
+		// Verify at least one event was received
+		assert.NotEmpty(t, events, "Should receive at least one event")
+	})
+
+	t.Run("watcher tracks file positions", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		watcher := behavioral.NewLiveWatcher(tmpDir, "live-test")
+		watcher.SetPollInterval(50 * time.Millisecond)
+
+		go func() {
+			_ = watcher.Start(ctx)
+		}()
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Write content
+		content := `{"type":"session_start","session_id":"pos-test-001","project":"live-test","timestamp":"2024-01-15T10:00:00Z","status":"active"}
+`
+		sessionFile := filepath.Join(projectDir, "agent-postest.jsonl")
+		require.NoError(t, os.WriteFile(sessionFile, []byte(content), 0644))
+
+		time.Sleep(200 * time.Millisecond)
+
+		// Check positions were tracked
+		positions := watcher.GetPositions()
+		assert.NotEmpty(t, positions, "Should track file positions")
+	})
+
+	t.Run("watcher handles appended content", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		watcher := behavioral.NewLiveWatcher(tmpDir, "live-test")
+		watcher.SetPollInterval(50 * time.Millisecond)
+
+		go func() {
+			_ = watcher.Start(ctx)
+		}()
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Create file with initial content
+		sessionFile := filepath.Join(projectDir, "agent-append.jsonl")
+		initial := `{"type":"session_start","session_id":"append-001","project":"live-test","timestamp":"2024-01-15T10:00:00Z","status":"active"}
+`
+		require.NoError(t, os.WriteFile(sessionFile, []byte(initial), 0644))
+
+		time.Sleep(150 * time.Millisecond)
+
+		// Append more content
+		f, err := os.OpenFile(sessionFile, os.O_APPEND|os.O_WRONLY, 0644)
+		require.NoError(t, err)
+		appendContent := `{"type":"assistant","sessionId":"append-001","message":{"role":"assistant","content":[{"type":"text","text":"Appended message"}]},"timestamp":"2024-01-15T10:00:05Z"}
+`
+		_, err = f.WriteString(appendContent)
+		require.NoError(t, err)
+		f.Close()
+
+		// Collect events
+		var eventCount int
+		timeout := time.After(1 * time.Second)
+	collectLoop2:
+		for {
+			select {
+			case _, ok := <-watcher.Events():
+				if !ok {
+					break collectLoop2
+				}
+				eventCount++
+				if eventCount >= 2 {
+					break collectLoop2
+				}
+			case <-timeout:
+				break collectLoop2
+			}
+		}
+
+		// Should have received events from both initial and appended content
+		assert.GreaterOrEqual(t, eventCount, 1, "Should receive events")
+	})
+}
+
+// TestStreamCommandRemoved verifies that the stream subcommand was removed
+func TestStreamCommandRemoved(t *testing.T) {
+	t.Run("stream command not in observe subcommands", func(t *testing.T) {
+		cmd := NewObserveCommand()
+
+		// Check that stream is NOT a subcommand
+		for _, subcmd := range cmd.Commands() {
+			assert.NotEqual(t, "stream", subcmd.Name(), "stream command should be removed")
+		}
+	})
+
+	t.Run("observe has transcript and live commands", func(t *testing.T) {
+		cmd := NewObserveCommand()
+
+		hasTranscript := false
+		hasLive := false
+		for _, subcmd := range cmd.Commands() {
+			if subcmd.Name() == "transcript" {
+				hasTranscript = true
+			}
+			if subcmd.Name() == "live" {
+				hasLive = true
+			}
+		}
+
+		assert.True(t, hasTranscript, "transcript command should exist")
+		assert.True(t, hasLive, "live command should exist")
+	})
+
+	t.Run("help does not mention stream", func(t *testing.T) {
+		rootCmd := NewRootCommand()
+		buf := new(bytes.Buffer)
+		rootCmd.SetOut(buf)
+		rootCmd.SetErr(buf)
+		rootCmd.SetArgs([]string{"observe", "--help"})
+
+		err := rootCmd.Execute()
+		assert.NoError(t, err)
+		output := buf.String()
+
+		// Stream should not be in help output
+		assert.NotContains(t, output, "stream ")
+		// But transcript and live should be
+		assert.Contains(t, output, "transcript")
+		assert.Contains(t, output, "live")
+	})
+}
+
+// TestObserveTranscriptCommand tests the transcript command constructor
+func TestObserveTranscriptCommand(t *testing.T) {
+	t.Run("command created successfully", func(t *testing.T) {
+		cmd := NewObserveTranscriptCmd()
+		assert.NotNil(t, cmd)
+		assert.Equal(t, "transcript <session-id>", cmd.Use)
+		assert.Contains(t, cmd.Short, "transcript")
+	})
+
+	t.Run("requires session ID argument", func(t *testing.T) {
+		cmd := NewObserveTranscriptCmd()
+		cmd.SetArgs([]string{})
+		err := cmd.Execute()
+		assert.Error(t, err) // Should error without session ID
+	})
+
+	t.Run("has raw flag", func(t *testing.T) {
+		cmd := NewObserveTranscriptCmd()
+		rawFlag := cmd.Flags().Lookup("raw")
+		assert.NotNil(t, rawFlag, "should have --raw flag")
+	})
+}
+
+// TestObserveLiveCommand tests the live command constructor
+func TestObserveLiveCommand(t *testing.T) {
+	t.Run("command created successfully", func(t *testing.T) {
+		cmd := NewObserveLiveCmd()
+		assert.NotNil(t, cmd)
+		assert.Equal(t, "live", cmd.Use)
+		assert.Contains(t, cmd.Short, "real-time")
+	})
+
+	t.Run("has raw flag", func(t *testing.T) {
+		cmd := NewObserveLiveCmd()
+		rawFlag := cmd.Flags().Lookup("raw")
+		assert.NotNil(t, rawFlag, "should have --raw flag")
+	})
 }

@@ -185,6 +185,95 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_behavioral_sessions_external_id ON behavio
 CREATE INDEX IF NOT EXISTS idx_behavioral_sessions_project ON behavioral_sessions(project_path);
 `,
 	},
+	{
+		Version:     5,
+		Description: "Backfill aggregate counters from detail tables",
+		// This migration backfills total_tool_calls, total_bash_commands, and total_file_operations
+		// from the detail tables for sessions that were ingested before counter increments were added.
+		SQL: `
+-- Backfill aggregate counters from detail tables
+UPDATE behavioral_sessions SET
+  total_tool_calls = (SELECT COUNT(*) FROM tool_executions WHERE tool_executions.session_id = behavioral_sessions.id),
+  total_bash_commands = (SELECT COUNT(*) FROM bash_commands WHERE bash_commands.session_id = behavioral_sessions.id),
+  total_file_operations = (SELECT COUNT(*) FROM file_operations WHERE file_operations.session_id = behavioral_sessions.id)
+WHERE total_tool_calls = 0 AND total_bash_commands = 0 AND total_file_operations = 0;
+`,
+	},
+	{
+		Version:     6,
+		Description: "Backfill session timestamps from tool_executions",
+		// This migration backfills session_start, session_end, and total_duration_seconds
+		// from tool_executions for sessions that have 0 duration (before timestamp tracking was added).
+		SQL: `
+-- Backfill session timestamps from tool_executions (most reliable source)
+UPDATE behavioral_sessions SET
+  session_start = COALESCE(
+    (SELECT MIN(execution_time) FROM tool_executions WHERE tool_executions.session_id = behavioral_sessions.id),
+    session_start
+  ),
+  session_end = COALESCE(
+    (SELECT MAX(execution_time) FROM tool_executions WHERE tool_executions.session_id = behavioral_sessions.id),
+    session_end
+  ),
+  total_duration_seconds = COALESCE(
+    (SELECT CAST((julianday(MAX(execution_time)) - julianday(MIN(execution_time))) * 86400 AS INTEGER)
+     FROM tool_executions WHERE tool_executions.session_id = behavioral_sessions.id),
+    total_duration_seconds
+  )
+WHERE (total_duration_seconds = 0 OR total_duration_seconds IS NULL)
+  AND EXISTS (SELECT 1 FROM tool_executions WHERE tool_executions.session_id = behavioral_sessions.id);
+
+-- Also try bash_commands for sessions without tool_executions
+UPDATE behavioral_sessions SET
+  session_start = COALESCE(
+    (SELECT MIN(execution_time) FROM bash_commands WHERE bash_commands.session_id = behavioral_sessions.id),
+    session_start
+  ),
+  session_end = COALESCE(
+    (SELECT MAX(execution_time) FROM bash_commands WHERE bash_commands.session_id = behavioral_sessions.id),
+    session_end
+  ),
+  total_duration_seconds = COALESCE(
+    (SELECT CAST((julianday(MAX(execution_time)) - julianday(MIN(execution_time))) * 86400 AS INTEGER)
+     FROM bash_commands WHERE bash_commands.session_id = behavioral_sessions.id),
+    total_duration_seconds
+  )
+WHERE (total_duration_seconds = 0 OR total_duration_seconds IS NULL)
+  AND EXISTS (SELECT 1 FROM bash_commands WHERE bash_commands.session_id = behavioral_sessions.id);
+
+-- Finally try file_operations
+UPDATE behavioral_sessions SET
+  session_start = COALESCE(
+    (SELECT MIN(execution_time) FROM file_operations WHERE file_operations.session_id = behavioral_sessions.id),
+    session_start
+  ),
+  session_end = COALESCE(
+    (SELECT MAX(execution_time) FROM file_operations WHERE file_operations.session_id = behavioral_sessions.id),
+    session_end
+  ),
+  total_duration_seconds = COALESCE(
+    (SELECT CAST((julianday(MAX(execution_time)) - julianday(MIN(execution_time))) * 86400 AS INTEGER)
+     FROM file_operations WHERE file_operations.session_id = behavioral_sessions.id),
+    total_duration_seconds
+  )
+WHERE (total_duration_seconds = 0 OR total_duration_seconds IS NULL)
+  AND EXISTS (SELECT 1 FROM file_operations WHERE file_operations.session_id = behavioral_sessions.id);
+
+-- Delete sessions with no events and no duration (orphaned/empty)
+DELETE FROM behavioral_sessions
+WHERE (total_duration_seconds = 0 OR total_duration_seconds IS NULL)
+  AND total_tool_calls = 0
+  AND total_bash_commands = 0
+  AND total_file_operations = 0;
+`,
+	},
+	{
+		Version:     7,
+		Description: "Add model name column to behavioral_sessions for cost calculation",
+		// This migration adds a model_name column to track the model used in each session.
+		// Required for cost calculation based on ModelCosts pricing.
+		SQL: ``,
+	},
 }
 
 // MigrationVersion represents a record of an applied migration
@@ -230,6 +319,13 @@ func (s *Store) ApplyMigrations(ctx context.Context) error {
 		// Handle migration 4 special case: add columns idempotently
 		if migration.Version == 4 {
 			if err := s.applyMigration4Tx(ctx, tx); err != nil {
+				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
+			}
+		}
+
+		// Handle migration 7 special case: add model_name column idempotently
+		if migration.Version == 7 {
+			if err := s.applyMigration7Tx(ctx, tx); err != nil {
 				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
 			}
 		}
@@ -459,6 +555,14 @@ func (s *Store) applyMigration4Tx(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 
+	return nil
+}
+
+// applyMigration7Tx adds model_name column for cost calculation (within transaction).
+func (s *Store) applyMigration7Tx(ctx context.Context, tx *sql.Tx) error {
+	if err := s.addColumnIfNotExistsTx(ctx, tx, "behavioral_sessions", "model_name", "TEXT"); err != nil {
+		return fmt.Errorf("add column model_name: %w", err)
+	}
 	return nil
 }
 
