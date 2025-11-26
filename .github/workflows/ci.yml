@@ -103,9 +103,6 @@ jobs:
           - goos: darwin
             goarch: arm64
             name: conductor-darwin-arm64
-          - goos: windows
-            goarch: amd64
-            name: conductor-windows-amd64.exe
 
     steps:
       - name: Checkout code
