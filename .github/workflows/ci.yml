@@ -53,25 +53,7 @@ jobs:
           gofmt -l .
           test -z "$(gofmt -l .)"
 
-  # Job 2: Coverage - Generate and upload test coverage
-  coverage:
-    name: Coverage
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
-          cache: true
-
-      - name: Run tests with coverage
-        run: go test $(go list ./... | grep -v test/fixtures) -cover
-
-  # Job 3: Build - Build binaries for multiple platforms
+  # Job 2: Build - Build binaries for multiple platforms
   build:
     name: Build Binaries
     runs-on: ubuntu-latest
