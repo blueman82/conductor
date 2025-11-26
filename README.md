@@ -1,6 +1,12 @@
-# Conductor
+<p align="center">
+  <img src="assets/logo.png" alt="Conductor Logo" width="400">
+</p>
 
-**Autonomous Multi-Agent Orchestration for Claude Code**
+<h1 align="center">Conductor</h1>
+
+<p align="center">
+  <strong>Autonomous Multi-Agent Orchestration for Claude Code</strong>
+</p>
 
 Conductor is a production-ready Go CLI tool that executes implementation plans by orchestrating multiple Claude Code agents in coordinated parallel waves. It parses plan files, calculates task dependencies using graph algorithms, and manages parallel execution with quality control reviews.
 
