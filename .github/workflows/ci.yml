@@ -69,19 +69,7 @@ jobs:
           cache: true
 
       - name: Run tests with coverage
-        run: go test $(go list ./... | grep -v test/fixtures) -coverprofile=coverage.out -covermode=atomic
-
-      - name: Display coverage summary
-        run: go tool cover -func=coverage.out
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.out
-          flags: unittests
-          name: codecov-conductor
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: go test $(go list ./... | grep -v test/fixtures) -cover
 
   # Job 3: Build - Build binaries for multiple platforms
   build:
