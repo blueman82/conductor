@@ -1,0 +1,10 @@
+{"type":"session_start","session_id":"test-transcript-123","project":"test-project","timestamp":"2024-01-15T10:00:00Z","status":"active","agent_name":"backend-developer"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"text","text":"I'll help you implement the feature. Let me start by reading the existing code."}]},"timestamp":"2024-01-15T10:00:01Z"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"Read","input":{"file_path":"/src/main.go"}}]},"timestamp":"2024-01-15T10:00:05Z"}
+{"type":"user","sessionId":"test-transcript-123","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":"package main\n\nfunc main() {}"}]},"timestamp":"2024-01-15T10:00:06Z"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"text","text":"Now I'll write the implementation."}]},"timestamp":"2024-01-15T10:00:10Z"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_02","name":"Write","input":{"file_path":"/src/feature.go","content":"package main"}}]},"timestamp":"2024-01-15T10:00:15Z"}
+{"type":"user","sessionId":"test-transcript-123","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_02","content":"File written successfully"}]},"timestamp":"2024-01-15T10:00:16Z"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_03","name":"Bash","input":{"command":"go test ./..."}}]},"timestamp":"2024-01-15T10:00:20Z"}
+{"type":"user","sessionId":"test-transcript-123","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_03","content":"FAIL: tests failed","is_error":true}]},"timestamp":"2024-01-15T10:00:25Z"}
+{"type":"assistant","sessionId":"test-transcript-123","message":{"role":"assistant","content":[{"type":"text","text":"The tests failed. Let me fix the issue."}]},"timestamp":"2024-01-15T10:00:30Z"}

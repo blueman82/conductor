@@ -228,11 +228,14 @@ func formatTimestamp(t time.Time) string {
 
 // formatDuration formats a duration for human-readable display
 func formatDuration(d time.Duration) string {
+	if d == 0 {
+		return "0.0s"
+	}
 	if d < time.Minute {
-		return fmt.Sprintf("%.0fs", d.Seconds())
+		return fmt.Sprintf("%.1fs", d.Seconds())
 	}
 	if d < time.Hour {
-		return fmt.Sprintf("%.0fm", d.Minutes())
+		return fmt.Sprintf("%.1fm", d.Minutes())
 	}
 	if d < 24*time.Hour {
 		return fmt.Sprintf("%.1fh", d.Hours())

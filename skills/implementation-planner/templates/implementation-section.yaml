@@ -1,0 +1,114 @@
+# Implementation Section Template
+# Structure matches conductor parser: internal/parser/yaml.go:58-73
+
+# MINIMAL EXAMPLE (use for simple tasks)
+minimal_example:
+  implementation:
+    approach: |
+      Brief explanation of implementation strategy.
+      Architectural decisions and why this approach.
+
+    key_points:
+      - point: "Key decision or critical step"
+        details: "Why this matters, implications, context"
+        reference: "Optional: file path, docs, or pattern reference"
+
+# FULL EXAMPLE (use for complex tasks with dependencies)
+full_example:
+  implementation:
+    approach: |
+      Comprehensive implementation strategy.
+      Cover architectural decisions, design patterns, and trade-offs.
+      Explain why this approach over alternatives.
+
+    code_structure: |
+      src/module/file1.py:
+        - Class1 (primary component)
+        - helper_function()
+        - validate_input()
+
+      src/module/file2.py:
+        - Class2 (secondary component)
+        - process_data()
+
+      tests/test_module.py:
+        - test_class1_functionality()
+        - test_integration_with_class2()
+
+    key_points:
+      - point: "Critical implementation decision"
+        details: "Why this decision matters. Impact on architecture, performance, or maintainability."
+        reference: "existing_file.py:123 or documentation URL"
+
+      - point: "Integration point with dependency"
+        details: "How this connects to components from other tasks. Data flow, API contracts."
+        reference: "Task 2 implementation or shared interface"
+
+      - point: "Error handling strategy"
+        details: "How errors propagate, what gets caught vs re-raised, logging approach."
+        reference: "See error_handling.md or logging standard"
+
+    integration:
+      imports:
+        - "from module_from_task_1 import Service"
+        - "from shared.config import Config"
+        - "import logging"
+
+      services_to_inject:
+        - "DatabaseConnection (from task 1)"
+        - "CacheService (from task 3)"
+        - "EventPublisher (from task 2)"
+
+      config_values:
+        - "MAX_RETRIES - from environment, default 3"
+        - "TIMEOUT_SECONDS - from config.yaml, default 30"
+        - "LOG_LEVEL - from environment, default INFO"
+
+      error_handling:
+        - "ValidationError → 400 Bad Request with field-specific messages"
+        - "DatabaseError → retry 3 times, then 500 Internal Server Error"
+        - "TimeoutError → 504 Gateway Timeout"
+        - "AuthenticationError → 401 Unauthorized"
+
+# FIELD USAGE GUIDE
+
+# approach (string, multiline)
+# - High-level implementation strategy
+# - Architectural decisions and rationale
+# - Why this approach over alternatives
+# - Any important context or constraints
+
+# code_structure (string, multiline)
+# - File and class/function organization
+# - Pseudocode or structural outline
+# - Show relationships between components
+# - Use when structure isn't obvious from description
+
+# key_points (array of objects)
+# Each entry MUST have:
+#   - point: Critical decision, pattern, or step
+#   - details: Why it matters, implications
+#   - reference: (optional) File, docs, or pattern to follow
+
+# integration (object)
+# Use when task has depends_on (wiring multiple components)
+#   - imports: Required import statements
+#   - services_to_inject: Dependencies from other tasks
+#   - config_values: Configuration keys and defaults
+#   - error_handling: Error cases and response strategy
+
+# WHEN TO USE EACH FIELD
+
+# Always include:
+#   - approach (explains strategy)
+#   - key_points (minimum 1-3 critical steps)
+
+# Add code_structure when:
+#   - Multiple files (3+)
+#   - Complex class hierarchies
+#   - Architecture not obvious from description
+
+# Add integration when:
+#   - Task has depends_on (wiring components)
+#   - Cross-cutting concerns (auth, logging, caching)
+#   - Multiple services need coordination

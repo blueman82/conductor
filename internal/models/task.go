@@ -9,8 +9,8 @@ import (
 
 // CrossFileDependency represents a dependency on a task in a different plan file
 type CrossFileDependency struct {
-	File   string `yaml:"file" json:"file"`   // Filename (e.g., "plan-01-foundation.yaml")
-	TaskID string `yaml:"task" json:"task"`   // Task number in that file
+	File   string `yaml:"file" json:"file"` // Filename (e.g., "plan-01-foundation.yaml")
+	TaskID string `yaml:"task" json:"task"` // Task number in that file
 }
 
 // String returns a standardized string representation of a cross-file dependency
@@ -40,6 +40,9 @@ type Task struct {
 	TestCommands        []string `yaml:"test_commands,omitempty" json:"test_commands,omitempty"`
 	Type                string   `yaml:"type,omitempty" json:"type,omitempty"`                                 // Task type: regular or integration
 	IntegrationCriteria []string `yaml:"integration_criteria,omitempty" json:"integration_criteria,omitempty"` // Criteria for integration tasks
+
+	// JSON Schema enforcement (v2.8+)
+	JSONSchema string `yaml:"json_schema,omitempty" json:"json_schema,omitempty"` // Custom JSON schema for response validation
 
 	// Execution metadata for enhanced console output
 	ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`

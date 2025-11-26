@@ -1,0 +1,18 @@
+plan:
+  metadata:
+    name: "Valid Plan for Invalid Test"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 1
+      name: "Task One"
+      files:
+        - file1.txt
+      prompt: "This is a valid task"
+
+    - task_number: 2
+      name: "Task Two"
+      files:
+        - file2.txt
+      depends_on:
+        - 1
+      prompt: "This task depends on task 1"

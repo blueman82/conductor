@@ -150,13 +150,10 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 			return nil, fmt.Errorf("task %d: invalid task_number: %w", i+1, err)
 		}
 
-		dependsOn := make([]string, 0, len(yt.DependsOn))
-		for j, dep := range yt.DependsOn {
-			depStr, err := convertToString(dep)
-			if err != nil {
-				return nil, fmt.Errorf("task %s: invalid depends_on[%d]: %w", taskNum, j, err)
-			}
-			dependsOn = append(dependsOn, depStr)
+		// Process dependencies using the helper that supports mixed formats
+		dependsOn, err := processDependencies(yt.DependsOn)
+		if err != nil {
+			return nil, fmt.Errorf("task %s: %w", taskNum, err)
 		}
 
 		task := models.Task{
@@ -208,6 +205,108 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 	}
 
 	return plan, nil
+}
+
+// processDependencies converts a slice of mixed dependency formats (int, float, string, map)
+// into normalized string representations. Supports:
+// - Numeric dependencies: 1, 2.5, etc.
+// - String dependencies: "1", "integration-1", etc.
+// - Cross-file dependencies: {file: "plan-01.yaml", task: 2}
+func processDependencies(deps []interface{}) ([]string, error) {
+	var normalized []string
+
+	for _, dep := range deps {
+		switch v := dep.(type) {
+		case int:
+			normalized = append(normalized, fmt.Sprintf("%d", v))
+		case float64:
+			// YAML parses numbers as float64; check if it's a whole number
+			if v == float64(int(v)) {
+				normalized = append(normalized, fmt.Sprintf("%d", int(v)))
+			} else {
+				normalized = append(normalized, fmt.Sprintf("%v", v))
+			}
+		case string:
+			normalized = append(normalized, v)
+		case map[string]interface{}:
+			// Parse cross-file dependency
+			cfd, err := models.ParseCrossFileDep(buildCrossFileDepString(v))
+			if err != nil {
+				// Try to extract file and task from map directly
+				file, hasFile := v["file"].(string)
+				task, hasTask := v["task"]
+
+				if !hasFile || !hasTask {
+					// Return the original error message from models
+					var fileErr, taskErr string
+					if !hasFile {
+						fileErr = "missing required 'file' field"
+					}
+					if !hasTask {
+						if fileErr != "" {
+							taskErr = " and missing required 'task' field"
+						} else {
+							taskErr = "missing required 'task' field"
+						}
+					}
+					return nil, fmt.Errorf("cross-file dependency: %s%s", fileErr, taskErr)
+				}
+
+				// Convert task to string
+				var taskStr string
+				switch t := task.(type) {
+				case int:
+					taskStr = fmt.Sprintf("%d", t)
+				case float64:
+					if t == float64(int(t)) {
+						taskStr = fmt.Sprintf("%d", int(t))
+					} else {
+						taskStr = fmt.Sprintf("%v", t)
+					}
+				case string:
+					taskStr = t
+				default:
+					return nil, fmt.Errorf("cross-file dependency 'task' must be int/float/string, got %T", task)
+				}
+
+				normalized = append(normalized, fmt.Sprintf("file:%s:task:%s", file, taskStr))
+			} else {
+				normalized = append(normalized, cfd.String())
+			}
+		default:
+			return nil, fmt.Errorf("invalid depends_on[%d]: unsupported type: %T", len(normalized), v)
+		}
+	}
+
+	return normalized, nil
+}
+
+// buildCrossFileDepString converts a map representation to the standard string format
+func buildCrossFileDepString(m map[string]interface{}) string {
+	file, hasFile := m["file"].(string)
+	task := m["task"]
+
+	if !hasFile || task == nil {
+		return ""
+	}
+
+	var taskStr string
+	switch t := task.(type) {
+	case int:
+		taskStr = fmt.Sprintf("%d", t)
+	case float64:
+		if t == float64(int(t)) {
+			taskStr = fmt.Sprintf("%d", int(t))
+		} else {
+			taskStr = fmt.Sprintf("%v", t)
+		}
+	case string:
+		taskStr = t
+	default:
+		taskStr = fmt.Sprintf("%v", t)
+	}
+
+	return fmt.Sprintf("file:%s:task:%s", file, taskStr)
 }
 
 // convertToString converts interface{} to string, supporting int, float, and string types
@@ -299,6 +398,16 @@ func buildPromptFromYAML(yt *yamlTask) string {
 	// Task header
 	taskNum, _ := convertToString(yt.TaskNumber)
 	fmt.Fprintf(&prompt, "# Task %s: %s\n\n", taskNum, yt.Name)
+
+	// Target files - CRITICAL: tells agent exactly which files to create/modify
+	if len(yt.Files) > 0 {
+		fmt.Fprintf(&prompt, "## Target Files (REQUIRED)\n\n")
+		fmt.Fprintf(&prompt, "**You MUST create/modify these exact files:**\n")
+		for _, file := range yt.Files {
+			fmt.Fprintf(&prompt, "- `%s`\n", file)
+		}
+		fmt.Fprintf(&prompt, "\n⚠️ Do NOT create files with different names or paths. Use the exact paths listed above.\n\n")
+	}
 
 	// Description
 	if yt.Description != "" {

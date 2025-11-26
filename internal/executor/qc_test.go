@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
@@ -759,43 +760,6 @@ func TestLoadContext(t *testing.T) {
 	}
 }
 
-func TestBuildQCJSONPrompt(t *testing.T) {
-	tests := []struct {
-		name         string
-		basePrompt   string
-		wantContains []string
-	}{
-		{
-			name:       "adds JSON instruction",
-			basePrompt: "Review this task execution",
-			wantContains: []string{
-				"Review this task execution",
-				"IMPORTANT:",
-				"valid JSON",
-				"verdict",
-				"feedback",
-				"issues",
-				"recommendations",
-				"should_retry",
-				"suggested_agent",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			qc := NewQualityController(nil)
-			prompt := qc.buildQCJSONPrompt(tt.basePrompt)
-
-			for _, want := range tt.wantContains {
-				if !contains(prompt, want) {
-					t.Errorf("buildQCJSONPrompt() missing expected content %q\nGot: %s", want, prompt)
-				}
-			}
-		})
-	}
-}
-
 func TestParseQCJSON(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -1202,74 +1166,6 @@ func TestAggregateVerdicts(t *testing.T) {
 	}
 }
 
-func TestExtractJSONFromCodeFence(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "valid JSON with ```json fence",
-			input: "```json\n{\"verdict\":\"GREEN\",\"feedback\":\"Good\"}\n```",
-			want:  "{\"verdict\":\"GREEN\",\"feedback\":\"Good\"}",
-		},
-		{
-			name:  "valid JSON with just ``` fence",
-			input: "```\n{\"verdict\":\"RED\",\"feedback\":\"Bad\"}\n```",
-			want:  "{\"verdict\":\"RED\",\"feedback\":\"Bad\"}",
-		},
-		{
-			name:  "JSON without fences",
-			input: "{\"verdict\":\"GREEN\",\"feedback\":\"Good\"}",
-			want:  "{\"verdict\":\"GREEN\",\"feedback\":\"Good\"}",
-		},
-		{
-			name:  "multiline JSON in fence",
-			input: "```json\n{\n  \"verdict\": \"GREEN\",\n  \"feedback\": \"Good\"\n}\n```",
-			want:  "{\n  \"verdict\": \"GREEN\",\n  \"feedback\": \"Good\"\n}",
-		},
-		{
-			name:  "fence with language identifier",
-			input: "```javascript\n{\"verdict\":\"YELLOW\",\"feedback\":\"OK\"}\n```",
-			want:  "{\"verdict\":\"YELLOW\",\"feedback\":\"OK\"}",
-		},
-		{
-			name:  "text with fence - extracts JSON from fence",
-			input: "Here's the result:\n```json\n{\"verdict\":\"GREEN\"}\n```\nDone",
-			want:  "{\"verdict\":\"GREEN\"}", // Fence found anywhere in content, JSON extracted
-		},
-		{
-			name:  "uppercase JSON marker",
-			input: "```JSON\n{\"verdict\":\"GREEN\"}\n```",
-			want:  "{\"verdict\":\"GREEN\"}", // Case-insensitive detection
-		},
-		{
-			name:  "mixed case Json marker",
-			input: "```Json\n{\"verdict\":\"GREEN\"}\n```",
-			want:  "{\"verdict\":\"GREEN\"}", // Case-insensitive detection
-		},
-		{
-			name:  "empty fence - returns empty string",
-			input: "```json\n\n```",
-			want:  "", // No JSON found in fence
-		},
-		{
-			name:  "whitespace around JSON",
-			input: "```json\n  {\"verdict\":\"GREEN\"}  \n```",
-			want:  "{\"verdict\":\"GREEN\"}",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractJSONFromCodeFence(tt.input)
-			if got != tt.want {
-				t.Errorf("extractJSONFromCodeFence() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 // mockQCLogger for testing QC logging calls
 type mockQCLogger struct {
 	agentSelectionCalls []struct {
@@ -1500,9 +1396,6 @@ func TestBuildStructuredReviewPrompt_WithCriteria(t *testing.T) {
 	}
 	if !contains(prompt, "go test ./...") {
 		t.Error("should include test commands")
-	}
-	if !contains(prompt, "criteria_results") {
-		t.Error("should specify JSON response format with criteria_results")
 	}
 	if !contains(prompt, "agent output") {
 		t.Error("should include agent output")
@@ -2551,67 +2444,8 @@ func contains(s, substr string) bool {
 		}())
 }
 
-// TestInvokeAndParseQCAgent_RetriesOnInvalidJSON tests JSON validation retry logic
-// This test verifies that when a QC agent returns invalid JSON (verdict in metadata),
-// the system retries with a schema reminder and validates the corrected response.
-func TestInvokeAndParseQCAgent_RetriesOnInvalidJSON(t *testing.T) {
-	callCount := 0
-	mockInv := &mockInvoker{
-		mockInvoke: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
-			callCount++
-			if callCount == 1 {
-				// First call: return invalid JSON (verdict in metadata, not at root level)
-				return &agent.InvocationResult{
-					Output:   `{"metadata": {"verdict": "GREEN"}, "feedback": "looks good"}`,
-					Duration: 100 * time.Millisecond,
-				}, nil
-			}
-			// Second call (retry): verify schema reminder in prompt, return valid JSON
-			if !strings.Contains(task.Prompt, "PREVIOUS JSON INVALID") {
-				t.Error("Retry prompt missing schema reminder indicator")
-			}
-			if !strings.Contains(task.Prompt, "verdict must be at root level") {
-				t.Error("Retry prompt missing schema explanation")
-			}
-			return &agent.InvocationResult{
-				Output:   `{"verdict":"GREEN","feedback":"looks good","issues":[],"recommendations":[],"should_retry":false,"suggested_agent":""}`,
-				Duration: 100 * time.Millisecond,
-			}, nil
-		},
-	}
-
-	qc := &QualityController{
-		Invoker: mockInv,
-	}
-
-	task := models.Task{
-		Number: "1",
-		Name:   "Test task",
-		Prompt: "original prompt",
-	}
-
-	// Test that invokeAndParseQCAgent retries on invalid JSON
-	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
-
-	if err != nil {
-		t.Fatalf("Expected success after retry, got error: %v", err)
-	}
-
-	if callCount != 2 {
-		t.Errorf("Expected 2 invocations (original + retry), got %d", callCount)
-	}
-
-	if resp.Verdict != "GREEN" {
-		t.Errorf("Expected verdict GREEN, got %s", resp.Verdict)
-	}
-
-	if resp.Feedback != "looks good" {
-		t.Errorf("Expected feedback 'looks good', got %q", resp.Feedback)
-	}
-}
-
-// TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON tests maximum retry exhaustion
-// When JSON remains invalid after retry limit, the system should return an error.
+// TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON tests that invalid JSON responses fail immediately
+// With --json-schema flag enforcement, invalid JSON should not reach this point, but we test failure handling.
 func TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON(t *testing.T) {
 	callCount := 0
 	mockInv := &mockInvoker{
@@ -2635,7 +2469,7 @@ func TestInvokeAndParseQCAgent_FailsOnPersistentInvalidJSON(t *testing.T) {
 		Prompt: "original prompt",
 	}
 
-	// Test that invokeAndParseQCAgent fails after exhausting retries
+	// Test that invokeAndParseQCAgent fails on invalid JSON (single attempt with schema enforcement)
 	resp, err := qc.invokeAndParseQCAgent(context.Background(), task, "test-agent")
 
 	if err == nil {
@@ -3021,4 +2855,170 @@ func TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegrati
 	if contains(prompt, "This should not appear") {
 		t.Error("Integration criteria should not be included in non-integration task prompts")
 	}
+}
+
+// TestInjectBehaviorContext_WithProvider tests behavioral context injection with a provider
+func TestInjectBehaviorContext_WithProvider(t *testing.T) {
+	// Create mock metrics provider
+	mockProvider := &mockBehavioralMetricsProvider{
+		metrics: &behavioral.BehavioralMetrics{
+			TotalSessions:   3,
+			SuccessRate:     0.75,
+			AverageDuration: 30 * time.Second,
+			TotalCost:       0.25,
+			ErrorRate:       0.1,
+			ToolExecutions: []behavioral.ToolExecution{
+				{Name: "Read", Count: 15, SuccessRate: 0.95, AvgDuration: 50 * time.Millisecond},
+				{Name: "Bash", Count: 8, SuccessRate: 0.7, AvgDuration: 200 * time.Millisecond},
+			},
+			TokenUsage: behavioral.TokenUsage{
+				InputTokens:  5000,
+				OutputTokens: 2000,
+				CostUSD:      0.25,
+				ModelName:    "claude-sonnet-4-5",
+			},
+		},
+	}
+
+	var provider BehavioralMetricsProvider = mockProvider
+	qc := NewQualityController(nil)
+	qc.BehavioralMetrics = &provider
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
+
+	// Verify behavioral context is injected
+	if !contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
+		t.Error("BuildReviewPrompt() should include BEHAVIORAL ANALYSIS CONTEXT when provider is set")
+	}
+	if !contains(prompt, "Sessions**: 3") {
+		t.Error("BuildReviewPrompt() should include session count")
+	}
+	if !contains(prompt, "Success Rate**: 75.0%") {
+		t.Error("BuildReviewPrompt() should include success rate")
+	}
+	if !contains(prompt, "Tool Usage") {
+		t.Error("BuildReviewPrompt() should include tool usage section")
+	}
+	if !contains(prompt, "Cost Summary") {
+		t.Error("BuildReviewPrompt() should include cost summary")
+	}
+}
+
+// TestInjectBehaviorContext_WithoutProvider tests behavioral context injection without provider
+func TestInjectBehaviorContext_WithoutProvider(t *testing.T) {
+	qc := NewQualityController(nil)
+	// BehavioralMetrics is nil by default
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
+
+	// Verify no behavioral context when provider is not set
+	if contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
+		t.Error("BuildReviewPrompt() should not include BEHAVIORAL ANALYSIS CONTEXT when provider is nil")
+	}
+}
+
+// TestInjectBehaviorContext_StructuredPrompt tests behavioral context in structured prompts
+func TestInjectBehaviorContext_StructuredPrompt(t *testing.T) {
+	mockProvider := &mockBehavioralMetricsProvider{
+		metrics: &behavioral.BehavioralMetrics{
+			TotalSessions:   5,
+			SuccessRate:     0.8,
+			AverageDuration: 1 * time.Minute,
+			TotalCost:       1.5,  // High cost - should trigger anomaly
+			ErrorRate:       0.25, // High error rate - should trigger anomaly
+			BashCommands: []behavioral.BashCommand{
+				{Command: "cmd1", Success: false},
+				{Command: "cmd2", Success: false},
+				{Command: "cmd3", Success: false},
+				{Command: "cmd4", Success: false},
+			},
+		},
+	}
+
+	var provider BehavioralMetricsProvider = mockProvider
+	qc := NewQualityController(nil)
+	qc.BehavioralMetrics = &provider
+
+	task := models.Task{
+		Number: "2",
+		Name:   "Task with criteria",
+		Prompt: "Do something",
+		SuccessCriteria: []string{
+			"Criterion 1",
+			"Criterion 2",
+		},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Task output")
+
+	// Verify behavioral context is in structured prompt
+	if !contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
+		t.Error("BuildStructuredReviewPrompt() should include BEHAVIORAL ANALYSIS CONTEXT")
+	}
+	// Verify anomalies are detected and shown
+	if !contains(prompt, "Anomalies Detected") {
+		t.Error("BuildStructuredReviewPrompt() should include anomalies section when there are anomalies")
+	}
+	if !contains(prompt, "High cost") {
+		t.Error("BuildStructuredReviewPrompt() should flag high cost anomaly")
+	}
+	if !contains(prompt, "High error rate") {
+		t.Error("BuildStructuredReviewPrompt() should flag high error rate anomaly")
+	}
+	if !contains(prompt, "bash failures") {
+		t.Error("BuildStructuredReviewPrompt() should flag multiple bash failures")
+	}
+	// Verify consideration note
+	if !contains(prompt, "Consider these behavioral patterns") {
+		t.Error("BuildStructuredReviewPrompt() should include behavioral consideration note")
+	}
+}
+
+// TestInjectBehaviorContext_NilMetrics tests handling when provider returns nil metrics
+func TestInjectBehaviorContext_NilMetrics(t *testing.T) {
+	mockProvider := &mockBehavioralMetricsProvider{
+		metrics: nil, // Provider returns nil
+	}
+
+	var provider BehavioralMetricsProvider = mockProvider
+	qc := NewQualityController(nil)
+	qc.BehavioralMetrics = &provider
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
+
+	// Verify no behavioral context when metrics are nil
+	if contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
+		t.Error("BuildReviewPrompt() should not include BEHAVIORAL ANALYSIS CONTEXT when metrics are nil")
+	}
+}
+
+// mockBehavioralMetricsProvider is a test mock for BehavioralMetricsProvider
+type mockBehavioralMetricsProvider struct {
+	metrics *behavioral.BehavioralMetrics
+}
+
+func (m *mockBehavioralMetricsProvider) GetMetrics(ctx context.Context, taskNumber string) *behavioral.BehavioralMetrics {
+	return m.metrics
 }

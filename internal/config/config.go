@@ -135,6 +135,52 @@ type QualityControlConfig struct {
 	RetryOnRed int `yaml:"retry_on_red"`
 }
 
+// CostModelConfig represents Claude model token pricing configuration
+type CostModelConfig struct {
+	// SonnetInput is the cost per 1M input tokens for Claude Sonnet
+	SonnetInput float64 `yaml:"sonnet_input"`
+
+	// SonnetOutput is the cost per 1M output tokens for Claude Sonnet
+	SonnetOutput float64 `yaml:"sonnet_output"`
+
+	// HaikuInput is the cost per 1M input tokens for Claude Haiku
+	HaikuInput float64 `yaml:"haiku_input"`
+
+	// HaikuOutput is the cost per 1M output tokens for Claude Haiku
+	HaikuOutput float64 `yaml:"haiku_output"`
+
+	// OpusInput is the cost per 1M input tokens for Claude Opus
+	OpusInput float64 `yaml:"opus_input"`
+
+	// OpusOutput is the cost per 1M output tokens for Claude Opus
+	OpusOutput float64 `yaml:"opus_output"`
+}
+
+// AgentWatchConfig represents Agent Watch behavioral analytics configuration
+type AgentWatchConfig struct {
+	// Enabled enables Agent Watch behavioral analytics
+	Enabled bool `yaml:"enabled"`
+
+	// BaseDir is the base directory for discovering Claude Code session files
+	// Default: ~/.claude/projects
+	BaseDir string `yaml:"base_dir"`
+
+	// DefaultLimit is the default number of sessions/entries to display in observe commands
+	DefaultLimit int `yaml:"default_limit"`
+
+	// PollIntervalSecs is the poll interval in seconds for real-time activity streaming
+	PollIntervalSecs int `yaml:"poll_interval_secs"`
+
+	// AutoImport enables automatic import of new session data
+	AutoImport bool `yaml:"auto_import"`
+
+	// CacheSize is the maximum number of sessions to cache in memory
+	CacheSize int `yaml:"cache_size"`
+
+	// CostModel contains Claude model pricing configuration
+	CostModel CostModelConfig `yaml:"cost_model"`
+}
+
 // Config represents conductor configuration options
 type Config struct {
 	// MaxConcurrency is the maximum number of concurrent tasks (0 = unlimited)
@@ -169,6 +215,9 @@ type Config struct {
 
 	// QualityControl contains quality control configuration
 	QualityControl QualityControlConfig `yaml:"quality_control"`
+
+	// AgentWatch contains Agent Watch behavioral analytics configuration
+	AgentWatch AgentWatchConfig `yaml:"agent_watch"`
 }
 
 // DefaultConsoleConfig returns ConsoleConfig with sensible default values
@@ -182,6 +231,32 @@ func DefaultConsoleConfig() ConsoleConfig {
 		ShowAgentNames:    true,
 		ShowFileCounts:    true,
 		ShowDurations:     true,
+	}
+}
+
+// DefaultCostModelConfig returns CostModelConfig with current Claude API pricing
+// Prices are per 1M tokens as of the build date
+func DefaultCostModelConfig() CostModelConfig {
+	return CostModelConfig{
+		SonnetInput:  3.0,
+		SonnetOutput: 15.0,
+		HaikuInput:   0.80,
+		HaikuOutput:  4.0,
+		OpusInput:    15.0,
+		OpusOutput:   75.0,
+	}
+}
+
+// DefaultAgentWatchConfig returns AgentWatchConfig with sensible default values
+func DefaultAgentWatchConfig() AgentWatchConfig {
+	return AgentWatchConfig{
+		Enabled:          true,
+		BaseDir:          "~/.claude/projects",
+		DefaultLimit:     100,
+		PollIntervalSecs: 2,
+		AutoImport:       false,
+		CacheSize:        50,
+		CostModel:        DefaultCostModelConfig(),
 	}
 }
 
@@ -231,6 +306,7 @@ func DefaultConfig() *Config {
 			},
 			RetryOnRed: 2,
 		},
+		AgentWatch: DefaultAgentWatchConfig(),
 	}
 }
 
@@ -319,6 +395,7 @@ func LoadConfig(path string) (*Config, error) {
 		Feedback       FeedbackConfig       `yaml:"feedback"`
 		Learning       LearningConfig       `yaml:"learning"`
 		QualityControl QualityControlConfig `yaml:"quality_control"`
+		AgentWatch     AgentWatchConfig     `yaml:"agent_watch"`
 	}
 
 	var yamlCfg yamlConfig
@@ -508,6 +585,67 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.QualityControl.Agents.ExplicitList = []string{cfg.QualityControl.ReviewAgent}
 			}
 		}
+
+		// Merge AgentWatch config
+		if agentWatchSection, exists := rawMap["agent_watch"]; exists && agentWatchSection != nil {
+			agentWatch := yamlCfg.AgentWatch
+			agentWatchMap, _ := agentWatchSection.(map[string]interface{})
+
+			if _, exists := agentWatchMap["enabled"]; exists {
+				cfg.AgentWatch.Enabled = agentWatch.Enabled
+			}
+			if _, exists := agentWatchMap["base_dir"]; exists {
+				cfg.AgentWatch.BaseDir = agentWatch.BaseDir
+			}
+			if _, exists := agentWatchMap["default_limit"]; exists {
+				cfg.AgentWatch.DefaultLimit = agentWatch.DefaultLimit
+			}
+			if _, exists := agentWatchMap["poll_interval_secs"]; exists {
+				cfg.AgentWatch.PollIntervalSecs = agentWatch.PollIntervalSecs
+			}
+			if _, exists := agentWatchMap["auto_import"]; exists {
+				cfg.AgentWatch.AutoImport = agentWatch.AutoImport
+			}
+			if _, exists := agentWatchMap["cache_size"]; exists {
+				cfg.AgentWatch.CacheSize = agentWatch.CacheSize
+			}
+
+			// Handle cost_model section
+			if costModelSection, exists := agentWatchMap["cost_model"]; exists && costModelSection != nil {
+				costModelMap, _ := costModelSection.(map[string]interface{})
+
+				if sonnetInput, exists := costModelMap["sonnet_input"]; exists {
+					if val, ok := sonnetInput.(float64); ok {
+						cfg.AgentWatch.CostModel.SonnetInput = val
+					}
+				}
+				if sonnetOutput, exists := costModelMap["sonnet_output"]; exists {
+					if val, ok := sonnetOutput.(float64); ok {
+						cfg.AgentWatch.CostModel.SonnetOutput = val
+					}
+				}
+				if haikuInput, exists := costModelMap["haiku_input"]; exists {
+					if val, ok := haikuInput.(float64); ok {
+						cfg.AgentWatch.CostModel.HaikuInput = val
+					}
+				}
+				if haikuOutput, exists := costModelMap["haiku_output"]; exists {
+					if val, ok := haikuOutput.(float64); ok {
+						cfg.AgentWatch.CostModel.HaikuOutput = val
+					}
+				}
+				if opusInput, exists := costModelMap["opus_input"]; exists {
+					if val, ok := opusInput.(float64); ok {
+						cfg.AgentWatch.CostModel.OpusInput = val
+					}
+				}
+				if opusOutput, exists := costModelMap["opus_output"]; exists {
+					if val, ok := opusOutput.(float64); ok {
+						cfg.AgentWatch.CostModel.OpusOutput = val
+					}
+				}
+			}
+		}
 	}
 
 	// Apply environment variable overrides (highest priority)
@@ -532,12 +670,37 @@ func LoadConfigFromRootWithBuildTime(buildTimeRoot string) (*Config, error) {
 	return LoadConfig(configPath)
 }
 
-// LoadConfigFromDir loads configuration from .conductor/config.yaml in the conductor repo root
-// Uses the build-time injected root (set via SetBuildTimeRepoRoot)
-// The dir parameter is IGNORED - kept for backward compatibility only
-// If the directory or file doesn't exist, returns default configuration without error
+// LoadConfigFromDir loads configuration from .conductor/config.yaml
+// Priority order:
+//  1. If dir is provided and config exists at {dir}/.conductor/config.yaml, use it
+//  2. If "." is passed, use current working directory
+//  3. Try build-time injected root if available
+//  4. Return default configuration if no config file found
 func LoadConfigFromDir(dir string) (*Config, error) {
-	return LoadConfigFromRootWithBuildTime(buildTimeRepoRoot)
+	// Handle "." as current directory
+	if dir == "." {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return DefaultConfig(), nil
+		}
+		dir = cwd
+	}
+
+	// Try config at provided/resolved directory
+	if dir != "" {
+		configPath := filepath.Join(dir, ".conductor", "config.yaml")
+		if _, err := os.Stat(configPath); err == nil {
+			return LoadConfig(configPath)
+		}
+	}
+
+	// Try build-time root as fallback
+	if buildTimeRepoRoot != "" {
+		return LoadConfigFromRootWithBuildTime(buildTimeRepoRoot)
+	}
+
+	// Return defaults if no config found
+	return DefaultConfig(), nil
 }
 
 // MergeWithFlags merges CLI flags into the configuration
@@ -650,6 +813,50 @@ func (c *Config) Validate() error {
 			if trimmed == "" {
 				return fmt.Errorf("quality_control.agents.blocked[%d] cannot be empty", i)
 			}
+		}
+	}
+
+	// Validate Agent Watch configuration
+	if c.AgentWatch.Enabled {
+		// Validate base_dir is not empty
+		if c.AgentWatch.BaseDir == "" {
+			return fmt.Errorf("agent_watch.base_dir cannot be empty when agent_watch is enabled")
+		}
+
+		// Validate default_limit is positive
+		if c.AgentWatch.DefaultLimit <= 0 {
+			return fmt.Errorf("agent_watch.default_limit must be > 0, got %d", c.AgentWatch.DefaultLimit)
+		}
+
+		// Validate poll_interval_secs is positive
+		if c.AgentWatch.PollIntervalSecs <= 0 {
+			return fmt.Errorf("agent_watch.poll_interval_secs must be > 0, got %d", c.AgentWatch.PollIntervalSecs)
+		}
+
+		// Validate cache_size is positive
+		if c.AgentWatch.CacheSize <= 0 {
+			return fmt.Errorf("agent_watch.cache_size must be > 0, got %d", c.AgentWatch.CacheSize)
+		}
+
+		// Validate cost model pricing is non-negative
+		costModel := c.AgentWatch.CostModel
+		if costModel.SonnetInput < 0 {
+			return fmt.Errorf("agent_watch.cost_model.sonnet_input must be >= 0, got %f", costModel.SonnetInput)
+		}
+		if costModel.SonnetOutput < 0 {
+			return fmt.Errorf("agent_watch.cost_model.sonnet_output must be >= 0, got %f", costModel.SonnetOutput)
+		}
+		if costModel.HaikuInput < 0 {
+			return fmt.Errorf("agent_watch.cost_model.haiku_input must be >= 0, got %f", costModel.HaikuInput)
+		}
+		if costModel.HaikuOutput < 0 {
+			return fmt.Errorf("agent_watch.cost_model.haiku_output must be >= 0, got %f", costModel.HaikuOutput)
+		}
+		if costModel.OpusInput < 0 {
+			return fmt.Errorf("agent_watch.cost_model.opus_input must be >= 0, got %f", costModel.OpusInput)
+		}
+		if costModel.OpusOutput < 0 {
+			return fmt.Errorf("agent_watch.cost_model.opus_output must be >= 0, got %f", costModel.OpusOutput)
 		}
 	}
 

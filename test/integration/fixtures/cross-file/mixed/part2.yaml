@@ -1,0 +1,23 @@
+plan:
+  metadata:
+    name: "Mixed Dependencies - Part 2"
+    estimated_tasks: 2
+  tasks:
+    - task_number: 4
+      name: "Add Request Logging Middleware"
+      files:
+        - middleware/logging.go
+      prompt: "Create middleware that logs all requests"
+
+    - task_number: 5
+      name: "Implement Authentication"
+      files:
+        - auth/middleware.go
+      depends_on:
+        - 4
+        - file: part1.yaml
+          task: 2
+      prompt: |
+        Implement authentication middleware.
+        Uses router from task 2 in part1 and logging from task 4.
+        This demonstrates both local and cross-file dependencies.

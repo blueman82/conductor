@@ -175,9 +175,10 @@ func (is *IntelligentSelector) invokeClaudeForSelection(ctx context.Context, pro
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, is.Timeout)
 	defer cancel()
 
-	// Build command args - minimal flags for quick selection
+	// Build command args with JSON schema enforcement
 	args := []string{
 		"-p", prompt,
+		"--json-schema", models.IntelligentSelectionSchema(),
 		"--output-format", "json",
 		"--settings", `{"disableAllHooks": true}`,
 	}
@@ -200,43 +201,13 @@ func (is *IntelligentSelector) invokeClaudeForSelection(ctx context.Context, pro
 		return nil, fmt.Errorf("empty response from claude")
 	}
 
-	// Strip markdown code fences if present
-	content = stripCodeFences(content)
-
-	// Parse as recommendation
+	// Parse as recommendation - schema guarantees valid JSON
 	var recommendation IntelligentAgentRecommendation
 	if err := json.Unmarshal([]byte(content), &recommendation); err != nil {
-		return nil, fmt.Errorf("failed to parse recommendation JSON: %w (content: %s)", err, content)
+		return nil, fmt.Errorf("schema enforcement failed: %w (content: %s)", err, content)
 	}
 
 	return &recommendation, nil
-}
-
-// stripCodeFences removes markdown code fences from JSON response
-func stripCodeFences(content string) string {
-	content = strings.TrimSpace(content)
-
-	// Remove ```json ... ``` or ``` ... ```
-	if strings.HasPrefix(content, "```") {
-		lines := strings.Split(content, "\n")
-		if len(lines) >= 2 {
-			// Skip first line (```json or ```)
-			start := 1
-			end := len(lines) - 1
-
-			// Skip last line if it's closing ```
-			if end > start && strings.TrimSpace(lines[end]) == "```" {
-				end--
-			}
-
-			// Rejoin the middle lines
-			if start <= end {
-				content = strings.Join(lines[start:end+1], "\n")
-			}
-		}
-	}
-
-	return strings.TrimSpace(content)
 }
 
 // applyGuardrails validates and constrains the agent selection

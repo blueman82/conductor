@@ -1,0 +1,493 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# OBSERVE COMMANDS ENHANCEMENT
+# ═══════════════════════════════════════════════════════════════════════════
+# Feature: Implement remaining observe subcommands (project, session, interactive)
+# Problem: 3 TODOs in observe.go for unimplemented functionality
+# Solution: Wire existing behavioral package functions to CLI commands
+# ═══════════════════════════════════════════════════════════════════════════
+# DATA FLOW REGISTRY
+# ═══════════════════════════════════════════════════════════════════════════
+# PRODUCERS:
+#   behavioral/project.go → ListProjects(), GetProjectStats()
+#   behavioral/aggregator.go → GetProjectMetrics(), GetSessionMetrics(), ListSessions()
+#   behavioral/discovery.go → DiscoverProjectSessions()
+#   behavioral/display.go → FormatTable(), color utilities
+#   learning/store.go → GetSummaryStats(), GetSessionStats()
+#
+# CONSUMERS:
+#   Task 1 → [project.go, aggregator.go, display.go] (observe project)
+#   Task 2 → [aggregator.go, parser.go, display.go] (observe session)
+#   Task 3 → [1, 2, aggregator.go] (interactive mode)
+#
+# VALIDATION: All consumers use existing behavioral package functions ✓
+# ═══════════════════════════════════════════════════════════════════════════
+
+conductor:
+  default_agent: golang-pro
+  worktree_groups:
+    - group_id: "observe-commands"
+      description: "Implement observe project and session commands (Tasks 1-2)"
+      tasks: [1, 2]
+      rationale: "Sequential due to shared observe.go file"
+    - group_id: "interactive-mode"
+      description: "Enhance interactive mode after commands exist (Task 3)"
+      tasks: [3]
+      rationale: "Depends on commands being available"
+plan:
+  metadata:
+    feature_name: "Observe Commands Enhancement"
+    created: "2025-11-25"
+    version: "1.0.0"
+    estimated_total_time: "2-3 hours"
+  context:
+    language: "Go 1.21+"
+    framework: "Cobra CLI"
+    architecture: "CLI commands calling behavioral package functions"
+    related_packages:
+      - "internal/cmd/observe.go"
+      - "internal/behavioral/project.go"
+      - "internal/behavioral/aggregator.go"
+      - "internal/behavioral/display.go"
+  background: |
+    The `conductor observe` command has 3 TODO placeholders:
+    1. Line 106: `observe project` - project-level metrics
+    2. Line 127: `observe session` - session-specific analysis
+    3. Line 75: Interactive mode - session selection after project pick
+
+    All required data retrieval functions already exist in the behavioral package.
+    This plan wires them to the CLI with proper formatting.
+  tasks:
+    # ═══════════════════════════════════════════════════════════════════════
+    # TASK 1: Implement observe project command
+    # ═══════════════════════════════════════════════════════════════════════
+    - task_number: 1
+      name: "Implement observe project command"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe.go"
+        - "internal/cmd/observe_project.go"
+      depends_on: []
+      estimated_time: "45m"
+      description: |
+        # Task 1: Implement observe project command
+
+        ## IMPLEMENTATION REQUIREMENTS
+        Replace TODO at observe.go:106 with full project analysis.
+
+        **MUST use existing functions:**
+        - `behavioral.GetProjectStats(projectName)` - basic stats
+        - `aggregator.GetProjectMetrics(projectName)` - detailed metrics
+        - `learning.Store.GetSummaryStats(ctx, project)` - DB-backed stats
+
+        ## COMMAND STRUCTURE
+        ```
+        conductor observe project [project-name]
+        conductor observe project --project myapp
+        conductor observe project  # Uses observeProject flag if set
+        ```
+
+        ## OUTPUT FORMAT
+        Follow pattern from observe_stats.go:
+        ```
+        === Project: myapp ===
+
+        Sessions:        42
+        Success Rate:    87.5%
+        Total Duration:  12h 34m
+        Last Activity:   2025-11-25 10:30:00
+
+        --- Tool Usage ---
+        Tool               Calls    Success%
+        Read               1,234    98.5%
+        Write              567      95.2%
+        ...
+
+        --- Recent Sessions ---
+        ID                  Duration  Status
+        abc123              5m 30s    success
+        def456              2m 15s    failed
+        ...
+        ```
+
+        ## IMPLEMENTATION APPROACH
+        1. Create new file `observe_project.go` for DisplayProjectAnalysis()
+        2. Update NewObserveProjectCmd() in observe.go to call it
+        3. Accept project name from args[0] or --project flag
+        4. Use Aggregator with GetProjectMetrics() for rich data
+        5. Fall back to GetProjectStats() if aggregator fails
+      success_criteria:
+        - "observe project [name] displays project metrics"
+        - "Project name accepted from positional arg or --project flag"
+        - "Output shows sessions, success rate, tool usage, recent sessions"
+        - "Handles non-existent project with clear error"
+        - "Uses existing GetProjectMetrics() or GetProjectStats()"
+        - "No TODO comments in production code"
+        - "Tests verify command execution and output format"
+      test_commands:
+        - "go test ./internal/cmd/... -run TestObserveProject -v"
+        - "go build ./cmd/conductor && ./conductor observe project --help"
+      implementation:
+        approach: "Create DisplayProjectAnalysis() following observe_stats.go pattern"
+        key_points:
+          - point: "Dual data source"
+            details: "Try Aggregator first (JSONL-based), fall back to Store (DB-based)"
+          - point: "Reuse formatting"
+            details: "Follow formatStatsTable() pattern from observe_stats.go"
+          - point: "Project resolution"
+            details: "args[0] > --project flag > error if neither"
+        integration:
+          imports:
+            - "github.com/harrison/conductor/internal/behavioral"
+            - "github.com/harrison/conductor/internal/learning"
+          error_handling:
+            - "Return clear error for non-existent project"
+            - "Warn but continue if some metrics unavailable"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "go vet ./internal/cmd/... && go test ./internal/cmd/... -v"
+      commit:
+        message: "feat(observe): implement project-level analysis command"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":261978,"duration_api_ms":283244,"num_turns":39,"result":"","session_id":"5421d81b-dd0b-4d20-8b85-6549ca0ff8dd","total_cost_usd":2.1206847,"usage":{"input_tokens":37,"cache_creation_input_tokens":87752,"cache_read_input_tokens":2446410,"output_tokens":12760,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":87752}},"modelUsage":{"claude-opus-4-5-20251101":{"inputTokens":40,"outputTokens":12789,"cacheReadInputTokens":2451729,"cacheCreationInputTokens":87752,"webSearchRequests":0,"costUSD":2.0942394999999996,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":22522,"outputTokens":682,"cacheReadInputTokens":5132,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0264452,"contextWindow":200000}},"permission_denials":[],"structured_output":{"status":"success","summary":"Implemented observe project command with DisplayProjectAnalysis() function, GetRecentSessions() store method, and comprehensive tests","output":"## Implementation Complete\n\n### Files Created\n- `internal/cmd/observe_project.go` - DisplayProjectAnalysis() with:\n  - Dual data sources: DB (SummaryStats) + JSONL (Aggregator)\n  - Tool usage table\n  - Agent performance breakdown\n  - Recent sessions list\n  - formatBytes() helper\n\n- `internal/cmd/observe_project_test.go` - Tests for:\n  - formatProjectAnalysis() with various data combinations\n  - formatBytes() edge cases\n  - DisplayProjectAnalysis() error handling\n\n### Files Modified\n- `internal/cmd/observe.go:105-111` - NewObserveProjectCmd() now calls DisplayProjectAnalysis()\n- `internal/learning/store.go:1788-1864` - Added RecentSession type and GetRecentSessions()\n- `internal/learning/store_test.go:1625-1708` - Added TestGetRecentSessions()\n\n### Command Usage\n```\nconductor observe project [project-name]\nconductor observe project --project myapp\n```\n\n### Output Format\n```\n=== Project: myapp ===\n\n--- Overview ---\nSessions:        42\nSuccess Rate:    87.5%\nAverage Duration: 5m 0s\nLast Activity:   2025-11-25 10:30:00\n\n--- Tool Usage ---\nTool                      Calls    Success%\nRead                        100      98.0%\n\n--- Agent Performance ---\nAgent                     Sessions    Success%  Avg Duration\n\n--- Recent Sessions ---\nAgent                Duration   Status  Task\n```","files_modified":["internal/cmd/observe_project.go","internal/cmd/observe_project_test.go","internal/cmd/observe.go","internal/learning/store.go","internal/learning/store_test.go"],"errors":[]},"uuid":"e4a24ad5-66ea-4413-8873-cc9db33ce337"}
+          qc_feedback: |-
+            [code-reviewer] Implementation complete and verified. All success criteria satisfied:
+
+            1. `observe project [name]` displays project metrics - VERIFIED (DisplayProjectAnalysis called from observe.go:111)
+            2. Project name accepted from positional arg or --project flag - VERIFIED (observe.go:107-110)
+            3. Output shows sessions, success rate, tool usage, recent sessions - VERIFIED (formatProjectAnalysis includes Overview, Tool Usage, Agent Performance, Recent Sessions sections)
+            4. Handles non-existent project with clear error - VERIFIED (observe_project.go:16-18)
+            5. Uses existing GetProjectMetrics()/GetProjectStats() - VERIFIED (lines 42, 46)
+            6. No TODO comments in production code - VERIFIED (observe_project.go clean, observe.go TODOs are in other unrelated functions)
+            7. Tests verify command execution and output format - VERIFIED (all tests pass)
+
+            Files modified match expected: observe.go, observe_project.go, observe_project_test.go, store.go, store_test.go
+
+            Go-specific criteria:
+            - Error handling follows `if err != nil` pattern - YES
+            - No nil pointer dereferences - YES (proper nil checks on all interfaces)
+            - Context cancellation respected - YES (ctx passed to all store methods)
+            - strings.Builder used for concatenation - YES (formatProjectAnalysis uses sb.WriteString)
+            [cli-developer] All success criteria verified:
+
+            ✅ **Criterion 0**: observe project [name] displays project metrics - DisplayProjectAnalysis() implemented in observe_project.go:15-70 with sessions, success rate, tool usage, agent performance, recent sessions
+
+            ✅ **Criterion 1**: Project name accepted from positional arg or --project flag - observe.go:106-111 shows args[0] takes precedence over observeProject flag
+
+            ✅ **Criterion 2**: Output shows sessions, success rate, tool usage, recent sessions - formatProjectAnalysis() at observe_project.go:72-202 includes all sections
+
+            ✅ **Criterion 3**: Handles non-existent project with clear error - DisplayProjectAnalysis() returns error at line 17-18 when project is empty; test passes
+
+            ✅ **Criterion 4**: Uses existing GetProjectMetrics/GetProjectStats - observe_project.go:42-46 calls both behavioral.GetProjectStats() and aggregator.GetProjectMetrics()
+
+            ✅ **Criterion 5**: No TODO in observe_project.go - grep found TODOs only in observe.go (unrelated) and observe_export.go (separate feature)
+
+            ✅ **Criterion 6**: Tests verify command execution and output format - observe_project_test.go contains TestFormatProjectAnalysis (4 cases), TestFormatBytes (6 cases), TestDisplayProjectAnalysis_NoProject
+
+            **Files Modified (match expected)**:
+            - internal/cmd/observe.go ✅
+            - internal/cmd/observe_project.go ✅
+            - internal/cmd/observe_project_test.go (extra test file - acceptable)
+            - internal/learning/store.go (RecentSession type + GetRecentSessions)
+            - internal/learning/store_test.go (TestGetRecentSessions)
+
+            **Go-specific criteria**:
+            - Error handling: if err != nil pattern used throughout ✅
+            - strings.Builder: used for string concatenation in formatProjectAnalysis() ✅
+            - Context passed through: ctx used with store methods ✅
+
+            **All tests pass**:
+            - TestObserveProjectCmd_Help
+            - TestFormatProjectAnalysis (4 sub-tests)
+            - TestFormatBytes (6 sub-tests)
+            - TestDisplayProjectAnalysis_NoProject
+            - TestGetRecentSessions (3 sub-tests)
+            [golang-pro] Agent golang-pro failed: validation failed despite schema: verdict is required
+            [test-automator] Implementation complete and verified. All success criteria pass.
+
+            **Files Modified (matches expected + extras):**
+            - internal/cmd/observe.go ✓
+            - internal/cmd/observe_project.go ✓ (new)
+            - internal/cmd/observe_project_test.go (bonus: comprehensive tests)
+            - internal/learning/store.go (GetRecentSessions added)
+            - internal/learning/store_test.go (TestGetRecentSessions added)
+
+            **Verification:**
+            - Tests pass: `go test ./internal/cmd/... -run TestObserveProject -v` ✓
+            - Tests pass: `go test ./internal/learning/... -run TestGetRecentSessions -v` ✓
+            - Build succeeds: `go build ./cmd/conductor` ✓
+            - Help works: `./conductor observe project --help` ✓
+            - Uses GetProjectMetrics() and GetProjectStats() at lines 42 and 46
+            - No TODOs in observe_project.go or observe_project_test.go
+            - strings.Builder used for string concatenation
+            - Context cancellation respected with context.Background()
+            - Error handling follows if err != nil pattern
+          timestamp: "2025-11-25T12:18:30Z"
+      completed_date: "2025-11-25"
+    # ═══════════════════════════════════════════════════════════════════════
+    # TASK 2: Implement observe session command
+    # ═══════════════════════════════════════════════════════════════════════
+    - task_number: 2
+      name: "Implement observe session command"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe.go"
+        - "internal/cmd/observe_session.go"
+      depends_on: [1]
+      estimated_time: "45m"
+      description: |
+        # Task 2: Implement observe session command
+
+        ## IMPLEMENTATION REQUIREMENTS
+        Replace TODO at observe.go:127 with full session analysis.
+
+        **MUST use existing functions:**
+        - `aggregator.GetSessionMetrics(project, sessionID)` - metrics from JSONL
+        - `behavioral.ParseSessionFile(filepath)` - raw session data
+        - `learning.Store.GetSessionDetails(ctx, sessionID)` - DB-backed
+
+        ## COMMAND STRUCTURE
+        ```
+        conductor observe session [session-id]
+        conductor observe session abc123 --project myapp
+        conductor observe session  # Error: session ID required
+        ```
+
+        ## OUTPUT FORMAT
+        ```
+        === Session: abc123 ===
+
+        Project:         myapp
+        Duration:        5m 30s
+        Status:          success
+        Started:         2025-11-25 10:25:00
+        Ended:           2025-11-25 10:30:30
+
+        --- Token Usage ---
+        Input Tokens:    12,345
+        Output Tokens:   6,789
+        Total:           19,134
+        Cost:            $0.42
+
+        --- Tool Timeline ---
+        10:25:01  Read       src/main.go           success  120ms
+        10:25:05  Write      src/utils.go          success  85ms
+        10:25:10  Bash       go test ./...         failed   2.3s
+        ...
+
+        --- Errors (2) ---
+        1. [10:25:10] Bash: exit code 1 - tests failed
+        2. [10:26:30] Write: permission denied
+        ```
+
+        ## IMPLEMENTATION APPROACH
+        1. Create new file `observe_session.go` for DisplaySessionAnalysis()
+        2. Update NewObserveSessionCmd() in observe.go to call it
+        3. Session ID required as args[0]
+        4. Project optional (can search across projects if not specified)
+        5. Use Aggregator.GetSessionMetrics() for rich data
+        6. Display tool timeline with timestamps
+      success_criteria:
+        - "observe session [id] displays session details"
+        - "Session ID required as positional argument"
+        - "Shows duration, tokens, tool timeline, errors"
+        - "Handles unknown session with clear error"
+        - "Uses existing GetSessionMetrics() or ParseSessionFile()"
+        - "No TODO comments in production code"
+        - "Tests verify command execution and output format"
+      test_commands:
+        - "go test ./internal/cmd/... -run TestObserveSession -v"
+        - "go build ./cmd/conductor && ./conductor observe session --help"
+      implementation:
+        approach: "Create DisplaySessionAnalysis() with timeline formatting"
+        key_points:
+          - point: "Session lookup"
+            details: "If project not specified, search all projects for session ID"
+          - point: "Timeline format"
+            details: "Sort events by timestamp, show tool/file/status/duration"
+          - point: "Error highlighting"
+            details: "Collect and display errors separately at end"
+        integration:
+          imports:
+            - "github.com/harrison/conductor/internal/behavioral"
+          error_handling:
+            - "Return clear error for non-existent session"
+            - "Handle partial data gracefully"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "go vet ./internal/cmd/... && go test ./internal/cmd/... -v"
+      commit:
+        message: "feat(observe): implement session analysis command"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":173175,"duration_api_ms":179929,"num_turns":24,"result":"","session_id":"af60df08-7ce7-4ac6-8f95-9a0fd333d91f","total_cost_usd":1.8194063000000003,"usage":{"input_tokens":22,"cache_creation_input_tokens":109016,"cache_read_input_tokens":1753052,"output_tokens":9806,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":109016}},"modelUsage":{"claude-opus-4-5-20251101":{"inputTokens":25,"outputTokens":9829,"cacheReadInputTokens":1758397,"cacheCreationInputTokens":109016,"webSearchRequests":0,"costUSD":1.8063984999999998,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":10837,"outputTokens":331,"cacheReadInputTokens":5158,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0130078,"contextWindow":200000}},"permission_denials":[],"structured_output":{"status":"success","summary":"Implemented observe session command with DisplaySessionAnalysis(), full timeline display, and comprehensive tests","output":"## Implementation Complete\n\n### Files Created:\n- `internal/cmd/observe_session.go` - DisplaySessionAnalysis() with:\n  - Session lookup by ID (supports partial match)\n  - Project-specific or cross-project search\n  - JSONL-based metrics via aggregator.GetSessionMetrics()\n  - DB-backed fallback via store.GetSessionMetrics()\n  - Tool timeline with timestamps\n  - Error summary section\n  - Token usage display\n\n- `internal/cmd/observe_session_test.go` - 7 test functions covering:\n  - Empty session ID validation\n  - Basic session analysis formatting\n  - Timeline display with events\n  - Tool usage fallback display\n  - DB session analysis\n  - Number/millisecond formatting\n  - Command structure validation\n\n### Files Modified:\n- `internal/cmd/observe.go:117-141` - Updated NewObserveSessionCmd() to call DisplaySessionAnalysis()\n\n### Command Usage:\n```\nconductor observe session [session-id]\nconductor observe session abc123 --project myapp\n```\n\n### Output Format:\n```\n=== Session: abc123 ===\n\nProject:         myapp\nDuration:        5.0m\nStatus:          success\nSuccess Rate:    90.0%\n\n--- Token Usage ---\nInput Tokens:    10,000\nOutput Tokens:   5,000\nTotal:           15,000\nCost:            $0.4200\n\n--- Tool Timeline ---\n10:25:01  Read         success  120ms\n10:25:05  Bash         failed   2.3s   go test ./...\n\n--- Errors (1) ---\n1. [10:25:05] Bash: exit code 1\n```\n\n### All tests passing","files_modified":["internal/cmd/observe_session.go","internal/cmd/observe_session_test.go","internal/cmd/observe.go"],"errors":[]},"uuid":"d78eb5d7-f8a3-4deb-8435-940b4110d828"}
+          qc_feedback: |-
+            [code-reviewer] Implementation verified. All success criteria pass:
+            - observe session [id] displays session details via DisplaySessionAnalysis()
+            - Session ID required as positional argument (returns clear error "session ID is required")
+            - Shows duration, tokens, tool timeline, errors (formatSessionAnalysis with all sections)
+            - Handles unknown session with clear error message
+            - Uses existing GetSessionMetrics() and ParseSessionFile() functions
+            - No TODO comments in production code (verified via grep)
+            - Tests verify command execution and output format (7 test functions, all passing)
+            [cli-developer] Agent cli-developer failed: validation failed despite schema: verdict is required
+            [golang-pro] All success criteria verified. Implementation is complete and correct.
+            [test-automator] The observe session command implementation is complete and meets all success criteria. The implementation correctly requires session ID as positional argument, displays duration/tokens/tool timeline/errors, handles unknown sessions with clear errors, uses existing GetSessionMetrics() and ParseSessionFile(), has no TODO comments, and tests verify command execution and output format.
+          timestamp: "2025-11-25T12:23:02Z"
+      completed_date: "2025-11-25"
+    # ═══════════════════════════════════════════════════════════════════════
+    # TASK 3: Enhance interactive mode
+    # ═══════════════════════════════════════════════════════════════════════
+    - task_number: 3
+      name: "Enhance observe interactive mode"
+      agent: "golang-pro"
+      files:
+        - "internal/cmd/observe.go"
+      depends_on: [1, 2]
+      estimated_time: "30m"
+      description: |
+        # Task 3: Enhance observe interactive mode
+
+        ## PHASE 0: DEPENDENCY VERIFICATION
+        ```bash
+        grep -q "func DisplayProjectAnalysis" internal/cmd/observe_project.go && \
+          echo "✓ Task 1 ready" || echo "❌ STOP: Task 1 incomplete"
+        grep -q "func DisplaySessionAnalysis" internal/cmd/observe_session.go && \
+          echo "✓ Task 2 ready" || echo "❌ STOP: Task 2 incomplete"
+        ```
+
+        ## IMPLEMENTATION REQUIREMENTS
+        Replace TODO at observe.go:75 with session selection or project summary.
+
+        **MUST use existing functions:**
+        - `aggregator.ListSessions(project)` - get sessions for project
+        - `DisplayProjectAnalysis()` - from Task 1
+        - `DisplaySessionAnalysis()` - from Task 2
+
+        ## CURRENT FLOW
+        ```
+        observe → DisplayProjectMenu() → select project → TODO
+        ```
+
+        ## NEW FLOW
+        ```
+        observe → DisplayProjectMenu() → select project →
+          → Show project summary (quick stats)
+          → Show session list menu
+          → User selects session OR exits
+          → Show session details
+        ```
+
+        ## IMPLEMENTATION APPROACH
+        1. After project selection, show quick project summary
+        2. List recent sessions (last 10) with selection menu
+        3. User can select session number or 'q' to quit
+        4. On session select, call DisplaySessionAnalysis()
+
+        ## MENU FORMAT
+        ```
+        Selected project: myapp
+
+        === Quick Summary ===
+        Sessions: 42 | Success: 87% | Last: 2h ago
+
+        === Recent Sessions ===
+        [1] abc123  5m 30s   success  10:30
+        [2] def456  2m 15s   failed   10:25
+        [3] ghi789  8m 45s   success  10:15
+        ...
+
+        Enter session number (or 'q' to quit):
+        ```
+      success_criteria:
+        - "After project selection, shows project summary"
+        - "Lists recent sessions with selection menu"
+        - "User can select session by number"
+        - "Selected session displays full analysis"
+        - "User can quit with 'q'"
+        - "Uses ListSessions() and DisplaySessionAnalysis()"
+        - "No TODO comments in production code"
+      test_commands:
+        - "go test ./internal/cmd/... -run TestObserveInteractive -v"
+        - "go build ./cmd/conductor && ./conductor observe --help"
+      implementation:
+        approach: "Add interactive session selection after project pick"
+        key_points:
+          - point: "Quick summary first"
+            details: "Show 1-line project stats before session list"
+          - point: "Session menu"
+            details: "Use bufio.Scanner for input, parse number or 'q'"
+          - point: "Loop until quit"
+            details: "After viewing session, return to session menu"
+        integration:
+          imports:
+            - "bufio"
+            - "os"
+          services_to_inject:
+            - "DisplayProjectAnalysis from Task 1"
+            - "DisplaySessionAnalysis from Task 2"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "go vet ./internal/cmd/... && go test ./internal/cmd/... -v"
+      commit:
+        message: "feat(observe): add interactive session selection mode"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":217842,"duration_api_ms":223603,"num_turns":35,"result":"","session_id":"b75c5cc8-85f6-44d5-b781-8a84eef0c781","total_cost_usd":1.85340665,"usage":{"input_tokens":224,"cache_creation_input_tokens":88367,"cache_read_input_tokens":2125884,"output_tokens":8117,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":88367}},"modelUsage":{"claude-opus-4-5-20251101":{"inputTokens":227,"outputTokens":8140,"cacheReadInputTokens":2131255,"cacheCreationInputTokens":88367,"webSearchRequests":0,"costUSD":1.8225562499999999,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":27167,"outputTokens":633,"cacheReadInputTokens":5184,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.030850399999999997,"contextWindow":200000}},"permission_denials":[],"structured_output":{"status":"success","summary":"Enhanced observe interactive mode with session selection. After project selection, users now see a quick summary (session count, success rate, last activity) and a list of recent sessions (max 10) that they can select to view detailed analysis.","output":"## Implementation Summary\n\n### Changes to `internal/cmd/observe.go`:\n1. Added imports: `bufio`, `os`, `strings`, `github.com/fatih/color`, `github.com/harrison/conductor/internal/behavioral`\n2. Replaced TODO placeholder with call to `runInteractiveSessionSelection()`\n3. Added `runInteractiveSessionSelection()` function - entry point for interactive mode\n4. Added `runInteractiveSessionSelectionWithReader()` - testable version with injected reader\n5. Added `formatTimeAgo()` helper - formats relative time (e.g., \"2h ago\")\n6. Added `estimateDuration()` helper - estimates session duration from file size\n\n### New Interactive Flow:\n```\nobserve → DisplayProjectMenu() → select project →\n  → Show quick summary (sessions, success rate, last activity)\n  → Show recent sessions list (max 10)\n  → User selects session number or 'q' to quit\n  → Show session details via DisplaySessionAnalysis()\n  → Return to session list or quit\n```\n\n### Changes to `internal/cmd/observe_test.go`:\n- Added `TestInteractiveSessionSelection_QuitImmediately`\n- Added `TestInteractiveSessionSelection_InvalidInput`\n- Added `TestFormatTimeAgo` with subtests\n- Added `TestEstimateDuration` with subtests\n\n### Changes to `internal/cmd/observe_integration_test.go`:\n- Updated `TestObserveIntegration_ObserveInteractiveWithProject` to expect error for nonexistent project (behavior change)\n\n### Key Integration Points:\n- Uses `aggregator.ListSessions(project)` from Task 1\n- Uses `DisplaySessionAnalysis()` from Task 2\n- Uses existing `MenuReader` interface for testability","files_modified":["internal/cmd/observe.go","internal/cmd/observe_test.go","internal/cmd/observe_integration_test.go"],"errors":[],"metadata":{"tests_passed":true,"tests_added":4,"lines_added":160,"pre_existing_flaky_test":"TestConcurrentInitialization in learning package (race condition)"}},"uuid":"34148f12-bc36-4922-96b8-c3f869cf4f81"}
+          qc_feedback: |-
+            [code-reviewer] The interactive session selection mode is fully implemented with all success criteria met. After project selection, users see a quick summary (session count, success rate, last activity) followed by a list of recent sessions (max 10). Users can select sessions by number to view detailed analysis via DisplaySessionAnalysis(), and can quit with 'q'. The implementation uses ListSessions() and DisplaySessionAnalysis() as required, with no TODO comments remaining.
+            [cli-developer] Task 3 (Enhance observe interactive mode) implementation verified complete.
+
+            **All SUCCESS CRITERIA VERIFIED:**
+            ✅ [0] After project selection, shows project summary - Quick Summary section with session count, success rate, last activity
+            ✅ [1] Lists recent sessions with selection menu - Recent Sessions section shows max 10 sessions with selection numbers
+            ✅ [2] User can select session by number - Input parsing with fmt.Sscanf, validates 1-displayCount range
+            ✅ [3] Selected session displays full analysis - Calls DisplaySessionAnalysis(sessionID, project)
+            ✅ [4] User can quit with 'q' - Input handled with strings.ToLower + "q" comparison
+            ✅ [5] Uses ListSessions() and DisplaySessionAnalysis() - Lines 102, 199 in observe.go
+            ✅ [6] No TODO comments in production code - Grep confirms no TODOs
+
+            **Implementation Details:**
+            - `runInteractiveSessionSelection()` - entry point at line 85
+            - `runInteractiveSessionSelectionWithReader()` - testable version with injected reader at line 92
+            - `formatTimeAgo()` helper - formats relative time at line 218
+            - `estimateDuration()` helper - estimates duration from file size at line 234
+
+            **Tests Added:**
+            - TestInteractiveSessionSelection_QuitImmediately
+            - TestInteractiveSessionSelection_InvalidInput
+            - TestFormatTimeAgo (4 subtests)
+            - TestEstimateDuration (3 subtests)
+
+            **Build Verified:** go build ./cmd/conductor && ./conductor observe --help works correctly
+            [golang-pro] Implementation complete and verified. The interactive session selection mode is fully implemented in observe.go with all success criteria met.
+            [qa-expert] All success criteria for Task 3 (Enhance observe interactive mode) are satisfied. The implementation correctly:
+
+            1. Shows quick project summary after selection (sessions count, success rate, last activity)
+            2. Displays recent sessions list (max 10) with selection menu
+            3. Allows user to select session by number (1-10)
+            4. Displays full session analysis via DisplaySessionAnalysis()
+            5. Supports 'q' to quit at any prompt
+            6. Uses aggregator.ListSessions() and DisplaySessionAnalysis() from dependencies
+            7. Contains no TODO comments in production code
+
+            Tests pass: TestInteractiveSessionSelection_QuitImmediately, TestInteractiveSessionSelection_InvalidInput, TestFormatTimeAgo, TestEstimateDuration
+
+            Build succeeds and help command works correctly.
+          timestamp: "2025-11-25T12:28:13Z"
+      completed_date: "2025-11-25"

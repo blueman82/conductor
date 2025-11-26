@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -2365,5 +2366,388 @@ learning:
 	// Validate the entire config
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
+// TestDefaultAgentWatchConfig verifies default Agent Watch configuration values
+func TestDefaultAgentWatchConfig(t *testing.T) {
+	cfg := DefaultAgentWatchConfig()
+
+	if !cfg.Enabled {
+		t.Errorf("Enabled = %v, want true", cfg.Enabled)
+	}
+	if cfg.BaseDir != "~/.claude/projects" {
+		t.Errorf("BaseDir = %q, want %q", cfg.BaseDir, "~/.claude/projects")
+	}
+	if cfg.DefaultLimit != 100 {
+		t.Errorf("DefaultLimit = %d, want 100", cfg.DefaultLimit)
+	}
+	if cfg.PollIntervalSecs != 2 {
+		t.Errorf("PollIntervalSecs = %d, want 2", cfg.PollIntervalSecs)
+	}
+	if cfg.AutoImport != false {
+		t.Errorf("AutoImport = %v, want false", cfg.AutoImport)
+	}
+	if cfg.CacheSize != 50 {
+		t.Errorf("CacheSize = %d, want 50", cfg.CacheSize)
+	}
+
+	// Verify cost model defaults
+	costModel := cfg.CostModel
+	if costModel.SonnetInput != 3.0 {
+		t.Errorf("SonnetInput = %f, want 3.0", costModel.SonnetInput)
+	}
+	if costModel.SonnetOutput != 15.0 {
+		t.Errorf("SonnetOutput = %f, want 15.0", costModel.SonnetOutput)
+	}
+	if costModel.HaikuInput != 0.80 {
+		t.Errorf("HaikuInput = %f, want 0.80", costModel.HaikuInput)
+	}
+	if costModel.HaikuOutput != 4.0 {
+		t.Errorf("HaikuOutput = %f, want 4.0", costModel.HaikuOutput)
+	}
+	if costModel.OpusInput != 15.0 {
+		t.Errorf("OpusInput = %f, want 15.0", costModel.OpusInput)
+	}
+	if costModel.OpusOutput != 75.0 {
+		t.Errorf("OpusOutput = %f, want 75.0", costModel.OpusOutput)
+	}
+}
+
+// TestDefaultCostModelConfig verifies default cost model pricing
+func TestDefaultCostModelConfig(t *testing.T) {
+	cfg := DefaultCostModelConfig()
+
+	tests := []struct {
+		name string
+		got  float64
+		want float64
+	}{
+		{"SonnetInput", cfg.SonnetInput, 3.0},
+		{"SonnetOutput", cfg.SonnetOutput, 15.0},
+		{"HaikuInput", cfg.HaikuInput, 0.80},
+		{"HaikuOutput", cfg.HaikuOutput, 4.0},
+		{"OpusInput", cfg.OpusInput, 15.0},
+		{"OpusOutput", cfg.OpusOutput, 75.0},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.got != test.want {
+				t.Errorf("got %f, want %f", test.got, test.want)
+			}
+		})
+	}
+}
+
+// TestLoadConfigAgentWatch tests loading Agent Watch configuration from YAML
+func TestLoadConfigAgentWatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `max_concurrency: 4
+timeout: 30m
+agent_watch:
+  enabled: true
+  base_dir: /custom/claude/projects
+  default_limit: 200
+  poll_interval_secs: 5
+  auto_import: true
+  cache_size: 100
+  cost_model:
+    sonnet_input: 3.5
+    sonnet_output: 16.0
+    haiku_input: 1.0
+    haiku_output: 5.0
+    opus_input: 20.0
+    opus_output: 80.0
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Verify Agent Watch config loaded correctly
+	if !cfg.AgentWatch.Enabled {
+		t.Errorf("AgentWatch.Enabled = %v, want true", cfg.AgentWatch.Enabled)
+	}
+	if cfg.AgentWatch.BaseDir != "/custom/claude/projects" {
+		t.Errorf("AgentWatch.BaseDir = %q, want %q", cfg.AgentWatch.BaseDir, "/custom/claude/projects")
+	}
+	if cfg.AgentWatch.DefaultLimit != 200 {
+		t.Errorf("AgentWatch.DefaultLimit = %d, want 200", cfg.AgentWatch.DefaultLimit)
+	}
+	if cfg.AgentWatch.PollIntervalSecs != 5 {
+		t.Errorf("AgentWatch.PollIntervalSecs = %d, want 5", cfg.AgentWatch.PollIntervalSecs)
+	}
+	if !cfg.AgentWatch.AutoImport {
+		t.Errorf("AgentWatch.AutoImport = %v, want true", cfg.AgentWatch.AutoImport)
+	}
+	if cfg.AgentWatch.CacheSize != 100 {
+		t.Errorf("AgentWatch.CacheSize = %d, want 100", cfg.AgentWatch.CacheSize)
+	}
+
+	// Verify cost model loaded correctly
+	costModel := cfg.AgentWatch.CostModel
+	if costModel.SonnetInput != 3.5 {
+		t.Errorf("CostModel.SonnetInput = %f, want 3.5", costModel.SonnetInput)
+	}
+	if costModel.SonnetOutput != 16.0 {
+		t.Errorf("CostModel.SonnetOutput = %f, want 16.0", costModel.SonnetOutput)
+	}
+	if costModel.HaikuInput != 1.0 {
+		t.Errorf("CostModel.HaikuInput = %f, want 1.0", costModel.HaikuInput)
+	}
+	if costModel.HaikuOutput != 5.0 {
+		t.Errorf("CostModel.HaikuOutput = %f, want 5.0", costModel.HaikuOutput)
+	}
+	if costModel.OpusInput != 20.0 {
+		t.Errorf("CostModel.OpusInput = %f, want 20.0", costModel.OpusInput)
+	}
+	if costModel.OpusOutput != 80.0 {
+		t.Errorf("CostModel.OpusOutput = %f, want 80.0", costModel.OpusOutput)
+	}
+}
+
+// TestLoadConfigAgentWatchDefaults tests that Agent Watch defaults are used when config is missing
+func TestLoadConfigAgentWatchDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Config without agent_watch section should use defaults
+	configContent := `max_concurrency: 4
+timeout: 30m
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Verify defaults are used
+	defaults := DefaultAgentWatchConfig()
+	if cfg.AgentWatch.Enabled != defaults.Enabled {
+		t.Errorf("AgentWatch.Enabled = %v, want %v", cfg.AgentWatch.Enabled, defaults.Enabled)
+	}
+	if cfg.AgentWatch.BaseDir != defaults.BaseDir {
+		t.Errorf("AgentWatch.BaseDir = %q, want %q", cfg.AgentWatch.BaseDir, defaults.BaseDir)
+	}
+	if cfg.AgentWatch.DefaultLimit != defaults.DefaultLimit {
+		t.Errorf("AgentWatch.DefaultLimit = %d, want %d", cfg.AgentWatch.DefaultLimit, defaults.DefaultLimit)
+	}
+	if cfg.AgentWatch.PollIntervalSecs != defaults.PollIntervalSecs {
+		t.Errorf("AgentWatch.PollIntervalSecs = %d, want %d", cfg.AgentWatch.PollIntervalSecs, defaults.PollIntervalSecs)
+	}
+	if cfg.AgentWatch.CacheSize != defaults.CacheSize {
+		t.Errorf("AgentWatch.CacheSize = %d, want %d", cfg.AgentWatch.CacheSize, defaults.CacheSize)
+	}
+}
+
+// TestValidateAgentWatchEnabled tests validation of enabled Agent Watch configuration
+func TestValidateAgentWatchEnabled(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       *Config
+		wantError bool
+		errMsg    string
+	}{
+		{
+			name: "valid Agent Watch config",
+			cfg: &Config{
+				MaxConcurrency: 0,
+				Timeout:        10 * time.Hour,
+				LogLevel:       "info",
+				LogDir:         ".conductor/logs",
+				AgentWatch: AgentWatchConfig{
+					Enabled:          true,
+					BaseDir:          "~/.claude/projects",
+					DefaultLimit:     100,
+					PollIntervalSecs: 2,
+					CacheSize:        50,
+					CostModel: CostModelConfig{
+						SonnetInput:  3.0,
+						SonnetOutput: 15.0,
+						HaikuInput:   0.80,
+						HaikuOutput:  4.0,
+						OpusInput:    15.0,
+						OpusOutput:   75.0,
+					},
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "empty base_dir when enabled",
+			cfg: &Config{
+				MaxConcurrency: 0,
+				Timeout:        10 * time.Hour,
+				LogLevel:       "info",
+				LogDir:         ".conductor/logs",
+				AgentWatch: AgentWatchConfig{
+					Enabled:          true,
+					BaseDir:          "",
+					DefaultLimit:     100,
+					PollIntervalSecs: 2,
+					CacheSize:        50,
+					CostModel:        DefaultCostModelConfig(),
+				},
+			},
+			wantError: true,
+			errMsg:    "base_dir cannot be empty",
+		},
+		{
+			name: "invalid default_limit",
+			cfg: &Config{
+				MaxConcurrency: 0,
+				Timeout:        10 * time.Hour,
+				LogLevel:       "info",
+				LogDir:         ".conductor/logs",
+				AgentWatch: AgentWatchConfig{
+					Enabled:          true,
+					BaseDir:          "~/.claude/projects",
+					DefaultLimit:     0,
+					PollIntervalSecs: 2,
+					CacheSize:        50,
+					CostModel:        DefaultCostModelConfig(),
+				},
+			},
+			wantError: true,
+			errMsg:    "default_limit must be > 0",
+		},
+		{
+			name: "invalid poll_interval_secs",
+			cfg: &Config{
+				MaxConcurrency: 0,
+				Timeout:        10 * time.Hour,
+				LogLevel:       "info",
+				LogDir:         ".conductor/logs",
+				AgentWatch: AgentWatchConfig{
+					Enabled:          true,
+					BaseDir:          "~/.claude/projects",
+					DefaultLimit:     100,
+					PollIntervalSecs: -1,
+					CacheSize:        50,
+					CostModel:        DefaultCostModelConfig(),
+				},
+			},
+			wantError: true,
+			errMsg:    "poll_interval_secs must be > 0",
+		},
+		{
+			name: "invalid cache_size",
+			cfg: &Config{
+				MaxConcurrency: 0,
+				Timeout:        10 * time.Hour,
+				LogLevel:       "info",
+				LogDir:         ".conductor/logs",
+				AgentWatch: AgentWatchConfig{
+					Enabled:          true,
+					BaseDir:          "~/.claude/projects",
+					DefaultLimit:     100,
+					PollIntervalSecs: 2,
+					CacheSize:        0,
+					CostModel:        DefaultCostModelConfig(),
+				},
+			},
+			wantError: true,
+			errMsg:    "cache_size must be > 0",
+		},
+		{
+			name: "negative sonnet_input pricing",
+			cfg: &Config{
+				MaxConcurrency: 0,
+				Timeout:        10 * time.Hour,
+				LogLevel:       "info",
+				LogDir:         ".conductor/logs",
+				AgentWatch: AgentWatchConfig{
+					Enabled:          true,
+					BaseDir:          "~/.claude/projects",
+					DefaultLimit:     100,
+					PollIntervalSecs: 2,
+					CacheSize:        50,
+					CostModel: CostModelConfig{
+						SonnetInput:  -1.0,
+						SonnetOutput: 15.0,
+					},
+				},
+			},
+			wantError: true,
+			errMsg:    "sonnet_input must be >= 0",
+		},
+		{
+			name: "disabled Agent Watch has no validation",
+			cfg: &Config{
+				MaxConcurrency: 0,
+				Timeout:        10 * time.Hour,
+				LogLevel:       "info",
+				LogDir:         ".conductor/logs",
+				AgentWatch: AgentWatchConfig{
+					Enabled: false,
+					// Other fields can be invalid when disabled
+					DefaultLimit:     0,
+					PollIntervalSecs: -1,
+					CacheSize:        -5,
+				},
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if (err != nil) != tt.wantError {
+				t.Errorf("Validate() error = %v, wantError %v", err, tt.wantError)
+			}
+			if tt.wantError && err != nil && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("Validate() error message = %q, want to contain %q", err.Error(), tt.errMsg)
+			}
+		})
+	}
+}
+
+// TestLoadConfigAgentWatchPartial tests partial Agent Watch configuration updates
+func TestLoadConfigAgentWatchPartial(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Only override some fields
+	configContent := `agent_watch:
+  enabled: false
+  default_limit: 150
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Overridden values
+	if cfg.AgentWatch.Enabled {
+		t.Errorf("AgentWatch.Enabled = %v, want false", cfg.AgentWatch.Enabled)
+	}
+	if cfg.AgentWatch.DefaultLimit != 150 {
+		t.Errorf("AgentWatch.DefaultLimit = %d, want 150", cfg.AgentWatch.DefaultLimit)
+	}
+
+	// Default values should remain
+	if cfg.AgentWatch.BaseDir != "~/.claude/projects" {
+		t.Errorf("AgentWatch.BaseDir = %q, want %q (default)", cfg.AgentWatch.BaseDir, "~/.claude/projects")
+	}
+	if cfg.AgentWatch.PollIntervalSecs != 2 {
+		t.Errorf("AgentWatch.PollIntervalSecs = %d, want 2 (default)", cfg.AgentWatch.PollIntervalSecs)
+	}
+	if cfg.AgentWatch.CacheSize != 50 {
+		t.Errorf("AgentWatch.CacheSize = %d, want 50 (default)", cfg.AgentWatch.CacheSize)
 	}
 }

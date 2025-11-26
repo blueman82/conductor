@@ -425,6 +425,7 @@ func (cl *ConsoleLogger) logTaskResultDefault(result models.TaskResult) error {
 //	Agent: agent-name
 //	Files: list of files (with operation types)
 //	Feedback: QC review feedback
+//	Behavioral: tools, bash, cost (if available)
 func (cl *ConsoleLogger) logTaskResultVerbose(result models.TaskResult) error {
 	ts := timestamp()
 
@@ -486,6 +487,19 @@ func (cl *ConsoleLogger) logTaskResultVerbose(result models.TaskResult) error {
 	if totalFiles > 0 {
 		filesList := buildVerboseFilesList(result.Task)
 		output.WriteString(fmt.Sprintf("[%s]   Files: %s\n", ts, filesList))
+	}
+
+	// Behavioral metrics section (only if available)
+	if result.Task.Metadata != nil {
+		var metrics string
+		if cl.colorOutput {
+			metrics = formatColorizedBehavioralMetrics(result.Task.Metadata)
+		} else {
+			metrics = formatBehavioralMetrics(result.Task.Metadata)
+		}
+		if metrics != "" {
+			output.WriteString(fmt.Sprintf("[%s]   Behavioral: %s\n", ts, metrics))
+		}
 	}
 
 	// QC Feedback section (only if feedback exists)
@@ -1223,6 +1237,49 @@ func formatDurationWithDecimal(d time.Duration) string {
 		seconds := d.Seconds()
 		return fmt.Sprintf("%.1f%s", seconds, "s")
 	}
+}
+
+// formatBehavioralMetrics formats behavioral metrics from task metadata into a readable summary.
+// Returns empty string if no relevant behavioral data is available.
+// Format: "tools: N, bash: N, cost: $X.XX"
+func formatBehavioralMetrics(metadata map[string]interface{}) string {
+	if metadata == nil {
+		return ""
+	}
+
+	var parts []string
+
+	// Extract tool count
+	if toolCount, ok := metadata["tool_count"].(int); ok && toolCount > 0 {
+		parts = append(parts, fmt.Sprintf("tools: %d", toolCount))
+	} else if toolCountFloat, ok := metadata["tool_count"].(float64); ok && toolCountFloat > 0 {
+		parts = append(parts, fmt.Sprintf("tools: %d", int(toolCountFloat)))
+	}
+
+	// Extract bash command count
+	if bashCount, ok := metadata["bash_count"].(int); ok && bashCount > 0 {
+		parts = append(parts, fmt.Sprintf("bash: %d", bashCount))
+	} else if bashCountFloat, ok := metadata["bash_count"].(float64); ok && bashCountFloat > 0 {
+		parts = append(parts, fmt.Sprintf("bash: %d", int(bashCountFloat)))
+	}
+
+	// Extract file operation count
+	if fileOps, ok := metadata["file_operations"].(int); ok && fileOps > 0 {
+		parts = append(parts, fmt.Sprintf("files: %d", fileOps))
+	} else if fileOpsFloat, ok := metadata["file_operations"].(float64); ok && fileOpsFloat > 0 {
+		parts = append(parts, fmt.Sprintf("files: %d", int(fileOpsFloat)))
+	}
+
+	// Extract cost (in dollars)
+	if cost, ok := metadata["cost"].(float64); ok && cost > 0 {
+		parts = append(parts, fmt.Sprintf("cost: $%.4f", cost))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return strings.Join(parts, ", ")
 }
 
 // NoOpLogger is a Logger implementation that discards all log messages.

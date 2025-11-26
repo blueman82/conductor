@@ -1,0 +1,18 @@
+plan:
+  metadata:
+    name: "Diamond Pattern - Join"
+    estimated_tasks: 1
+  tasks:
+    - task_number: 4
+      name: "Wire Components Together"
+      files:
+        - integration/wire.go
+      depends_on:
+        - file: branches.yaml
+          task: 2
+        - file: branches.yaml
+          task: 3
+      prompt: |
+        Wire together components A and B from tasks 2 and 3.
+        Verify they communicate correctly and handle all edge cases.
+        Create comprehensive integration tests.

@@ -1,0 +1,33 @@
+plan:
+  metadata:
+    name: "Handler Layer"
+    estimated_tasks: 3
+  tasks:
+    - task_number: 7
+      name: "User Handler"
+      files:
+        - handlers/user.go
+      depends_on:
+        - file: 02-middleware.yaml
+          task: 5
+      prompt: "Implement user request handler"
+
+    - task_number: 8
+      name: "Product Handler"
+      files:
+        - handlers/product.go
+      depends_on:
+        - file: 02-middleware.yaml
+          task: 4
+        - file: 02-middleware.yaml
+          task: 6
+      prompt: "Implement product request handler"
+
+    - task_number: 9
+      name: "Order Handler"
+      files:
+        - handlers/order.go
+      depends_on:
+        - file: 02-middleware.yaml
+          task: 4
+      prompt: "Implement order request handler"

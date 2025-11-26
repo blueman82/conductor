@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
@@ -68,13 +69,14 @@ func inferDomainChecks(files []string) string {
 // QualityController manages quality control reviews using Claude Code agents
 type QualityController struct {
 	Invoker             InvokerInterface
-	ReviewAgent         string               // DEPRECATED: Agent name for single-agent QC (backward compat)
-	AgentConfig         models.QCAgentConfig // Multi-agent QC configuration (v2.2+)
-	Registry            *agent.Registry      // Agent registry for auto-selection (v2.2+)
-	MaxRetries          int                  // Maximum number of retry attempts for RED responses
-	LearningStore       *learning.Store      // Learning store for historical context (optional)
-	Logger              QCLogger             // Logger for QC events (optional, can be nil)
-	IntelligentSelector *IntelligentSelector // Intelligent selector for mode="intelligent" (v2.4+)
+	ReviewAgent         string                     // DEPRECATED: Agent name for single-agent QC (backward compat)
+	AgentConfig         models.QCAgentConfig       // Multi-agent QC configuration (v2.2+)
+	Registry            *agent.Registry            // Agent registry for auto-selection (v2.2+)
+	MaxRetries          int                        // Maximum number of retry attempts for RED responses
+	LearningStore       *learning.Store            // Learning store for historical context (optional)
+	Logger              QCLogger                   // Logger for QC events (optional, can be nil)
+	IntelligentSelector *IntelligentSelector       // Intelligent selector for mode="intelligent" (v2.4+)
+	BehavioralMetrics   *BehavioralMetricsProvider // Provider for behavioral metrics context (v2.7+)
 }
 
 // QCLogger is the minimal interface for QC logging functionality
@@ -84,6 +86,12 @@ type QCLogger interface {
 	LogQCAggregatedResult(verdict string, strategy string)
 	LogQCCriteriaResults(agentName string, results []models.CriterionResult)
 	LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string)
+}
+
+// BehavioralMetricsProvider provides behavioral metrics for QC context injection
+type BehavioralMetricsProvider interface {
+	// GetMetrics returns behavioral metrics for the current task execution
+	GetMetrics(ctx context.Context, taskNumber string) *behavioral.BehavioralMetrics
 }
 
 // InvokerInterface defines the interface for agent invocation
@@ -140,6 +148,11 @@ Agent Output:
 		}
 	}
 
+	// Inject behavioral metrics context if provider configured
+	if behaviorContext := qc.injectBehaviorContext(ctx, task); behaviorContext != "" {
+		basePrompt += "\n\n" + behaviorContext
+	}
+
 	// Add formatting instructions
 	return agent.PrepareAgentPrompt(basePrompt)
 }
@@ -194,14 +207,17 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
-	// Add expected file paths for verification
+	// Add expected file paths for verification - CRITICAL for agent compliance
 	if len(task.Files) > 0 {
-		sb.WriteString("## EXPECTED FILE PATHS - VERIFY EXACT MATCH\n")
-		sb.WriteString("Agent output must show files_modified matching these paths:\n")
+		sb.WriteString("## EXPECTED FILE PATHS - CRITICAL VERIFICATION\n")
+		sb.WriteString("⚠️ **MANDATORY**: Agent MUST create/modify these EXACT file paths:\n")
 		for _, file := range task.Files {
-			sb.WriteString(fmt.Sprintf("- [ ] %s\n", file))
+			sb.WriteString(fmt.Sprintf("- [ ] `%s`\n", file))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("\n**Verdict Rules:**\n")
+		sb.WriteString("- If agent created files with DIFFERENT paths/names → **RED** (wrong files)\n")
+		sb.WriteString("- If expected files are missing → **RED** (incomplete)\n")
+		sb.WriteString("- Only GREEN if ALL expected files exist at EXACT paths\n\n")
 	}
 
 	// Add domain-specific review criteria based on file extensions
@@ -222,51 +238,13 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		}
 	}
 
-	sb.WriteString("## RESPONSE FORMAT\nYou MUST ONLY respond with JSON including criteria_results array.\n")
+	// Inject behavioral metrics context if provider configured
+	if behaviorContext := qc.injectBehaviorContext(ctx, task); behaviorContext != "" {
+		sb.WriteString(behaviorContext)
+		sb.WriteString("\n")
+	}
 
 	return sb.String()
-}
-
-// buildQCJSONPrompt appends JSON instruction to QC prompts
-func (qc *QualityController) buildQCJSONPrompt(basePrompt string) string {
-	return qc.buildQCJSONPromptWithCriteria(basePrompt, false)
-}
-
-// buildQCJSONPromptWithCriteria appends JSON instruction with optional criteria_results schema
-func (qc *QualityController) buildQCJSONPromptWithCriteria(basePrompt string, hasSuccessCriteria bool) string {
-	var jsonInstruction string
-	if hasSuccessCriteria {
-		jsonInstruction = `
-
-IMPORTANT: You MUST ONLY respond with valid JSON in this format:
-{
-  "verdict": "GREEN|RED|YELLOW",
-  "feedback": "Detailed review feedback",
-  "criteria_results": [
-    {"index": 0, "criterion": "first criterion text", "passed": true, "evidence": "evidence or fail reason"},
-    {"index": 1, "criterion": "second criterion text", "passed": false, "evidence": "why it failed"}
-  ],
-  "issues": [{"severity": "critical|warning|info", "description": "...", "location": "..."}],
-  "recommendations": ["suggestion1"],
-  "should_retry": false,
-  "suggested_agent": "agent-name"
-}
-
-Each criterion MUST have a corresponding entry in criteria_results with its index and pass/fail status.`
-	} else {
-		jsonInstruction = `
-
-IMPORTANT: You MUST ONLY respond with valid JSON in this format:
-{
-  "verdict": "GREEN|RED|YELLOW",
-  "feedback": "Detailed review feedback",
-  "issues": [{"severity": "critical|warning|info", "description": "...", "location": "..."}],
-  "recommendations": ["suggestion1"],
-  "should_retry": false,
-  "suggested_agent": "agent-name"
-}`
-	}
-	return basePrompt + jsonInstruction
 }
 
 // ParseReviewResponse extracts the QC flag and feedback from agent output
@@ -353,20 +331,20 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 		// Use legacy prompt for backward compatibility
 		basePrompt = qc.BuildReviewPrompt(ctx, task, output)
 	}
-	prompt := qc.buildQCJSONPromptWithCriteria(basePrompt, hasSuccessCriteria)
 
-	// Create a review task for the invoker
+	// Create a review task for the invoker with JSON schema enforcement
 	reviewTask := models.Task{
-		Number: task.Number,
-		Name:   fmt.Sprintf("QC Review: %s", task.Name),
-		Prompt: prompt,
-		Agent:  qc.ReviewAgent,
+		Number:     task.Number,
+		Name:       fmt.Sprintf("QC Review: %s", task.Name),
+		Prompt:     basePrompt,
+		Agent:      qc.ReviewAgent,
+		JSONSchema: models.QCResponseSchema(hasSuccessCriteria), // Enforce QC response structure via schema
 	}
 
-	// Invoke the QC agent and parse response with automatic retry on JSON validation failure
+	// Invoke the QC agent and parse response
 	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, qc.ReviewAgent)
 	if jsonErr != nil {
-		// Invocation failed (not just JSON parsing)
+		// Invocation or parsing failed
 		return nil, fmt.Errorf("QC review failed: %w", jsonErr)
 	}
 
@@ -522,18 +500,18 @@ func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.
 	} else {
 		basePrompt = qc.BuildReviewPrompt(ctx, task, output)
 	}
-	prompt := qc.buildQCJSONPromptWithCriteria(basePrompt, hasSuccessCriteria)
 
 	reviewTask := models.Task{
-		Number: task.Number,
-		Name:   fmt.Sprintf("QC Review: %s", task.Name),
-		Prompt: prompt,
-		Agent:  agentName,
+		Number:     task.Number,
+		Name:       fmt.Sprintf("QC Review: %s", task.Name),
+		Prompt:     basePrompt,
+		Agent:      agentName,
+		JSONSchema: models.QCResponseSchema(hasSuccessCriteria), // Enforce QC response structure via schema
 	}
 
 	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, agentName)
 	if jsonErr != nil {
-		// Invocation or JSON parsing failed - return error
+		// Invocation or parsing failed - return error
 		return nil, fmt.Errorf("QC review failed: %w", jsonErr)
 	}
 
@@ -568,14 +546,14 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 			} else {
 				basePrompt = qc.BuildReviewPrompt(ctx, task, output)
 			}
-			prompt := qc.buildQCJSONPromptWithCriteria(basePrompt, hasSuccessCriteria)
 
-			// Create review task for this agent
+			// Create review task for this agent with JSON schema enforcement
 			reviewTask := models.Task{
-				Number: task.Number,
-				Name:   fmt.Sprintf("QC Review: %s", task.Name),
-				Prompt: prompt,
-				Agent:  agent,
+				Number:     task.Number,
+				Name:       fmt.Sprintf("QC Review: %s", task.Name),
+				Prompt:     basePrompt,
+				Agent:      agent,
+				JSONSchema: models.QCResponseSchema(hasSuccessCriteria), // Enforce QC response structure via schema
 			}
 
 			// Invoke agent and parse response
@@ -677,10 +655,10 @@ func (qc *QualityController) aggregateVerdicts(results []*ReviewResult, agents [
 	return combined
 }
 
-// parseQCJSON parses JSON response from QC agent, with strict validation
+// parseQCJSON parses JSON response from QC agent with schema enforcement
+// With --json-schema flag, responses are guaranteed to match QCResponse structure
 func parseQCJSON(output string) (*models.QCResponse, error) {
-	// Step 1: Extract "result" field from Claude CLI envelope
-	// The output is wrapped in a JSON envelope with a nested "result" field
+	// Extract content from Claude CLI envelope
 	claudeOut, _ := agent.ParseClaudeOutput(output)
 	actualOutput := claudeOut.Content
 
@@ -689,119 +667,31 @@ func parseQCJSON(output string) (*models.QCResponse, error) {
 		actualOutput = output
 	}
 
-	// Step 1.5: Extract JSON from markdown code fences if present
-	// QC agent may wrap JSON in ```json...``` anywhere in output (not just at start)
-	// Use case-insensitive check for ```json (handles ```JSON, ```Json, etc.)
-	lowerOutput := strings.ToLower(actualOutput)
-	if strings.Contains(lowerOutput, "```json") || strings.HasPrefix(strings.TrimSpace(actualOutput), "```") {
-		actualOutput = extractJSONFromCodeFence(actualOutput)
-	}
-
 	var resp models.QCResponse
 
-	// Step 2: Parse extracted JSON as QCResponse
+	// Parse JSON - schema enforcement guarantees valid structure
 	err := json.Unmarshal([]byte(actualOutput), &resp)
 	if err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+		return nil, fmt.Errorf("JSON schema enforcement failed: %w", err)
 	}
 
-	// Step 3: Validate parsed JSON
+	// Validate parsed JSON structure
 	if err := resp.Validate(); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+		return nil, fmt.Errorf("validation failed despite schema: %w", err)
 	}
 
 	return &resp, nil
 }
 
-// extractJSONFromCodeFence removes markdown code fence wrappers (```json...```)
-// Returns the extracted JSON or the original string if no fences found
-func extractJSONFromCodeFence(content string) string {
-	trimmed := strings.TrimSpace(content)
-
-	// Look for ```json...``` pattern ANYWHERE in content (case-insensitive)
-	// This handles both ```json and ```JSON variants
-	lowerContent := strings.ToLower(trimmed)
-	if strings.Contains(lowerContent, "```json") {
-		// Find opening fence (case-insensitive)
-		start := strings.Index(lowerContent, "```json")
-		if start != -1 {
-			// Move past the opening fence and any newline
-			start += len("```json")
-			if start < len(trimmed) && trimmed[start] == '\n' {
-				start++
-			}
-
-			// Find closing fence after the opening
-			remaining := trimmed[start:]
-			end := strings.Index(remaining, "```")
-			if end > 0 {
-				return strings.TrimSpace(remaining[:end])
-			}
-		}
-	}
-
-	// Fallback: look for any ``` markers at START of content
-	if strings.HasPrefix(trimmed, "```") {
-		start := strings.Index(trimmed, "```") + 3
-		// Skip any language identifier on same line
-		if newlineIdx := strings.Index(trimmed[start:], "\n"); newlineIdx != -1 {
-			start += newlineIdx + 1
-		}
-
-		end := strings.LastIndex(trimmed, "```")
-		if end > start {
-			return strings.TrimSpace(trimmed[start:end])
-		}
-	}
-
-	return content
-}
-
-// invokeAndParseQCAgent invokes a QC agent and parses the response, with automatic retry on JSON validation failure.
-// This method implements a robust JSON validation retry mechanism:
-// 1. First invocation attempts JSON parsing
-// 2. If parsing fails, retries with a schema reminder injected into the prompt
-// 3. Returns parsed response on success, error on persistent failure
+// invokeAndParseQCAgent invokes a QC agent and parses the response with schema enforcement.
+// With --json-schema flag, invalid JSON is prevented at the CLI level, eliminating need for retries.
 func (qc *QualityController) invokeAndParseQCAgent(ctx context.Context, task models.Task, agentName string) (*models.QCResponse, error) {
-	// First attempt: invoke agent and parse response
 	result, err := qc.Invoker.Invoke(ctx, task)
 	if err != nil {
 		return nil, fmt.Errorf("QC review failed: %w", err)
 	}
 
-	// Try to parse JSON response
-	qcResp, parseErr := parseQCJSON(result.Output)
-	if parseErr == nil {
-		return qcResp, nil // Success on first try
-	}
-
-	// JSON parsing failed - prepare retry with schema reminder
-	retryTask := task
-	retryTask.Prompt = task.Prompt + fmt.Sprintf(`
-
-PREVIOUS JSON INVALID
-
-Your previous response had invalid JSON.
-Error: %s
-
-You MUST respond with this exact JSON schema (verdict must be at root level, NOT nested):
-{
-  "verdict": "GREEN|RED|YELLOW",
-  "feedback": "detailed review feedback",
-  "issues": [{"severity": "critical|warning|info", "description": "...", "location": "..."}],
-  "recommendations": ["suggestion"],
-  "should_retry": false,
-  "suggested_agent": "agent-name"
-}`, parseErr.Error())
-
-	// Retry invocation
-	retryResult, err := qc.Invoker.Invoke(ctx, retryTask)
-	if err != nil {
-		return nil, fmt.Errorf("QC review retry failed: %w", err)
-	}
-
-	// Parse retry response - return error if still invalid
-	return parseQCJSON(retryResult.Output)
+	return parseQCJSON(result.Output)
 }
 
 // aggregateCriteriaResults combines per-criterion verdicts using unanimous consensus.
@@ -932,6 +822,25 @@ func (qc *QualityController) aggregateMultiAgentCriteria(results []*ReviewResult
 		Flag:     verdict,
 		Feedback: feedback,
 	}
+}
+
+// injectBehaviorContext retrieves and formats behavioral metrics for QC prompt injection
+func (qc *QualityController) injectBehaviorContext(ctx context.Context, task models.Task) string {
+	if qc.BehavioralMetrics == nil {
+		return ""
+	}
+
+	provider := *qc.BehavioralMetrics
+	if provider == nil {
+		return ""
+	}
+
+	metrics := provider.GetMetrics(ctx, task.Number)
+	if metrics == nil {
+		return ""
+	}
+
+	return BuildBehaviorPromptSection(metrics)
 }
 
 // LoadContext loads execution history from database for the task

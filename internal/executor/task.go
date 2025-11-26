@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -380,6 +381,27 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 		return
 	}
 
+	// Determine which file to query for deduplication
+	fileToQuery := te.PlanFile
+	if task.SourceFile != "" {
+		fileToQuery = task.SourceFile
+	} else if te.SourceFile != "" {
+		fileToQuery = te.SourceFile
+	}
+
+	// Check if this final outcome was already recorded during retry loop
+	// Query most recent execution for this task
+	history, err := te.LearningStore.GetExecutionHistory(ctx, fileToQuery, task.Number)
+	if err == nil && len(history) > 0 {
+		lastExec := history[0]
+		// Check if last execution matches this final state (same verdict + run number)
+		// If so, it was already recorded during retry - skip duplicate
+		if lastExec.QCVerdict == verdict && lastExec.RunNumber == te.RunNumber {
+			// Already recorded during retry loop - skip to avoid duplicate
+			return
+		}
+	}
+
 	// Extract failure patterns from metadata if present
 	var failurePatterns []string
 	if task.Metadata != nil {
@@ -417,7 +439,7 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 
 	// Build TaskExecution record
 	exec := &learning.TaskExecution{
-		PlanFile:        te.PlanFile,
+		PlanFile:        fileToQuery,
 		RunNumber:       te.RunNumber,
 		TaskNumber:      task.Number,
 		TaskName:        task.Name,
@@ -438,6 +460,41 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 		// In production: log.Warn("failed to record execution: %v", err)
 		// For now, silently continue
 	}
+}
+
+// collectBehavioralMetrics extracts metrics from a session JSONL file and stores in database
+// Returns nil if session file not found (graceful degradation)
+func (te *DefaultTaskExecutor) collectBehavioralMetrics(ctx context.Context, sessionID string, task models.Task, taskExecutionID int64) error {
+	// Skip if no learning store
+	if te.LearningStore == nil {
+		return nil
+	}
+
+	// Convert to concrete type to access database
+	store, ok := te.LearningStore.(*learning.Store)
+	if !ok {
+		return nil // Graceful degradation
+	}
+
+	// Create behavior collector
+	collector := NewBehaviorCollector(store, "")
+
+	// Load session metrics
+	metrics, err := collector.LoadSessionMetrics(sessionID)
+	if err != nil {
+		// Log warning but don't fail task - graceful degradation
+		fmt.Fprintf(os.Stderr, "Warning: failed to load behavioral metrics for session %s: %v\n", sessionID, err)
+		return nil
+	}
+
+	// Store metrics in database
+	if err := collector.StoreSessionMetrics(ctx, taskExecutionID, metrics); err != nil {
+		// Log warning but don't fail task - graceful degradation
+		fmt.Fprintf(os.Stderr, "Warning: failed to store behavioral metrics: %v\n", err)
+		return nil
+	}
+
+	return nil
 }
 
 // updateFeedback stores execution attempt feedback to the plan file.
@@ -614,6 +671,43 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		result.Output = output
 		result.Duration = totalDuration
 
+		// Collect behavioral metrics post-invocation (before QC)
+		// This captures the session_id from the invocation and loads JSONL metrics
+		if invocation.SessionID != "" {
+			// We need the task_execution_id to link behavioral data
+			// Store attempt execution first to get the ID
+			if te.LearningStore != nil {
+				fileToRecord := te.PlanFile
+				if task.SourceFile != "" {
+					fileToRecord = task.SourceFile
+				} else if te.SourceFile != "" {
+					fileToRecord = te.SourceFile
+				}
+
+				// Create preliminary execution record (before QC)
+				prelimExec := &learning.TaskExecution{
+					PlanFile:     fileToRecord,
+					RunNumber:    te.RunNumber,
+					TaskNumber:   task.Number,
+					TaskName:     task.Name,
+					Agent:        task.Agent,
+					Prompt:       task.Prompt,
+					Success:      false, // Will be updated after QC
+					Output:       invocation.Output,
+					ErrorMessage: "",
+					DurationSecs: int64(invocation.Duration.Seconds()),
+					QCVerdict:    "", // Not yet determined
+					QCFeedback:   "",
+				}
+
+				// Record to get task_execution_id
+				if err := te.LearningStore.RecordExecution(ctx, prelimExec); err == nil {
+					// Collect behavioral metrics with the task_execution_id
+					_ = te.collectBehavioralMetrics(ctx, invocation.SessionID, task, prelimExec.ID)
+				}
+			}
+		}
+
 		// Initialize execution attempt record
 		execAttempt := models.ExecutionAttempt{
 			Attempt:     attempt + 1, // 1-indexed
@@ -667,6 +761,52 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			te.qcReviewHook(ctx, &task, review.Flag, review.Feedback, output)
 			// Update result task to include metadata
 			result.Task = task
+
+			// Record attempt to database immediately for next retry's QC context
+			// This enables QC agents to see previous attempt feedback during retries
+			if te.LearningStore != nil && review != nil {
+				// Determine which file to use (multi-file plan support)
+				fileToRecord := te.PlanFile
+				if task.SourceFile != "" {
+					fileToRecord = task.SourceFile
+				} else if te.SourceFile != "" {
+					fileToRecord = te.SourceFile
+				}
+
+				// Extract failure patterns from metadata (populated by qcReviewHook)
+				var failurePatterns []string
+				if task.Metadata != nil {
+					if patterns, ok := task.Metadata["failure_patterns"].([]string); ok {
+						failurePatterns = patterns
+					}
+				}
+
+				// Determine success based on verdict
+				attemptSuccess := review.Flag == models.StatusGreen || review.Flag == models.StatusYellow
+
+				// Build execution record for this attempt
+				attemptExec := &learning.TaskExecution{
+					PlanFile:        fileToRecord,
+					RunNumber:       te.RunNumber,
+					TaskNumber:      task.Number,
+					TaskName:        task.Name,
+					Agent:           task.Agent,
+					Prompt:          task.Prompt,
+					Success:         attemptSuccess,
+					Output:          invocation.Output,
+					ErrorMessage:    "", // No error if we reached QC
+					DurationSecs:    int64(invocation.Duration.Seconds()),
+					QCVerdict:       review.Flag,
+					QCFeedback:      review.Feedback,
+					FailurePatterns: failurePatterns,
+				}
+
+				// Record to database (graceful degradation on error)
+				if err := te.LearningStore.RecordExecution(ctx, attemptExec); err != nil {
+					// Log warning but don't fail task execution
+					// In production: log.Warn("failed to record attempt to DB: %v", err)
+				}
+			}
 		}
 
 		// Append attempt to history

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,17 +135,17 @@ func TestBuildCommandArgs(t *testing.T) {
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction and task prompt
+					// Verify prompt includes JSON instruction suffix and task prompt
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis") &&
+						if strings.Contains(arg, "respond with JSON containing") &&
 							strings.Contains(arg, "Do something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Command should include formatting instructions and the task prompt")
+						t.Error("Command should include JSON instruction suffix and the task prompt")
 					}
 				},
 			},
@@ -179,16 +180,16 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify formatting instruction prefix (agent reference removed in e431bfd)
+					// Verify JSON instruction suffix (formatting instruction removed)
 					hasFormatting := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis") {
+						if strings.Contains(arg, "respond with JSON containing") {
 							hasFormatting = true
 							break
 						}
 					}
 					if !hasFormatting {
-						t.Error("Prompt should include formatting instructions")
+						t.Error("Prompt should include JSON instruction suffix")
 					}
 				},
 			},
@@ -209,18 +210,26 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction prefix and JSON instruction
+					// Verify prompt includes JSON instruction suffix
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
-							strings.Contains(arg, "Do work") &&
-							strings.Contains(arg, "IMPORTANT: Respond ONLY with valid JSON") {
+						if strings.Contains(arg, "respond with JSON containing") &&
+							strings.Contains(arg, "Do work") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions and JSON instruction when agent doesn't exist in registry")
+						t.Error("Prompt should include formatting instructions when agent doesn't exist in registry")
+					}
+				},
+				func(t *testing.T, args []string) {
+					// Verify JSON instruction is NOT in prompt (now in --json-schema)
+					for _, arg := range args {
+						if strings.Contains(arg, "After completing all implementation work") {
+							t.Error("Prompt should NOT include JSON instruction (moved to --json-schema)")
+							break
+						}
 					}
 				},
 			},
@@ -237,18 +246,17 @@ Swift agent content
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes formatting instruction prefix and JSON instruction
+					// Verify prompt includes JSON instruction suffix
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Do not use markdown formatting or emojis in your response.") &&
-							strings.Contains(arg, "Create something") &&
-							strings.Contains(arg, "IMPORTANT: Respond ONLY with valid JSON") {
+						if strings.Contains(arg, "respond with JSON containing") &&
+							strings.Contains(arg, "Create something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions and JSON instruction when no registry is available")
+						t.Error("Prompt should include JSON instruction when no registry is available")
 					}
 				},
 			},
@@ -335,39 +343,60 @@ Go development content
 
 func TestParseClaudeOutput(t *testing.T) {
 	tests := []struct {
-		name        string
-		output      string
-		wantContent string
-		wantError   string
-		wantErr     bool
+		name          string
+		output        string
+		wantContent   string
+		wantError     string
+		wantSessionID string
+		wantErr       bool
 	}{
 		{
-			name:        "valid JSON output",
-			output:      `{"content":"Hello World","error":""}`,
-			wantContent: "Hello World",
-			wantError:   "",
-			wantErr:     false,
+			name:          "valid JSON output",
+			output:        `{"content":"Hello World","error":""}`,
+			wantContent:   "Hello World",
+			wantError:     "",
+			wantSessionID: "",
+			wantErr:       false,
 		},
 		{
-			name:        "valid JSON with error",
-			output:      `{"content":"","error":"Something went wrong"}`,
-			wantContent: "",
-			wantError:   "Something went wrong",
-			wantErr:     false,
+			name:          "valid JSON with session_id",
+			output:        `{"content":"Task done","error":"","session_id":"abc-123-xyz"}`,
+			wantContent:   "Task done",
+			wantError:     "",
+			wantSessionID: "abc-123-xyz",
+			wantErr:       false,
 		},
 		{
-			name:        "non-JSON output",
-			output:      "Plain text output without JSON",
-			wantContent: "Plain text output without JSON",
-			wantError:   "",
-			wantErr:     false,
+			name:          "valid JSON with error",
+			output:        `{"content":"","error":"Something went wrong"}`,
+			wantContent:   "",
+			wantError:     "Something went wrong",
+			wantSessionID: "",
+			wantErr:       false,
 		},
 		{
-			name:        "empty output",
-			output:      "",
-			wantContent: "",
-			wantError:   "",
-			wantErr:     false,
+			name:          "non-JSON output",
+			output:        "Plain text output without JSON",
+			wantContent:   "Plain text output without JSON",
+			wantError:     "",
+			wantSessionID: "",
+			wantErr:       false,
+		},
+		{
+			name:          "empty output",
+			output:        "",
+			wantContent:   "",
+			wantError:     "",
+			wantSessionID: "",
+			wantErr:       false,
+		},
+		{
+			name:          "structured_output from --json-schema",
+			output:        `{"type":"result","result":"","session_id":"test-123","structured_output":{"status":"success","summary":"Task done","output":"Created file","errors":[],"files_modified":["test.go"]}}`,
+			wantContent:   `{"errors":[],"files_modified":["test.go"],"output":"Created file","status":"success","summary":"Task done"}`,
+			wantError:     "",
+			wantSessionID: "test-123",
+			wantErr:       false,
 		},
 	}
 
@@ -384,58 +413,103 @@ func TestParseClaudeOutput(t *testing.T) {
 			if result.Error != tt.wantError {
 				t.Errorf("Error = %q, want %q", result.Error, tt.wantError)
 			}
+			if result.SessionID != tt.wantSessionID {
+				t.Errorf("SessionID = %q, want %q", result.SessionID, tt.wantSessionID)
+			}
 		})
 	}
 }
 
 func TestInvoke(t *testing.T) {
-	// Create temporary directory for test files
-	tmpDir := t.TempDir()
+	tests := []struct {
+		name              string
+		scriptOutput      string
+		wantSessionID     string
+		wantContentPart   string
+		wantSessionIDLogs bool
+	}{
+		{
+			name:              "output with session_id",
+			scriptOutput:      `{"content":"Task completed successfully","error":"","session_id":"session-abc-123"}`,
+			wantSessionID:     "session-abc-123",
+			wantContentPart:   "Task completed successfully",
+			wantSessionIDLogs: true,
+		},
+		{
+			name:              "output without session_id",
+			scriptOutput:      `{"content":"Task completed successfully","error":""}`,
+			wantSessionID:     "",
+			wantContentPart:   "Task completed successfully",
+			wantSessionIDLogs: false,
+		},
+	}
 
-	// Create a mock executable script that simulates claude CLI
-	mockScript := filepath.Join(tmpDir, "mock-claude")
-	scriptContent := `#!/bin/sh
-echo '{"content":"Task completed successfully","error":""}'
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary directory for test files
+			tmpDir := t.TempDir()
+
+			// Create a mock executable script that simulates claude CLI
+			mockScript := filepath.Join(tmpDir, "mock-claude")
+			scriptContent := fmt.Sprintf(`#!/bin/sh
+echo '%s'
 exit 0
-`
-	err := os.WriteFile(mockScript, []byte(scriptContent), 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
+`, tt.scriptOutput)
+			err := os.WriteFile(mockScript, []byte(scriptContent), 0755)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	// Create invoker with mock claude path
-	inv := &Invoker{
-		ClaudePath: mockScript,
-	}
+			// Create invoker with mock claude path
+			inv := &Invoker{
+				ClaudePath: mockScript,
+			}
 
-	// Create test task
-	task := models.Task{
-		Number:        "1",
-		Name:          "Test Task",
-		Prompt:        "Do something",
-		EstimatedTime: 30 * time.Minute,
-	}
+			// Create test task
+			task := models.Task{
+				Number:        "1",
+				Name:          "Test Task",
+				Prompt:        "Do something",
+				EstimatedTime: 30 * time.Minute,
+			}
 
-	// Invoke with context
-	ctx := context.Background()
-	result, err := inv.Invoke(ctx, task)
+			// Invoke with context
+			ctx := context.Background()
+			result, err := inv.Invoke(ctx, task)
 
-	if err != nil {
-		t.Fatalf("Invoke() error = %v", err)
-	}
+			if err != nil {
+				t.Fatalf("Invoke() error = %v", err)
+			}
 
-	if result == nil {
-		t.Fatal("Invoke() returned nil result")
-	}
+			if result == nil {
+				t.Fatal("Invoke() returned nil result")
+			}
 
-	// Parse and verify output
-	output, err := ParseClaudeOutput(result.Output)
-	if err != nil {
-		t.Fatalf("ParseClaudeOutput() error = %v", err)
-	}
+			// Verify SessionID in result
+			if result.SessionID != tt.wantSessionID {
+				t.Errorf("result.SessionID = %q, want %q", result.SessionID, tt.wantSessionID)
+			}
 
-	if !strings.Contains(output.Content, "Task completed successfully") {
-		t.Errorf("Output content = %q, want to contain 'Task completed successfully'", output.Content)
+			// Verify SessionID in AgentResponse
+			if result.AgentResponse != nil && result.AgentResponse.SessionID != tt.wantSessionID {
+				t.Errorf("result.AgentResponse.SessionID = %q, want %q", result.AgentResponse.SessionID, tt.wantSessionID)
+			}
+
+			// Parse and verify output
+			output, err := ParseClaudeOutput(result.Output)
+			if err != nil {
+				t.Fatalf("ParseClaudeOutput() error = %v", err)
+			}
+
+			if !strings.Contains(output.Content, tt.wantContentPart) {
+				t.Errorf("Output content = %q, want to contain %q", output.Content, tt.wantContentPart)
+			}
+
+			// Verify session_id in parsed output
+			if output.SessionID != tt.wantSessionID {
+				t.Errorf("output.SessionID = %q, want %q", output.SessionID, tt.wantSessionID)
+			}
+		})
 	}
 }
 
@@ -523,8 +597,9 @@ exit 0
 func TestClaudeOutputMarshaling(t *testing.T) {
 	// Test that ClaudeOutput can be marshaled/unmarshaled correctly
 	original := &ClaudeOutput{
-		Content: "Test content",
-		Error:   "Test error",
+		Content:   "Test content",
+		Error:     "Test error",
+		SessionID: "test-session-123",
 	}
 
 	// Marshal to JSON
@@ -547,56 +622,8 @@ func TestClaudeOutputMarshaling(t *testing.T) {
 	if parsed.Error != original.Error {
 		t.Errorf("Error = %q, want %q", parsed.Error, original.Error)
 	}
-}
-
-// TestBuildCommandArgsWithAgentsFlag tests Method 1 agent invocation using --agents JSON flag
-func TestInvoker_BuildJSONPrompt(t *testing.T) {
-	tests := []struct {
-		name           string
-		originalPrompt string
-		wantContains   []string
-	}{
-		{
-			name:           "appends JSON instruction",
-			originalPrompt: "Implement authentication",
-			wantContains: []string{
-				"Implement authentication",
-				"IMPORTANT: Respond ONLY with valid JSON",
-				`"status": "success|failed"`,
-				`"summary"`,
-				`"output"`,
-				`"errors"`,
-				`"files_modified"`,
-				`"metadata"`,
-			},
-		},
-		{
-			name:           "preserves original prompt",
-			originalPrompt: "Build iOS app with SwiftUI",
-			wantContains: []string{
-				"Build iOS app with SwiftUI",
-				"IMPORTANT: Respond ONLY with valid JSON",
-			},
-		},
-		{
-			name:           "handles empty prompt",
-			originalPrompt: "",
-			wantContains: []string{
-				"IMPORTANT: Respond ONLY with valid JSON",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			invoker := NewInvoker()
-			prompt := invoker.buildJSONPrompt(tt.originalPrompt)
-			for _, want := range tt.wantContains {
-				if !strings.Contains(prompt, want) {
-					t.Errorf("buildJSONPrompt() missing %q", want)
-				}
-			}
-		})
+	if parsed.SessionID != original.SessionID {
+		t.Errorf("SessionID = %q, want %q", parsed.SessionID, original.SessionID)
 	}
 }
 
@@ -634,43 +661,19 @@ func TestParseAgentJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:   "malformed JSON - fallback to plain text",
-			output: "plain text output",
-			want: &models.AgentResponse{
-				Status:   "success",
-				Summary:  "Plain text response",
-				Output:   "plain text output",
-				Errors:   []string{},
-				Files:    []string{},
-				Metadata: map[string]interface{}{"parse_fallback": true},
-			},
-			wantErr: false,
+			name:    "malformed JSON - schema enforcement prevents this",
+			output:  "plain text output",
+			wantErr: true,
 		},
 		{
-			name:   "empty response",
-			output: "",
-			want: &models.AgentResponse{
-				Status:   "success",
-				Summary:  "Plain text response",
-				Output:   "",
-				Errors:   []string{},
-				Files:    []string{},
-				Metadata: map[string]interface{}{"parse_fallback": true},
-			},
-			wantErr: false,
+			name:    "empty response - schema enforcement prevents this",
+			output:  "",
+			wantErr: true,
 		},
 		{
-			name:   "partial JSON - fallback",
-			output: `{"status":"success"`,
-			want: &models.AgentResponse{
-				Status:   "success",
-				Summary:  "Plain text response",
-				Output:   `{"status":"success"`,
-				Errors:   []string{},
-				Files:    []string{},
-				Metadata: map[string]interface{}{"parse_fallback": true},
-			},
-			wantErr: false,
+			name:    "partial JSON - schema enforcement prevents this",
+			output:  `{"status":"success"`,
+			wantErr: true,
 		},
 		{
 			name:   "JSON with extra fields",
@@ -686,17 +689,9 @@ func TestParseAgentJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:   "invalid status value - fallback",
-			output: `{"status":"invalid","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
-			want: &models.AgentResponse{
-				Status:   "success",
-				Summary:  "Plain text response",
-				Output:   `{"status":"invalid","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
-				Errors:   []string{},
-				Files:    []string{},
-				Metadata: map[string]interface{}{"parse_fallback": true},
-			},
-			wantErr: false,
+			name:    "invalid status value - schema enforcement prevents this",
+			output:  `{"status":"invalid","summary":"Done","output":"result","errors":[],"files_modified":[],"metadata":{}}`,
+			wantErr: true,
 		},
 	}
 
@@ -705,6 +700,10 @@ func TestParseAgentJSON(t *testing.T) {
 			got, err := parseAgentJSON(tt.output)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseAgentJSON() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			// Skip assertion checks if we expected an error
+			if tt.wantErr {
 				return
 			}
 			if got.Status != tt.want.Status {
@@ -721,13 +720,6 @@ func TestParseAgentJSON(t *testing.T) {
 			}
 			if len(got.Files) != len(tt.want.Files) {
 				t.Errorf("Files length = %v, want %v", len(got.Files), len(tt.want.Files))
-			}
-			if tt.want.Metadata != nil {
-				if fallback, ok := tt.want.Metadata["parse_fallback"]; ok && fallback == true {
-					if got.Metadata["parse_fallback"] != true {
-						t.Errorf("Missing parse_fallback metadata flag")
-					}
-				}
 			}
 		})
 	}
@@ -786,6 +778,19 @@ Go development content
 						t.Error("Command must have --agents flag when agent is specified")
 					}
 				},
+				// Check 1.5: --json-schema flag must be present
+				func(t *testing.T, args []string) {
+					hasJsonSchemaFlag := false
+					for _, arg := range args {
+						if arg == "--json-schema" {
+							hasJsonSchemaFlag = true
+							break
+						}
+					}
+					if !hasJsonSchemaFlag {
+						t.Error("Command must have --json-schema flag for structured responses")
+					}
+				},
 				// Check 2: --agents must come before -p flag
 				func(t *testing.T, args []string) {
 					agentsFlagIdx := -1
@@ -800,6 +805,22 @@ Go development content
 					}
 					if agentsFlagIdx >= 0 && pFlagIdx >= 0 && agentsFlagIdx >= pFlagIdx {
 						t.Error("--agents flag must come before -p flag")
+					}
+				},
+				// Check 2.5: --json-schema must come before -p flag
+				func(t *testing.T, args []string) {
+					jsonSchemaIdx := -1
+					pFlagIdx := -1
+					for i, arg := range args {
+						if arg == "--json-schema" {
+							jsonSchemaIdx = i
+						}
+						if arg == "-p" {
+							pFlagIdx = i
+						}
+					}
+					if jsonSchemaIdx >= 0 && pFlagIdx >= 0 && jsonSchemaIdx >= pFlagIdx {
+						t.Error("--json-schema flag must come before -p flag")
 					}
 				},
 				// Check 3: --agents value must be valid JSON
@@ -864,7 +885,7 @@ Go development content
 			},
 		},
 		{
-			name: "task without agent - no --agents flag",
+			name: "task without agent - no --agents flag but has --json-schema",
 			task: models.Task{
 				Number:        "2",
 				Name:          "Simple Task",
@@ -884,6 +905,18 @@ Go development content
 					}
 					if hasAgentsFlag {
 						t.Error("Command should not have --agents flag when no agent specified")
+					}
+				},
+				func(t *testing.T, args []string) {
+					hasJsonSchemaFlag := false
+					for _, arg := range args {
+						if arg == "--json-schema" {
+							hasJsonSchemaFlag = true
+							break
+						}
+					}
+					if !hasJsonSchemaFlag {
+						t.Error("Command must have --json-schema flag even without agent")
 					}
 				},
 			},

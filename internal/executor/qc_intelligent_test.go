@@ -157,44 +157,6 @@ func TestGenerateCacheKey(t *testing.T) {
 	})
 }
 
-func TestStripCodeFences(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "no code fence",
-			input:    `{"agents": ["test"]}`,
-			expected: `{"agents": ["test"]}`,
-		},
-		{
-			name:     "json code fence",
-			input:    "```json\n{\"agents\": [\"test\"]}\n```",
-			expected: `{"agents": ["test"]}`,
-		},
-		{
-			name:     "plain code fence",
-			input:    "```\n{\"agents\": [\"test\"]}\n```",
-			expected: `{"agents": ["test"]}`,
-		},
-		{
-			name:     "multiline json",
-			input:    "```json\n{\n  \"agents\": [\"a\", \"b\"],\n  \"rationale\": \"test\"\n}\n```",
-			expected: "{\n  \"agents\": [\"a\", \"b\"],\n  \"rationale\": \"test\"\n}",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := stripCodeFences(tt.input)
-			if result != tt.expected {
-				t.Errorf("expected %q, got %q", tt.expected, result)
-			}
-		})
-	}
-}
-
 func TestIntelligentSelectorGuardrails(t *testing.T) {
 	// Create mock registry with test agents
 	registry := agent.NewRegistry("/nonexistent")

@@ -25,12 +25,14 @@ type InvocationResult struct {
 	Duration      time.Duration
 	Error         error
 	AgentResponse *models.AgentResponse
+	SessionID     string
 }
 
 // ClaudeOutput represents the JSON output structure from claude CLI
 type ClaudeOutput struct {
-	Content string `json:"content"`
-	Error   string `json:"error"`
+	Content   string `json:"content"`
+	Error     string `json:"error"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // NewInvoker creates a new Invoker with default settings
@@ -85,81 +87,51 @@ func serializeAgentToJSON(agent *Agent) (string, error) {
 }
 
 // PrepareAgentPrompt adds formatting instructions to agent prompts for consistent output
+// Includes minimal JSON instruction - structure is enforced via --json-schema flag
 func PrepareAgentPrompt(prompt string) string {
-	const instructionPrefix = "Do not use markdown formatting or emojis in your response. "
-	return instructionPrefix + prompt
+	const instructionSuffix = `
+
+After completing all work, respond with JSON containing: status ("success" or "failed"), summary, output, errors (array), files_modified (array).`
+	return prompt + instructionSuffix
 }
 
-// buildJSONPrompt appends JSON instruction to agent prompts
-func (inv *Invoker) buildJSONPrompt(originalPrompt string) string {
-	jsonInstruction := `
-
-IMPORTANT: Respond ONLY with valid JSON in this format:
-{
-  "status": "success|failed",
-  "summary": "Brief description",
-  "output": "Full execution output",
-  "errors": ["error1"],
-  "files_modified": ["file1.go"],
-  "metadata": {}
-}`
-	return originalPrompt + jsonInstruction
-}
-
-// parseAgentJSON parses JSON response from agent, with fallback to plain text
+// parseAgentJSON parses JSON response from agent
+// With --json-schema enforcement, responses are guaranteed to be valid JSON
+// Returns error if response is invalid
 func parseAgentJSON(output string) (*models.AgentResponse, error) {
 	var resp models.AgentResponse
 
-	// Try parsing as JSON
+	// Parse as JSON (schema enforcement should guarantee valid JSON)
 	err := json.Unmarshal([]byte(output), &resp)
 	if err != nil {
-		// Fallback: wrap plain text
-		resp = models.AgentResponse{
-			Status:   "success",
-			Summary:  "Plain text response",
-			Output:   output,
-			Errors:   []string{},
-			Files:    []string{},
-			Metadata: map[string]interface{}{"parse_fallback": true},
-		}
-		return &resp, nil
+		return nil, fmt.Errorf("failed to parse agent response as JSON: %w", err)
 	}
 
-	// Validate parsed JSON
+	// Validate parsed JSON structure
 	if err := resp.Validate(); err != nil {
-		// Invalid JSON structure, fallback to plain text
-		resp = models.AgentResponse{
-			Status:   "success",
-			Summary:  "Plain text response",
-			Output:   output,
-			Errors:   []string{},
-			Files:    []string{},
-			Metadata: map[string]interface{}{"parse_fallback": true},
-		}
-		return &resp, nil
+		return nil, fmt.Errorf("agent response failed validation: %w", err)
 	}
 
 	return &resp, nil
 }
 
 // BuildCommandArgs constructs the command-line arguments for invoking claude CLI
-// Uses Method 1: --agents JSON flag to pass agent definition explicitly for better automation reliability
+// Enforces JSON-structured responses using --json-schema flag
 //
-// Method 1 (current): Pass agent via --agents JSON flag
-//   - More reliable for automation (explicit definition)
-//   - Example: claude --agents '{"golang-pro":{...}}' -p "use the golang-pro subagent to: ..."
+// Argument order:
+//  1. --agents (if agent specified and found in registry)
+//  2. --json-schema (enforces response structure via JSON schema - can be custom or default AgentResponseSchema)
+//  3. -p (prompt without JSON instructions)
+//  4. --permission-mode bypassPermissions
+//  5. --settings (disableAllHooks)
+//  6. --output-format json
 //
 // Behavior:
 //   - If task.Agent is specified AND exists in registry: adds --agents flag with JSON definition
 //   - If task.Agent is specified but not found: falls back to plain prompt (no agent)
 //   - If task.Agent is empty: plain prompt (no agent flags)
-//
-// Arguments order:
-//  1. --agents (if agent specified and found)
-//  2. -p (prompt with "use the X subagent to:" prefix if agent present + JSON instruction)
-//  3. --dangerously-skip-permissions
-//  4. --settings (disableAllHooks)
-//  5. --output-format json
+//   - If task.JSONSchema is set: uses custom schema; otherwise uses AgentResponseSchema
+//   - --json-schema enforces the response structure, eliminating need for prompt-based JSON instructions
 func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	args := []string{}
 
@@ -169,21 +141,23 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 			// Serialize agent to JSON
 			agentJSON, err := serializeAgentToJSON(agent)
 			if err == nil {
-				// Add --agents flag BEFORE -p flag (must come first)
+				// Add --agents flag BEFORE other flags (must come first)
 				args = append(args, "--agents", agentJSON)
 			}
 		}
 	}
 
-	// Build prompt - NO agent prefix needed when using --agents with prompt field
-	// The agent definition already includes its system prompt via the "prompt" field
+	// Add JSON schema for structured responses
+	// If task specifies custom JSONSchema, use it; otherwise use default AgentResponseSchema
+	schemaJSON := task.JSONSchema
+	if schemaJSON == "" {
+		schemaJSON = models.AgentResponseSchema()
+	}
+	args = append(args, "--json-schema", schemaJSON)
+
+	// Build prompt with formatting instructions
 	prompt := task.Prompt
-
-	// Add formatting instructions to the prompt
 	prompt = PrepareAgentPrompt(prompt)
-
-	// Add JSON instruction to prompt
-	prompt = inv.buildJSONPrompt(prompt)
 
 	// Add -p flag for non-interactive print mode (essential for automation)
 	args = append(args, "-p", prompt)
@@ -194,7 +168,7 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	// Disable hooks for automation
 	args = append(args, "--settings", `{"disableAllHooks": true}`)
 
-	// JSON output for easier parsing
+	// JSON output for easier parsing (wrapper format, not content format)
 	args = append(args, "--output-format", "json")
 
 	return args
@@ -251,6 +225,9 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 		printLine("Agent", "(base model - no tools)", magenta)
 	}
 
+	// Schema enforcement indicator
+	printLine("Schema", "Enforced", green)
+
 	// Task info
 	printLine("Task", task.Name, bold)
 
@@ -298,13 +275,33 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// Parse agent response from output
 	parsedOutput, parseErr := ParseClaudeOutput(string(output))
 	if parseErr == nil && parsedOutput.Content != "" {
+		// Extract session_id from Claude CLI output
+		result.SessionID = parsedOutput.SessionID
+
+		// Log session_id if present
+		if result.SessionID != "" {
+			fmt.Fprintf(os.Stderr, "Session ID: %s\n", result.SessionID)
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: No session_id in Claude CLI output\n")
+		}
+
 		// Parse the content as AgentResponse JSON
-		agentResp, _ := parseAgentJSON(parsedOutput.Content)
-		result.AgentResponse = agentResp
+		agentResp, parseErr := parseAgentJSON(parsedOutput.Content)
+		if parseErr != nil {
+			result.Error = fmt.Errorf("failed to parse agent response: %w", parseErr)
+		} else if agentResp != nil {
+			// Set session_id in AgentResponse as well
+			agentResp.SessionID = result.SessionID
+			result.AgentResponse = agentResp
+		}
 	} else {
-		// Fallback: parse raw output as AgentResponse
-		agentResp, _ := parseAgentJSON(string(output))
-		result.AgentResponse = agentResp
+		// If we couldn't extract content from Claude output, try parsing raw as fallback
+		agentResp, parseErr := parseAgentJSON(string(output))
+		if parseErr != nil {
+			result.Error = fmt.Errorf("failed to parse agent response: %w", parseErr)
+		} else {
+			result.AgentResponse = agentResp
+		}
 	}
 
 	return result, nil
@@ -319,7 +316,7 @@ func (inv *Invoker) InvokeWithTimeout(task models.Task, timeout time.Duration) (
 }
 
 // ParseClaudeOutput parses the JSON output from claude CLI
-// Handles both "content" and "result" fields for flexible agent response formats
+// Handles "structured_output" (from --json-schema), "content", and "result" fields
 // If the output is not valid JSON, it returns the raw output as content
 func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
 	// First try to parse as JSON
@@ -332,8 +329,24 @@ func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
 	// Build result with both content and error fields
 	result := &ClaudeOutput{}
 
+	// Check for "session_id" field (available in Claude CLI output)
+	if sessionIDField, ok := jsonMap["session_id"]; ok {
+		if sessionIDStr, ok := sessionIDField.(string); ok {
+			result.SessionID = sessionIDStr
+		}
+	}
+
+	// Check for "structured_output" field (used when --json-schema is specified)
+	// This takes highest precedence as it's the schema-validated output
+	if structuredOutput, ok := jsonMap["structured_output"]; ok {
+		// Re-serialize the structured output as JSON string for downstream parsing
+		if outputBytes, err := json.Marshal(structuredOutput); err == nil {
+			result.Content = string(outputBytes)
+			return result, nil
+		}
+	}
+
 	// Check for "result" field (used by some agents like conductor-qc)
-	// This takes precedence as it's a custom field used by our agents
 	if resultField, ok := jsonMap["result"]; ok {
 		if resultStr, ok := resultField.(string); ok {
 			result.Content = resultStr

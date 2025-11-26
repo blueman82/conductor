@@ -340,6 +340,17 @@ Write tests first
 	if !strings.Contains(task.Prompt, "Test First") {
 		t.Error("Prompt should contain 'Test First' section")
 	}
+
+	// Verify file injection is present
+	if !strings.Contains(task.Prompt, "Target Files (REQUIRED)") {
+		t.Error("Prompt should contain 'Target Files (REQUIRED)' section")
+	}
+	if !strings.Contains(task.Prompt, "test.go") {
+		t.Error("Prompt should contain the file 'test.go'")
+	}
+	if !strings.Contains(task.Prompt, "MUST create/modify these exact files") {
+		t.Error("Prompt should contain file injection instructions")
+	}
 }
 
 func TestParseMarkdownIgnoresHeadingsInCodeBlocks(t *testing.T) {
@@ -1151,6 +1162,170 @@ conductor:
 				}
 				if plan.QualityControl.Agents.BlockedAgents[i] != agent {
 					t.Errorf("Expected blocked agent %d to be %q, got %q", i, agent, plan.QualityControl.Agents.BlockedAgents[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseMarkdownCrossFileDependencies(t *testing.T) {
+	tests := []struct {
+		name              string
+		content           string
+		expectedDependsOn []string
+	}{
+		{
+			name: "simple cross-file dependency with slash notation",
+			content: `**File(s)**: ` + "`internal/feature/feature.go`" + `
+**Depends on**: file:plan-01-setup.md/task:2
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"file:plan-01-setup.md:task:2"},
+		},
+		{
+			name: "simple cross-file dependency with colon notation",
+			content: `**File(s)**: ` + "`internal/feature/feature.go`" + `
+**Depends on**: file:plan-01-setup.yaml:task:2
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"file:plan-01-setup.yaml:task:2"},
+		},
+		{
+			name: "mixed numeric and cross-file dependencies",
+			content: `**File(s)**: ` + "`cmd/api/router.go`" + `
+**Depends on**: Task 1, file:plan-01-foundation.yaml/task:2, 3
+**Estimated time**: 2h`,
+			expectedDependsOn: []string{"1", "file:plan-01-foundation.yaml:task:2", "3"},
+		},
+		{
+			name: "multiple cross-file dependencies",
+			content: `**File(s)**: ` + "`internal/integration/integration.go`" + `
+**Depends on**: file:plan-01-foundation.yaml:task:1, file:plan-02-auth.yaml:task:2, file:plan-03-api.yaml:task:4
+**Estimated time**: 3h`,
+			expectedDependsOn: []string{"file:plan-01-foundation.yaml:task:1", "file:plan-02-auth.yaml:task:2", "file:plan-03-api.yaml:task:4"},
+		},
+		{
+			name: "cross-file with alphanumeric task numbers",
+			content: `**File(s)**: ` + "`internal/feature/feature.go`" + `
+**Depends on**: file:plan-integration.yaml:task:integration-1
+**Estimated time**: 1h30m`,
+			expectedDependsOn: []string{"file:plan-integration.yaml:task:integration-1"},
+		},
+		{
+			name: "task notation with cross-file",
+			content: `**File(s)**: ` + "`internal/api/api.go`" + `
+**Depends on**: Task 1, file:plan-02.md/task:3, Task 4
+**Estimated time**: 2h`,
+			expectedDependsOn: []string{"1", "file:plan-02.md:task:3", "4"},
+		},
+		{
+			name: "backward compatibility - numeric only",
+			content: `**File(s)**: ` + "`file.go`" + `
+**Depends on**: 1, 2, 3
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"1", "2", "3"},
+		},
+		{
+			name: "backward compatibility - task notation",
+			content: `**File(s)**: ` + "`file.go`" + `
+**Depends on**: Task 1, Task 2
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"1", "2"},
+		},
+		{
+			name: "cross-file with whitespace",
+			content: `**File(s)**: ` + "`file.go`" + `
+**Depends on**: file:plan-01.yaml / task:2, 3
+**Estimated time**: 1h`,
+			expectedDependsOn: []string{"file:plan-01.yaml:task:2", "3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := &models.Task{}
+			parseTaskMetadata(task, tt.content)
+
+			// Verify dependencies
+			if len(task.DependsOn) != len(tt.expectedDependsOn) {
+				t.Errorf("expected %d dependencies, got %d", len(tt.expectedDependsOn), len(task.DependsOn))
+				t.Logf("Expected: %v", tt.expectedDependsOn)
+				t.Logf("Got: %v", task.DependsOn)
+			}
+
+			for i, expected := range tt.expectedDependsOn {
+				if i >= len(task.DependsOn) {
+					break
+				}
+				if task.DependsOn[i] != expected {
+					t.Errorf("dependency %d: expected %q, got %q", i, expected, task.DependsOn[i])
+				}
+			}
+		})
+	}
+}
+
+func TestInjectFilesIntoPrompt(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		files   []string
+		wantHas []string
+		wantNot []string
+	}{
+		{
+			name:    "no files - no injection",
+			content: "Original content",
+			files:   nil,
+			wantHas: []string{"Original content"},
+			wantNot: []string{"Target Files", "MUST create"},
+		},
+		{
+			name:    "empty files - no injection",
+			content: "Original content",
+			files:   []string{},
+			wantHas: []string{"Original content"},
+			wantNot: []string{"Target Files", "MUST create"},
+		},
+		{
+			name:    "single file - injection",
+			content: "Original content",
+			files:   []string{"src/main.go"},
+			wantHas: []string{
+				"Target Files (REQUIRED)",
+				"MUST create/modify these exact files",
+				"`src/main.go`",
+				"Do NOT create files with different names",
+				"Original content",
+			},
+			wantNot: nil,
+		},
+		{
+			name:    "multiple files - injection",
+			content: "Task description here",
+			files:   []string{"file1.go", "file2.go", "pkg/util.go"},
+			wantHas: []string{
+				"Target Files (REQUIRED)",
+				"`file1.go`",
+				"`file2.go`",
+				"`pkg/util.go`",
+				"Task description here",
+			},
+			wantNot: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := injectFilesIntoPrompt(tt.content, tt.files)
+
+			for _, want := range tt.wantHas {
+				if !strings.Contains(result, want) {
+					t.Errorf("expected result to contain %q, got:\n%s", want, result)
+				}
+			}
+
+			for _, notWant := range tt.wantNot {
+				if strings.Contains(result, notWant) {
+					t.Errorf("expected result NOT to contain %q, got:\n%s", notWant, result)
 				}
 			}
 		})

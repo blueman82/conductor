@@ -1,0 +1,40 @@
+conductor:
+  default_agent: golang-pro
+
+plan:
+  metadata:
+    feature_name: "Mixed Dependency Example"
+    created: "2025-11-23"
+    estimated_tasks: 3
+  tasks:
+    - task_number: 1
+      name: "Implement Authentication"
+      files:
+        - internal/auth/jwt.go
+        - internal/auth/middleware.go
+      depends_on: []
+      estimated_time: "1h"
+      agent: golang-pro
+      description: "Implement JWT-based authentication"
+
+    - task_number: 2
+      name: "Setup Cache Layer"
+      files:
+        - internal/cache/redis.go
+      depends_on:
+        - 1
+      estimated_time: "45m"
+      agent: golang-pro
+      description: "Configure Redis cache with authentication"
+
+    - task_number: 3
+      name: "Wire Everything Together"
+      files:
+        - cmd/api/main.go
+      depends_on:
+        - 2
+        - file: "cross-file-simple.yaml"
+          task: 2
+      estimated_time: "30m"
+      agent: golang-pro
+      description: "Integration task that depends on tasks from current and another plan"
