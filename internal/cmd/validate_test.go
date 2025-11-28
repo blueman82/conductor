@@ -23,10 +23,10 @@ func TestValidateCommand_ValidPlan(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	if err != nil {
-		t.Errorf("validatePlan() returned error for valid plan: %v", err)
+		t.Errorf("validatePlanWithAlignment() returned error for valid plan: %v", err)
 	}
 
 	outputStr := output.String()
@@ -45,10 +45,10 @@ func TestValidateCommand_CyclicDependencies(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for cyclic dependencies")
+		t.Error("validatePlanWithAlignment() should return error for cyclic dependencies")
 	}
 
 	outputStr := output.String()
@@ -67,10 +67,10 @@ func TestValidateCommand_MissingFile(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for missing file")
+		t.Error("validatePlanWithAlignment() should return error for missing file")
 	}
 
 	outputStr := output.String()
@@ -86,10 +86,10 @@ func TestValidateCommand_InvalidTasks(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for invalid tasks")
+		t.Error("validatePlanWithAlignment() should return error for invalid tasks")
 	}
 
 	outputStr := output.String()
@@ -109,10 +109,10 @@ func TestValidateCommand_FileOverlaps(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for file overlaps")
+		t.Error("validatePlanWithAlignment() should return error for file overlaps")
 	}
 
 	outputStr := output.String()
@@ -131,10 +131,10 @@ func TestValidateCommand_MissingDependencies(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for missing dependencies")
+		t.Error("validatePlanWithAlignment() should return error for missing dependencies")
 	}
 
 	outputStr := output.String()
@@ -154,10 +154,10 @@ func TestValidateCommand_AgentNotFound(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for unknown agent")
+		t.Error("validatePlanWithAlignment() should return error for unknown agent")
 	}
 
 	outputStr := output.String()
@@ -183,10 +183,10 @@ func TestValidateCommand_UnknownFormat(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err = validatePlan(tmpFile, registry, &output)
+	err = validatePlanWithAlignment(tmpFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for unknown format")
+		t.Error("validatePlanWithAlignment() should return error for unknown format")
 	}
 
 	outputStr := output.String()
@@ -289,10 +289,10 @@ func TestValidateCommand_MultipleErrors(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err = validatePlan(tmpFile, registry, &output)
+	err = validatePlanWithAlignment(tmpFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for plan with multiple errors")
+		t.Error("validatePlanWithAlignment() should return error for plan with multiple errors")
 	}
 
 	outputStr := output.String()
@@ -347,11 +347,11 @@ func TestValidateCommand_WithRealAgents(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	// Should succeed now that we have the golang-pro agent
 	if err != nil {
-		t.Errorf("validatePlan() returned error with real agents: %v", err)
+		t.Errorf("validatePlanWithAlignment() returned error with real agents: %v", err)
 	}
 
 	outputStr := output.String()
@@ -381,10 +381,10 @@ func TestValidateCommand_ParseError(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err = validatePlan(tmpFile, registry, &output)
+	err = validatePlanWithAlignment(tmpFile, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validatePlan() should return error for malformed YAML")
+		t.Error("validatePlanWithAlignment() should return error for malformed YAML")
 	}
 
 	outputStr := output.String()
@@ -444,7 +444,7 @@ func TestValidateCommand_OutputFormat(t *testing.T) {
 			registry.Discover()
 
 			var output bytes.Buffer
-			err := validatePlan(testFile, registry, &output)
+			err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 			if tt.expectSuccess && err != nil {
 				t.Errorf("Expected success but got error: %v", err)
@@ -538,7 +538,7 @@ plan:
 	registry.Discover()
 
 	var output bytes.Buffer
-	err = validatePlan(tmpFile, registry, &output)
+	err = validatePlanWithAlignment(tmpFile, registry, &output, "warn")
 
 	if err == nil {
 		t.Error("Expected validation to fail for missing default and QC agents")
@@ -564,11 +564,11 @@ func TestValidateMultiFilePlan(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlanDirectory(testDir, registry, &output)
+	err := validatePlanDirectoryWithAlignment(testDir, registry, &output, "warn")
 
 	// Should succeed for valid split plan
 	if err != nil {
-		t.Errorf("validatePlanDirectory() returned error for valid split plan: %v", err)
+		t.Errorf("validatePlanDirectoryWithAlignment() returned error for valid split plan: %v", err)
 	}
 
 	outputStr := output.String()
@@ -585,11 +585,11 @@ func TestValidateWorktreeGroups(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlan(testFile, registry, &output)
+	err := validatePlanWithAlignment(testFile, registry, &output, "warn")
 
 	// Should fail due to invalid worktree groups
 	if err == nil {
-		t.Error("validatePlan() should return error for invalid worktree groups")
+		t.Error("validatePlanWithAlignment() should return error for invalid worktree groups")
 	}
 
 	outputStr := output.String()
@@ -615,11 +615,11 @@ func TestValidateCrossFileDeps(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlanDirectory(testDir, registry, &output)
+	err := validatePlanDirectoryWithAlignment(testDir, registry, &output, "warn")
 
 	// Should fail due to broken cross-file dependencies (task 2 depends on non-existent task 999)
 	if err == nil {
-		t.Error("validatePlanDirectory() should return error for broken cross-file dependencies")
+		t.Error("validatePlanDirectoryWithAlignment() should return error for broken cross-file dependencies")
 	}
 
 	outputStr := output.String()
@@ -640,11 +640,11 @@ func TestValidateSplitBoundaries(t *testing.T) {
 	registry.Discover()
 
 	var output bytes.Buffer
-	err := validatePlanDirectory(testDir, registry, &output)
+	err := validatePlanDirectoryWithAlignment(testDir, registry, &output, "warn")
 
 	// Should succeed for valid split boundaries
 	if err != nil {
-		t.Errorf("validatePlanDirectory() returned error for valid split boundaries: %v", err)
+		t.Errorf("validatePlanDirectoryWithAlignment() returned error for valid split boundaries: %v", err)
 	}
 
 	outputStr := output.String()
@@ -713,10 +713,10 @@ Setup database connection.
 
 	// Test validation with multiple file arguments
 	var output bytes.Buffer
-	err := validateMultipleFiles([]string{plan1Path, plan2Path}, registry, &output)
+	err := validateMultipleFilesWithAlignment([]string{plan1Path, plan2Path}, registry, &output, "warn")
 
 	if err != nil {
-		t.Errorf("validateMultipleFiles() failed for valid multi-file plan: %v", err)
+		t.Errorf("validateMultipleFilesWithAlignment() failed for valid multi-file plan: %v", err)
 	}
 
 	outputStr := output.String()
@@ -783,10 +783,10 @@ Build foundation.
 
 	// Test validation - should succeed with valid cross-file dependency
 	var output bytes.Buffer
-	err := validateMultipleFiles([]string{plan1Path, plan2Path}, registry, &output)
+	err := validateMultipleFilesWithAlignment([]string{plan1Path, plan2Path}, registry, &output, "warn")
 
 	if err != nil {
-		t.Errorf("validateMultipleFiles() failed for valid cross-file dependencies: %v", err)
+		t.Errorf("validateMultipleFilesWithAlignment() failed for valid cross-file dependencies: %v", err)
 	}
 
 	outputStr := output.String()
@@ -836,10 +836,10 @@ Build base.
 
 	// Test validation - should fail due to missing dependency
 	var output bytes.Buffer
-	err := validateMultipleFiles([]string{plan1Path, plan2Path}, registry, &output)
+	err := validateMultipleFilesWithAlignment([]string{plan1Path, plan2Path}, registry, &output, "warn")
 
 	if err == nil {
-		t.Error("validateMultipleFiles() should fail for missing cross-file dependency")
+		t.Error("validateMultipleFilesWithAlignment() should fail for missing cross-file dependency")
 	}
 
 	outputStr := output.String()
@@ -909,10 +909,10 @@ Do task one.
 
 	// Validate the filtered files
 	var output bytes.Buffer
-	err = validateMultipleFiles(planFiles, registry, &output)
+	err = validateMultipleFilesWithAlignment(planFiles, registry, &output, "warn")
 
 	if err != nil {
-		t.Errorf("validateMultipleFiles() failed: %v", err)
+		t.Errorf("validateMultipleFilesWithAlignment() failed: %v", err)
 	}
 
 	outputStr := output.String()
@@ -988,10 +988,10 @@ Build base.
 
 	// Validate the filtered files
 	var output bytes.Buffer
-	err = validateMultipleFiles(planFiles, registry, &output)
+	err = validateMultipleFilesWithAlignment(planFiles, registry, &output, "warn")
 
 	if err != nil {
-		t.Errorf("validateMultipleFiles() failed: %v", err)
+		t.Errorf("validateMultipleFilesWithAlignment() failed: %v", err)
 	}
 
 	outputStr := output.String()
@@ -1125,10 +1125,10 @@ Test task.
 
 	// Validate should succeed
 	var output bytes.Buffer
-	err = validateMultipleFiles(planFiles, registry, &output)
+	err = validateMultipleFilesWithAlignment(planFiles, registry, &output, "warn")
 
 	if err != nil {
-		t.Errorf("validateMultipleFiles() failed: %v", err)
+		t.Errorf("validateMultipleFilesWithAlignment() failed: %v", err)
 	}
 }
 
@@ -1278,7 +1278,7 @@ Task %d description.
 
 	// Validate with multiple files
 	var output bytes.Buffer
-	err = validateMultipleFiles(planFiles, registry, &output)
+	err = validateMultipleFilesWithAlignment(planFiles, registry, &output, "warn")
 
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -1339,7 +1339,7 @@ Single task.
 
 	// Validate single file
 	var output bytes.Buffer
-	err := validatePlan(planPath, registry, &output)
+	err := validatePlanWithAlignment(planPath, registry, &output, "warn")
 
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -1397,7 +1397,7 @@ First task.
 
 	// Validate with 2 files
 	var output bytes.Buffer
-	err := validateMultipleFiles([]string{plan1Path, plan2Path}, registry, &output)
+	err := validateMultipleFilesWithAlignment([]string{plan1Path, plan2Path}, registry, &output, "warn")
 
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
