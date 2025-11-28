@@ -81,5 +81,3 @@ PATTERN_EXTRACTION_REFERENCE.md
 
 # To un-ignore a file in an ignored directory, need to:
 !docs/conductor.md
-INTEGRATION_TASKS_ARCHITECTURE_REVIEW.md
-docs/plans/integration-tasks-enhancement.yaml
