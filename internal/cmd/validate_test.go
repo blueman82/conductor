@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/parser"
 )
 
@@ -1138,6 +1139,14 @@ Test task.
 
 // TestValidateCommand_NoMatchingPlanFiles_SpecificError tests error message when directory has non-plan files
 func TestValidateCommand_NoMatchingPlanFiles_SpecificError(t *testing.T) {
+	// Set up conductor repo root for config loading
+	oldConductorRepoRoot := ConductorRepoRoot
+	ConductorRepoRoot = t.TempDir()
+	defer func() { ConductorRepoRoot = oldConductorRepoRoot }()
+
+	config.SetBuildTimeRepoRoot(ConductorRepoRoot)
+	defer config.SetBuildTimeRepoRoot("")
+
 	tmpDir := t.TempDir()
 
 	// Create non-plan files
@@ -1190,6 +1199,14 @@ func TestValidateCommand_NoMatchingPlanFiles_SpecificError(t *testing.T) {
 
 // TestValidateCommand_MultipleNonPlanFiles_SpecificError tests error when multiple files don't match plan-* pattern
 func TestValidateCommand_MultipleNonPlanFiles_SpecificError(t *testing.T) {
+	// Set up conductor repo root for config loading
+	oldConductorRepoRoot := ConductorRepoRoot
+	ConductorRepoRoot = t.TempDir()
+	defer func() { ConductorRepoRoot = oldConductorRepoRoot }()
+
+	config.SetBuildTimeRepoRoot(ConductorRepoRoot)
+	defer config.SetBuildTimeRepoRoot("")
+
 	tmpDir := t.TempDir()
 
 	// Create files that don't match plan-* pattern
@@ -1431,6 +1448,14 @@ First task.
 
 // TestValidateCommand_WarnsMixedPatterns tests warning when numbered files are present
 func TestValidateCommand_WarnsMixedPatterns(t *testing.T) {
+	// Set up conductor repo root for config loading
+	oldConductorRepoRoot := ConductorRepoRoot
+	ConductorRepoRoot = t.TempDir()
+	defer func() { ConductorRepoRoot = oldConductorRepoRoot }()
+
+	config.SetBuildTimeRepoRoot(ConductorRepoRoot)
+	defer config.SetBuildTimeRepoRoot("")
+
 	tmpDir := t.TempDir()
 
 	// Create numbered files (old pattern)
@@ -1521,6 +1546,14 @@ Testing task.
 
 // TestValidateCommand_NoWarningForPlanFilesOnly tests no warning when only plan-* files exist
 func TestValidateCommand_NoWarningForPlanFilesOnly(t *testing.T) {
+	// Set up conductor repo root for config loading
+	oldConductorRepoRoot := ConductorRepoRoot
+	ConductorRepoRoot = t.TempDir()
+	defer func() { ConductorRepoRoot = oldConductorRepoRoot }()
+
+	config.SetBuildTimeRepoRoot(ConductorRepoRoot)
+	defer config.SetBuildTimeRepoRoot("")
+
 	tmpDir := t.TempDir()
 
 	// Create only plan-* files (no numbered files)
