@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/display"
 	"github.com/harrison/conductor/internal/executor"
 	"github.com/harrison/conductor/internal/models"
@@ -55,6 +56,12 @@ func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 	registry := agent.NewRegistry("")
 	registry.Discover()
 
+	cfg, err := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	alignmentMode := cfg.Validation.KeyPointCriteria
+
 	// Handle three cases:
 	// 1. Single directory - use existing validatePlanDirectory
 	// 2. Single file - use existing validatePlan
@@ -83,11 +90,11 @@ func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 				}
 				warning.Display(output)
 			}
-			return validateMultipleFiles(planFiles, registry, output)
+			return validateMultipleFilesWithAlignment(planFiles, registry, output, alignmentMode)
 		}
 
 		// Single file - use existing validatePlan
-		return validatePlan(path, registry, output)
+		return validatePlanWithAlignment(path, registry, output, alignmentMode)
 	}
 
 	// Multiple paths provided - filter and validate together
@@ -117,7 +124,7 @@ func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 		warning.Display(output)
 	}
 
-	return validateMultipleFiles(planFiles, registry, output)
+	return validateMultipleFilesWithAlignment(planFiles, registry, output, alignmentMode)
 }
 
 // filterPlanFiles filters paths to only include plan-*.md and plan-*.yaml files
@@ -197,8 +204,8 @@ func isPlanFile(filename string) bool {
 	return ext == ".md" || ext == ".markdown" || ext == ".yaml" || ext == ".yml"
 }
 
-// validateMultipleFiles validates multiple plan files as a merged plan
-func validateMultipleFiles(planFiles []string, registry *agent.Registry, output io.Writer) error {
+// validateMultipleFilesWithAlignment validates multiple plan files as a merged plan with alignment settings
+func validateMultipleFilesWithAlignment(planFiles []string, registry *agent.Registry, output io.Writer, alignmentMode string) error {
 	var errors []string
 
 	// Parse all plan files and collect tasks with progress indicator
@@ -241,6 +248,15 @@ func validateMultipleFiles(planFiles []string, registry *agent.Registry, output 
 
 	// Show completion message in green
 	fmt.Fprintf(output, "\x1b[32m✓\x1b[0m Parsed %d tasks from %d plan files\n", len(allTasks), len(planFiles))
+
+	if warnings, alignmentErrors := parser.ValidateKeyPointCriteriaAlignment(allTasks, alignmentMode); len(warnings) > 0 || len(alignmentErrors) > 0 {
+		for _, warn := range warnings {
+			fmt.Fprintf(output, "Warning: %s\n", warn)
+		}
+		if len(alignmentErrors) > 0 {
+			errors = append(errors, alignmentErrors...)
+		}
+	}
 
 	// Validate individual tasks
 	for _, task := range allTasks {
@@ -307,7 +323,7 @@ func validateMultipleFiles(planFiles []string, registry *agent.Registry, output 
 // validatePlan performs comprehensive validation of a plan file
 // Returns error if validation fails, nil if plan is valid
 // output parameter allows redirecting output for testing
-func validatePlan(filePath string, registry *agent.Registry, output io.Writer) error {
+func validatePlanWithAlignment(filePath string, registry *agent.Registry, output io.Writer, alignmentMode string) error {
 	var errors []string
 
 	// 1. Parse the plan file
@@ -320,6 +336,15 @@ func validatePlan(filePath string, registry *agent.Registry, output io.Writer) e
 
 	fmt.Fprintf(output, "✓ Validating plan from %s\n", filePath)
 	fmt.Fprintf(output, "✓ Parsed %d tasks successfully\n", len(plan.Tasks))
+
+	if warnings, alignmentErrors := parser.ValidateKeyPointCriteriaAlignment(plan.Tasks, alignmentMode); len(warnings) > 0 || len(alignmentErrors) > 0 {
+		for _, warn := range warnings {
+			fmt.Fprintf(output, "Warning: %s\n", warn)
+		}
+		if len(alignmentErrors) > 0 {
+			errors = append(errors, alignmentErrors...)
+		}
+	}
 
 	// 2. Validate individual tasks
 	for _, task := range plan.Tasks {
@@ -433,7 +458,7 @@ func validateAgents(plan *models.Plan, registry *agent.Registry) []string {
 // validatePlanDirectory validates a directory containing multiple plan files
 // Returns error if validation fails, nil if plan is valid
 // output parameter allows redirecting output for testing
-func validatePlanDirectory(dirPath string, registry *agent.Registry, output io.Writer) error {
+func validatePlanDirectoryWithAlignment(dirPath string, registry *agent.Registry, output io.Writer, alignmentMode string) error {
 	var errors []string
 
 	// 1. Check if directory exists
@@ -498,6 +523,15 @@ func validatePlanDirectory(dirPath string, registry *agent.Registry, output io.W
 	}
 
 	fmt.Fprintf(output, "✓ Parsed %d tasks from plan files\n", len(allTasks))
+
+	if warnings, alignmentErrors := parser.ValidateKeyPointCriteriaAlignment(allTasks, alignmentMode); len(warnings) > 0 || len(alignmentErrors) > 0 {
+		for _, warn := range warnings {
+			fmt.Fprintf(output, "Warning: %s\n", warn)
+		}
+		if len(alignmentErrors) > 0 {
+			errors = append(errors, alignmentErrors...)
+		}
+	}
 
 	// 4. Validate individual tasks
 	for _, task := range allTasks {

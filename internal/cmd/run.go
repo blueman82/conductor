@@ -381,6 +381,15 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	if warnings, alignmentErrors := parser.ValidateKeyPointCriteriaAlignment(plan.Tasks, cfg.Validation.KeyPointCriteria); len(warnings) > 0 || len(alignmentErrors) > 0 {
+		for _, warn := range warnings {
+			fmt.Fprintf(cmd.OutOrStdout(), "Warning: %s\n", warn)
+		}
+		if len(alignmentErrors) > 0 {
+			return fmt.Errorf("key_point alignment validation failed: %s", strings.Join(alignmentErrors, "; "))
+		}
+	}
+
 	// Merge config QC settings into plan if plan doesn't explicitly set QC
 	// Configuration priority: plan frontmatter (explicit) > config file > defaults
 	// This ensures plans without QC frontmatter get sensible defaults from config

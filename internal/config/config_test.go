@@ -411,6 +411,13 @@ log_level: info
 			wantError: true,
 		},
 		{
+			name: "invalid key point alignment mode",
+			config: `validation:
+  key_point_criteria: invalid
+`,
+			wantError: true,
+		},
+		{
 			name: "zero timeout (allowed)",
 			config: `timeout: 0s
 `,
@@ -2749,5 +2756,156 @@ func TestLoadConfigAgentWatchPartial(t *testing.T) {
 	}
 	if cfg.AgentWatch.CacheSize != 50 {
 		t.Errorf("AgentWatch.CacheSize = %d, want 50 (default)", cfg.AgentWatch.CacheSize)
+	}
+}
+
+// TestValidationConfig_DefaultValue tests that DefaultConfig sets KeyPointCriteria to 'warn'
+func TestValidationConfig_DefaultValue(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.Validation.KeyPointCriteria != "warn" {
+		t.Errorf("Validation.KeyPointCriteria = %q, want %q", cfg.Validation.KeyPointCriteria, "warn")
+	}
+}
+
+// TestValidationConfig_ValidModes tests that Validate() accepts valid modes
+func TestValidationConfig_ValidModes(t *testing.T) {
+	validModes := []string{"warn", "strict", "off"}
+
+	for _, mode := range validModes {
+		t.Run(mode, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Validation.KeyPointCriteria = mode
+
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("Validate() error = %v for valid mode %q", err, mode)
+			}
+		})
+	}
+}
+
+// TestValidationConfig_InvalidMode tests that Validate() returns error for invalid modes
+func TestValidationConfig_InvalidMode(t *testing.T) {
+	invalidModes := []string{"invalid", "WARN", "STRICT", "OFF", "warning", "error"}
+
+	for _, mode := range invalidModes {
+		t.Run(mode, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Validation.KeyPointCriteria = mode
+
+			if err := cfg.Validate(); err == nil {
+				t.Errorf("Validate() expected error for invalid mode %q, got nil", mode)
+			}
+		})
+	}
+}
+
+// TestValidationConfig_YAMLMerge tests that YAML config overrides default KeyPointCriteria
+func TestValidationConfig_YAMLMerge(t *testing.T) {
+	tests := []struct {
+		name          string
+		configContent string
+		expectMode    string
+	}{
+		{
+			name: "strict mode from YAML",
+			configContent: `validation:
+  key_point_criteria: strict
+`,
+			expectMode: "strict",
+		},
+		{
+			name: "off mode from YAML",
+			configContent: `validation:
+  key_point_criteria: off
+`,
+			expectMode: "off",
+		},
+		{
+			name: "warn mode from YAML",
+			configContent: `validation:
+  key_point_criteria: warn
+`,
+			expectMode: "warn",
+		},
+		{
+			name:          "missing validation section uses default",
+			configContent: `max_concurrency: 5`,
+			expectMode:    "warn",
+		},
+		{
+			name: "empty validation section uses default",
+			configContent: `validation:
+`,
+			expectMode: "warn",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			if err := os.WriteFile(configPath, []byte(tt.configContent), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			if cfg.Validation.KeyPointCriteria != tt.expectMode {
+				t.Errorf("Validation.KeyPointCriteria = %q, want %q", cfg.Validation.KeyPointCriteria, tt.expectMode)
+			}
+
+			// Also verify it passes validation
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("Validate() error = %v", err)
+			}
+		})
+	}
+}
+
+// TestValidationConfig_WithOtherSettings tests validation config alongside other settings
+func TestValidationConfig_WithOtherSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `max_concurrency: 8
+timeout: 2h
+log_level: debug
+validation:
+  key_point_criteria: strict
+learning:
+  enabled: true
+quality_control:
+  enabled: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Verify validation setting
+	if cfg.Validation.KeyPointCriteria != "strict" {
+		t.Errorf("Validation.KeyPointCriteria = %q, want %q", cfg.Validation.KeyPointCriteria, "strict")
+	}
+
+	// Verify other settings are correct
+	if cfg.MaxConcurrency != 8 {
+		t.Errorf("MaxConcurrency = %d, want 8", cfg.MaxConcurrency)
+	}
+	if cfg.LogLevel != "debug" {
+		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "debug")
+	}
+
+	// Validate entire config
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() error = %v", err)
 	}
 }

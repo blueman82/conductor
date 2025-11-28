@@ -181,6 +181,13 @@ type AgentWatchConfig struct {
 	CostModel CostModelConfig `yaml:"cost_model"`
 }
 
+// ValidationConfig controls plan validation behavior
+type ValidationConfig struct {
+	// KeyPointCriteria sets how to handle key_point vs success_criteria misalignment:
+	// "warn" (default) logs a warning, "strict" fails validation, "off" disables the check
+	KeyPointCriteria string `yaml:"key_point_criteria"`
+}
+
 // Config represents conductor configuration options
 type Config struct {
 	// MaxConcurrency is the maximum number of concurrent tasks (0 = unlimited)
@@ -218,6 +225,9 @@ type Config struct {
 
 	// AgentWatch contains Agent Watch behavioral analytics configuration
 	AgentWatch AgentWatchConfig `yaml:"agent_watch"`
+
+	// Validation controls plan validation strictness
+	Validation ValidationConfig `yaml:"validation"`
 }
 
 // DefaultConsoleConfig returns ConsoleConfig with sensible default values
@@ -307,6 +317,9 @@ func DefaultConfig() *Config {
 			RetryOnRed: 2,
 		},
 		AgentWatch: DefaultAgentWatchConfig(),
+		Validation: ValidationConfig{
+			KeyPointCriteria: "warn",
+		},
 	}
 }
 
@@ -396,6 +409,7 @@ func LoadConfig(path string) (*Config, error) {
 		Learning       LearningConfig       `yaml:"learning"`
 		QualityControl QualityControlConfig `yaml:"quality_control"`
 		AgentWatch     AgentWatchConfig     `yaml:"agent_watch"`
+		Validation     ValidationConfig     `yaml:"validation"`
 	}
 
 	var yamlCfg yamlConfig
@@ -646,6 +660,16 @@ func LoadConfig(path string) (*Config, error) {
 				}
 			}
 		}
+
+		// Merge Validation config
+		if validationSection, exists := rawMap["validation"]; exists && validationSection != nil {
+			validation := yamlCfg.Validation
+			validationMap, _ := validationSection.(map[string]interface{})
+
+			if _, exists := validationMap["key_point_criteria"]; exists {
+				cfg.Validation.KeyPointCriteria = validation.KeyPointCriteria
+			}
+		}
 	}
 
 	// Apply environment variable overrides (highest priority)
@@ -754,6 +778,18 @@ func (c *Config) Validate() error {
 
 	// Console configuration is all boolean flags with sensible defaults,
 	// no additional validation needed
+	// Validate validation settings (supports warn, strict, off)
+	if c.Validation.KeyPointCriteria == "" {
+		c.Validation.KeyPointCriteria = "warn"
+	}
+	validCriteriaModes := map[string]bool{
+		"warn":   true,
+		"strict": true,
+		"off":    true,
+	}
+	if !validCriteriaModes[c.Validation.KeyPointCriteria] {
+		return fmt.Errorf("validation.key_point_criteria must be one of: warn, strict, off; got %q", c.Validation.KeyPointCriteria)
+	}
 
 	// Validate learning configuration
 	if c.Learning.Enabled {

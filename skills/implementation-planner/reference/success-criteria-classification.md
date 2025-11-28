@@ -142,6 +142,28 @@ Add the external files to the task (use sparingly).
 
 **Warning:** This can lead to large, unfocused tasks. Prefer Strategy 1 or 2.
 
+## Behavioral vs Implementation-Specific
+
+**Critical Rule:** Success criteria describe WHAT, not HOW.
+
+**BAD - Implementation-specific:**
+```yaml
+- "RenderTier enum exported with 5 levels (RICH=4, FULL=3, STANDARD=2, COMPAT=1, PLAIN=0)"
+- "RGB interface exported with readonly number fields"
+- "tempToColor returns chalk.rgb() for true-color terminals"
+```
+
+**GOOD - Behavioral:**
+```yaml
+- "RenderTier enum has 5 distinct capability tiers"
+- "RGB interface has r, g, b number properties"
+- "tempToColor returns function that applies color styling to text"
+```
+
+The implementation section tells the agent HOW. Success criteria tell QC WHAT to verify. If criteria duplicate implementation details, any reasonable deviation fails QC.
+
+**Test:** Can the agent achieve this criterion with a different but equally valid implementation? If no, it's too specific.
+
 ## Validation Checklist
 
 For each non-integration task, verify:
@@ -150,6 +172,7 @@ For each non-integration task, verify:
 - [ ] No criteria reference CLI flags, UI elements, or other packages
 - [ ] No criteria use integration keywords (see table above)
 - [ ] All cross-component behavior is in integration tasks
+- [ ] No criteria specify implementation details (enum values, exact chars, specific libraries)
 
 ## Plan Header
 

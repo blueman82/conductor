@@ -32,11 +32,11 @@ type yamlTask struct {
 	TaskNumber          interface{}   `yaml:"task_number"` // Accepts int, float, or string
 	Name                string        `yaml:"name"`
 	Files               []string      `yaml:"files"`
-	DependsOn           []interface{} `yaml:"depends_on"` // Accepts int, float, or string
-	EstimatedTime       string        `yaml:"estimated_time"`
-	Agent               string        `yaml:"agent"`
-	WorktreeGroup       string        `yaml:"worktree_group"` // Worktree group for task organization
-	Status              string        `yaml:"status"`
+		DependsOn           []interface{} `yaml:"depends_on"` // Accepts int, float, or string
+		EstimatedTime       string        `yaml:"estimated_time"`
+		Agent               string        `yaml:"agent"`
+		WorktreeGroup       string        `yaml:"worktree_group"` // Worktree group for task organization
+		Status              string        `yaml:"status"`
 	CompletedDate       string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
 	CompletedAt         string        `yaml:"completed_at"`   // Timestamp format: RFC3339
 	Description         string        `yaml:"description"`
@@ -159,6 +159,7 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 		task := models.Task{
 			Number:              taskNum,
 			Name:                yt.Name,
+			KeyPoints:           convertKeyPoints(yt.Implementation.KeyPoints),
 			Files:               yt.Files,
 			DependsOn:           dependsOn,
 			Agent:               yt.Agent,
@@ -307,6 +308,31 @@ func buildCrossFileDepString(m map[string]interface{}) string {
 	}
 
 	return fmt.Sprintf("file:%s:task:%s", file, taskStr)
+}
+
+// convertKeyPoints normalizes YAML key_point entries into model KeyPoints
+func convertKeyPoints(src []struct {
+	Point     string `yaml:"point"`
+	Details   string `yaml:"details"`
+	Reference string `yaml:"reference"`
+}) []models.KeyPoint {
+	var keyPoints []models.KeyPoint
+	for _, kp := range src {
+		trimmedPoint := strings.TrimSpace(kp.Point)
+		if trimmedPoint == "" {
+			continue
+		}
+		keyPoints = append(keyPoints, models.KeyPoint{
+			Point:     trimmedPoint,
+			Details:   strings.TrimSpace(kp.Details),
+			Reference: strings.TrimSpace(kp.Reference),
+		})
+	}
+
+	if len(keyPoints) == 0 {
+		return nil
+	}
+	return keyPoints
 }
 
 // convertToString converts interface{} to string, supporting int, float, and string types

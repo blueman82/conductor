@@ -133,3 +133,13 @@ agent_watch:
     haiku_output: 4.0
     opus_input: 15.0
     opus_output: 75.0
+
+# Plan validation configuration
+# Controls strictness of plan file validation
+validation:
+  # How to handle key_point vs success_criteria misalignment
+  # Options:
+  #   - warn: Log a warning but continue (default)
+  #   - strict: Fail validation if key_points exceed success_criteria
+  #   - off: Disable the check entirely
+  key_point_criteria: warn

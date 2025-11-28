@@ -13,6 +13,13 @@ type CrossFileDependency struct {
 	TaskID string `yaml:"task" json:"task"` // Task number in that file
 }
 
+// KeyPoint represents a structured implementation key point from the plan
+type KeyPoint struct {
+	Point     string `yaml:"point,omitempty" json:"point,omitempty"`
+	Details   string `yaml:"details,omitempty" json:"details,omitempty"`
+	Reference string `yaml:"reference,omitempty" json:"reference,omitempty"`
+}
+
 // String returns a standardized string representation of a cross-file dependency
 // Format: "file:{filename}:task:{task-id}" (e.g., "file:plan-01-foundation.yaml:task:2")
 func (cfd *CrossFileDependency) String() string {
@@ -34,6 +41,7 @@ type Task struct {
 	CompletedAt   *time.Time             // Timestamp when task was completed (nil if not completed)
 	SourceFile    string                 // Source plan file this task originates from (for multi-file plans)
 	Metadata      map[string]interface{} // Additional metadata for hooks and extensions
+	KeyPoints     []KeyPoint             `yaml:"key_points,omitempty" json:"key_points,omitempty"` // Structured implementation key points
 
 	// Structured verification (v2.3+)
 	SuccessCriteria     []string `yaml:"success_criteria,omitempty" json:"success_criteria,omitempty"`

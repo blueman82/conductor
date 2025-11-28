@@ -6,8 +6,8 @@ allowed-tools: Read, Bash, Glob, Grep, Write, TodoWrite
 
 # Implementation Planner Skill
 
-**Version:** 2.5.0
-**Last Updated:** 2025-11-26
+**Version:** 2.6.0
+**Last Updated:** 2025-11-27
 **Purpose:** Generate conductor-compatible YAML implementation plans with full codebase analysis, data flow tracing, dependency graphing, package conflict detection, and quality control.
 
 ## When to Activate
@@ -303,6 +303,117 @@ For each task where type != integration:
    depends_on: [1, 3, 10]  # Add CLI setup dependency
    ```
 
+**BEHAVIORAL vs IMPLEMENTATION-SPECIFIC (Critical):**
+
+Success criteria describe WHAT, not HOW. Implementation section describes HOW.
+
+```yaml
+# BAD - Implementation-specific:
+- "RenderTier enum with (RICH=4, FULL=3, STANDARD=2)"  # Specific values
+- "RGB interface with readonly number fields"          # Specific modifier
+- "tempToColor returns chalk.rgb()"                    # Specific library call
+
+# GOOD - Behavioral:
+- "RenderTier enum has 5 distinct capability tiers"
+- "RGB interface has r, g, b number properties"
+- "tempToColor returns function that applies color styling"
+```
+
+**Test:** Can the agent achieve this with a different but valid implementation? If no, too specific.
+
+**CRITERIA DERIVATION FROM KEY_POINTS (Critical):**
+
+Success criteria MUST be derived directly from `implementation.key_points`. Never write criteria independently.
+
+**Process:**
+```
+For each key_point in implementation.key_points:
+  → Write criterion that verifies THIS specific point
+  → Use SAME terminology as key_point
+  → Criterion = testable assertion of key_point
+```
+
+**Example:**
+```yaml
+# key_points written first:
+key_points:
+  - point: "Weather-themed spinner set"
+    details: "sunny, rainy, windy, snowy, stormy, default"
+
+# criteria derived from key_points (same words):
+success_criteria:
+  - "LOADING_SPINNERS has weather-themed spinners: sunny, rainy, windy, snowy, stormy, default"
+```
+
+```yaml
+# BAD - criteria invented independently:
+key_points:
+  - point: "Weather-themed spinner set"
+    details: "sunny, rainy, windy, snowy, stormy"
+success_criteria:
+  - "LOADING_SPINNERS has spinners for: fetch, aggregate, analyze"  # ❌ Different terminology!
+
+# GOOD - criteria derived from key_points:
+key_points:
+  - point: "Weather-themed spinner set"
+    details: "sunny, rainy, windy, snowy, stormy"
+success_criteria:
+  - "LOADING_SPINNERS has weather-themed spinners: sunny, rainy, windy, snowy, stormy"  # ✓ Same words
+```
+
+**Validation:** After writing success_criteria, verify each criterion references terminology from a key_point above it.
+
+**BEHAVIORAL FACT VERIFICATION (Critical):**
+
+Before writing key_points that make claims about existing behavior, verify against codebase:
+
+**Claims that require verification:**
+- Default values ("default format is X")
+- Existing options ("command accepts --flag")
+- Current behavior ("function returns X")
+- Feature availability ("compare has --format option")
+
+**Process:**
+```
+For each behavioral claim in key_points:
+  → grep/read codebase to verify
+  → Include verification command as comment
+```
+
+**Example:**
+```yaml
+# BEFORE writing key_points, verify:
+# grep -n "format ??" packages/cli/src/commands/forecast.ts
+# Result: options.format ?? "narrative"
+
+key_points:
+  - point: "Backward compatibility"
+    details: "Default format stays 'narrative'"  # ✓ Verified
+```
+
+```yaml
+# BAD - unverified assumption:
+key_points:
+  - point: "Backward compatibility"
+    details: "Default format stays 'table'"  # ❌ Never checked
+
+# BAD - claim about feature that doesn't exist:
+success_criteria:
+  - "compare command accepts --format rich"  # ❌ Never verified compare has --format
+```
+
+**Verification commands to run:**
+```bash
+# Default values
+grep -n "??" <file> | grep <option>
+
+# Option existence
+grep -n "option\|flag\|--" <file>
+
+# Function behavior
+grep -A5 "function <name>" <file>
+```
+
 **Add to plan header comment:**
 ```yaml
 # ═══════════════════════════════════════════════════════════════════════════
@@ -310,6 +421,9 @@ For each task where type != integration:
 # ═══════════════════════════════════════════════════════════════════════════
 # All component tasks have CAPABILITY-only criteria ✓
 # Integration criteria isolated to integration tasks ✓
+# Criteria are BEHAVIORAL not implementation-specific ✓
+# Criteria DERIVED from key_points (same terminology) ✓
+# Behavioral claims VERIFIED against codebase ✓
 # ═══════════════════════════════════════════════════════════════════════════
 ```
 
@@ -616,6 +730,8 @@ Skill successful when:
 - ✅ Valid syntax (parseable)
 - ✅ **Data flow analysis complete** - all consumers depend_on their producers
 - ✅ **Success criteria classified** - CAPABILITY vs INTEGRATION properly scoped
+- ✅ **Criteria derived from key_points** - same terminology, direct derivation
+- ✅ **Behavioral claims verified** - existing behavior checked against codebase
 - ✅ **Dependency verification in prompts** - tasks check deps before implementing
 - ✅ **Anti-pattern criteria included** - no TODO, placeholders, unused vars
 - ✅ Dependency graph correct (no wave conflicts)
@@ -626,6 +742,21 @@ Skill successful when:
 - ✅ User can execute with conductor immediately
 
 ## Version History
+
+### v2.6.0 (2025-11-27)
+- **CRITICAL: Added criteria derivation from key_points requirement**
+  - Success criteria MUST be derived directly from `implementation.key_points`
+  - Enforces same terminology between key_points and criteria
+  - Process: for each key_point → write criterion using same words
+  - Validation: verify each criterion references terminology from key_point above it
+- Fixes Weather Oracle Task 9 failure pattern where criteria used "fetch, aggregate, analyze" but key_points specified "weather-themed spinners"
+- Added to plan header comment: "Criteria DERIVED from key_points (same terminology) ✓"
+- **CRITICAL: Added behavioral fact verification requirement**
+  - Claims about existing behavior must be verified against codebase before writing key_points
+  - Applies to: default values, existing options, current behavior, feature availability
+  - Process: grep/read codebase to verify, include verification command as comment
+- Fixes Weather Oracle Task 11 failure pattern where "default format is table" was assumed (actual: "narrative") and "compare accepts --format" was assumed (compare has no --format option)
+- Added to plan header comment: "Behavioral claims VERIFIED against codebase ✓"
 
 ### v2.5.0 (2025-11-26)
 - **CRITICAL: Added success criteria classification phase (Phase 2.7)**

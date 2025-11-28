@@ -1,0 +1,374 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# IMPLEMENTATION PLAN: Key Points to Success Criteria Validation Tests
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# STATUS: Implementation COMPLETE, tests MISSING
+# SCOPE: Test coverage for existing keypoint validation feature
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# DATA FLOW REGISTRY
+# ═══════════════════════════════════════════════════════════════════════════
+# PRODUCERS:
+#   - Task 1 → ValidateKeyPointCriteriaAlignment tests (parser package)
+# CONSUMERS:
+#   - Task 2 → Uses validation function via config integration
+#   - Task 3 → Standalone (QC prompt tests)
+# VALIDATION: Task 2 depends_on Task 1; Task 3 independent ✓
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# SUCCESS CRITERIA CLASSIFICATION
+# ═══════════════════════════════════════════════════════════════════════════
+# All tasks have CAPABILITY-only criteria ✓
+# No integration criteria needed (test-only plan) ✓
+# Criteria are BEHAVIORAL not implementation-specific ✓
+# Criteria DERIVED from key_points (same terminology) ✓
+# ═══════════════════════════════════════════════════════════════════════════
+
+conductor:
+  default_agent: golang-pro
+  quality_control:
+    enabled: true
+    agents:
+      mode: auto
+    retry_on_red: 2
+  worktree_groups:
+    - group_id: "unit-tests"
+      description: "Core validation function tests"
+      tasks: [1]
+      rationale: "Foundation tests must pass before integration tests"
+    - group_id: "integration-tests"
+      description: "Config and QC integration tests"
+      tasks: [2, 3]
+      rationale: "Can run in parallel after unit tests pass"
+plan:
+  metadata:
+    feature_name: "Key Points Criteria Validation Test Coverage"
+    created: "2025-11-27"
+    estimated_tasks: 3
+  context:
+    framework: "Go 1.21+"
+    architecture: "CLI orchestration with parser/executor/config packages"
+    testing_framework: "Go testing with table-driven tests"
+    existing_implementation:
+      - "parser/keypoint_validation.go - ValidateKeyPointCriteriaAlignment function"
+      - "config/config.go - ValidationConfig.KeyPointCriteria (warn/strict/off)"
+      - "cmd/run.go:384 - validation integration"
+      - "cmd/validate.go:252,340,527 - validation integration"
+      - "executor/qc.go:202-222 - QC prompt key_points injection"
+  tasks:
+    - task_number: 1
+      name: "Unit Tests for ValidateKeyPointCriteriaAlignment"
+      agent: "golang-pro"
+      files:
+        - "internal/parser/keypoint_validation_test.go"
+      depends_on: []
+      estimated_time: "45m"
+      description: |
+        Create comprehensive unit tests for the ValidateKeyPointCriteriaAlignment function
+        in internal/parser/keypoint_validation.go. The function already exists and works;
+        this task adds test coverage.
+
+        ## EXISTING IMPLEMENTATION (READ FIRST)
+        ```bash
+        cat internal/parser/keypoint_validation.go
+        ```
+
+        The function takes []models.Task and mode string, returns (warnings, errors).
+        Modes: "warn" (default), "strict", "off"
+      test_first:
+        test_file: "internal/parser/keypoint_validation_test.go"
+        structure:
+          - "TestValidateKeyPointCriteriaAlignment_WarnMode"
+          - "TestValidateKeyPointCriteriaAlignment_StrictMode"
+          - "TestValidateKeyPointCriteriaAlignment_OffMode"
+          - "TestValidateKeyPointCriteriaAlignment_NoKeyPoints"
+          - "TestValidateKeyPointCriteriaAlignment_EqualCounts"
+          - "TestValidateKeyPointCriteriaAlignment_MoreCriteria"
+          - "TestValidateKeyPointCriteriaAlignment_IntegrationTask"
+        assertions:
+          - "Warn mode returns warnings, not errors"
+          - "Strict mode returns errors, not warnings"
+          - "Off mode returns nothing"
+          - "Tasks without key_points are skipped"
+          - "Equal counts produce no output"
+          - "More criteria than key_points is valid"
+          - "Integration tasks count both criteria types"
+      implementation:
+        approach: "Table-driven tests covering all modes and edge cases"
+        key_points:
+          - point: "Table-driven test structure"
+            details: "Use t.Run with named subtests for each scenario"
+          - point: "Cover all three modes"
+            details: "warn returns warnings, strict returns errors, off returns nil"
+          - point: "Edge cases for key_point counts"
+            details: "zero key_points, equal counts, more criteria than key_points, more key_points than criteria"
+          - point: "Integration task handling"
+            details: "Integration tasks should count both SuccessCriteria and IntegrationCriteria"
+      success_criteria:
+        # Derived from key_point 1: Table-driven test structure
+        - "Tests use t.Run with named subtests for each scenario"
+        # Derived from key_point 2: Cover all three modes
+        - "Tests cover warn mode (returns warnings, not errors)"
+        - "Tests cover strict mode (returns errors, not warnings)"
+        - "Tests cover off mode (returns nil, nil)"
+        # Derived from key_point 3: Edge cases for key_point counts
+        - "Tests cover zero key_points scenario (skipped, no output)"
+        - "Tests cover equal counts scenario (no warnings or errors)"
+        - "Tests cover more criteria than key_points (valid, no warnings)"
+        - "Tests cover more key_points than criteria (triggers warning/error)"
+        # Derived from key_point 4: Integration task handling
+        - "Tests verify integration tasks count both SuccessCriteria and IntegrationCriteria"
+      test_commands:
+        - "go test ./internal/parser/ -run TestValidateKeyPointCriteriaAlignment -v"
+        - "go test ./internal/parser/ -run TestValidateKeyPointCriteriaAlignment -cover"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              go fmt ./internal/parser/keypoint_validation_test.go && \
+              go vet ./internal/parser/ && \
+              go test ./internal/parser/ -run TestValidateKeyPointCriteriaAlignment -v
+      verification:
+        automated_tests:
+          command: "go test ./internal/parser/ -run TestValidateKeyPointCriteriaAlignment -v -cover"
+          expected_output: "PASS"
+      commit:
+        type: "test"
+        message: "test(parser): add unit tests for ValidateKeyPointCriteriaAlignment"
+        files:
+          - "internal/parser/keypoint_validation_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":89438,"duration_api_ms":110559,"num_turns":10,"result":"","session_id":"4bc2c0e2-d677-416a-b915-ebb57aadba61","total_cost_usd":0.73092075,"usage":{"input_tokens":12,"cache_creation_input_tokens":53830,"cache_read_input_tokens":426499,"output_tokens":5231,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":53830}},"modelUsage":{"claude-opus-4-5-20251101":{"inputTokens":15,"outputTokens":5251,"cacheReadInputTokens":426499,"cacheCreationInputTokens":59167,"webSearchRequests":0,"costUSD":0.71439325,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":8080,"outputTokens":402,"cacheReadInputTokens":0,"cacheCreationInputTokens":5150,"webSearchRequests":0,"costUSD":0.0165275,"contextWindow":200000}},"permission_denials":[],"structured_output":{"status":"success","summary":"Created comprehensive unit tests for ValidateKeyPointCriteriaAlignment with 100% function coverage","output":"Created internal/parser/keypoint_validation_test.go with 9 test functions:\n- TestValidateKeyPointCriteriaAlignment_WarnMode (2 subtests)\n- TestValidateKeyPointCriteriaAlignment_StrictMode (2 subtests)\n- TestValidateKeyPointCriteriaAlignment_OffMode\n- TestValidateKeyPointCriteriaAlignment_NoKeyPoints (2 subtests)\n- TestValidateKeyPointCriteriaAlignment_EqualCounts\n- TestValidateKeyPointCriteriaAlignment_MoreCriteria\n- TestValidateKeyPointCriteriaAlignment_IntegrationTask (3 subtests)\n- TestValidateKeyPointCriteriaAlignment_NonIntegrationTaskIgnoresIntegrationCriteria\n- TestValidateKeyPointCriteriaAlignment_MessageFormat\n\nCoverage: 100% for ValidateKeyPointCriteriaAlignment function\nAll tests pass: PASS","errors":[],"files_modified":["internal/parser/keypoint_validation_test.go"],"metadata":{"tests_added":9,"coverage":"100%","commit_type":"test","commit_message":"test(parser): add unit tests for ValidateKeyPointCriteriaAlignment"}},"uuid":"7b18ec39-d56b-4c0b-bd99-5279289ea6c5"}
+          qc_feedback: |-
+            [quality-control] All success criteria verified. Test file exists at correct path with comprehensive coverage.
+
+            **File Verification:**
+            - ✅ `internal/parser/keypoint_validation_test.go` exists at exact required path
+
+            **Test Structure:**
+            - ✅ Uses t.Run with named subtests throughout (WarnMode: 2, StrictMode: 2, NoKeyPoints: 2, IntegrationTask: 3)
+            - 9 test functions total with 11 subtests
+
+            **Criteria Coverage:**
+            - ✅ Warn mode: returns warnings, not errors (TestValidateKeyPointCriteriaAlignment_WarnMode)
+            - ✅ Strict mode: returns errors, not warnings (TestValidateKeyPointCriteriaAlignment_StrictMode)
+            - ✅ Off mode: returns nil, nil (TestValidateKeyPointCriteriaAlignment_OffMode)
+            - ✅ Zero key_points: skipped, no output (TestValidateKeyPointCriteriaAlignment_NoKeyPoints)
+            - ✅ Equal counts: no warnings or errors (TestValidateKeyPointCriteriaAlignment_EqualCounts)
+            - ✅ More criteria than key_points: valid, no warnings (TestValidateKeyPointCriteriaAlignment_MoreCriteria)
+            - ✅ More key_points than criteria: triggers warning/error (tested in WarnMode/StrictMode)
+            - ✅ Integration tasks count both SuccessCriteria and IntegrationCriteria (TestValidateKeyPointCriteriaAlignment_IntegrationTask)
+
+            **Test Commands:**
+            - `go test ./internal/parser/ -run TestValidateKeyPointCriteriaAlignment -v` → PASS
+            - `go test ./internal/parser/ -run TestValidateKeyPointCriteriaAlignment -cover` → 100% for ValidateKeyPointCriteriaAlignment function
+            [golang-pro] Test file created at exact path `internal/parser/keypoint_validation_test.go` with 9 test functions using table-driven approach with t.Run subtests. All modes covered (warn/strict/off), edge cases handled (zero key_points, equal counts, more criteria), integration task behavior verified. 100% coverage of ValidateKeyPointCriteriaAlignment function. All tests pass.
+          timestamp: "2025-11-27T09:16:39Z"
+      completed_date: "2025-11-27"
+    - task_number: 2
+      name: "Config Integration Tests and Documentation for Key Point Validation"
+      agent: "golang-pro"
+      files:
+        - "internal/config/config_test.go"
+        - ".conductor/config.yaml"
+        - ".conductor/config.yaml.example"
+      depends_on: [1]
+      estimated_time: "30m"
+      description: |
+        Add tests to verify that the config.Validation.KeyPointCriteria setting
+        is properly loaded, validated, and defaults correctly. Also add the
+        validation section to .conductor/config.yaml to document the option.
+
+        ## EXISTING CONFIG CODE (READ FIRST)
+        ```bash
+        grep -A20 "ValidationConfig" internal/config/config.go
+        ```
+
+        The config code already:
+        - Defaults to "warn"
+        - Validates mode is one of: warn, strict, off
+        - Merges from YAML config file
+
+        ## MISSING FROM .conductor/config.yaml
+        The validation section needs to be added to document the option:
+        ```yaml
+        validation:
+          key_point_criteria: warn  # warn, strict, or off
+        ```
+      test_first:
+        test_file: "internal/config/config_test.go"
+        structure:
+          - "TestValidationConfig_DefaultValue"
+          - "TestValidationConfig_ValidModes"
+          - "TestValidationConfig_InvalidMode"
+          - "TestValidationConfig_YAMLMerge"
+        assertions:
+          - "Default KeyPointCriteria is 'warn'"
+          - "Valid modes are accepted without error"
+          - "Invalid modes return validation error"
+          - "YAML config overrides default"
+      implementation:
+        approach: "Add tests to config_test.go and add validation section to .conductor/config.yaml"
+        key_points:
+          - point: "Default value test"
+            details: "NewConfig() should set KeyPointCriteria to 'warn'"
+          - point: "Valid modes acceptance"
+            details: "Validate() accepts 'warn', 'strict', 'off'"
+          - point: "Invalid mode rejection"
+            details: "Validate() returns error for invalid modes like 'invalid'"
+          - point: "YAML merge behavior"
+            details: "Config from YAML file overrides default"
+          - point: "Add validation section to .conductor/config.yaml and .conductor/config.yaml.example"
+            details: "Document key_point_criteria option with comments explaining warn/strict/off modes in both files"
+      success_criteria:
+        # Derived from key_point 1: Default value test
+        - "Test verifies NewConfig() sets KeyPointCriteria to 'warn'"
+        # Derived from key_point 2: Valid modes acceptance
+        - "Test verifies Validate() accepts 'warn', 'strict', 'off' without error"
+        # Derived from key_point 3: Invalid mode rejection
+        - "Test verifies Validate() returns error for invalid mode"
+        # Derived from key_point 4: YAML merge behavior
+        - "Test verifies YAML config key_point_criteria overrides default"
+        # Derived from key_point 5: Add validation section to config.yaml and config.yaml.example
+        - ".conductor/config.yaml contains validation.key_point_criteria setting with comments"
+        - ".conductor/config.yaml.example contains validation.key_point_criteria setting with comments"
+      test_commands:
+        - "go test ./internal/config/ -run TestValidationConfig -v"
+        - "grep -q 'key_point_criteria' .conductor/config.yaml"
+        - "grep -q 'key_point_criteria' .conductor/config.yaml.example"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              go fmt ./internal/config/config_test.go && \
+              go vet ./internal/config/ && \
+              go test ./internal/config/ -run TestValidationConfig -v
+      verification:
+        automated_tests:
+          command: "go test ./internal/config/ -run TestValidationConfig -v && grep -q 'key_point_criteria' .conductor/config.yaml && grep -q 'key_point_criteria' .conductor/config.yaml.example"
+          expected_output: "PASS"
+      commit:
+        type: "test"
+        message: "test(config): add tests for ValidationConfig.KeyPointCriteria and document in config files"
+        files:
+          - "internal/config/config_test.go"
+          - ".conductor/config.yaml"
+          - ".conductor/config.yaml.example"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":145385,"duration_api_ms":159296,"num_turns":27,"result":"","session_id":"8f7f5e59-d43b-410e-9a02-4997d7025145","total_cost_usd":1.8887510000000003,"usage":{"input_tokens":1988,"cache_creation_input_tokens":117268,"cache_read_input_tokens":1954377,"output_tokens":6270,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":117268}},"modelUsage":{"claude-opus-4-5-20251101":{"inputTokens":1991,"outputTokens":6293,"cacheReadInputTokens":1959729,"cacheCreationInputTokens":117268,"webSearchRequests":0,"costUSD":1.8800695,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":6040,"outputTokens":425,"cacheReadInputTokens":5165,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0086815,"contextWindow":200000}},"permission_denials":[],"structured_output":{"status":"success","summary":"Added tests for ValidationConfig.KeyPointCriteria and documented in config files","output":"Completed Task 2: Config Integration Tests and Documentation for Key Point Validation\n\nTests added to internal/config/config_test.go:\n- TestValidationConfig_DefaultValue: Verifies default is 'warn'\n- TestValidationConfig_ValidModes: Tests 'warn', 'strict', 'off' accepted\n- TestValidationConfig_InvalidMode: Tests invalid modes rejected\n- TestValidationConfig_YAMLMerge: Tests YAML config overrides default\n- TestValidationConfig_WithOtherSettings: Tests validation config alongside other settings\n\nDocumentation added:\n- .conductor/config.yaml: Added validation section with key_point_criteria: warn\n- .conductor/config.yaml.example: Added validation section with examples for strict/off modes\n\nAll tests pass: go test ./internal/config/ -run TestValidationConfig -v\nVerification: Both config files contain key_point_criteria","files_modified":["internal/config/config_test.go",".conductor/config.yaml",".conductor/config.yaml.example"],"errors":[]},"uuid":"534e018c-dcac-4e65-b259-8209221253dc"}
+          qc_feedback: |-
+            [quality-control] All success criteria verified. The task was already completed by a previous agent. The implementation includes:
+
+            **Tests (internal/config/config_test.go)**:
+            - TestValidationConfig_DefaultValue: Verifies DefaultConfig() sets KeyPointCriteria to 'warn' ✓
+            - TestValidationConfig_ValidModes: Tests 'warn', 'strict', 'off' are accepted ✓
+            - TestValidationConfig_InvalidMode: Tests invalid modes return error ✓
+            - TestValidationConfig_YAMLMerge: Tests YAML config overrides default ✓
+            - TestValidationConfig_WithOtherSettings: Tests validation config works with other settings ✓
+
+            **Config Files**:
+            - .conductor/config.yaml: Contains validation.key_point_criteria with comments ✓
+            - .conductor/config.yaml.example: Contains validation.key_point_criteria with comments and examples ✓
+
+            All tests pass: `go test ./internal/config/ -run TestValidationConfig -v` returns PASS
+            [golang-pro] All success criteria verified. Tests pass for ValidationConfig (DefaultValue, ValidModes, InvalidMode, YAMLMerge, WithOtherSettings). Both config files contain the validation.key_point_criteria setting with comments explaining warn/strict/off modes.
+          timestamp: "2025-11-27T09:19:56Z"
+      completed_date: "2025-11-27"
+    - task_number: 3
+      name: "QC Prompt Key Points Injection Tests"
+      agent: "golang-pro"
+      files:
+        - "internal/executor/qc_test.go"
+      depends_on: [1]
+      estimated_time: "30m"
+      description: |
+        Add tests to verify that BuildStructuredReviewPrompt includes key_points
+        in the QC review prompt with appropriate guidance text.
+
+        ## EXISTING QC PROMPT BUILDER (READ FIRST)
+        ```bash
+        grep -A30 "if len(task.KeyPoints) > 0" internal/executor/qc.go
+        ```
+
+        The QC prompt already:
+        - Includes "## KEY POINTS (GUIDANCE - NOT SCORED)" section
+        - Shows warning when key_points > criteria
+        - Lists all key_points with point, details, reference
+      test_first:
+        test_file: "internal/executor/qc_test.go"
+        structure:
+          - "TestBuildStructuredReviewPrompt_KeyPointsSection"
+          - "TestBuildStructuredReviewPrompt_KeyPointsWarning"
+          - "TestBuildStructuredReviewPrompt_NoKeyPoints"
+        assertions:
+          - "Prompt includes KEY POINTS section when task has key_points"
+          - "Prompt includes warning when key_points > criteria"
+          - "Prompt omits KEY POINTS section when task has no key_points"
+          - "Key point details and references are included"
+      implementation:
+        approach: "Add tests to existing qc_test.go for key_points injection"
+        key_points:
+          - point: "KEY POINTS section presence"
+            details: "BuildStructuredReviewPrompt includes '## KEY POINTS' when task.KeyPoints is non-empty"
+          - point: "Mismatch warning display"
+            details: "When key_points count > criteria count, warning message appears"
+          - point: "Key point content formatting"
+            details: "Each key point shows Point, Details (if present), Reference (if present)"
+          - point: "Empty key_points handling"
+            details: "No KEY POINTS section when task.KeyPoints is nil or empty"
+      success_criteria:
+        # Derived from key_point 1: KEY POINTS section presence
+        - "Test verifies '## KEY POINTS' appears in prompt when task.KeyPoints is non-empty"
+        # Derived from key_point 2: Mismatch warning display
+        - "Test verifies warning message appears when key_points count > criteria count"
+        # Derived from key_point 3: Key point content formatting
+        - "Test verifies key point Point, Details, Reference are included in prompt"
+        # Derived from key_point 4: Empty key_points handling
+        - "Test verifies KEY POINTS section is absent when task.KeyPoints is empty"
+      test_commands:
+        - "go test ./internal/executor/ -run TestBuildStructuredReviewPrompt_KeyPoints -v"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: |
+              go fmt ./internal/executor/qc_test.go && \
+              go vet ./internal/executor/ && \
+              go test ./internal/executor/ -run TestBuildStructuredReviewPrompt -v
+      verification:
+        automated_tests:
+          command: "go test ./internal/executor/ -run TestBuildStructuredReviewPrompt -v"
+          expected_output: "PASS"
+      commit:
+        type: "test"
+        message: "test(executor): add tests for QC prompt key_points injection"
+        files:
+          - "internal/executor/qc_test.go"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":93370,"duration_api_ms":101435,"num_turns":19,"result":"","session_id":"6e87a428-46d0-4cc2-8cf0-bce016eeceac","total_cost_usd":0.8864369999999999,"usage":{"input_tokens":1241,"cache_creation_input_tokens":63912,"cache_read_input_tokens":727419,"output_tokens":4333,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":63912}},"modelUsage":{"claude-opus-4-5-20251101":{"inputTokens":1244,"outputTokens":4353,"cacheReadInputTokens":732791,"cacheCreationInputTokens":63912,"webSearchRequests":0,"costUSD":0.8808905,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":3158,"outputTokens":374,"cacheReadInputTokens":5185,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0055465,"contextWindow":200000}},"permission_denials":[],"structured_output":{"status":"success","summary":"Added 4 tests for QC prompt key_points injection in internal/executor/qc_test.go","output":"Added tests:\n- TestBuildStructuredReviewPrompt_KeyPointsSection: Verifies KEY POINTS section presence, key point content with details/reference, and standard guidance text\n- TestBuildStructuredReviewPrompt_KeyPointsWarning: Verifies warning when key_points > criteria count\n- TestBuildStructuredReviewPrompt_NoKeyPoints: Verifies KEY POINTS section omitted for nil/empty key_points\n- TestBuildStructuredReviewPrompt_KeyPointsWithIntegrationTask: Verifies key_points work with integration tasks (total criteria = success + integration)\n\nAll tests pass.","files_modified":["internal/executor/qc_test.go"],"errors":[],"metadata":{"tests_added":4,"test_names":["TestBuildStructuredReviewPrompt_KeyPointsSection","TestBuildStructuredReviewPrompt_KeyPointsWarning","TestBuildStructuredReviewPrompt_NoKeyPoints","TestBuildStructuredReviewPrompt_KeyPointsWithIntegrationTask"]}},"uuid":"818ac511-e707-49e9-b4d5-8a3a5f50d20f"}
+          qc_feedback: |-
+            [quality-control] All 4 tests for QC prompt key_points injection are present in internal/executor/qc_test.go and pass successfully.
+            [golang-pro] All 4 tests for QC prompt key_points injection are properly implemented and passing in internal/executor/qc_test.go.
+
+            Tests verify:
+            - TestBuildStructuredReviewPrompt_KeyPointsSection: KEY POINTS section presence + content (Point, Details, Reference)
+            - TestBuildStructuredReviewPrompt_KeyPointsWarning: Warning when key_points > criteria
+            - TestBuildStructuredReviewPrompt_NoKeyPoints: Section absent for nil/empty key_points
+            - TestBuildStructuredReviewPrompt_KeyPointsWithIntegrationTask: Works with integration tasks (total criteria = success + integration)
+          timestamp: "2025-11-27T09:22:21Z"
+      completed_date: "2025-11-27"

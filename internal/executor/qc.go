@@ -199,6 +199,28 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		}
 	}
 
+	if len(task.KeyPoints) > 0 {
+		sb.WriteString("## KEY POINTS (GUIDANCE - NOT SCORED)\n\n")
+		keyPointCount := len(task.KeyPoints)
+		criteriaCount := len(allCriteria)
+		if criteriaCount < keyPointCount {
+			sb.WriteString(fmt.Sprintf("⚠️ %d key point(s) do not have explicit success criteria above. Treat these as context while scoring only against listed criteria.\n\n", keyPointCount-criteriaCount))
+		} else {
+			sb.WriteString("These implementation key points are provided for context. Score strictly against the success criteria above.\n\n")
+		}
+		for _, kp := range task.KeyPoints {
+			line := kp.Point
+			if kp.Details != "" {
+				line += fmt.Sprintf(": %s", kp.Details)
+			}
+			if kp.Reference != "" {
+				line += fmt.Sprintf(" (ref: %s)", kp.Reference)
+			}
+			sb.WriteString(fmt.Sprintf("- %s\n", line))
+		}
+		sb.WriteString("\n")
+	}
+
 	if len(task.TestCommands) > 0 {
 		sb.WriteString("## TEST COMMANDS\n")
 		for _, cmd := range task.TestCommands {

@@ -3022,3 +3022,180 @@ type mockBehavioralMetricsProvider struct {
 func (m *mockBehavioralMetricsProvider) GetMetrics(ctx context.Context, taskNumber string) *behavioral.BehavioralMetrics {
 	return m.metrics
 }
+
+// TestBuildStructuredReviewPrompt_KeyPointsSection verifies key_points section is included
+// when task has key_points.
+func TestBuildStructuredReviewPrompt_KeyPointsSection(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Number: "1",
+		Name:   "Task with key points",
+		Prompt: "Implement feature",
+		SuccessCriteria: []string{
+			"Feature works",
+			"Tests pass",
+			"Code is clean",
+		},
+		KeyPoints: []models.KeyPoint{
+			{Point: "Use dependency injection"},
+			{Point: "Follow naming conventions", Details: "Use camelCase for variables"},
+			{Point: "Add error handling", Details: "Wrap errors with context", Reference: "internal/errors/errors.go"},
+		},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+	// Verify KEY POINTS section is present
+	if !contains(prompt, "## KEY POINTS (GUIDANCE - NOT SCORED)") {
+		t.Error("KEY POINTS section should be present when task has key_points")
+	}
+
+	// Verify key point content
+	if !contains(prompt, "Use dependency injection") {
+		t.Error("First key point should be included")
+	}
+	if !contains(prompt, "Follow naming conventions: Use camelCase for variables") {
+		t.Error("Second key point with details should be included")
+	}
+	if !contains(prompt, "Add error handling: Wrap errors with context (ref: internal/errors/errors.go)") {
+		t.Error("Third key point with details and reference should be included")
+	}
+
+	// Verify guidance text is present (not the warning since criteria >= key_points)
+	if !contains(prompt, "These implementation key points are provided for context") {
+		t.Error("Standard guidance text should be present when criteria >= key_points")
+	}
+}
+
+// TestBuildStructuredReviewPrompt_KeyPointsWarning verifies warning appears when
+// key_points count exceeds criteria count.
+func TestBuildStructuredReviewPrompt_KeyPointsWarning(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Number: "2",
+		Name:   "Task with more key points than criteria",
+		Prompt: "Implement feature",
+		SuccessCriteria: []string{
+			"Feature works",
+		},
+		KeyPoints: []models.KeyPoint{
+			{Point: "Key point 1"},
+			{Point: "Key point 2"},
+			{Point: "Key point 3"},
+			{Point: "Key point 4"},
+		},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+	// Verify KEY POINTS section is present
+	if !contains(prompt, "## KEY POINTS (GUIDANCE - NOT SCORED)") {
+		t.Error("KEY POINTS section should be present")
+	}
+
+	// Verify warning is shown (4 key_points - 1 criteria = 3 without explicit criteria)
+	if !contains(prompt, "3 key point(s) do not have explicit success criteria") {
+		t.Error("Warning about key points without explicit criteria should be present")
+	}
+
+	// Verify all key points are still included
+	if !contains(prompt, "Key point 1") {
+		t.Error("Key point 1 should be included")
+	}
+	if !contains(prompt, "Key point 4") {
+		t.Error("Key point 4 should be included")
+	}
+}
+
+// TestBuildStructuredReviewPrompt_NoKeyPoints verifies KEY POINTS section is NOT included
+// when task has no key_points.
+func TestBuildStructuredReviewPrompt_NoKeyPoints(t *testing.T) {
+	tests := []struct {
+		name      string
+		keyPoints []models.KeyPoint
+	}{
+		{
+			name:      "nil key_points",
+			keyPoints: nil,
+		},
+		{
+			name:      "empty key_points slice",
+			keyPoints: []models.KeyPoint{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qc := NewQualityController(nil)
+			task := models.Task{
+				Number: "3",
+				Name:   "Task without key points",
+				Prompt: "Implement feature",
+				SuccessCriteria: []string{
+					"Feature works",
+					"Tests pass",
+				},
+				KeyPoints: tt.keyPoints,
+			}
+
+			ctx := context.Background()
+			prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+			// Verify KEY POINTS section is NOT present
+			if contains(prompt, "## KEY POINTS") {
+				t.Error("KEY POINTS section should NOT be present when task has no key_points")
+			}
+			if contains(prompt, "GUIDANCE - NOT SCORED") {
+				t.Error("KEY POINTS header should NOT be present when task has no key_points")
+			}
+		})
+	}
+}
+
+// TestBuildStructuredReviewPrompt_KeyPointsWithIntegrationTask verifies key_points work
+// correctly with integration tasks that have both success and integration criteria.
+func TestBuildStructuredReviewPrompt_KeyPointsWithIntegrationTask(t *testing.T) {
+	qc := NewQualityController(nil)
+	task := models.Task{
+		Number: "4",
+		Name:   "Integration task with key points",
+		Prompt: "Wire components together",
+		Type:   "integration",
+		SuccessCriteria: []string{
+			"Component A works",
+			"Component B works",
+		},
+		IntegrationCriteria: []string{
+			"A and B integrate properly",
+			"Data flows correctly",
+		},
+		KeyPoints: []models.KeyPoint{
+			{Point: "Check interface compatibility"},
+			{Point: "Verify error propagation"},
+		},
+	}
+
+	ctx := context.Background()
+	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+	// Verify KEY POINTS section is present
+	if !contains(prompt, "## KEY POINTS (GUIDANCE - NOT SCORED)") {
+		t.Error("KEY POINTS section should be present for integration task")
+	}
+
+	// With 4 total criteria (2 success + 2 integration) and 2 key points,
+	// no warning should appear
+	if contains(prompt, "do not have explicit success criteria") {
+		t.Error("Warning should NOT appear when total criteria >= key_points count")
+	}
+
+	// Verify key points are included
+	if !contains(prompt, "Check interface compatibility") {
+		t.Error("First key point should be included")
+	}
+	if !contains(prompt, "Verify error propagation") {
+		t.Error("Second key point should be included")
+	}
+}
