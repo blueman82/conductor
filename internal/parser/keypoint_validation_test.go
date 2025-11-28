@@ -257,13 +257,13 @@ func TestValidateKeyPointCriteriaAlignment_MoreCriteria(t *testing.T) {
 
 func TestValidateKeyPointCriteriaAlignment_IntegrationTask(t *testing.T) {
 	tests := []struct {
-		name                string
-		keyPointCount       int
-		successCriteriaLen  int
-		integrationCritLen  int
-		expectedWarnings    int
-		expectedErrors      int
-		description         string
+		name               string
+		keyPointCount      int
+		successCriteriaLen int
+		integrationCritLen int
+		expectedWarnings   int
+		expectedErrors     int
+		description        string
 	}{
 		{
 			name:               "integration task counts both criteria types",

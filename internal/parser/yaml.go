@@ -32,11 +32,11 @@ type yamlTask struct {
 	TaskNumber          interface{}   `yaml:"task_number"` // Accepts int, float, or string
 	Name                string        `yaml:"name"`
 	Files               []string      `yaml:"files"`
-		DependsOn           []interface{} `yaml:"depends_on"` // Accepts int, float, or string
-		EstimatedTime       string        `yaml:"estimated_time"`
-		Agent               string        `yaml:"agent"`
-		WorktreeGroup       string        `yaml:"worktree_group"` // Worktree group for task organization
-		Status              string        `yaml:"status"`
+	DependsOn           []interface{} `yaml:"depends_on"` // Accepts int, float, or string
+	EstimatedTime       string        `yaml:"estimated_time"`
+	Agent               string        `yaml:"agent"`
+	WorktreeGroup       string        `yaml:"worktree_group"` // Worktree group for task organization
+	Status              string        `yaml:"status"`
 	CompletedDate       string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
 	CompletedAt         string        `yaml:"completed_at"`   // Timestamp format: RFC3339
 	Description         string        `yaml:"description"`

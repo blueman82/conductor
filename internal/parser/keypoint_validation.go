@@ -51,4 +51,3 @@ func ValidateKeyPointCriteriaAlignment(tasks []models.Task, mode string) (warnin
 
 	return warnings, errors
 }
-
