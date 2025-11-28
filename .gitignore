@@ -73,11 +73,9 @@ test-results/
 transcripts/
 conductor
 
-# Deployment strategies (local planning docs)
-
-# Orphaned documentation (removed from repo)
-IMPLEMENTATION_SUMMARY.md
-PATTERN_EXTRACTION_REFERENCE.md
+# Ignore docs folder
+docs/
 
 # To un-ignore a file in an ignored directory, need to:
 !docs/conductor.md
+!docs/reference/ANALYZE_COMMANDS_GUIDE.md
