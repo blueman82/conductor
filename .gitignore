@@ -78,4 +78,3 @@ docs/
 
 # To un-ignore a file in an ignored directory, need to:
 !docs/conductor.md
-!docs/reference/ANALYZE_COMMANDS_GUIDE.md
