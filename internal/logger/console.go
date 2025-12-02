@@ -1305,10 +1305,16 @@ func (cl *ConsoleLogger) LogTestCommands(results []models.TestCommandResult) {
 
 // LogErrorPattern logs a detected error pattern with categorization and suggestion.
 // Format: Boxed output with category, pattern, and actionable suggestion.
-// Implements the ErrorPatternDisplay interface for logging detected error patterns.
-func (cl *ConsoleLogger) LogErrorPattern(pattern ErrorPatternDisplay) {
+// Accepts interface{} for flexibility with different pattern types (e.g., ErrorPattern from executor).
+func (cl *ConsoleLogger) LogErrorPattern(pattern interface{}) {
 	if cl.writer == nil || pattern == nil {
 		return
+	}
+
+	// Type assert to ErrorPatternDisplay
+	p, ok := pattern.(ErrorPatternDisplay)
+	if !ok {
+		return // Not the right type, skip
 	}
 
 	if !cl.shouldLog("info") {
@@ -1335,7 +1341,7 @@ func (cl *ConsoleLogger) LogErrorPattern(pattern ErrorPatternDisplay) {
 
 	// Category line with color based on category
 	var categoryLine string
-	categoryStr := pattern.GetCategory()
+	categoryStr := p.GetCategory()
 	switch categoryStr {
 	case "ENV_LEVEL":
 		if cl.colorOutput {
@@ -1361,7 +1367,7 @@ func (cl *ConsoleLogger) LogErrorPattern(pattern ErrorPatternDisplay) {
 	output.WriteString(drawBoxLine(categoryLine, w) + "\n")
 
 	// Pattern line
-	patternText := truncateCommand(pattern.GetPattern(), w-12)
+	patternText := truncateCommand(p.GetPattern(), w-12)
 	patternLine := "Pattern: " + patternText
 	output.WriteString(drawBoxLine(patternLine, w) + "\n")
 
@@ -1373,7 +1379,7 @@ func (cl *ConsoleLogger) LogErrorPattern(pattern ErrorPatternDisplay) {
 	output.WriteString(drawBoxLine(suggestionHeader, w) + "\n")
 
 	// Word-wrap the suggestion text
-	wrappedSuggestion := wordWrapText(pattern.GetSuggestion(), w-8)
+	wrappedSuggestion := wordWrapText(p.GetSuggestion(), w-8)
 	for _, line := range wrappedSuggestion {
 		output.WriteString(drawBoxLine(line, w) + "\n")
 	}

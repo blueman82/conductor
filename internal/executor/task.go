@@ -39,10 +39,12 @@ type LearningStore interface {
 }
 
 // RuntimeEnforcementLogger logs runtime enforcement events (test commands, criterion verification).
+// LogErrorPattern accepts an error pattern display (ErrorPattern implements logger.ErrorPatternDisplay).
 type RuntimeEnforcementLogger interface {
 	LogTestCommands(entries []models.TestCommandResult)
 	LogCriterionVerifications(entries []models.CriterionVerificationResult)
 	LogDocTargetVerifications(entries []models.DocTargetResult)
+	LogErrorPattern(pattern interface{}) // Flexible interface for testing
 }
 
 // TaskExecution represents a single task execution record for learning storage.
@@ -159,10 +161,11 @@ type DefaultTaskExecutor struct {
 	EnforceDependencyChecks bool                     // Run dependency checks before task invocation
 	CommandRunner           CommandRunner            // Command runner for dependency checks (optional)
 	WorkDir                 string                   // Working directory for dependency check commands
-	EnforceTestCommands     bool                     // Run test commands after agent output (v2.9+)
-	VerifyCriteria          bool                     // Run optional per-criterion verifications (v2.9+)
-	EnforceDocTargets       bool                     // Run documentation target verification for doc tasks (v2.9+)
-	Logger                  RuntimeEnforcementLogger // Logger for runtime enforcement output (optional)
+	EnforceTestCommands         bool                     // Run test commands after agent output (v2.9+)
+	VerifyCriteria              bool                     // Run optional per-criterion verifications (v2.9+)
+	EnforceDocTargets           bool                     // Run documentation target verification for doc tasks (v2.9+)
+	EnableErrorPatternDetection bool                     // Enable error pattern detection on test failures (v2.11+)
+	Logger                      RuntimeEnforcementLogger // Logger for runtime enforcement output (optional)
 
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
@@ -843,6 +846,32 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 				_ = te.updatePlanStatus(task, StatusFailed, false)
 				te.postTaskHook(ctx, &task, &result, models.StatusRed)
 				return result, lastErr
+			}
+
+			// Detect error patterns before injecting feedback (v2.11+)
+			if te.EnableErrorPatternDetection {
+				for _, result := range te.lastTestResults {
+					if !result.Passed {
+						pattern := DetectErrorPattern(result.Output)
+						if pattern != nil {
+							// Store pattern for learning system
+							if task.Metadata == nil {
+								task.Metadata = make(map[string]interface{})
+							}
+							patterns, ok := task.Metadata["error_patterns"].([]string)
+							if !ok {
+								patterns = []string{}
+							}
+							patterns = append(patterns, pattern.Category.String())
+							task.Metadata["error_patterns"] = patterns
+
+							// Log pattern with suggestion
+							if te.Logger != nil {
+								te.Logger.LogErrorPattern(pattern)
+							}
+						}
+					}
+				}
 			}
 
 			// Inject test failure feedback for retry (mirrors QC pattern)

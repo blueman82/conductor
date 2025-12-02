@@ -581,6 +581,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Wire runtime enforcement flags (v2.9+)
 	taskExec.EnforceTestCommands = cfg.Executor.EnforceTestCommands
 	taskExec.VerifyCriteria = cfg.Executor.VerifyCriteria
+	taskExec.EnableErrorPatternDetection = cfg.Executor.EnableErrorPatternDetection
 	fmt.Fprintf(os.Stderr, "[v2.9] Runtime enforcement: test_commands=%v, verify_criteria=%v\n",
 		taskExec.EnforceTestCommands, taskExec.VerifyCriteria)
 
