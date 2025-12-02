@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/models"
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
 
@@ -200,48 +201,50 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 
 	// Get dynamic box width
 	boxWidth := getBoxWidth()
-	innerWidth := boxWidth - 2 // Account for │ on each side
+	innerWidth := boxWidth - 4 // Account for "│ " and " │"
 
-	// Box drawing helpers
+	// Box drawing - all borders in cyan
 	hLine := strings.Repeat("─", boxWidth-2)
-	topBorder := "┌" + hLine + "┐"
-	midBorder := "├" + hLine + "┤"
-	botBorder := "└" + hLine + "┘"
+	fmt.Fprintf(os.Stderr, "\n%s┌%s┐%s\n", cyan, hLine, reset)
 
-	// Pad content to fill box
-	padLine := func(content string, contentLen int) string {
-		padding := innerWidth - contentLen
-		if padding < 0 {
-			padding = 0
-		}
-		return "│ " + content + strings.Repeat(" ", padding-1) + "│"
+	// Header line - use runewidth for proper emoji width calculation
+	headerText := "🤖 Agent Invocation"
+	headerVisibleLen := runewidth.StringWidth(headerText)
+	headerPad := innerWidth - headerVisibleLen
+	if headerPad < 0 {
+		headerPad = 0
 	}
+	fmt.Fprintf(os.Stderr, "%s│%s %s%s%s%s %s│%s\n",
+		cyan, reset, bold, headerText, reset, strings.Repeat(" ", headerPad), cyan, reset)
+	fmt.Fprintf(os.Stderr, "%s├%s┤%s\n", cyan, hLine, reset)
 
-	fmt.Fprintf(os.Stderr, "\n%s%s%s\n", cyan, topBorder, reset)
-
-	// Header line
-	header := bold + "🤖 Agent Invocation" + reset
-	headerLen := 20 // visible length without ANSI
-	fmt.Fprintf(os.Stderr, "%s%s%s\n", cyan, padLine(header, headerLen), reset)
-	fmt.Fprintf(os.Stderr, "%s%s%s\n", cyan, midBorder, reset)
-
-	// Helper to print a labeled line
+	// Helper to print a labeled line with proper alignment
 	printLine := func(label, value, valueColor string) {
-		labelLen := len(label) + 3 // "Label:  "
-		maxValueLen := innerWidth - labelLen - 2
-		if len(value) > maxValueLen {
-			value = value[:maxValueLen-3] + "..."
+		// Use runewidth for proper width calculation (handles emojis, CJK chars)
+		labelWidth := runewidth.StringWidth(label)
+		valueWidth := runewidth.StringWidth(value)
+
+		// Truncate value if too long
+		maxValueWidth := innerWidth - labelWidth - 2 // -2 for ": "
+		if valueWidth > maxValueWidth && maxValueWidth > 3 {
+			// Truncate with runewidth awareness
+			value = runewidth.Truncate(value, maxValueWidth-3, "...")
+			valueWidth = runewidth.StringWidth(value)
 		}
 
-		padding := innerWidth - labelLen - len(value) - 1
+		// Calculate padding: innerWidth - label - ": " - value
+		padding := innerWidth - labelWidth - 2 - valueWidth
 		if padding < 0 {
 			padding = 0
 		}
-		spacer := strings.Repeat(" ", padding)
 
-		// Borders cyan, label yellow, value colored
-		fmt.Fprintf(os.Stderr, "%s│%s %s%s:%s  %s%s%s%s%s│%s\n",
-			cyan, reset, yellow, label, reset, valueColor, value, reset, spacer, cyan, reset)
+		// Print: cyan│ yellow_label: value_color_value padding cyan│
+		fmt.Fprintf(os.Stderr, "%s│%s %s%s:%s %s%s%s%s %s│%s\n",
+			cyan, reset,
+			yellow, label, reset,
+			valueColor, value, reset,
+			strings.Repeat(" ", padding),
+			cyan, reset)
 	}
 
 	// Agent info
@@ -275,7 +278,7 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 		printLine("Files", filesStr, green)
 	}
 
-	fmt.Fprintf(os.Stderr, "%s%s%s\n\n", cyan, botBorder, reset)
+	fmt.Fprintf(os.Stderr, "%s└%s┘%s\n\n", cyan, hLine, reset)
 }
 
 // Invoke executes the claude CLI command with the given context

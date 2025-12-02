@@ -348,8 +348,9 @@ executor:
 
   # Run test commands after agent output but before QC review (default: true)
   # When enabled, tasks with test_commands will have their commands executed
-  # after the agent completes. Task fails immediately if any command exits
-  # non-zero (blocks QC review). Test output is captured and attached to logs.
+  # after the agent completes. With QC enabled: test failures trigger retry with
+  # feedback injection (v2.10+). Without QC: hard gate - task fails immediately.
+  # Test output is captured and attached to logs.
   enforce_test_commands: true
 
   # Run optional per-criterion verification commands (default: true)

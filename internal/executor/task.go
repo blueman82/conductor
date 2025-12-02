@@ -634,6 +634,9 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	// Track execution history for all attempts
 	var executionHistory []models.ExecutionAttempt
 
+	// Track test failure state for retry injection (v2.10+)
+	var testFailureErr error
+
 	for attempt := 0; attempt <= maxAttempt; attempt++ {
 		if err := ctx.Err(); err != nil {
 			// Wrap context errors with TimeoutError for better error handling
@@ -749,8 +752,11 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			Duration:    invocation.Duration,
 		}
 
+		// Clear test failure from previous attempt
+		testFailureErr = nil
+
 		// Run test commands after agent output but BEFORE QC (v2.9+)
-		// Test command failure returns error immediately (task fails, no QC review)
+		// Test command failure is tracked but doesn't return immediately (v2.10+)
 		if te.EnforceTestCommands && len(task.TestCommands) > 0 {
 			runner := te.CommandRunner
 			if runner == nil {
@@ -762,10 +768,8 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 				te.Logger.LogTestCommands(testResults)
 			}
 			if testErr != nil {
-				result.Status = models.StatusFailed
-				result.Error = fmt.Errorf("test command failed: %w", testErr)
-				_ = te.updatePlanStatus(task, StatusFailed, false)
-				return result, result.Error
+				// Track failure but continue to allow retry (v2.10+)
+				testFailureErr = testErr
 			}
 		}
 
@@ -815,6 +819,40 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 					return result, docErr
 				}
 			}
+		}
+
+		// Handle test failures (v2.10+)
+		// Test failures are treated like QC RED verdicts - retry with feedback injection
+		if testFailureErr != nil {
+			if !te.qcEnabled || te.reviewer == nil {
+				// No QC enabled - fail immediately with no retry (backward compat: hard gate)
+				result.Status = models.StatusFailed
+				result.Error = fmt.Errorf("test command failed: %w", testFailureErr)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				return result, result.Error
+			}
+
+			// QC enabled - treat test failure like RED verdict
+			lastErr = fmt.Errorf("test command failed: %w", testFailureErr)
+			result.RetryCount = attempt
+
+			// Check retry budget
+			if attempt >= te.retryLimit {
+				result.Status = models.StatusRed
+				result.Error = lastErr
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				te.postTaskHook(ctx, &task, &result, models.StatusRed)
+				return result, lastErr
+			}
+
+			// Inject test failure feedback for retry (mirrors QC pattern)
+			testFeedback := FormatTestResults(te.lastTestResults)
+			if testFeedback != "" {
+				task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - TEST COMMANDS FAILED (MUST FIX):\n%s\n---\n\nFix ALL test failures listed above before completing the task.", task.Prompt, testFeedback)
+			}
+
+			// Continue to next retry iteration
+			continue
 		}
 
 		if !te.qcEnabled || te.reviewer == nil {

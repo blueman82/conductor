@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,9 +15,10 @@ import (
 )
 
 type stubInvoker struct {
-	mu        sync.Mutex
-	responses []*agent.InvocationResult
-	calls     []models.Task
+	mu         sync.Mutex
+	responses  []*agent.InvocationResult
+	calls      []models.Task
+	invokeFunc func(context.Context, models.Task) (*agent.InvocationResult, error) // Optional custom function
 }
 
 func newStubInvoker(responses ...*agent.InvocationResult) *stubInvoker {
@@ -27,6 +29,13 @@ func (s *stubInvoker) Invoke(ctx context.Context, task models.Task) (*agent.Invo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls = append(s.calls, task)
+
+	// If custom function provided, use it
+	if s.invokeFunc != nil {
+		return s.invokeFunc(ctx, task)
+	}
+
+	// Otherwise use responses queue
 	if len(s.responses) == 0 {
 		return nil, fmt.Errorf("no response configured for task %s", task.Name)
 	}
@@ -86,6 +95,18 @@ func (s *stubReviewer) ShouldRetry(_ *ReviewResult, attempt int) bool {
 		return false
 	}
 	return s.retryDecisions[attempt]
+}
+
+// customRunner allows dynamic command runner behavior for tests
+type customRunner struct {
+	runFunc func(context.Context, string) (string, error)
+}
+
+func (c *customRunner) Run(ctx context.Context, command string) (string, error) {
+	if c.runFunc != nil {
+		return c.runFunc(ctx, command)
+	}
+	return "", nil
 }
 
 func TestTaskExecutor_ExecutesTaskWithoutQC(t *testing.T) {
@@ -1101,19 +1122,22 @@ func TestExecute_TestCommandsPass(t *testing.T) {
 // TestExecute_TestCommandsFailBlocksQC verifies that test command failure
 // causes immediate task failure (no QC review).
 func TestExecute_TestCommandsFailBlocksQC(t *testing.T) {
-	// Setup fake command runner that fails on second command
-	runner := NewFakeCommandRunner()
-	runner.SetOutput("go test ./...", "PASS")
-	runner.SetOutput("go lint ./...", "errors found")
-	runner.SetError("go lint ./...", errors.New("exit status 1"))
+	// NOTE: v2.10+ behavior change - test failures now trigger retry with QC enabled
+	// This test verifies test failure eventually exhausts retries
 
-	invoker := newStubInvoker(&agent.InvocationResult{
-		Output:   `{"content":"task complete"}`,
-		ExitCode: 0,
-		Duration: 100 * time.Millisecond,
-	})
+	invocationCount := 0
+	invoker := &stubInvoker{
+		invokeFunc: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			invocationCount++
+			return &agent.InvocationResult{
+				Output:   `{"content":"task complete"}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
 
-	// Setup a reviewer - if it gets called, we can detect it via outputs slice
+	// Setup a reviewer - won't be reached since test always fails
 	reviewer := &stubReviewer{
 		results: []*ReviewResult{{Flag: models.StatusGreen}},
 	}
@@ -1129,7 +1153,12 @@ func TestExecute_TestCommandsFailBlocksQC(t *testing.T) {
 	}
 
 	executor.EnforceTestCommands = true
-	executor.CommandRunner = runner
+	// Use runner that always fails
+	executor.CommandRunner = &customRunner{
+		runFunc: func(ctx context.Context, command string) (string, error) {
+			return "errors found", errors.New("exit status 1")
+		},
+	}
 
 	task := models.Task{
 		Number:       "1",
@@ -1143,13 +1172,14 @@ func TestExecute_TestCommandsFailBlocksQC(t *testing.T) {
 		t.Fatal("expected error from test command failure, got nil")
 	}
 
-	if result.Status != models.StatusFailed {
-		t.Errorf("expected status FAILED, got %s", result.Status)
+	// v2.10+: With QC enabled, test failures trigger retry, eventually returning RED
+	if result.Status != models.StatusRed {
+		t.Errorf("expected status RED (after retries), got %s", result.Status)
 	}
 
-	// Verify reviewer was NOT called (outputs should be empty)
-	if len(reviewer.outputs) > 0 {
-		t.Error("QC reviewer should NOT be called when test commands fail")
+	// v2.10+: Verify retries happened (agent invoked 3 times: initial + 2 retries)
+	if invocationCount != 3 {
+		t.Errorf("expected 3 invocations (initial + 2 retries), got %d", invocationCount)
 	}
 
 	// Verify error message contains test command info
@@ -1201,6 +1231,293 @@ func TestExecute_TestCommandsDisabled(t *testing.T) {
 	// Verify no commands were executed
 	if len(runner.Commands()) != 0 {
 		t.Errorf("expected 0 commands (disabled), got %d", len(runner.Commands()))
+	}
+}
+
+// TestExecute_TestFailure_TriggersRetry verifies that test failures trigger retry
+// when QC is enabled (v2.10+).
+func TestExecute_TestFailure_TriggersRetry(t *testing.T) {
+	// Setup fake command runner - test always fails
+	runner := NewFakeCommandRunner()
+	runner.SetError("go test ./...", errors.New("exit status 1"))
+	runner.SetOutput("go test ./...", "FAIL: TestFoo")
+
+	// Track invocation count - test should trigger retry
+	invocationCount := 0
+	invoker := &stubInvoker{
+		invokeFunc: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			invocationCount++
+			return &agent.InvocationResult{
+				Output:   `{"content":"task complete"}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	// Setup reviewer to return GREEN on retry (simulating agent fixed the issue)
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusGreen}, // Retry 1: agent fixed issue
+		},
+	}
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, updater, TaskExecutorConfig{
+		PlanPath:       "plan.md",
+		QualityControl: models.QualityControlConfig{Enabled: true, RetryOnRed: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceTestCommands = true
+	// Use custom runner that succeeds on second attempt
+	callCount := 0
+	executor.CommandRunner = &customRunner{
+		runFunc: func(ctx context.Context, command string) (string, error) {
+			callCount++
+			if callCount == 1 {
+				return "FAIL: TestFoo", errors.New("exit status 1")
+			}
+			return "PASS", nil
+		},
+	}
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Test Task",
+		Prompt:       "Do work",
+		TestCommands: []string{"go test ./..."},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify agent was invoked twice (initial + retry)
+	if invocationCount != 2 {
+		t.Errorf("expected 2 agent invocations (initial + retry), got %d", invocationCount)
+	}
+
+	// Verify test was called twice
+	if callCount != 2 {
+		t.Errorf("expected 2 test command calls (initial + retry), got %d", callCount)
+	}
+
+	// Verify retry count
+	if result.RetryCount != 1 {
+		t.Errorf("expected RetryCount=1, got %d", result.RetryCount)
+	}
+}
+
+// TestExecute_TestFailure_InjectsFeedback verifies that test failures inject
+// feedback into the prompt for retry (v2.10+).
+func TestExecute_TestFailure_InjectsFeedback(t *testing.T) {
+	// Capture the prompt on second invocation to verify feedback injection
+	invocationCount := 0
+	var secondPrompt string
+	invoker := &stubInvoker{
+		invokeFunc: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			invocationCount++
+			if invocationCount == 2 {
+				secondPrompt = task.Prompt
+			}
+			return &agent.InvocationResult{
+				Output:   `{"content":"task complete"}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusGreen}, // Retry 1: passes
+		},
+	}
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, updater, TaskExecutorConfig{
+		PlanPath:       "plan.md",
+		QualityControl: models.QualityControlConfig{Enabled: true, RetryOnRed: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceTestCommands = true
+	// Use custom runner that fails on first attempt, passes on second
+	callCount := 0
+	executor.CommandRunner = &customRunner{
+		runFunc: func(ctx context.Context, command string) (string, error) {
+			callCount++
+			if callCount == 1 {
+				return "FAIL: TestFoo\nexpected 5, got 3", errors.New("exit status 1")
+			}
+			return "PASS", nil
+		},
+	}
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Test Task",
+		Prompt:       "Do work",
+		TestCommands: []string{"go test ./..."},
+	}
+
+	_, err = executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify feedback was injected into prompt
+	if !strings.Contains(secondPrompt, "PREVIOUS ATTEMPT FAILED - TEST COMMANDS FAILED (MUST FIX)") {
+		t.Error("expected test failure feedback header in retry prompt")
+	}
+
+	if !strings.Contains(secondPrompt, "FAIL: TestFoo") {
+		t.Error("expected test output in retry prompt")
+	}
+
+	if !strings.Contains(secondPrompt, "expected 5, got 3") {
+		t.Error("expected test error details in retry prompt")
+	}
+}
+
+// TestExecute_TestFailure_RespectsRetryLimit verifies that test failures
+// respect the retry limit and fail after max retries (v2.10+).
+func TestExecute_TestFailure_RespectsRetryLimit(t *testing.T) {
+	// Track invocation count
+	invocationCount := 0
+	invoker := &stubInvoker{
+		invokeFunc: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			invocationCount++
+			return &agent.InvocationResult{
+				Output:   `{"content":"task complete"}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{}, // No results - won't reach QC
+	}
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, updater, TaskExecutorConfig{
+		PlanPath:       "plan.md",
+		QualityControl: models.QualityControlConfig{Enabled: true, RetryOnRed: 2}, // Max 2 retries
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceTestCommands = true
+	// Test always fails
+	executor.CommandRunner = &customRunner{
+		runFunc: func(ctx context.Context, command string) (string, error) {
+			return "FAIL: TestFoo", errors.New("exit status 1")
+		},
+	}
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Test Task",
+		Prompt:       "Do work",
+		TestCommands: []string{"go test ./..."},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries, got nil")
+	}
+
+	if result.Status != models.StatusRed {
+		t.Errorf("expected status RED, got %s", result.Status)
+	}
+
+	// Verify agent was invoked 3 times (initial + 2 retries)
+	if invocationCount != 3 {
+		t.Errorf("expected 3 agent invocations (initial + 2 retries), got %d", invocationCount)
+	}
+
+	// Verify retry count = retry limit
+	if result.RetryCount != 2 {
+		t.Errorf("expected RetryCount=2 (retry limit), got %d", result.RetryCount)
+	}
+
+	// Verify error is test failure
+	if !errors.Is(err, ErrTestCommandFailed) {
+		t.Errorf("expected ErrTestCommandFailed, got %v", err)
+	}
+}
+
+// TestExecute_TestFailure_NoQC_HardGate verifies backward compatibility:
+// test failures with QC disabled remain hard gates (v2.10+).
+func TestExecute_TestFailure_NoQC_HardGate(t *testing.T) {
+	runner := NewFakeCommandRunner()
+	runner.SetError("go test ./...", errors.New("exit status 1"))
+	runner.SetOutput("go test ./...", "FAIL: TestFoo")
+
+	invocationCount := 0
+	invoker := &stubInvoker{
+		invokeFunc: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+			invocationCount++
+			return &agent.InvocationResult{
+				Output:   `{"content":"task complete"}`,
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	updater := &recordingUpdater{}
+
+	// NO QC configured - should be hard gate
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceTestCommands = true
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Test Task",
+		Prompt:       "Do work",
+		TestCommands: []string{"go test ./..."},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err == nil {
+		t.Fatal("expected error from test failure (hard gate), got nil")
+	}
+
+	if result.Status != models.StatusFailed {
+		t.Errorf("expected status FAILED, got %s", result.Status)
+	}
+
+	// Verify NO retry happened (hard gate)
+	if invocationCount != 1 {
+		t.Errorf("expected 1 invocation (no retry), got %d", invocationCount)
+	}
+
+	// Verify error is test failure
+	if !errors.Is(err, ErrTestCommandFailed) {
+		t.Errorf("expected ErrTestCommandFailed, got %v", err)
 	}
 }
 

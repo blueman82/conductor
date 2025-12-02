@@ -153,7 +153,8 @@ executor:
   enforce_dependency_checks: true
 
   # Run test commands after agent output but before QC review (default: true)
-  # Hard gate - task fails immediately if any command exits non-zero
+  # With QC enabled: soft gate - task retries with feedback (v2.10+)
+  # Without QC: hard gate - task fails immediately
   enforce_test_commands: true
 
   # Run optional per-criterion verification commands (default: true)

@@ -17,6 +17,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/mattn/go-isatty"
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
 
@@ -1132,22 +1133,28 @@ func getTerminalWidth() int {
 	return width
 }
 
-// drawBoxTop draws the top border of a box
+// ANSI color codes for box drawing
+const (
+	cyanColor  = "\033[36m"
+	resetColor = "\033[0m"
+)
+
+// drawBoxTop draws the top border of a box (colored cyan)
 func drawBoxTop(width int) string {
-	return boxTopLeft + strings.Repeat(boxHorizontal, width-2) + boxTopRight
+	return cyanColor + boxTopLeft + strings.Repeat(boxHorizontal, width-2) + boxTopRight + resetColor
 }
 
-// drawBoxBottom draws the bottom border of a box
+// drawBoxBottom draws the bottom border of a box (colored cyan)
 func drawBoxBottom(width int) string {
-	return boxBottomLeft + strings.Repeat(boxHorizontal, width-2) + boxBottomRight
+	return cyanColor + boxBottomLeft + strings.Repeat(boxHorizontal, width-2) + boxBottomRight + resetColor
 }
 
-// drawBoxDivider draws a horizontal divider within a box
+// drawBoxDivider draws a horizontal divider within a box (colored cyan)
 func drawBoxDivider(width int) string {
-	return boxTeeLeft + strings.Repeat(boxHorizontal, width-2) + boxTeeRight
+	return cyanColor + boxTeeLeft + strings.Repeat(boxHorizontal, width-2) + boxTeeRight + resetColor
 }
 
-// drawBoxLine draws a line of content within a box, padding to width
+// drawBoxLine draws a line of content within a box, padding to width (borders colored cyan)
 func drawBoxLine(content string, width int) string {
 	// Account for visible width (strip ANSI codes for length calculation)
 	visibleLen := visibleLength(content)
@@ -1157,15 +1164,16 @@ func drawBoxLine(content string, width int) string {
 		// Truncate content if too long
 		content = truncateToVisibleWidth(content, width-4)
 	}
-	return boxVertical + " " + content + strings.Repeat(" ", padding) + " " + boxVertical
+	return cyanColor + boxVertical + resetColor + " " + content + strings.Repeat(" ", padding) + " " + cyanColor + boxVertical + resetColor
 }
 
-// visibleLength returns the visible length of a string (excluding ANSI codes)
+// visibleLength returns the visible terminal width of a string (excluding ANSI codes).
+// Uses runewidth to properly handle wide characters like emojis (🧪 = 2 cols, ✓ = 1 col).
 func visibleLength(s string) int {
 	// Strip ANSI escape sequences
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	clean := ansiRegex.ReplaceAllString(s, "")
-	return len([]rune(clean))
+	return runewidth.StringWidth(clean)
 }
 
 // truncateToVisibleWidth truncates a string to a visible width, preserving ANSI codes
@@ -1173,14 +1181,10 @@ func truncateToVisibleWidth(s string, maxWidth int) string {
 	if visibleLength(s) <= maxWidth {
 		return s
 	}
-	// Simple truncation - strip codes, truncate, lose colors
+	// Simple truncation - strip codes, truncate using runewidth, lose colors
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	clean := ansiRegex.ReplaceAllString(s, "")
-	runes := []rune(clean)
-	if len(runes) > maxWidth-3 {
-		return string(runes[:maxWidth-3]) + "..."
-	}
-	return clean
+	return runewidth.Truncate(clean, maxWidth-3, "...")
 }
 
 // LogTestCommands logs test command execution results with boxed colorized output.
