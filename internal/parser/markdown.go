@@ -45,6 +45,13 @@ type conductorConfig struct {
 	QualityControl *qualityControlYAML `yaml:"quality_control"`
 }
 
+// markdownPlannerCompliance represents planner compliance in frontmatter (v2.9+)
+type markdownPlannerCompliance struct {
+	PlannerVersion    string   `yaml:"planner_version"`
+	StrictEnforcement bool     `yaml:"strict_enforcement"`
+	RequiredFeatures  []string `yaml:"required_features"`
+}
+
 type qualityControlYAML struct {
 	Enabled     bool        `yaml:"enabled"`
 	ReviewAgent string      `yaml:"review_agent"`
@@ -489,10 +496,32 @@ func extractFrontmatter(content []byte) ([]byte, []byte) {
 	return content, nil
 }
 
+// markdownDataFlowRegistry represents data flow registry in frontmatter (v2.9+)
+type markdownDataFlowRegistry struct {
+	Producers            map[string][]markdownDataFlowEntry       `yaml:"producers"`
+	Consumers            map[string][]markdownDataFlowEntry       `yaml:"consumers"`
+	DocumentationTargets map[string][]markdownDocumentationTarget `yaml:"documentation_targets"`
+}
+
+// markdownDataFlowEntry represents a single producer/consumer entry
+type markdownDataFlowEntry struct {
+	Task        interface{} `yaml:"task"`
+	Symbol      string      `yaml:"symbol,omitempty"`
+	Description string      `yaml:"description,omitempty"`
+}
+
+// markdownDocumentationTarget represents a documentation location in frontmatter
+type markdownDocumentationTarget struct {
+	Location string `yaml:"location"`
+	Section  string `yaml:"section,omitempty"`
+}
+
 // parseConductorConfig parses conductor configuration from frontmatter
 func parseConductorConfig(frontmatter []byte, plan *models.Plan) error {
 	var config struct {
-		Conductor *conductorConfig `yaml:"conductor"`
+		Conductor         *conductorConfig           `yaml:"conductor"`
+		PlannerCompliance *markdownPlannerCompliance `yaml:"planner_compliance"`
+		DataFlowRegistry  *markdownDataFlowRegistry  `yaml:"data_flow_registry"`
 	}
 
 	if err := yaml.Unmarshal(frontmatter, &config); err != nil {
@@ -533,5 +562,109 @@ func parseConductorConfig(frontmatter []byte, plan *models.Plan) error {
 		}
 	}
 
+	// Parse planner compliance if present (v2.9+)
+	if config.PlannerCompliance != nil {
+		if config.PlannerCompliance.PlannerVersion == "" {
+			return fmt.Errorf("planner_compliance: planner_version is required")
+		}
+		plan.PlannerCompliance = &models.PlannerComplianceSpec{
+			PlannerVersion:    config.PlannerCompliance.PlannerVersion,
+			StrictEnforcement: config.PlannerCompliance.StrictEnforcement,
+			RequiredFeatures:  config.PlannerCompliance.RequiredFeatures,
+		}
+	}
+
+	// Parse data flow registry if present (v2.9+)
+	if config.DataFlowRegistry != nil {
+		registry, err := parseMarkdownDataFlowRegistry(config.DataFlowRegistry)
+		if err != nil {
+			return fmt.Errorf("failed to parse data_flow_registry: %w", err)
+		}
+		plan.DataFlowRegistry = registry
+	}
+
+	// Validate data flow registry requirements
+	if IsDataFlowRegistryRequired(plan.PlannerCompliance) {
+		if err := ValidateDataFlowRegistry(plan.DataFlowRegistry, true); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+// parseMarkdownDataFlowRegistry converts markdown frontmatter registry to models
+func parseMarkdownDataFlowRegistry(raw *markdownDataFlowRegistry) (*models.DataFlowRegistry, error) {
+	if raw == nil {
+		return nil, nil
+	}
+
+	registry := &models.DataFlowRegistry{
+		Producers:            make(map[string][]models.DataFlowEntry),
+		Consumers:            make(map[string][]models.DataFlowEntry),
+		DocumentationTargets: make(map[string][]models.DocumentationTarget),
+	}
+
+	// Parse producers
+	for symbol, entries := range raw.Producers {
+		for i, entry := range entries {
+			taskNum, err := convertMarkdownTaskNum(entry.Task)
+			if err != nil {
+				return nil, fmt.Errorf("data_flow_registry.producers[%s][%d]: invalid task: %w", symbol, i, err)
+			}
+			registry.Producers[symbol] = append(registry.Producers[symbol], models.DataFlowEntry{
+				TaskNumber:  taskNum,
+				Symbol:      entry.Symbol,
+				Description: entry.Description,
+			})
+		}
+	}
+
+	// Parse consumers
+	for symbol, entries := range raw.Consumers {
+		for i, entry := range entries {
+			taskNum, err := convertMarkdownTaskNum(entry.Task)
+			if err != nil {
+				return nil, fmt.Errorf("data_flow_registry.consumers[%s][%d]: invalid task: %w", symbol, i, err)
+			}
+			registry.Consumers[symbol] = append(registry.Consumers[symbol], models.DataFlowEntry{
+				TaskNumber:  taskNum,
+				Symbol:      entry.Symbol,
+				Description: entry.Description,
+			})
+		}
+	}
+
+	// Parse documentation targets
+	for taskNum, targets := range raw.DocumentationTargets {
+		for _, target := range targets {
+			registry.DocumentationTargets[taskNum] = append(registry.DocumentationTargets[taskNum], models.DocumentationTarget{
+				Location: target.Location,
+				Section:  target.Section,
+			})
+		}
+	}
+
+	return registry, nil
+}
+
+// convertMarkdownTaskNum converts task number from interface{} to string
+func convertMarkdownTaskNum(val interface{}) (string, error) {
+	if val == nil {
+		return "", fmt.Errorf("task number is nil")
+	}
+
+	switch v := val.(type) {
+	case string:
+		return v, nil
+	case int:
+		return fmt.Sprintf("%d", v), nil
+	case float64:
+		if v == float64(int(v)) {
+			return fmt.Sprintf("%d", int(v)), nil
+		}
+		return fmt.Sprintf("%g", v), nil
+	default:
+		return "", fmt.Errorf("unsupported type: %T", val)
+	}
 }

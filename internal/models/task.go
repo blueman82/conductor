@@ -52,6 +52,10 @@ type Task struct {
 	// JSON Schema enforcement (v2.8+)
 	JSONSchema string `yaml:"json_schema,omitempty" json:"json_schema,omitempty"` // Custom JSON schema for response validation
 
+	// Runtime enforcement metadata (v2.9+)
+	RuntimeMetadata    *TaskMetadataRuntime `yaml:"runtime_metadata,omitempty" json:"runtime_metadata,omitempty"`
+	StructuredCriteria []SuccessCriterion   `yaml:"structured_criteria,omitempty" json:"structured_criteria,omitempty"` // Criteria with optional verification blocks
+
 	// Execution metadata for enhanced console output
 	ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`
 	ExecutionEndTime   time.Time     `json:"execution_end_time,omitempty" yaml:"execution_end_time,omitempty"`
@@ -295,6 +299,71 @@ func ParseCrossFileDep(dep string) (*CrossFileDependency, error) {
 		File:   filename,
 		TaskID: taskID,
 	}, nil
+}
+
+// =============================================================================
+// Runtime Enforcement Types (v2.9+)
+// =============================================================================
+
+// TaskMetadataRuntime contains machine-readable metadata for runtime enforcement.
+// This replaces scraping comments and enables strict validation.
+type TaskMetadataRuntime struct {
+	// DependencyChecks are commands to run before task execution to verify prerequisites.
+	DependencyChecks []DependencyCheck `yaml:"dependency_checks,omitempty" json:"dependency_checks,omitempty"`
+
+	// DocumentationTargets specify where documentation should be updated.
+	DocumentationTargets []DocumentationTarget `yaml:"documentation_targets,omitempty" json:"documentation_targets,omitempty"`
+
+	// PromptBlocks are structured prompt sections injected into the agent prompt.
+	PromptBlocks []PromptBlock `yaml:"prompt_blocks,omitempty" json:"prompt_blocks,omitempty"`
+}
+
+// DependencyCheck represents a command to run for dependency verification.
+type DependencyCheck struct {
+	// Command is the shell command to execute.
+	Command string `yaml:"command" json:"command"`
+
+	// Description explains what this check verifies.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+// DocumentationTarget specifies a documentation location to update.
+type DocumentationTarget struct {
+	// Location is the file path for the documentation.
+	Location string `yaml:"location" json:"location"`
+
+	// Section is the specific section within the file.
+	Section string `yaml:"section,omitempty" json:"section,omitempty"`
+}
+
+// PromptBlock represents a structured section to inject into agent prompts.
+type PromptBlock struct {
+	// Type categorizes the prompt block (e.g., "context", "constraint", "instruction").
+	Type string `yaml:"type" json:"type"`
+
+	// Content is the text content of the block.
+	Content string `yaml:"content" json:"content"`
+}
+
+// SuccessCriterion represents a single success criterion with optional verification.
+type SuccessCriterion struct {
+	// Criterion is the human-readable success criterion text.
+	Criterion string `yaml:"criterion" json:"criterion"`
+
+	// Verification is an optional verification block to validate the criterion.
+	Verification *CriterionVerification `yaml:"verification,omitempty" json:"verification,omitempty"`
+}
+
+// CriterionVerification contains a command-based verification for a success criterion.
+type CriterionVerification struct {
+	// Command is the shell command to run for verification.
+	Command string `yaml:"command" json:"command"`
+
+	// Expected is the expected output or exit status.
+	Expected string `yaml:"expected,omitempty" json:"expected,omitempty"`
+
+	// Description explains what this verification checks.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
 // HasCyclicDependencies detects circular dependencies in a list of tasks

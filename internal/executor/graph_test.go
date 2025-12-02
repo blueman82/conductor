@@ -1099,6 +1099,114 @@ func TestCalculateWaves_CrossFileDependencies(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// Registry Prerequisite Validation Tests
+// =============================================================================
+
+// TestValidateRegistryPrerequisites_Valid verifies valid registry passes
+func TestValidateRegistryPrerequisites_Valid(t *testing.T) {
+	registry := &models.DataFlowRegistry{
+		Producers: map[string][]models.DataFlowEntry{
+			"SymbolA": {{TaskNumber: "1", Description: "Produces A"}},
+		},
+		Consumers: map[string][]models.DataFlowEntry{
+			"SymbolA": {{TaskNumber: "2", Description: "Consumes A"}},
+		},
+	}
+
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "2", Name: "Task 2", DependsOn: []string{"1"}}, // Depends on producer
+	}
+
+	err := ValidateRegistryPrerequisites(tasks, registry)
+	if err != nil {
+		t.Errorf("Expected no error for valid registry, got: %v", err)
+	}
+}
+
+// TestValidateRegistryPrerequisites_MissingDependency verifies consumer must depend on producer
+func TestValidateRegistryPrerequisites_MissingDependency(t *testing.T) {
+	registry := &models.DataFlowRegistry{
+		Producers: map[string][]models.DataFlowEntry{
+			"SymbolA": {{TaskNumber: "1", Description: "Produces A"}},
+		},
+		Consumers: map[string][]models.DataFlowEntry{
+			"SymbolA": {{TaskNumber: "2", Description: "Consumes A"}},
+		},
+	}
+
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "2", Name: "Task 2", DependsOn: []string{}}, // No dependency on producer!
+	}
+
+	err := ValidateRegistryPrerequisites(tasks, registry)
+	if err == nil {
+		t.Fatal("Expected error for missing dependency on producer")
+	}
+	if !strings.Contains(err.Error(), "task 2") {
+		t.Errorf("Expected error to mention task 2, got: %v", err)
+	}
+}
+
+// TestValidateRegistryPrerequisites_TransitiveDependency verifies transitive deps work
+func TestValidateRegistryPrerequisites_TransitiveDependency(t *testing.T) {
+	registry := &models.DataFlowRegistry{
+		Producers: map[string][]models.DataFlowEntry{
+			"SymbolA": {{TaskNumber: "1", Description: "Produces A"}},
+		},
+		Consumers: map[string][]models.DataFlowEntry{
+			"SymbolA": {{TaskNumber: "3", Description: "Consumes A"}},
+		},
+	}
+
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "2", Name: "Task 2", DependsOn: []string{"1"}},
+		{Number: "3", Name: "Task 3", DependsOn: []string{"2"}}, // Transitively depends on 1
+	}
+
+	err := ValidateRegistryPrerequisites(tasks, registry)
+	if err != nil {
+		t.Errorf("Expected transitive dependency to satisfy registry, got: %v", err)
+	}
+}
+
+// TestValidateRegistryPrerequisites_NilRegistry verifies nil registry passes
+func TestValidateRegistryPrerequisites_NilRegistry(t *testing.T) {
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+	}
+
+	err := ValidateRegistryPrerequisites(tasks, nil)
+	if err != nil {
+		t.Errorf("Expected no error for nil registry, got: %v", err)
+	}
+}
+
+// TestValidateRegistryPrerequisites_CrossFileDependency verifies cross-file deps work
+func TestValidateRegistryPrerequisites_CrossFileDependency(t *testing.T) {
+	registry := &models.DataFlowRegistry{
+		Producers: map[string][]models.DataFlowEntry{
+			"SymbolA": {{TaskNumber: "1", Description: "Produces A"}},
+		},
+		Consumers: map[string][]models.DataFlowEntry{
+			"SymbolA": {{TaskNumber: "2", Description: "Consumes A"}},
+		},
+	}
+
+	tasks := []models.Task{
+		{Number: "1", Name: "Task 1", DependsOn: []string{}},
+		{Number: "2", Name: "Task 2", DependsOn: []string{"file:plan-01.yaml:task:1"}}, // Cross-file dep
+	}
+
+	err := ValidateRegistryPrerequisites(tasks, registry)
+	if err != nil {
+		t.Errorf("Expected cross-file dependency to satisfy registry, got: %v", err)
+	}
+}
+
 // TestDetectCycle_CrossFileReferences tests cycle detection with cross-file dependencies
 func TestDetectCycle_CrossFileReferences(t *testing.T) {
 	tests := []struct {
@@ -1146,6 +1254,76 @@ func TestDetectCycle_CrossFileReferences(t *testing.T) {
 			hasCycle := graph.HasCycle()
 			if hasCycle != tt.wantCycle {
 				t.Errorf("HasCycle() = %v, want %v", hasCycle, tt.wantCycle)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Package Conflict Detection in Waves Tests
+// =============================================================================
+
+func TestCalculateWaves_PackageConflictDetection(t *testing.T) {
+	tests := []struct {
+		name    string
+		tasks   []models.Task
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "no conflict - different packages",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", Files: []string{"internal/executor/task.go"}},
+				{Number: "2", Name: "Task 2", Files: []string{"internal/parser/yaml.go"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "conflict - same package no dependency",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", Files: []string{"internal/executor/task.go"}},
+				{Number: "2", Name: "Task 2", Files: []string{"internal/executor/wave.go"}},
+			},
+			wantErr: true,
+			errMsg:  "internal/executor",
+		},
+		{
+			name: "no conflict - same package with dependency",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", Files: []string{"internal/executor/task.go"}},
+				{Number: "2", Name: "Task 2", DependsOn: []string{"1"}, Files: []string{"internal/executor/wave.go"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "no conflict - non-Go files same directory",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", Files: []string{"docs/README.md"}},
+				{Number: "2", Name: "Task 2", Files: []string{"docs/guide.md"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "conflict in wave 2 - same package",
+			tasks: []models.Task{
+				{Number: "1", Name: "Task 1", Files: []string{"internal/parser/yaml.go"}},
+				{Number: "2", Name: "Task 2", DependsOn: []string{"1"}, Files: []string{"internal/executor/a.go"}},
+				{Number: "3", Name: "Task 3", DependsOn: []string{"1"}, Files: []string{"internal/executor/b.go"}},
+			},
+			wantErr: true,
+			errMsg:  "internal/executor",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := CalculateWaves(tt.tasks)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CalculateWaves() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("Expected error to contain %q, got %q", tt.errMsg, err.Error())
 			}
 		})
 	}

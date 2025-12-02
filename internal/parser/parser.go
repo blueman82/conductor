@@ -265,6 +265,7 @@ func ApplyRetryOnRedFallback(plan *models.Plan, configMinFailures int) {
 
 // MergePlans combines multiple plans into a single plan
 // while preserving all task dependencies, including cross-file references.
+// Also merges DataFlowRegistry and PlannerCompliance fields from all plans.
 func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 	if len(plans) == 0 {
 		return &models.Plan{Tasks: []models.Task{}}, nil
@@ -273,6 +274,10 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 	seen := make(map[string]bool)
 	var mergedTasks []models.Task
 	fileMap := make(map[string]string) // task number -> source file path
+
+	// Collect DataFlowRegistries and PlannerCompliance specs for merging
+	var registries []*models.DataFlowRegistry
+	var firstCompliance *models.PlannerComplianceSpec
 
 	// First pass: collect all tasks and build file map
 	for _, plan := range plans {
@@ -289,6 +294,16 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 			fileMap[task.Number] = plan.FilePath
 			mergedTasks = append(mergedTasks, task)
 		}
+
+		// Collect DataFlowRegistry for merging
+		if plan.DataFlowRegistry != nil {
+			registries = append(registries, plan.DataFlowRegistry)
+		}
+
+		// Keep the first PlannerCompliance (priority to first plan)
+		if firstCompliance == nil && plan.PlannerCompliance != nil {
+			firstCompliance = plan.PlannerCompliance
+		}
 	}
 
 	// Second pass: validate and resolve cross-file dependencies
@@ -296,16 +311,24 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 		return nil, err
 	}
 
+	// Merge DataFlowRegistries from all plans
+	var mergedRegistry *models.DataFlowRegistry
+	if len(registries) > 0 {
+		mergedRegistry = MergeDataFlowRegistries(registries...)
+	}
+
 	var result *models.Plan
 	for _, plan := range plans {
 		if plan != nil {
 			result = &models.Plan{
-				Name:           plan.Name,
-				DefaultAgent:   plan.DefaultAgent,
-				QualityControl: plan.QualityControl,
-				WorktreeGroups: plan.WorktreeGroups,
-				Tasks:          mergedTasks,
-				FilePath:       plan.FilePath,
+				Name:              plan.Name,
+				DefaultAgent:      plan.DefaultAgent,
+				QualityControl:    plan.QualityControl,
+				WorktreeGroups:    plan.WorktreeGroups,
+				Tasks:             mergedTasks,
+				FilePath:          plan.FilePath,
+				DataFlowRegistry:  mergedRegistry,
+				PlannerCompliance: firstCompliance,
 			}
 			break
 		}

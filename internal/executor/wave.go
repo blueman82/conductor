@@ -18,10 +18,12 @@ type TaskExecutor interface {
 
 // WaveExecutor coordinates sequential wave execution with bounded parallelism per wave.
 type WaveExecutor struct {
-	taskExecutor  TaskExecutor
-	logger        Logger
-	skipCompleted bool // Skip tasks that are already completed
-	retryFailed   bool // Retry tasks that have failed status
+	taskExecutor        TaskExecutor
+	logger              Logger
+	skipCompleted       bool          // Skip tasks that are already completed
+	retryFailed         bool          // Retry tasks that have failed status
+	packageGuard        *PackageGuard // Runtime package conflict guard (v2.9+)
+	enforcePackageGuard bool          // Enable package guard enforcement
 }
 
 // NewWaveExecutor constructs a WaveExecutor with the provided task executor implementation.
@@ -42,6 +44,26 @@ func NewWaveExecutorWithConfig(taskExecutor TaskExecutor, logger Logger, skipCom
 		logger:        logger,
 		skipCompleted: skipCompleted,
 		retryFailed:   retryFailed,
+	}
+}
+
+// NewWaveExecutorWithPackageGuard constructs a WaveExecutor with package guard enforcement.
+func NewWaveExecutorWithPackageGuard(taskExecutor TaskExecutor, logger Logger, skipCompleted, retryFailed, enforcePackageGuard bool) *WaveExecutor {
+	return &WaveExecutor{
+		taskExecutor:        taskExecutor,
+		logger:              logger,
+		skipCompleted:       skipCompleted,
+		retryFailed:         retryFailed,
+		packageGuard:        NewPackageGuard(),
+		enforcePackageGuard: enforcePackageGuard,
+	}
+}
+
+// SetPackageGuard enables or disables package guard enforcement.
+func (w *WaveExecutor) SetPackageGuard(enabled bool) {
+	w.enforcePackageGuard = enabled
+	if enabled && w.packageGuard == nil {
+		w.packageGuard = NewPackageGuard()
 	}
 }
 
@@ -191,6 +213,34 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 				if task.SourceFile != "" {
 					taskExec.SourceFile = task.SourceFile
 				}
+			}
+
+			// Acquire package locks if guard is enabled (v2.9+)
+			var releasePackages func()
+			if w.enforcePackageGuard && w.packageGuard != nil {
+				packages := GetTaskPackages(task)
+				if len(packages) > 0 {
+					var acquireErr error
+					releasePackages, acquireErr = w.packageGuard.Acquire(ctx, task.Number, packages)
+					if acquireErr != nil {
+						// Failed to acquire - report as task failure
+						result := models.TaskResult{
+							Task:   task,
+							Status: models.StatusFailed,
+							Error:  fmt.Errorf("package guard: %w", acquireErr),
+						}
+						select {
+						case resultsCh <- taskExecutionResult{taskNumber: task.Number, result: result, err: acquireErr}:
+						case <-ctx.Done():
+						}
+						return
+					}
+				}
+			}
+
+			// Ensure packages are released after task execution
+			if releasePackages != nil {
+				defer releasePackages()
 			}
 
 			result, err := w.taskExecutor.Execute(ctx, task)

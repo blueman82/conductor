@@ -1,0 +1,195 @@
+# Runtime Enforcement Test Fixture
+# Tests PlannerComplianceSpec, TaskMetadataRuntime, DataFlowRegistry, and all enforcement modes
+#
+# Enforcement modes demonstrated:
+# - dependency_checks: Preflight commands before agent invocation
+# - test_commands: Post-agent tests (hard gate, blocks on failure)
+# - documentation_targets: Doc section verification (soft signal)
+# - success_criteria[].verification: Criterion verification (soft signal)
+# - package_guard: Go package isolation (via depends_on serialization)
+
+conductor:
+  default_agent: "golang-pro"
+  quality_control:
+    enabled: true
+    retry_on_red: 2
+
+# PlannerComplianceSpec validates plan meets rubric requirements
+planner_compliance:
+  planner_version: "2.9.0"
+  strict_enforcement: true
+  required_features:
+    - dependency_checks
+    - test_commands
+    - documentation_targets
+    - success_criteria
+    - package_guard
+
+# DataFlowRegistry tracks producer/consumer relationships
+data_flow_registry:
+  producers:
+    RuntimeConfig:
+      - task: "1"
+        description: "Produces runtime configuration struct"
+    EnforcementResult:
+      - task: "2"
+        description: "Produces enforcement execution results"
+  consumers:
+    RuntimeConfig:
+      - task: "2"
+        description: "Consumes config for enforcement execution"
+      - task: "3"
+        description: "Consumes config for integration validation"
+    EnforcementResult:
+      - task: "3"
+        description: "Validates enforcement pipeline"
+  documentation_targets:
+    "1":
+      - location: "docs/runtime.md"
+        section: "# Configuration"
+      - location: "CHANGELOG.md"
+        section: "## Unreleased"
+    "2":
+      - location: "docs/runtime.md"
+        section: "# Enforcement Pipeline"
+    "3":
+      - location: "docs/runtime.md"
+        section: "# Integration"
+
+plan:
+  metadata:
+    feature_name: "Runtime Enforcement Comprehensive Test"
+    created: "2025-12-02"
+    estimated_tasks: 3
+
+  tasks:
+    # Task 1: Full runtime metadata demonstration
+    - task_number: 1
+      name: "Task with full runtime metadata"
+      type: "component"
+      files:
+        - "internal/models/plan.go"
+        - "internal/models/task.go"
+      depends_on: []
+      estimated_time: "30m"
+      agent: "golang-pro"
+      description: "Test task with comprehensive runtime metadata demonstrating all enforcement fields"
+
+      # PREFLIGHT: dependency_checks run before agent invocation
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./..."
+            description: "Verify build succeeds before task"
+          - command: "go test -c ./internal/models"
+            description: "Verify test compilation"
+          - command: "test -f go.mod"
+            description: "Verify Go module exists"
+
+        # POST-AGENT (soft signal): documentation_targets verified after agent
+        documentation_targets:
+          - location: "docs/runtime.md"
+            section: "# Configuration"
+          - location: "CHANGELOG.md"
+            section: "## Unreleased"
+
+        # Prompt enrichment blocks
+        prompt_blocks:
+          - type: "context"
+            content: "This task establishes runtime enforcement patterns for Conductor v2.9+"
+          - type: "constraint"
+            content: "Must maintain backward compatibility with plans lacking runtime_metadata"
+          - type: "reference"
+            content: "See internal/executor/preflight.go for enforcement implementation"
+
+      # POST-AGENT (soft signal): verification blocks on criteria
+      success_criteria:
+        - criterion: "All new fields serialize via YAML round-trip"
+          verification:
+            command: "go test -run TestYAMLSerialization ./internal/parser"
+            expected: "PASS"
+            description: "Verifies YAML serialization preserves runtime metadata"
+        - criterion: "Parser populates TaskMetadataRuntime from YAML"
+        - criterion: "Validation rejects missing metadata when strict_enforcement=true"
+          verification:
+            command: "go test -run TestStrictValidation ./internal/validation"
+            expected: "PASS"
+        - criterion: "Empty runtime_metadata blocks are valid (not rejected)"
+
+      # POST-AGENT (hard gate): test_commands block task on failure
+      test_commands:
+        - "go test ./internal/parser -run RuntimeEnforcement -v"
+        - "go test ./internal/models -run Task -v"
+
+    # Task 2: Minimal runtime metadata (valid edge case)
+    - task_number: 2
+      name: "Task with minimal runtime metadata"
+      type: "component"
+      files:
+        - "internal/parser/yaml.go"
+      depends_on: [1]
+      estimated_time: "20m"
+      agent: "golang-pro"
+      description: "Task with minimal but valid runtime metadata - empty arrays are allowed"
+
+      runtime_metadata:
+        dependency_checks:
+          - command: "go vet ./..."
+            description: "Static analysis check"
+
+        # Empty arrays are valid
+        documentation_targets: []
+        prompt_blocks: []
+
+      success_criteria:
+        - criterion: "Parser handles minimal runtime_metadata"
+        - criterion: "Empty documentation_targets array is valid"
+        - criterion: "Empty prompt_blocks array is valid"
+
+      test_commands:
+        - "go test ./internal/parser -run YAML -v"
+
+    # Task 3: Integration task with dual criteria
+    - task_number: 3
+      name: "Integration task demonstrating dual criteria"
+      type: "integration"
+      files:
+        - "internal/executor/preflight.go"
+        - "internal/executor/task.go"
+      depends_on: [1, 2]
+      estimated_time: "25m"
+      agent: "golang-pro"
+      description: "Integration task verifying all enforcement modes work together"
+
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./internal/executor/..."
+            description: "Verify executor package builds"
+
+        documentation_targets:
+          - location: "docs/runtime.md"
+            section: "# Integration"
+
+        prompt_blocks:
+          - type: "integration"
+            content: "This task wires preflight checks into the task execution pipeline"
+
+      # Component-level success criteria
+      success_criteria:
+        - criterion: "RunDependencyChecks executes all checks in order"
+          verification:
+            command: "go test -run TestRunDependencyChecks ./internal/executor"
+            expected: "PASS"
+        - criterion: "VerifyDocumentationTargets returns structured results"
+        - criterion: "RunCriterionVerifications collects all verification outputs"
+
+      # Cross-component integration criteria
+      integration_criteria:
+        - "Preflight dependency checks complete before agent invocation"
+        - "Test commands execute after agent output and block on failure"
+        - "Criterion verification results flow into QC prompt context"
+        - "Documentation target results flow into QC prompt context"
+        - "Package guard prevents concurrent modifications to same Go package"
+
+      test_commands:
+        - "go test ./internal/executor -run Enforcement -v"
+        - "go test ./test/integration -run RuntimeEnforcement -v"

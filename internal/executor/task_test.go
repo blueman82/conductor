@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -862,4 +863,428 @@ func TestRetry_CorrectFilePathForMultiFile(t *testing.T) {
 	if executions[1].QCVerdict != models.StatusGreen {
 		t.Errorf("expected second record verdict GREEN, got %s", executions[1].QCVerdict)
 	}
+}
+
+func TestTaskExecutor_DependencyCheckSuccess(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+		Duration: 50 * time.Millisecond,
+	})
+
+	runner := NewFakeCommandRunner()
+	runner.SetOutput("echo check", "ok")
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceDependencyChecks = true
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test",
+		Prompt: "Do task",
+		RuntimeMetadata: &models.TaskMetadataRuntime{
+			DependencyChecks: []models.DependencyCheck{
+				{Command: "echo check", Description: "Test check"},
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify dependency check ran
+	cmds := runner.Commands()
+	if len(cmds) != 1 {
+		t.Errorf("expected 1 dependency check command, got %d", len(cmds))
+	}
+}
+
+func TestTaskExecutor_DependencyCheckFailure(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	runner := NewFakeCommandRunner()
+	runner.SetError("failing check", errors.New("exit status 1"))
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceDependencyChecks = true
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test",
+		Prompt: "Do task",
+		RuntimeMetadata: &models.TaskMetadataRuntime{
+			DependencyChecks: []models.DependencyCheck{
+				{Command: "failing check", Description: "Will fail"},
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err == nil {
+		t.Fatal("Execute should have returned error")
+	}
+
+	if result.Status != models.StatusFailed {
+		t.Errorf("expected status FAILED, got %s", result.Status)
+	}
+
+	// Verify invoker was NOT called (agent should not run if preflight fails)
+	if len(invoker.calls) != 0 {
+		t.Errorf("expected invoker not to be called, got %d calls", len(invoker.calls))
+	}
+}
+
+func TestTaskExecutor_DependencyCheckSkippedWhenDisabled(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	runner := NewFakeCommandRunner()
+	// Set up a failing check that would cause failure if run
+	runner.SetError("failing check", errors.New("exit status 1"))
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Dependency checks disabled
+	executor.EnforceDependencyChecks = false
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test",
+		Prompt: "Do task",
+		RuntimeMetadata: &models.TaskMetadataRuntime{
+			DependencyChecks: []models.DependencyCheck{
+				{Command: "failing check", Description: "Would fail if run"},
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify no dependency check commands were run
+	if len(runner.Commands()) != 0 {
+		t.Errorf("expected no dependency check commands, got %d", len(runner.Commands()))
+	}
+}
+
+func TestTaskExecutor_DependencyCheckSkippedWithoutMetadata(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	runner := NewFakeCommandRunner()
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceDependencyChecks = true
+	executor.CommandRunner = runner
+
+	// Task without RuntimeMetadata
+	task := models.Task{
+		Number: "1",
+		Name:   "Test",
+		Prompt: "Do task",
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+}
+
+// ============================================================================
+// Test Command Execution Tests (v2.9+)
+// ============================================================================
+
+// TestExecute_TestCommandsPass verifies that test commands are executed after
+// agent output and task succeeds when all commands pass.
+func TestExecute_TestCommandsPass(t *testing.T) {
+	// Setup fake command runner that returns success
+	runner := NewFakeCommandRunner()
+	runner.SetOutput("go test ./...", "PASS")
+	runner.SetOutput("go vet ./...", "ok")
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task complete"}`,
+		ExitCode: 0,
+		Duration: 100 * time.Millisecond,
+	})
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceTestCommands = true
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Test Task",
+		Prompt:       "Do work",
+		TestCommands: []string{"go test ./...", "go vet ./..."},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify test commands were executed
+	cmds := runner.Commands()
+	if len(cmds) != 2 {
+		t.Errorf("expected 2 test commands executed, got %d", len(cmds))
+	}
+}
+
+// TestExecute_TestCommandsFailBlocksQC verifies that test command failure
+// causes immediate task failure (no QC review).
+func TestExecute_TestCommandsFailBlocksQC(t *testing.T) {
+	// Setup fake command runner that fails on second command
+	runner := NewFakeCommandRunner()
+	runner.SetOutput("go test ./...", "PASS")
+	runner.SetOutput("go lint ./...", "errors found")
+	runner.SetError("go lint ./...", errors.New("exit status 1"))
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task complete"}`,
+		ExitCode: 0,
+		Duration: 100 * time.Millisecond,
+	})
+
+	// Setup a reviewer - if it gets called, we can detect it via outputs slice
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{{Flag: models.StatusGreen}},
+	}
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, updater, TaskExecutorConfig{
+		PlanPath:       "plan.md",
+		QualityControl: models.QualityControlConfig{Enabled: true, RetryOnRed: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnforceTestCommands = true
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Test Task",
+		Prompt:       "Do work",
+		TestCommands: []string{"go test ./...", "go lint ./..."},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err == nil {
+		t.Fatal("expected error from test command failure, got nil")
+	}
+
+	if result.Status != models.StatusFailed {
+		t.Errorf("expected status FAILED, got %s", result.Status)
+	}
+
+	// Verify reviewer was NOT called (outputs should be empty)
+	if len(reviewer.outputs) > 0 {
+		t.Error("QC reviewer should NOT be called when test commands fail")
+	}
+
+	// Verify error message contains test command info
+	if !errors.Is(err, ErrTestCommandFailed) {
+		t.Errorf("expected ErrTestCommandFailed, got %v", err)
+	}
+}
+
+// TestExecute_TestCommandsDisabled verifies that test commands are skipped
+// when EnforceTestCommands is false.
+func TestExecute_TestCommandsDisabled(t *testing.T) {
+	runner := NewFakeCommandRunner()
+	runner.SetError("should not run", errors.New("should not be called"))
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task complete"}`,
+		ExitCode: 0,
+		Duration: 100 * time.Millisecond,
+	})
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Disable test command enforcement
+	executor.EnforceTestCommands = false
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Test Task",
+		Prompt:       "Do work",
+		TestCommands: []string{"should not run"},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN, got %s", result.Status)
+	}
+
+	// Verify no commands were executed
+	if len(runner.Commands()) != 0 {
+		t.Errorf("expected 0 commands (disabled), got %d", len(runner.Commands()))
+	}
+}
+
+// TestExecute_CriterionVerificationFeedsToQC verifies that criterion verification
+// results are passed to QC for judgment (failures don't block task).
+func TestExecute_CriterionVerificationFeedsToQC(t *testing.T) {
+	// Setup fake command runner with one passing and one failing verification
+	runner := NewFakeCommandRunner()
+	runner.SetOutput("check1", "ok")
+	runner.SetOutput("check2", "not found")
+	runner.SetError("check2", errors.New("exit status 1"))
+
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"task complete"}`,
+		ExitCode: 0,
+		Duration: 100 * time.Millisecond,
+	})
+
+	// Track if QC received criterion results
+	var receivedCriterionResults []CriterionVerificationResult
+	qc := NewQualityController(invoker)
+	qc.Invoker = invoker
+
+	updater := &recordingUpdater{}
+
+	executor, err := NewTaskExecutor(invoker, nil, updater, TaskExecutorConfig{
+		PlanPath: "plan.md",
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.VerifyCriteria = true
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test Task",
+		Prompt: "Do work",
+		StructuredCriteria: []models.SuccessCriterion{
+			{
+				Criterion: "First check",
+				Verification: &models.CriterionVerification{
+					Command: "check1",
+				},
+			},
+			{
+				Criterion: "Second check",
+				Verification: &models.CriterionVerification{
+					Command: "check2",
+				},
+			},
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), task)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Task should still succeed (verification failures don't block)
+	if result.Status != models.StatusGreen {
+		t.Errorf("expected status GREEN (verification failures feed to QC), got %s", result.Status)
+	}
+
+	// Verify both verification commands were executed
+	cmds := runner.Commands()
+	if len(cmds) != 2 {
+		t.Errorf("expected 2 verification commands, got %d", len(cmds))
+	}
+
+	// Verify criterion results were stored
+	if len(executor.lastCriterionResults) != 2 {
+		t.Errorf("expected 2 criterion results, got %d", len(executor.lastCriterionResults))
+	}
+
+	// First should pass, second should fail
+	if !executor.lastCriterionResults[0].Passed {
+		t.Error("expected first criterion to pass")
+	}
+	if executor.lastCriterionResults[1].Passed {
+		t.Error("expected second criterion to fail")
+	}
+
+	// Suppress unused variable warning
+	_ = receivedCriterionResults
 }

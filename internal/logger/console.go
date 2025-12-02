@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/mattn/go-isatty"
+	"golang.org/x/term"
 )
 
 // Log level constants for filtering
@@ -1104,6 +1106,382 @@ func (cl *ConsoleLogger) LogQCIntelligentSelectionMetadata(rationale string, fal
 	cl.writer.Write([]byte(message))
 }
 
+// Box drawing characters for rich output formatting
+const (
+	boxTopLeft     = "┌"
+	boxTopRight    = "┐"
+	boxBottomLeft  = "└"
+	boxBottomRight = "┘"
+	boxHorizontal  = "─"
+	boxVertical    = "│"
+	boxTeeLeft     = "├"
+	boxTeeRight    = "┤"
+)
+
+// getTerminalWidth returns the current terminal width with sensible bounds.
+// Returns width capped between 60 (minimum readable) and 120 (max for readability).
+// Falls back to 80 if detection fails.
+func getTerminalWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width < 60 {
+		return 80 // fallback
+	}
+	if width > 120 {
+		return 120 // cap for readability
+	}
+	return width
+}
+
+// drawBoxTop draws the top border of a box
+func drawBoxTop(width int) string {
+	return boxTopLeft + strings.Repeat(boxHorizontal, width-2) + boxTopRight
+}
+
+// drawBoxBottom draws the bottom border of a box
+func drawBoxBottom(width int) string {
+	return boxBottomLeft + strings.Repeat(boxHorizontal, width-2) + boxBottomRight
+}
+
+// drawBoxDivider draws a horizontal divider within a box
+func drawBoxDivider(width int) string {
+	return boxTeeLeft + strings.Repeat(boxHorizontal, width-2) + boxTeeRight
+}
+
+// drawBoxLine draws a line of content within a box, padding to width
+func drawBoxLine(content string, width int) string {
+	// Account for visible width (strip ANSI codes for length calculation)
+	visibleLen := visibleLength(content)
+	padding := width - 4 - visibleLen // -4 for "│ " and " │"
+	if padding < 0 {
+		padding = 0
+		// Truncate content if too long
+		content = truncateToVisibleWidth(content, width-4)
+	}
+	return boxVertical + " " + content + strings.Repeat(" ", padding) + " " + boxVertical
+}
+
+// visibleLength returns the visible length of a string (excluding ANSI codes)
+func visibleLength(s string) int {
+	// Strip ANSI escape sequences
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	clean := ansiRegex.ReplaceAllString(s, "")
+	return len([]rune(clean))
+}
+
+// truncateToVisibleWidth truncates a string to a visible width, preserving ANSI codes
+func truncateToVisibleWidth(s string, maxWidth int) string {
+	if visibleLength(s) <= maxWidth {
+		return s
+	}
+	// Simple truncation - strip codes, truncate, lose colors
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	clean := ansiRegex.ReplaceAllString(s, "")
+	runes := []rune(clean)
+	if len(runes) > maxWidth-3 {
+		return string(runes[:maxWidth-3]) + "..."
+	}
+	return clean
+}
+
+// LogTestCommands logs test command execution results with boxed colorized output.
+// Format: Box with header, individual results per command, and summary
+func (cl *ConsoleLogger) LogTestCommands(results []models.TestCommandResult) {
+	if cl.writer == nil || len(results) == 0 {
+		return
+	}
+
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	var output strings.Builder
+	w := getTerminalWidth()
+
+	// Box top and header
+	output.WriteString(drawBoxTop(w) + "\n")
+
+	var headerText string
+	if cl.colorOutput {
+		headerText = color.New(color.FgCyan, color.Bold).Sprint("🧪 Test Commands") + " (hard gate)"
+	} else {
+		headerText = "🧪 Test Commands (hard gate)"
+	}
+	output.WriteString(drawBoxLine(headerText, w) + "\n")
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	// Individual results
+	passCount := 0
+	for i, entry := range results {
+		if entry.Passed {
+			passCount++
+		}
+
+		// Command line: [1/2] go test ./internal/config -run TestFoo
+		cmdLine := fmt.Sprintf("[%d/%d] %s", i+1, len(results), truncateCommand(entry.Command, w-16))
+		output.WriteString(drawBoxLine(cmdLine, w) + "\n")
+
+		// Status line: ✓ PASS (1.2s) or ✗ FAIL (0.5s)
+		durationStr := formatDurationWithDecimal(entry.Duration)
+		var statusLine string
+		if cl.colorOutput {
+			if entry.Passed {
+				statusLine = "      " + color.New(color.FgGreen).Sprint("✓ PASS") + fmt.Sprintf(" (%s)", durationStr)
+			} else {
+				statusLine = "      " + color.New(color.FgRed).Sprint("✗ FAIL") + fmt.Sprintf(" (%s)", durationStr)
+			}
+		} else {
+			if entry.Passed {
+				statusLine = fmt.Sprintf("      ✓ PASS (%s)", durationStr)
+			} else {
+				statusLine = fmt.Sprintf("      ✗ FAIL (%s)", durationStr)
+			}
+		}
+		output.WriteString(drawBoxLine(statusLine, w) + "\n")
+
+		// Error line for failures
+		if !entry.Passed && entry.Error != nil {
+			errLine := strings.TrimSpace(entry.Error.Error())
+			if len(errLine) > w-12 {
+				errLine = errLine[:w-15] + "..."
+			}
+			if cl.colorOutput {
+				errLine = color.New(color.FgRed).Sprint("      " + errLine)
+			} else {
+				errLine = "      " + errLine
+			}
+			output.WriteString(drawBoxLine(errLine, w) + "\n")
+		}
+
+		// Divider between commands (not after last)
+		if i < len(results)-1 {
+			output.WriteString(drawBoxDivider(w) + "\n")
+		}
+	}
+
+	// Summary divider and line
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	var summaryText string
+	if passCount == len(results) {
+		if cl.colorOutput {
+			summaryText = color.New(color.FgGreen, color.Bold).Sprintf("Summary: All %d passed ✓", len(results))
+		} else {
+			summaryText = fmt.Sprintf("Summary: All %d passed ✓", len(results))
+		}
+	} else {
+		if cl.colorOutput {
+			summaryText = color.New(color.FgYellow, color.Bold).Sprintf("Summary: %d/%d passed", passCount, len(results))
+		} else {
+			summaryText = fmt.Sprintf("Summary: %d/%d passed", passCount, len(results))
+		}
+	}
+	output.WriteString(drawBoxLine(summaryText, w) + "\n")
+
+	// Box bottom
+	output.WriteString(drawBoxBottom(w) + "\n")
+
+	cl.writer.Write([]byte(output.String()))
+}
+
+// LogCriterionVerifications logs criterion verification results with boxed output.
+// Format: Box with header, individual criteria results, and summary
+func (cl *ConsoleLogger) LogCriterionVerifications(results []models.CriterionVerificationResult) {
+	if cl.writer == nil || len(results) == 0 {
+		return
+	}
+
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	var output strings.Builder
+	w := getTerminalWidth()
+
+	// Box top and header
+	output.WriteString(drawBoxTop(w) + "\n")
+
+	var headerText string
+	if cl.colorOutput {
+		headerText = color.New(color.FgCyan, color.Bold).Sprint("🔍 Criterion Verification") + " (soft signal → QC)"
+	} else {
+		headerText = "🔍 Criterion Verification (soft signal → QC)"
+	}
+	output.WriteString(drawBoxLine(headerText, w) + "\n")
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	// Individual results
+	passCount := 0
+	for i, entry := range results {
+		if entry.Passed {
+			passCount++
+		}
+
+		// Criterion line: [0] "All new fields serialize via YAML round-trip"
+		criterionText := truncateCommand(entry.Criterion, w-16)
+		criterionLine := fmt.Sprintf("[%d] \"%s\"", entry.Index, criterionText)
+		output.WriteString(drawBoxLine(criterionLine, w) + "\n")
+
+		// Command line if present
+		if entry.Command != "" {
+			cmdLine := "    cmd: " + truncateCommand(entry.Command, w-16)
+			output.WriteString(drawBoxLine(cmdLine, w) + "\n")
+		}
+
+		// Status line: ✓ PASS (1.2s) or ○ FAIL (0.5s)
+		durationStr := formatDurationWithDecimal(entry.Duration)
+		var statusLine string
+		if cl.colorOutput {
+			if entry.Passed {
+				statusLine = "    " + color.New(color.FgGreen).Sprint("✓ PASS") + fmt.Sprintf(" (%s)", durationStr)
+			} else {
+				statusLine = "    " + color.New(color.FgYellow).Sprint("○ FAIL") + fmt.Sprintf(" (%s)", durationStr)
+			}
+		} else {
+			if entry.Passed {
+				statusLine = fmt.Sprintf("    ✓ PASS (%s)", durationStr)
+			} else {
+				statusLine = fmt.Sprintf("    ○ FAIL (%s)", durationStr)
+			}
+		}
+		output.WriteString(drawBoxLine(statusLine, w) + "\n")
+
+		// Divider between criteria (not after last)
+		if i < len(results)-1 {
+			output.WriteString(drawBoxDivider(w) + "\n")
+		}
+	}
+
+	// Summary divider and line
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	var summaryText string
+	if passCount == len(results) {
+		if cl.colorOutput {
+			summaryText = color.New(color.FgGreen, color.Bold).Sprintf("Summary: All %d passed → QC", len(results))
+		} else {
+			summaryText = fmt.Sprintf("Summary: All %d passed → QC", len(results))
+		}
+	} else {
+		if cl.colorOutput {
+			summaryText = color.New(color.FgYellow, color.Bold).Sprintf("Summary: %d/%d passed → QC (failures inform review)", passCount, len(results))
+		} else {
+			summaryText = fmt.Sprintf("Summary: %d/%d passed → QC (failures inform review)", passCount, len(results))
+		}
+	}
+	output.WriteString(drawBoxLine(summaryText, w) + "\n")
+
+	// Box bottom
+	output.WriteString(drawBoxBottom(w) + "\n")
+
+	cl.writer.Write([]byte(output.String()))
+}
+
+// LogDocTargetVerifications logs documentation target verification results with boxed output.
+// Format: Box with header, individual target results, and summary
+func (cl *ConsoleLogger) LogDocTargetVerifications(results []models.DocTargetResult) {
+	if cl.writer == nil || len(results) == 0 {
+		return
+	}
+
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	var output strings.Builder
+	w := getTerminalWidth()
+
+	// Box top and header
+	output.WriteString(drawBoxTop(w) + "\n")
+
+	var headerText string
+	if cl.colorOutput {
+		headerText = color.New(color.FgCyan, color.Bold).Sprint("📄 Doc Target Verification") + " (soft signal → QC)"
+	} else {
+		headerText = "📄 Doc Target Verification (soft signal → QC)"
+	}
+	output.WriteString(drawBoxLine(headerText, w) + "\n")
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	// Individual results
+	passCount := 0
+	for i, entry := range results {
+		if entry.Passed {
+			passCount++
+		}
+
+		// Target line: [1] docs/runtime.md → "# Configuration"
+		target := fmt.Sprintf("[%d] %s → \"%s\"", i+1, entry.Location, entry.Section)
+		if len(target) > w-6 {
+			target = target[:w-9] + "..."
+		}
+		output.WriteString(drawBoxLine(target, w) + "\n")
+
+		// Status line: ✓ FOUND or ○ MISSING
+		var statusLine string
+		if cl.colorOutput {
+			if entry.Passed {
+				statusLine = "    " + color.New(color.FgGreen).Sprint("✓ FOUND")
+			} else {
+				statusLine = "    " + color.New(color.FgYellow).Sprint("○ MISSING")
+			}
+		} else {
+			if entry.Passed {
+				statusLine = "    ✓ FOUND"
+			} else {
+				statusLine = "    ○ MISSING"
+			}
+		}
+		output.WriteString(drawBoxLine(statusLine, w) + "\n")
+
+		// Divider between targets (not after last)
+		if i < len(results)-1 {
+			output.WriteString(drawBoxDivider(w) + "\n")
+		}
+	}
+
+	// Summary divider and line
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	var summaryText string
+	if passCount == len(results) {
+		if cl.colorOutput {
+			summaryText = color.New(color.FgGreen, color.Bold).Sprintf("Summary: All %d found → QC", len(results))
+		} else {
+			summaryText = fmt.Sprintf("Summary: All %d found → QC", len(results))
+		}
+	} else {
+		if cl.colorOutput {
+			summaryText = color.New(color.FgYellow, color.Bold).Sprintf("Summary: %d/%d found → QC (missing inform review)", passCount, len(results))
+		} else {
+			summaryText = fmt.Sprintf("Summary: %d/%d found → QC (missing inform review)", passCount, len(results))
+		}
+	}
+	output.WriteString(drawBoxLine(summaryText, w) + "\n")
+
+	// Box bottom
+	output.WriteString(drawBoxBottom(w) + "\n")
+
+	cl.writer.Write([]byte(output.String()))
+}
+
+// truncateCommand shortens a command string for display.
+func truncateCommand(cmd string, maxLen int) string {
+	cmd = strings.TrimSpace(cmd)
+	if len(cmd) <= maxLen {
+		return cmd
+	}
+	return cmd[:maxLen-3] + "..."
+}
+
 // LogProgress logs real-time progress of task execution with percentage, counts, and average duration.
 // Format: "[HH:MM:SS] Progress: [████░░░░░░] 50% (4/8 tasks) - Avg: 3.2s/task"
 // Handles edge cases: zero tasks, all completed, no duration data.
@@ -1330,4 +1708,16 @@ func (n *NoOpLogger) LogQCCriteriaResults(agentName string, results []models.Cri
 
 // LogQCIntelligentSelectionMetadata is a no-op implementation.
 func (n *NoOpLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+}
+
+// LogTestCommands is a no-op implementation.
+func (n *NoOpLogger) LogTestCommands(entries []models.TestCommandResult) {
+}
+
+// LogCriterionVerifications is a no-op implementation.
+func (n *NoOpLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
+}
+
+// LogDocTargetVerifications is a no-op implementation.
+func (n *NoOpLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {
 }

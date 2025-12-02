@@ -1285,6 +1285,102 @@ Configuration is loaded in this order (later overrides earlier):
 7. **Update Plan**: Mark completed tasks
 8. **Log Results**: Write execution logs
 
+### Runtime enforcement pipeline
+
+Conductor v2.9+ enforces runtime checks during task execution. All enforcement modes default to **enabled**. The pipeline runs in this order:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    TASK EXECUTION PIPELINE                      │
+├─────────────────────────────────────────────────────────────────┤
+│  1. PREFLIGHT PHASE                                             │
+│     └─ Dependency Checks (runtime_metadata.dependency_checks)   │
+│        └─ On failure: BLOCK task, return error immediately      │
+│                                                                 │
+│  2. AGENT INVOCATION                                            │
+│     └─ Claude agent executes the task                           │
+│                                                                 │
+│  3. POST-AGENT PHASE                                            │
+│     ├─ Test Commands (test_commands array)                      │
+│     │  └─ On failure: BLOCK task, skip QC                       │
+│     ├─ Criterion Verification (success_criteria[].verification) │
+│     │  └─ On failure: Pass results to QC for judgment           │
+│     └─ Documentation Targets (runtime_metadata.doc_targets)     │
+│        └─ On failure: Pass results to QC for judgment           │
+│                                                                 │
+│  4. QUALITY CONTROL                                             │
+│     └─ QC reviews output + verification results                 │
+│                                                                 │
+│  5. PACKAGE GUARD (concurrent tasks only)                       │
+│     └─ Prevents multiple tasks from modifying same Go package   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Enforcement Flags
+
+| Flag | Config Key | Default | Description |
+|------|------------|---------|-------------|
+| `--no-enforce-dependency-checks` | `enforce_dependency_checks` | `true` | Run preflight commands before agent |
+| `--no-enforce-test-commands` | `enforce_test_commands` | `true` | Run test commands after agent (blocks on failure) |
+| `--no-enforce-package-guard` | `enforce_package_guard` | `true` | Prevent concurrent Go package modifications |
+| `--no-enforce-doc-targets` | `enforce_doc_targets` | `true` | Verify documentation targets before QC |
+| `--no-verify-criteria` | `verify_criteria` | `true` | Run criterion verification commands |
+
+#### Test Failures vs Verification Failures
+
+**Critical distinction:**
+
+- **Test command failure** = Immediate task block, QC skipped entirely
+- **Verification failure** = Results fed into QC prompt for human/agent judgment
+
+Test commands are hard gates. Verification commands are soft signals.
+
+#### Example Configuration
+
+```yaml
+# .conductor/config.yaml
+enforce_dependency_checks: true   # Preflight checks
+enforce_test_commands: true       # Post-agent tests (hard gate)
+enforce_package_guard: true       # Go package isolation
+enforce_doc_targets: true         # Doc target verification
+verify_criteria: true             # Criterion verification (soft signal)
+```
+
+#### Plan Metadata for Enforcement
+
+```yaml
+tasks:
+  - task_number: 1
+    name: "Implement feature"
+    files:
+      - "internal/feature/impl.go"
+
+    # Preflight checks (run before agent)
+    runtime_metadata:
+      dependency_checks:
+        - command: "go build ./..."
+          description: "Verify build succeeds"
+        - command: "test -f go.mod"
+          description: "Verify Go module exists"
+
+      documentation_targets:
+        - location: "docs/feature.md"
+          section: "# Configuration"
+
+    # Post-agent tests (hard gate)
+    test_commands:
+      - "go test ./internal/feature/..."
+
+    # Criterion verification (soft signal)
+    success_criteria:
+      - criterion: "Function handles edge cases"
+        verification:
+          command: "go test -run TestEdgeCases"
+          expected: "PASS"
+```
+
+See [Runtime Enforcement Examples](examples/runtime-enforcement.md) for detailed walkthroughs.
+
 ### Wave-Based Execution
 
 Tasks execute in waves based on dependencies:

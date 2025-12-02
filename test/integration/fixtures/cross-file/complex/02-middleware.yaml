@@ -6,7 +6,7 @@ plan:
     - task_number: 4
       name: "Logging Middleware"
       files:
-        - middleware/logging.go
+        - middleware/logging/logging.go
       depends_on:
         - file: 01-foundation.yaml
           task: 1
@@ -15,7 +15,7 @@ plan:
     - task_number: 5
       name: "Authentication Middleware"
       files:
-        - middleware/auth.go
+        - middleware/auth/auth.go
       depends_on:
         - file: 01-foundation.yaml
           task: 2
@@ -24,7 +24,7 @@ plan:
     - task_number: 6
       name: "Caching Middleware"
       files:
-        - middleware/cache.go
+        - middleware/cache/cache.go
       depends_on:
         - file: 01-foundation.yaml
           task: 3

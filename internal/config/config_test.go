@@ -2909,3 +2909,146 @@ quality_control:
 		t.Errorf("Validate() error = %v", err)
 	}
 }
+
+// TestValidationConfig_StrictRubricDefault tests that DefaultConfig sets StrictRubric to false
+func TestValidationConfig_StrictRubricDefault(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Validation.StrictRubric != false {
+		t.Errorf("Validation.StrictRubric = %v, want false", cfg.Validation.StrictRubric)
+	}
+}
+
+// TestValidationConfig_StrictRubricYAMLMerge tests that YAML config overrides StrictRubric
+func TestValidationConfig_StrictRubricYAMLMerge(t *testing.T) {
+	tests := []struct {
+		name         string
+		yaml         string
+		wantStrictRubric bool
+	}{
+		{
+			name:         "strict_rubric enabled",
+			yaml:         "validation:\n  strict_rubric: true\n",
+			wantStrictRubric: true,
+		},
+		{
+			name:         "strict_rubric disabled",
+			yaml:         "validation:\n  strict_rubric: false\n",
+			wantStrictRubric: false,
+		},
+		{
+			name:         "strict_rubric not set keeps default",
+			yaml:         "validation:\n  key_point_criteria: warn\n",
+			wantStrictRubric: false,
+		},
+		{
+			name:         "no validation section keeps default",
+			yaml:         "max_concurrency: 4\n",
+			wantStrictRubric: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			if err := os.WriteFile(configPath, []byte(tt.yaml), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			if cfg.Validation.StrictRubric != tt.wantStrictRubric {
+				t.Errorf("Validation.StrictRubric = %v, want %v", cfg.Validation.StrictRubric, tt.wantStrictRubric)
+			}
+		})
+	}
+}
+
+// TestValidationConfig_StrictRubricWithKeyPointCriteria tests both fields together
+func TestValidationConfig_StrictRubricWithKeyPointCriteria(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `validation:
+  key_point_criteria: strict
+  strict_rubric: true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.Validation.KeyPointCriteria != "strict" {
+		t.Errorf("Validation.KeyPointCriteria = %q, want %q", cfg.Validation.KeyPointCriteria, "strict")
+	}
+	if cfg.Validation.StrictRubric != true {
+		t.Errorf("Validation.StrictRubric = %v, want true", cfg.Validation.StrictRubric)
+	}
+
+	// Validate entire config
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() error = %v", err)
+	}
+}
+
+// TestDefaultConfigIncludesExecutor verifies DefaultConfig includes executor settings
+func TestDefaultConfigIncludesExecutor(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if !cfg.Executor.EnforceDependencyChecks {
+		t.Errorf("Default Executor.EnforceDependencyChecks = %v, want true", cfg.Executor.EnforceDependencyChecks)
+	}
+}
+
+// TestLoadConfigExecutor tests loading executor configuration from YAML
+func TestLoadConfigExecutor(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `executor:
+  enforce_dependency_checks: false
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.Executor.EnforceDependencyChecks {
+		t.Errorf("Executor.EnforceDependencyChecks = %v, want false", cfg.Executor.EnforceDependencyChecks)
+	}
+}
+
+// TestLoadConfigExecutorDefaults tests executor defaults are preserved when not specified
+func TestLoadConfigExecutorDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Config without executor section
+	configContent := `log_level: debug
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Default should be true
+	if !cfg.Executor.EnforceDependencyChecks {
+		t.Errorf("Executor.EnforceDependencyChecks = %v, want true (default)", cfg.Executor.EnforceDependencyChecks)
+	}
+}

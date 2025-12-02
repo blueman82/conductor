@@ -13,6 +13,7 @@ import (
 	"github.com/harrison/conductor/internal/executor"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/parser"
+	"github.com/harrison/conductor/internal/validation/rubric"
 	"github.com/spf13/cobra"
 )
 
@@ -61,6 +62,7 @@ func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	alignmentMode := cfg.Validation.KeyPointCriteria
+	strictRubric := cfg.Validation.StrictRubric
 
 	// Handle three cases:
 	// 1. Single directory - use existing validatePlanDirectory
@@ -90,11 +92,11 @@ func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 				}
 				warning.Display(output)
 			}
-			return validateMultipleFilesWithAlignment(planFiles, registry, output, alignmentMode)
+			return validateMultipleFilesWithConfig(planFiles, registry, output, alignmentMode, strictRubric)
 		}
 
 		// Single file - use existing validatePlan
-		return validatePlanWithAlignment(path, registry, output, alignmentMode)
+		return validatePlanWithConfig(path, registry, output, alignmentMode, strictRubric)
 	}
 
 	// Multiple paths provided - filter and validate together
@@ -124,7 +126,7 @@ func validatePlanFileWithOutput(paths []string, output io.Writer) error {
 		warning.Display(output)
 	}
 
-	return validateMultipleFilesWithAlignment(planFiles, registry, output, alignmentMode)
+	return validateMultipleFilesWithConfig(planFiles, registry, output, alignmentMode, strictRubric)
 }
 
 // filterPlanFiles filters paths to only include plan-*.md and plan-*.yaml files
@@ -205,7 +207,13 @@ func isPlanFile(filename string) bool {
 }
 
 // validateMultipleFilesWithAlignment validates multiple plan files as a merged plan with alignment settings
+// Deprecated: Use validateMultipleFilesWithConfig instead
 func validateMultipleFilesWithAlignment(planFiles []string, registry *agent.Registry, output io.Writer, alignmentMode string) error {
+	return validateMultipleFilesWithConfig(planFiles, registry, output, alignmentMode, false)
+}
+
+// validateMultipleFilesWithConfig validates multiple plan files as a merged plan with full config
+func validateMultipleFilesWithConfig(planFiles []string, registry *agent.Registry, output io.Writer, alignmentMode string, strictRubric bool) error {
 	var errors []string
 
 	// Parse all plan files and collect tasks with progress indicator
@@ -216,6 +224,7 @@ func validateMultipleFilesWithAlignment(planFiles []string, registry *agent.Regi
 	groupsMap := make(map[string]*models.WorktreeGroup)
 	var defaultAgent string
 	var qcConfig models.QualityControlConfig
+	var plannerCompliance *models.PlannerComplianceSpec
 
 	for _, planFile := range planFiles {
 		progress.Step(planFile)
@@ -244,6 +253,11 @@ func validateMultipleFilesWithAlignment(planFiles []string, registry *agent.Regi
 		if !qcConfig.Enabled && plan.QualityControl.Enabled {
 			qcConfig = plan.QualityControl
 		}
+
+		// Use first PlannerComplianceSpec found
+		if plannerCompliance == nil && plan.PlannerCompliance != nil {
+			plannerCompliance = plan.PlannerCompliance
+		}
 	}
 
 	// Show completion message in green
@@ -262,6 +276,67 @@ func validateMultipleFilesWithAlignment(planFiles []string, registry *agent.Regi
 	for _, task := range allTasks {
 		if err := task.Validate(); err != nil {
 			errors = append(errors, fmt.Sprintf("Task %s: %v", task.Number, err))
+		}
+	}
+
+	// Rubric validation (if enabled via config or plan has PlannerComplianceSpec)
+	if strictRubric && plannerCompliance != nil {
+		if err := rubric.ValidatePlan(allTasks, plannerCompliance); err != nil {
+			errors = append(errors, fmt.Sprintf("Rubric validation: %v", err))
+			fmt.Fprintf(output, "✗ Rubric validation failed\n")
+		} else {
+			fmt.Fprintf(output, "✓ Rubric validation passed\n")
+		}
+	} else if plannerCompliance != nil && plannerCompliance.StrictEnforcement {
+		// Plan itself requests strict enforcement
+		if err := rubric.ValidatePlan(allTasks, plannerCompliance); err != nil {
+			errors = append(errors, fmt.Sprintf("Rubric validation: %v", err))
+			fmt.Fprintf(output, "✗ Rubric validation failed\n")
+		} else {
+			fmt.Fprintf(output, "✓ Rubric validation passed\n")
+		}
+	}
+
+	// Data flow registry validation (v2.9+)
+	var dataFlowRegistry *models.DataFlowRegistry
+	for _, planFile := range planFiles {
+		plan, err := parser.ParseFile(planFile)
+		if err != nil {
+			continue // Already logged above
+		}
+		if plan.DataFlowRegistry != nil {
+			if dataFlowRegistry == nil {
+				dataFlowRegistry = plan.DataFlowRegistry
+			} else {
+				// Merge registries
+				dataFlowRegistry = parser.MergeDataFlowRegistries(dataFlowRegistry, plan.DataFlowRegistry)
+			}
+		}
+	}
+
+	if dataFlowRegistry != nil {
+		tempPlan := &models.Plan{
+			Tasks:             allTasks,
+			DataFlowRegistry:  dataFlowRegistry,
+			PlannerCompliance: plannerCompliance,
+		}
+		if err := rubric.ValidateRegistryBindings(tempPlan); err != nil {
+			errors = append(errors, fmt.Sprintf("Registry validation: %v", err))
+			fmt.Fprintf(output, "✗ Data flow registry validation failed\n")
+		} else {
+			fmt.Fprintf(output, "✓ Data flow registry validation passed\n")
+		}
+
+		// Validate documentation targets (skip file existence for now)
+		if err := rubric.ValidateDocumentationTargets(tempPlan, ""); err != nil {
+			errors = append(errors, fmt.Sprintf("Documentation targets: %v", err))
+			fmt.Fprintf(output, "✗ Documentation target validation failed\n")
+		}
+
+		// Registry prerequisite validation at graph level
+		if err := executor.ValidateRegistryPrerequisites(allTasks, dataFlowRegistry); err != nil {
+			errors = append(errors, fmt.Sprintf("Registry prerequisites: %v", err))
+			fmt.Fprintf(output, "✗ Registry prerequisite validation failed\n")
 		}
 	}
 
@@ -323,7 +398,13 @@ func validateMultipleFilesWithAlignment(planFiles []string, registry *agent.Regi
 // validatePlan performs comprehensive validation of a plan file
 // Returns error if validation fails, nil if plan is valid
 // output parameter allows redirecting output for testing
+// Deprecated: Use validatePlanWithConfig instead
 func validatePlanWithAlignment(filePath string, registry *agent.Registry, output io.Writer, alignmentMode string) error {
+	return validatePlanWithConfig(filePath, registry, output, alignmentMode, false)
+}
+
+// validatePlanWithConfig performs comprehensive validation of a plan file with full config support
+func validatePlanWithConfig(filePath string, registry *agent.Registry, output io.Writer, alignmentMode string, strictRubric bool) error {
 	var errors []string
 
 	// 1. Parse the plan file
@@ -353,12 +434,52 @@ func validatePlanWithAlignment(filePath string, registry *agent.Registry, output
 		}
 	}
 
-	// 3. Validate task dependencies (check all deps reference valid tasks)
+	// 3. Rubric validation (if enabled via config or plan has PlannerComplianceSpec)
+	if strictRubric && plan.PlannerCompliance != nil {
+		if err := rubric.ValidatePlan(plan.Tasks, plan.PlannerCompliance); err != nil {
+			errors = append(errors, fmt.Sprintf("Rubric validation: %v", err))
+			fmt.Fprintf(output, "✗ Rubric validation failed\n")
+		} else {
+			fmt.Fprintf(output, "✓ Rubric validation passed\n")
+		}
+	} else if plan.PlannerCompliance != nil && plan.PlannerCompliance.StrictEnforcement {
+		// Plan itself requests strict enforcement
+		if err := rubric.ValidatePlan(plan.Tasks, plan.PlannerCompliance); err != nil {
+			errors = append(errors, fmt.Sprintf("Rubric validation: %v", err))
+			fmt.Fprintf(output, "✗ Rubric validation failed\n")
+		} else {
+			fmt.Fprintf(output, "✓ Rubric validation passed\n")
+		}
+	}
+
+	// 3.5. Data flow registry validation (v2.9+)
+	if plan.DataFlowRegistry != nil {
+		if err := rubric.ValidateRegistryBindings(plan); err != nil {
+			errors = append(errors, fmt.Sprintf("Registry validation: %v", err))
+			fmt.Fprintf(output, "✗ Data flow registry validation failed\n")
+		} else {
+			fmt.Fprintf(output, "✓ Data flow registry validation passed\n")
+		}
+
+		// Validate documentation targets (skip file existence for now)
+		if err := rubric.ValidateDocumentationTargets(plan, ""); err != nil {
+			errors = append(errors, fmt.Sprintf("Documentation targets: %v", err))
+			fmt.Fprintf(output, "✗ Documentation target validation failed\n")
+		}
+
+		// Registry prerequisite validation at graph level
+		if err := executor.ValidateRegistryPrerequisites(plan.Tasks, plan.DataFlowRegistry); err != nil {
+			errors = append(errors, fmt.Sprintf("Registry prerequisites: %v", err))
+			fmt.Fprintf(output, "✗ Registry prerequisite validation failed\n")
+		}
+	}
+
+	// 4. Validate task dependencies (check all deps reference valid tasks)
 	if err := executor.ValidateTasks(plan.Tasks); err != nil {
 		errors = append(errors, err.Error())
 	}
 
-	// 4. Check for circular dependencies
+	// 5. Check for circular dependencies
 	graph := executor.BuildDependencyGraph(plan.Tasks)
 	if graph.HasCycle() {
 		errors = append(errors, "Circular dependency detected in task dependencies")
@@ -367,7 +488,7 @@ func validatePlanWithAlignment(filePath string, registry *agent.Registry, output
 		fmt.Fprintf(output, "✓ No circular dependencies detected\n")
 	}
 
-	// 5. Calculate waves and check file overlaps
+	// 6. Calculate waves and check file overlaps
 	// Only do this if we don't have dependency errors
 	if len(errors) == 0 {
 		waves, err := executor.CalculateWaves(plan.Tasks)
@@ -381,7 +502,7 @@ func validatePlanWithAlignment(filePath string, registry *agent.Registry, output
 		_ = waves // waves calculated but not used for anything else
 	}
 
-	// 6. Validate agents exist
+	// 7. Validate agents exist
 	agentErrors := validateAgents(plan, registry)
 	if len(agentErrors) == 0 {
 		fmt.Fprintf(output, "✓ All agents available\n")
@@ -389,7 +510,7 @@ func validatePlanWithAlignment(filePath string, registry *agent.Registry, output
 		errors = append(errors, agentErrors...)
 	}
 
-	// 7. Validate worktree groups
+	// 8. Validate worktree groups
 	groupsMap := make(map[string]*models.WorktreeGroup)
 	for _, group := range plan.WorktreeGroups {
 		groupsMap[group.GroupID] = &group
@@ -401,7 +522,7 @@ func validatePlanWithAlignment(filePath string, registry *agent.Registry, output
 		fmt.Fprintf(output, "✓ All worktree groups are valid\n")
 	}
 
-	// 8. Final validation check
+	// 9. Final validation check
 	if len(errors) == 0 {
 		fmt.Fprintf(output, "✓ All task dependencies valid\n")
 		fmt.Fprintf(output, "\n✓ Plan is valid!\n")

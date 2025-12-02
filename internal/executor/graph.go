@@ -310,6 +310,124 @@ func (g *DependencyGraph) HasCycle() bool {
 	return false
 }
 
+// ValidateRegistryPrerequisites validates that tasks respect DataFlowRegistry constraints.
+// This is a graph-level validation that ensures:
+// 1. No task is scheduled before its registry prerequisites are ready
+// 2. File ownership conflicts based on registry are detected
+//
+// This function should be called after ValidateTasks but before wave calculation.
+func ValidateRegistryPrerequisites(tasks []models.Task, registry *models.DataFlowRegistry) error {
+	if registry == nil {
+		return nil
+	}
+
+	// Build producer task -> files map from registry
+	// Build consumer task -> required files map from registry
+	producerFiles := make(map[string][]string)  // task -> files it produces
+	consumerNeeds := make(map[string][]string)  // task -> files/symbols it needs
+
+	for symbol, producers := range registry.Producers {
+		for _, p := range producers {
+			producerFiles[p.TaskNumber] = append(producerFiles[p.TaskNumber], symbol)
+		}
+	}
+
+	for symbol, consumers := range registry.Consumers {
+		for _, c := range consumers {
+			consumerNeeds[c.TaskNumber] = append(consumerNeeds[c.TaskNumber], symbol)
+		}
+	}
+
+	// Build task dependency lookup
+	taskDeps := make(map[string]map[string]bool)
+	for _, task := range tasks {
+		taskDeps[task.Number] = make(map[string]bool)
+		for _, dep := range task.DependsOn {
+			depID := dep
+			if models.IsCrossFileDep(dep) {
+				if cfd, err := models.ParseCrossFileDep(dep); err == nil {
+					depID = cfd.TaskID
+				}
+			}
+			taskDeps[task.Number][depID] = true
+		}
+	}
+
+	// Build producer lookup: symbol -> producer tasks
+	symbolProducers := make(map[string][]string)
+	for symbol, producers := range registry.Producers {
+		for _, p := range producers {
+			symbolProducers[symbol] = append(symbolProducers[symbol], p.TaskNumber)
+		}
+	}
+
+	var errors []string
+
+	// For each consumer, verify it has dependency on at least one producer
+	for symbol, consumers := range registry.Consumers {
+		producers := symbolProducers[symbol]
+		if len(producers) == 0 {
+			continue // Missing producer error is caught by rubric validator
+		}
+
+		for _, c := range consumers {
+			consumerTask := c.TaskNumber
+			deps := taskDeps[consumerTask]
+
+			// Check if consumer depends on any producer (direct or transitive)
+			dependsOnProducer := false
+			for _, prodTask := range producers {
+				if deps[prodTask] {
+					dependsOnProducer = true
+					break
+				}
+				// Check transitive - consumer depends on something that depends on producer
+				for depTask := range deps {
+					if checkTransitiveDep(depTask, prodTask, taskDeps, make(map[string]bool)) {
+						dependsOnProducer = true
+						break
+					}
+				}
+				if dependsOnProducer {
+					break
+				}
+			}
+
+			if !dependsOnProducer {
+				errors = append(errors, fmt.Sprintf(
+					"task %s consumes %q but does not depend on any producer task (%v)",
+					consumerTask, symbol, producers))
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("registry prerequisite validation failed:\n  - %s", strings.Join(errors, "\n  - "))
+	}
+
+	return nil
+}
+
+// checkTransitiveDep checks if fromTask transitively depends on targetTask
+func checkTransitiveDep(fromTask, targetTask string, deps map[string]map[string]bool, visited map[string]bool) bool {
+	if visited[fromTask] {
+		return false
+	}
+	visited[fromTask] = true
+
+	if deps[fromTask][targetTask] {
+		return true
+	}
+
+	for depTask := range deps[fromTask] {
+		if checkTransitiveDep(depTask, targetTask, deps, visited) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // CalculateWaves computes execution waves using Kahn's algorithm (topological sort)
 // Tasks with no dependencies go in Wave 1, tasks depending only on Wave 1 go in Wave 2, etc.
 func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
@@ -397,6 +515,20 @@ func CalculateWaves(tasks []models.Task) ([]models.Wave, error) {
 	}
 	if err := ValidateFileOverlaps(waves, taskMap); err != nil {
 		return nil, err
+	}
+
+	// Validate package conflicts in waves (v2.9+)
+	// Check each wave for Go package conflicts
+	for _, wave := range waves {
+		waveTasks := make([]models.Task, 0, len(wave.TaskNumbers))
+		for _, taskNum := range wave.TaskNumbers {
+			if task, exists := taskMap[taskNum]; exists {
+				waveTasks = append(waveTasks, *task)
+			}
+		}
+		if err := DetectPackageConflicts(waveTasks); err != nil {
+			return nil, fmt.Errorf("wave %q: %w", wave.Name, err)
+		}
 	}
 
 	return waves, nil

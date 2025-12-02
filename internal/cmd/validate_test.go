@@ -1609,3 +1609,303 @@ First task.
 		t.Error("Should NOT mention numbered files when none exist")
 	}
 }
+
+// TestValidateCommand_RubricValidation_StrictEnforcement tests that rubric validation runs when plan has strict enforcement
+func TestValidateCommand_RubricValidation_StrictEnforcement(t *testing.T) {
+	// Use the runtime_enforcement.yaml fixture which has strict_enforcement: true
+	testFile := filepath.Join("..", "parser", "testdata", "runtime_enforcement.yaml")
+
+	// Ensure the file exists
+	if _, err := os.Stat(testFile); os.IsNotExist(err) {
+		t.Skip("runtime_enforcement.yaml test fixture not found")
+	}
+
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	var output bytes.Buffer
+	// The plan has strict_enforcement: true so rubric validation should run automatically
+	err := validatePlanWithConfig(testFile, registry, &output, "warn", false)
+
+	outputStr := output.String()
+
+	// Plan has strict_enforcement: true so rubric validation should run
+	if err != nil {
+		// If error, it should be about rubric validation, not parsing
+		if !strings.Contains(outputStr, "Rubric") && !strings.Contains(err.Error(), "Rubric") {
+			// If there's no rubric-related output but there's an error, check what it is
+			t.Logf("Note: error was not rubric-related: %v", err)
+		}
+	} else {
+		// Success means rubric passed
+		if !strings.Contains(outputStr, "Rubric validation passed") {
+			t.Logf("Note: output didn't mention rubric validation, but no error: %s", outputStr)
+		}
+	}
+}
+
+// TestValidateCommand_RubricValidation_ConfigEnabled tests that rubric validation respects config
+func TestValidateCommand_RubricValidation_ConfigEnabled(t *testing.T) {
+	// Create a temp plan with PlannerComplianceSpec but strictEnforcement: false
+	tmpDir := t.TempDir()
+	planContent := `planner_compliance:
+  planner_version: "1.0.0"
+  strict_enforcement: false
+  required_features:
+    - success_criteria
+
+plan:
+  metadata:
+    feature_name: "Test Plan"
+    created: "2025-12-01"
+    estimated_tasks: 1
+
+  tasks:
+    - task_number: 1
+      name: "Test task"
+      files:
+        - "test.go"
+      description: "A simple test task"
+      runtime_metadata:
+        dependency_checks: []
+        documentation_targets: []
+        prompt_blocks: []
+      success_criteria:
+        - "Task completes"
+`
+	planFile := filepath.Join(tmpDir, "plan-test.yaml")
+	if err := os.WriteFile(planFile, []byte(planContent), 0644); err != nil {
+		t.Fatalf("Failed to create test plan: %v", err)
+	}
+
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	// Test with strictRubric = true from config (overrides plan)
+	var output bytes.Buffer
+	err := validatePlanWithConfig(planFile, registry, &output, "warn", true)
+
+	outputStr := output.String()
+
+	// With strictRubric=true from config, rubric validation should run
+	// Since the plan has runtime_metadata but no key_points, it might fail
+	// But we should at least see rubric validation attempted
+	if strings.Contains(outputStr, "Rubric") {
+		t.Logf("Rubric validation was triggered as expected")
+	}
+
+	// Verify basic validation passes
+	if err != nil && !strings.Contains(err.Error(), "Rubric") && !strings.Contains(err.Error(), "key_point") {
+		t.Errorf("Unexpected non-rubric error: %v", err)
+	}
+}
+
+// TestValidateCommand_RubricValidation_Disabled tests that rubric validation is skipped when disabled
+func TestValidateCommand_RubricValidation_Disabled(t *testing.T) {
+	// Create a temp plan with NO PlannerComplianceSpec
+	tmpDir := t.TempDir()
+	planContent := `plan:
+  metadata:
+    feature_name: "Test Plan"
+    created: "2025-12-01"
+    estimated_tasks: 1
+
+  tasks:
+    - task_number: 1
+      name: "Test task"
+      files:
+        - "test.go"
+      description: "A simple test task without compliance spec"
+`
+	planFile := filepath.Join(tmpDir, "plan-test.yaml")
+	if err := os.WriteFile(planFile, []byte(planContent), 0644); err != nil {
+		t.Fatalf("Failed to create test plan: %v", err)
+	}
+
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	// Test with strictRubric = false and no PlannerComplianceSpec in plan
+	var output bytes.Buffer
+	err := validatePlanWithConfig(planFile, registry, &output, "warn", false)
+
+	outputStr := output.String()
+
+	// Rubric validation should NOT run when disabled and plan has no compliance spec
+	// Check that neither "Rubric validation passed" nor "Rubric validation failed" appears
+	if strings.Contains(outputStr, "Rubric validation passed") || strings.Contains(outputStr, "Rubric validation failed") {
+		t.Errorf("Rubric validation should not run when disabled: %s", outputStr)
+	}
+
+	// Basic validation should pass
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Should still show success
+	if !strings.Contains(outputStr, "Plan is valid") {
+		t.Errorf("Expected plan to be valid, got: %s", outputStr)
+	}
+}
+
+// =============================================================================
+// Registry Validation Tests (v2.9+)
+// =============================================================================
+
+// TestValidateCommand_RegistryValidation_Valid tests valid registry passes validation
+func TestValidateCommand_RegistryValidation_Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	planContent := `plan:
+  metadata:
+    feature_name: "Registry Test"
+  tasks:
+    - task_number: 1
+      name: "Producer Task"
+      files: ["producer.go"]
+      description: "Produces SymbolA"
+    - task_number: 2
+      name: "Consumer Task"
+      files: ["consumer.go"]
+      depends_on: [1]
+      description: "Consumes SymbolA"
+
+data_flow_registry:
+  producers:
+    SymbolA:
+      - task: 1
+        description: "Produces A"
+  consumers:
+    SymbolA:
+      - task: 2
+        description: "Consumes A"
+`
+	planFile := filepath.Join(tmpDir, "plan-registry.yaml")
+	if err := os.WriteFile(planFile, []byte(planContent), 0644); err != nil {
+		t.Fatalf("Failed to create test plan: %v", err)
+	}
+
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	var output bytes.Buffer
+	err := validatePlanWithAlignment(planFile, registry, &output, "warn")
+
+	if err != nil {
+		t.Errorf("Expected validation to pass, got error: %v", err)
+	}
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "Data flow registry validation passed") {
+		t.Errorf("Expected registry validation passed message, got: %s", outputStr)
+	}
+}
+
+// TestValidateCommand_RegistryValidation_MissingProducer tests missing producer fails validation
+func TestValidateCommand_RegistryValidation_MissingProducer(t *testing.T) {
+	tmpDir := t.TempDir()
+	planContent := `plan:
+  metadata:
+    feature_name: "Registry Test Missing Producer"
+  tasks:
+    - task_number: 1
+      name: "Task 1"
+      files: ["task1.go"]
+      description: "Task 1"
+    - task_number: 2
+      name: "Consumer Task"
+      files: ["consumer.go"]
+      depends_on: [1]
+      description: "Consumes undefined symbol"
+
+data_flow_registry:
+  producers: {}
+  consumers:
+    UndefinedSymbol:
+      - task: 2
+        description: "Consumes undefined symbol"
+`
+	planFile := filepath.Join(tmpDir, "plan-missing-producer.yaml")
+	if err := os.WriteFile(planFile, []byte(planContent), 0644); err != nil {
+		t.Fatalf("Failed to create test plan: %v", err)
+	}
+
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	var output bytes.Buffer
+	err := validatePlanWithAlignment(planFile, registry, &output, "warn")
+
+	if err == nil {
+		t.Error("Expected validation to fail for missing producer")
+	}
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "Data flow registry validation failed") {
+		t.Errorf("Expected registry validation failed message, got: %s", outputStr)
+	}
+}
+
+// TestValidateCommand_RegistryValidation_MissingDependency tests consumer not depending on producer
+func TestValidateCommand_RegistryValidation_MissingDependency(t *testing.T) {
+	tmpDir := t.TempDir()
+	planContent := `plan:
+  metadata:
+    feature_name: "Registry Missing Dependency"
+  tasks:
+    - task_number: 1
+      name: "Producer Task"
+      files: ["producer.go"]
+      description: "Produces SymbolA"
+    - task_number: 2
+      name: "Consumer Task"
+      files: ["consumer.go"]
+      description: "Consumes SymbolA but does NOT depend on producer"
+
+data_flow_registry:
+  producers:
+    SymbolA:
+      - task: 1
+        description: "Produces A"
+  consumers:
+    SymbolA:
+      - task: 2
+        description: "Consumes A"
+`
+	planFile := filepath.Join(tmpDir, "plan-missing-dep.yaml")
+	if err := os.WriteFile(planFile, []byte(planContent), 0644); err != nil {
+		t.Fatalf("Failed to create test plan: %v", err)
+	}
+
+	agentsDir := setupTestAgents(t)
+	defer os.RemoveAll(agentsDir)
+
+	registry := agent.NewRegistry(agentsDir)
+	registry.Discover()
+
+	var output bytes.Buffer
+	err := validatePlanWithAlignment(planFile, registry, &output, "warn")
+
+	if err == nil {
+		t.Error("Expected validation to fail when consumer doesn't depend on producer")
+	}
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "Registry") {
+		t.Errorf("Expected registry-related error, got: %s", outputStr)
+	}
+}

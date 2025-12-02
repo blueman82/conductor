@@ -6,7 +6,7 @@ plan:
     - task_number: 2
       name: "Implement Component A"
       files:
-        - components/component_a.go
+        - components/a/component_a.go
       depends_on:
         - file: setup.yaml
           task: 1
@@ -17,7 +17,7 @@ plan:
     - task_number: 3
       name: "Implement Component B"
       files:
-        - components/component_b.go
+        - components/b/component_b.go
       depends_on:
         - file: setup.yaml
           task: 1

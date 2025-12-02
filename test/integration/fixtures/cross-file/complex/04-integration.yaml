@@ -19,7 +19,7 @@ plan:
     - task_number: 11
       name: "Integration Testing"
       files:
-        - test/integration_test.go
+        - test/integration/integration_test.go
       depends_on:
         - 10
       prompt: "Write comprehensive integration tests"
@@ -27,7 +27,7 @@ plan:
     - task_number: 12
       name: "Performance Testing"
       files:
-        - test/performance_test.go
+        - test/performance/performance_test.go
       depends_on:
         - 10
       prompt: "Write performance benchmarks"

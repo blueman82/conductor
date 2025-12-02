@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/models"
+	"golang.org/x/term"
 )
 
 // Invoker manages execution of claude CLI commands
@@ -174,6 +175,18 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	return args
 }
 
+// getBoxWidth returns the terminal width for box drawing, with sensible bounds.
+func getBoxWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width < 60 {
+		return 80 // fallback
+	}
+	if width > 120 {
+		return 120 // cap for readability
+	}
+	return width
+}
+
 // logInvocation prints a pretty summary of the agent invocation with colors
 func (inv *Invoker) logInvocation(task models.Task, args []string) {
 	// ANSI color codes
@@ -185,24 +198,45 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 	reset := "\033[0m"
 	bold := "\033[1m"
 
-	fmt.Fprintf(os.Stderr, "\n%s┌────────────────────────────────────────────────────────────────┐%s\n", cyan, reset)
-	fmt.Fprintf(os.Stderr, "%s│ %s🤖 Agent Invocation%s                                            │%s\n", cyan, bold, reset, cyan+reset)
-	fmt.Fprintf(os.Stderr, "%s├────────────────────────────────────────────────────────────────┤%s\n", cyan, reset)
+	// Get dynamic box width
+	boxWidth := getBoxWidth()
+	innerWidth := boxWidth - 2 // Account for │ on each side
 
-	// Helper to pad and colorize a line
-	// Box width: 64 chars total
-	// Format: "│ Label:  value                                      │"
-	// Available for "Label:  value" = 62 chars (64 - 2 for borders)
+	// Box drawing helpers
+	hLine := strings.Repeat("─", boxWidth-2)
+	topBorder := "┌" + hLine + "┐"
+	midBorder := "├" + hLine + "┤"
+	botBorder := "└" + hLine + "┘"
+
+	// Pad content to fill box
+	padLine := func(content string, contentLen int) string {
+		padding := innerWidth - contentLen
+		if padding < 0 {
+			padding = 0
+		}
+		return "│ " + content + strings.Repeat(" ", padding-1) + "│"
+	}
+
+	fmt.Fprintf(os.Stderr, "\n%s%s%s\n", cyan, topBorder, reset)
+
+	// Header line
+	header := bold + "🤖 Agent Invocation" + reset
+	headerLen := 20 // visible length without ANSI
+	fmt.Fprintf(os.Stderr, "%s%s%s\n", cyan, padLine(header, headerLen), reset)
+	fmt.Fprintf(os.Stderr, "%s%s%s\n", cyan, midBorder, reset)
+
+	// Helper to print a labeled line
 	printLine := func(label, value, valueColor string) {
-		// Truncate value if too long
-		labelLen := len(label) + 3 // "Label:  " = label + colon + 2 spaces
-		maxValueLen := 62 - labelLen
+		labelLen := len(label) + 3 // "Label:  "
+		maxValueLen := innerWidth - labelLen - 2
 		if len(value) > maxValueLen {
 			value = value[:maxValueLen-3] + "..."
 		}
 
-		// Calculate padding needed (62 - labelLen - valueLen)
-		padding := 62 - labelLen - len(value)
+		padding := innerWidth - labelLen - len(value) - 2
+		if padding < 0 {
+			padding = 0
+		}
 		spacer := strings.Repeat(" ", padding)
 
 		fmt.Fprintf(os.Stderr, "%s│%s %s%s:%s  %s%s%s%s %s│%s\n",
@@ -240,7 +274,7 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 		printLine("Files", filesStr, green)
 	}
 
-	fmt.Fprintf(os.Stderr, "%s└────────────────────────────────────────────────────────────────┘%s\n\n", cyan, reset)
+	fmt.Fprintf(os.Stderr, "%s%s%s\n\n", cyan, botBorder, reset)
 }
 
 // Invoke executes the claude CLI command with the given context

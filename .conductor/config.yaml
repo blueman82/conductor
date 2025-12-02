@@ -143,3 +143,27 @@ validation:
   #   - strict: Fail validation if key_points exceed success_criteria
   #   - off: Disable the check entirely
   key_point_criteria: warn
+
+# Task execution configuration (v2.9+)
+# Controls behavior during task execution - runtime enforcement
+executor:
+  # Run dependency check commands before agent invocation (default: true)
+  # Tasks with runtime_metadata.dependency_checks execute before agent
+  # Task aborted if any check command fails (exits non-zero)
+  enforce_dependency_checks: true
+
+  # Run test commands after agent output but before QC review (default: true)
+  # Hard gate - task fails immediately if any command exits non-zero
+  enforce_test_commands: true
+
+  # Run optional per-criterion verification commands (default: true)
+  # Soft signal - failures feed into QC prompt, don't block execution
+  verify_criteria: true
+
+  # Enforce runtime package conflict guard for Go packages (default: true)
+  # Prevents concurrent tasks from modifying same Go package
+  enforce_package_guard: true
+
+  # Enforce documentation target verification (default: true)
+  # Verifies agents edit exact sections specified in plan
+  enforce_doc_targets: true

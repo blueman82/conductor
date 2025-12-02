@@ -328,6 +328,70 @@ validation:
   #   - off: Disable the check entirely
   key_point_criteria: warn
 
+  # Enable strict rubric validation when PlannerComplianceSpec is present
+  # When true (and plan has PlannerComplianceSpec), validates:
+  #   - Terminology alignment between key_points and success_criteria
+  #   - Task type constraints (CAPABILITY vs INTEGRATION)
+  #   - Documentation targets for doc tasks
+  # Default: false (rubric validation only runs if plan's strict_enforcement is true)
+  strict_rubric: false
+
+# Task execution configuration (v2.9+)
+# Controls behavior during task execution
+executor:
+  # Run dependency check commands before agent invocation (default: true)
+  # When enabled, tasks with runtime_metadata.dependency_checks will have
+  # their check commands executed before the agent runs. Task execution
+  # is aborted if any check command fails (exits non-zero).
+  # Preflight output is streamed to task logs and attached to QC context.
+  enforce_dependency_checks: true
+
+  # Run test commands after agent output but before QC review (default: true)
+  # When enabled, tasks with test_commands will have their commands executed
+  # after the agent completes. Task fails immediately if any command exits
+  # non-zero (blocks QC review). Test output is captured and attached to logs.
+  enforce_test_commands: true
+
+  # Run optional per-criterion verification commands (default: true)
+  # When enabled, structured_criteria with verification blocks are executed
+  # after agent output. Unlike test commands, verification failures do NOT
+  # block execution - results are injected into QC prompt for final judgment.
+  verify_criteria: true
+
+  # Enforce runtime package conflict guard for Go packages (default: true)
+  # When enabled, prevents concurrent task execution from modifying the same
+  # Go package. Tasks must acquire package locks before execution; conflicts
+  # block until released. Package conflicts are also validated at wave
+  # calculation time during planning phase.
+  enforce_package_guard: true
+
+  # Enforce documentation target verification for documentation tasks (default: true)
+  # When enabled, documentation targets are verified before QC to ensure
+  # agents edit the exact sections specified in the plan.
+  enforce_doc_targets: true
+
+# Executor Examples
+
+# Example: Disable dependency checks for legacy plans
+# executor:
+#   enforce_dependency_checks: false
+
+# Example: Skip test command execution (rely only on QC review)
+# executor:
+#   enforce_test_commands: false
+
+# Example: Disable per-criterion verification (rely on QC judgment)
+# executor:
+#   verify_criteria: false
+
+# Example: Disable runtime package guard (allow concurrent package modifications)
+# executor:
+#   enforce_package_guard: false
+
+# Example: Disable documentation target verification
+# executor:
+#   enforce_doc_targets: false
+
 # Validation Examples
 
 # Example: Strict mode - fail validation if key_points exceed success_criteria
@@ -337,3 +401,7 @@ validation:
 # Example: Disable key_point validation entirely
 # validation:
 #   key_point_criteria: off
+
+# Example: Enable strict rubric validation for all plans with PlannerComplianceSpec
+# validation:
+#   strict_rubric: true
