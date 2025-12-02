@@ -991,6 +991,12 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			te.postTaskHook(ctx, &task, &result, models.StatusRed)
 			return result, lastErr
 		}
+
+		// Inject QC feedback into prompt for next retry (v2.9+)
+		// This ensures the agent sees what failed and can address specific issues
+		if review.Feedback != "" {
+			task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - QC FEEDBACK (MUST ADDRESS):\n%s\n---\n\nFix ALL issues listed above before completing the task.", task.Prompt, review.Feedback)
+		}
 	}
 
 	// Should not reach here; treat as failure.
