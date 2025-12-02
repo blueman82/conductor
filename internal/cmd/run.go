@@ -581,6 +581,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Wire runtime enforcement flags (v2.9+)
 	taskExec.EnforceTestCommands = cfg.Executor.EnforceTestCommands
 	taskExec.VerifyCriteria = cfg.Executor.VerifyCriteria
+	fmt.Fprintf(os.Stderr, "[v2.9] Runtime enforcement: test_commands=%v, verify_criteria=%v\n",
+		taskExec.EnforceTestCommands, taskExec.VerifyCriteria)
 
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithPackageGuard(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed, cfg.Executor.EnforcePackageGuard)
