@@ -14,10 +14,10 @@ type mockErrorPattern struct {
 	fixable    bool
 }
 
-func (m *mockErrorPattern) GetCategory() string  { return m.category }
-func (m *mockErrorPattern) GetPattern() string   { return m.pattern }
+func (m *mockErrorPattern) GetCategory() string   { return m.category }
+func (m *mockErrorPattern) GetPattern() string    { return m.pattern }
 func (m *mockErrorPattern) GetSuggestion() string { return m.suggestion }
-func (m *mockErrorPattern) IsAgentFixable() bool { return m.fixable }
+func (m *mockErrorPattern) IsAgentFixable() bool  { return m.fixable }
 
 // TestLogErrorPatternENVLevel verifies ENV_LEVEL error pattern logging with yellow color.
 func TestLogErrorPatternENVLevel(t *testing.T) {

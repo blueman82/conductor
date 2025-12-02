@@ -140,27 +140,27 @@ type TaskExecutorConfig struct {
 
 // DefaultTaskExecutor executes individual tasks, applying QC review and plan updates.
 type DefaultTaskExecutor struct {
-	invoker                 InvokerInterface
-	reviewer                Reviewer
-	planUpdater             PlanUpdater
-	cfg                     TaskExecutorConfig
-	clock                   func() time.Time
-	qcEnabled               bool
-	retryLimit              int
-	SourceFile              string                   // Track which file this task comes from
-	FileLockManager         FileLockManager          // Per-file locking strategy
-	LearningStore           LearningStore            // Adaptive learning store (optional)
-	PlanFile                string                   // Plan file path for learning queries
-	SessionID               string                   // Session ID for learning tracking
-	RunNumber               int                      // Run number for learning tracking
-	metrics                 *learning.PatternMetrics // Pattern detection metrics (optional)
-	AutoAdaptAgent          bool                     // Enable automatic agent adaptation
-	MinFailuresBeforeAdapt  int                      // Minimum failures before adapting agent
-	SwapDuringRetries       bool                     // Enable inter-retry agent swapping
-	Plan                    *models.Plan             // Plan reference for integration prompt builder
-	EnforceDependencyChecks bool                     // Run dependency checks before task invocation
-	CommandRunner           CommandRunner            // Command runner for dependency checks (optional)
-	WorkDir                 string                   // Working directory for dependency check commands
+	invoker                     InvokerInterface
+	reviewer                    Reviewer
+	planUpdater                 PlanUpdater
+	cfg                         TaskExecutorConfig
+	clock                       func() time.Time
+	qcEnabled                   bool
+	retryLimit                  int
+	SourceFile                  string                   // Track which file this task comes from
+	FileLockManager             FileLockManager          // Per-file locking strategy
+	LearningStore               LearningStore            // Adaptive learning store (optional)
+	PlanFile                    string                   // Plan file path for learning queries
+	SessionID                   string                   // Session ID for learning tracking
+	RunNumber                   int                      // Run number for learning tracking
+	metrics                     *learning.PatternMetrics // Pattern detection metrics (optional)
+	AutoAdaptAgent              bool                     // Enable automatic agent adaptation
+	MinFailuresBeforeAdapt      int                      // Minimum failures before adapting agent
+	SwapDuringRetries           bool                     // Enable inter-retry agent swapping
+	Plan                        *models.Plan             // Plan reference for integration prompt builder
+	EnforceDependencyChecks     bool                     // Run dependency checks before task invocation
+	CommandRunner               CommandRunner            // Command runner for dependency checks (optional)
+	WorkDir                     string                   // Working directory for dependency check commands
 	EnforceTestCommands         bool                     // Run test commands after agent output (v2.9+)
 	VerifyCriteria              bool                     // Run optional per-criterion verifications (v2.9+)
 	EnforceDocTargets           bool                     // Run documentation target verification for doc tasks (v2.9+)

@@ -439,7 +439,7 @@ func TestIntegration_ErrorPatternDetection_ConfigDisabled(t *testing.T) {
 	// Command runner: first fails with error that would match a pattern
 	runner := newStubCommandRunnerWithSequence()
 	runner.addResult("Error: undefined: someFunction", fmt.Errorf("exit status 1")) // CODE_LEVEL pattern
-	runner.addResult("", nil)                                                     // Second succeeds
+	runner.addResult("", nil)                                                       // Second succeeds
 	executor.CommandRunner = runner
 
 	task := models.Task{

@@ -334,18 +334,18 @@ func TestDetectErrorPatternPriority(t *testing.T) {
 // TestDetectErrorPatternCaseSensitivity verifies pattern matching is case-sensitive.
 func TestDetectErrorPatternCaseSensitivity(t *testing.T) {
 	tests := []struct {
-		name     string
-		output   string
+		name        string
+		output      string
 		shouldMatch bool
 	}{
 		{
-			name:     "exact case match",
-			output:   "command not found",
+			name:        "exact case match",
+			output:      "command not found",
 			shouldMatch: true,
 		},
 		{
-			name:     "uppercase variant",
-			output:   "Command Not Found",
+			name:        "uppercase variant",
+			output:      "Command Not Found",
 			shouldMatch: false, // Should not match - patterns are case-sensitive
 		},
 	}
@@ -368,24 +368,24 @@ func TestDetectErrorPatternCaseSensitivity(t *testing.T) {
 // TestDetectErrorPatternComplexRegex verifies regex patterns with special characters.
 func TestDetectErrorPatternComplexRegex(t *testing.T) {
 	tests := []struct {
-		name     string
-		output   string
-		wantCat  ErrorCategory
+		name    string
+		output  string
+		wantCat ErrorCategory
 	}{
 		{
-			name:     "scheme pattern with different scheme names",
-			output:   "scheme MyApp does not exist",
-			wantCat:  PLAN_LEVEL,
+			name:    "scheme pattern with different scheme names",
+			output:  "scheme MyApp does not exist",
+			wantCat: PLAN_LEVEL,
 		},
 		{
-			name:     "scheme with spaces in name",
-			output:   "scheme My Custom App does not exist",
-			wantCat:  PLAN_LEVEL,
+			name:    "scheme with spaces in name",
+			output:  "scheme My Custom App does not exist",
+			wantCat: PLAN_LEVEL,
 		},
 		{
-			name:     "target pattern with different target names",
-			output:   "Tests in the target 'AppTests' can't be run",
-			wantCat:  PLAN_LEVEL,
+			name:    "target pattern with different target names",
+			output:  "Tests in the target 'AppTests' can't be run",
+			wantCat: PLAN_LEVEL,
 		},
 	}
 
@@ -407,24 +407,24 @@ func TestDetectErrorPatternComplexRegex(t *testing.T) {
 // TestDetectErrorPatternPartialMatches verifies pattern matching with partial strings.
 func TestDetectErrorPatternPartialMatches(t *testing.T) {
 	tests := []struct {
-		name     string
-		output   string
-		wantCat  ErrorCategory
+		name    string
+		output  string
+		wantCat ErrorCategory
 	}{
 		{
-			name:     "permission denied in path",
-			output:   "/home/user/.local/bin: permission denied",
-			wantCat:  ENV_LEVEL,
+			name:    "permission denied in path",
+			output:  "/home/user/.local/bin: permission denied",
+			wantCat: ENV_LEVEL,
 		},
 		{
-			name:     "FAIL with additional context",
-			output:   "FAIL: test [TestSum] failed: expected 10 but got 5",
-			wantCat:  CODE_LEVEL,
+			name:    "FAIL with additional context",
+			output:  "FAIL: test [TestSum] failed: expected 10 but got 5",
+			wantCat: CODE_LEVEL,
 		},
 		{
-			name:     "undefined in complex message",
-			output:   "build error: undefined: github.com/some/package.FunctionName at line 42",
-			wantCat:  CODE_LEVEL,
+			name:    "undefined in complex message",
+			output:  "build error: undefined: github.com/some/package.FunctionName at line 42",
+			wantCat: CODE_LEVEL,
 		},
 	}
 
@@ -554,9 +554,9 @@ func TestDetectErrorPatternCopy(t *testing.T) {
 // TestDetectErrorPatternMultilineOutput verifies matching in multiline strings.
 func TestDetectErrorPatternMultilineOutput(t *testing.T) {
 	tests := []struct {
-		name     string
-		output   string
-		wantCat  ErrorCategory
+		name    string
+		output  string
+		wantCat ErrorCategory
 	}{
 		{
 			name: "error in multiline output",
@@ -599,10 +599,10 @@ Summary: 1 failure`,
 // TestErrorPatternFields verifies ErrorPattern structure has all required fields.
 func TestErrorPatternFields(t *testing.T) {
 	pattern := ErrorPattern{
-		Pattern:                  "test pattern",
-		Category:                 CODE_LEVEL,
-		Suggestion:               "test suggestion",
-		AgentCanFix:              true,
+		Pattern:                   "test pattern",
+		Category:                  CODE_LEVEL,
+		Suggestion:                "test suggestion",
+		AgentCanFix:               true,
 		RequiresHumanIntervention: false,
 	}
 
