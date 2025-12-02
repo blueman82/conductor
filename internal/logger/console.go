@@ -1209,9 +1209,9 @@ func (cl *ConsoleLogger) LogTestCommands(results []models.TestCommandResult) {
 
 	var headerText string
 	if cl.colorOutput {
-		headerText = color.New(color.FgCyan, color.Bold).Sprint("🧪 Test Commands") + " (hard gate)"
+		headerText = color.New(color.FgCyan, color.Bold).Sprint("🧪 Test Commands")
 	} else {
-		headerText = "🧪 Test Commands (hard gate)"
+		headerText = "🧪 Test Commands"
 	}
 	output.WriteString(drawBoxLine(headerText, w) + "\n")
 	output.WriteString(drawBoxDivider(w) + "\n")
