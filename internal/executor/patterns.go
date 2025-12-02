@@ -176,9 +176,10 @@ type invokerInterface interface {
 //
 // BEHAVIOR:
 // 1. If invoker is provided and Claude classification is enabled (config):
-//    - Attempts Claude-based semantic classification
-//    - On success + confidence >= 0.85: Returns pattern converted from CloudErrorClassification
-//    - On failure (timeout, network, low confidence): Falls back to regex
+//   - Attempts Claude-based semantic classification
+//   - On success + confidence >= 0.85: Returns pattern converted from CloudErrorClassification
+//   - On failure (timeout, network, low confidence): Falls back to regex
+//
 // 2. Falls back to regex patterns in all cases
 // 3. Returns nil if no pattern matches or output is empty
 //

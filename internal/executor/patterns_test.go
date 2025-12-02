@@ -642,9 +642,9 @@ func TestErrorPatternFields(t *testing.T) {
 // MockInvoker simulates an agent.Invoker for testing Claude-based error classification.
 // It allows tests to inject specific responses or errors without requiring real Claude invocation.
 type MockInvoker struct {
-	Response string // JSON response to return
-	Error    error  // Error to return (if non-nil, overrides Response)
-	CallCount int   // Track number of invocations
+	Response  string // JSON response to return
+	Error     error  // Error to return (if non-nil, overrides Response)
+	CallCount int    // Track number of invocations
 }
 
 // Invoke simulates the agent.Invoker interface method.
@@ -1118,9 +1118,9 @@ func TestConvertCloudClassificationToPattern(t *testing.T) {
 // category strings are rejected during conversion.
 func TestConvertCloudClassificationInvalidCategory(t *testing.T) {
 	tests := []struct {
-		name      string
-		category  string
-		wantNil   bool
+		name     string
+		category string
+		wantNil  bool
 	}{
 		{
 			name:     "invalid category typo",
@@ -1175,11 +1175,11 @@ func TestConvertCloudClassificationInvalidCategory(t *testing.T) {
 // Claude's error classification responses.
 func TestParseClaudeClassificationResponse(t *testing.T) {
 	tests := []struct {
-		name        string
-		jsonData    string
-		wantErr     bool
-		wantNil     bool
-		wantCategory string
+		name           string
+		jsonData       string
+		wantErr        bool
+		wantNil        bool
+		wantCategory   string
 		wantConfidence float64
 	}{
 		{
@@ -1214,22 +1214,22 @@ func TestParseClaudeClassificationResponse(t *testing.T) {
 			wantConfidence: 0.87,
 		},
 		{
-			name:        "invalid json",
-			jsonData:    `{not valid json}`,
-			wantErr:     true,
-			wantNil:     true,
+			name:     "invalid json",
+			jsonData: `{not valid json}`,
+			wantErr:  true,
+			wantNil:  true,
 		},
 		{
-			name:        "empty json",
-			jsonData:    `{}`,
-			wantErr:     false,
-			wantNil:     false,
+			name:     "empty json",
+			jsonData: `{}`,
+			wantErr:  false,
+			wantNil:  false,
 		},
 		{
-			name:        "malformed json missing quotes",
-			jsonData:    `{category: CODE_LEVEL}`,
-			wantErr:     true,
-			wantNil:     true,
+			name:     "malformed json missing quotes",
+			jsonData: `{category: CODE_LEVEL}`,
+			wantErr:  true,
+			wantNil:  true,
 		},
 	}
 
@@ -1265,8 +1265,8 @@ func TestParseClaudeClassificationResponse(t *testing.T) {
 // TestHasInvokeMethod verifies the invoker type checking function.
 func TestHasInvokeMethod(t *testing.T) {
 	tests := []struct {
-		name      string
-		obj       interface{}
+		name       string
+		obj        interface{}
 		wantResult bool
 	}{
 		{

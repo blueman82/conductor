@@ -24,7 +24,7 @@ type mockClaudeInvoker struct {
 	invokeCount       int
 	shouldFailAfter   int // Return error after N invocations
 	failureType       string
-	confidenceScores  []float64 // Per-response confidence overrides
+	confidenceScores  []float64                                   // Per-response confidence overrides
 	classificationFor map[string]*models.CloudErrorClassification // Pre-canned responses
 }
 
@@ -121,8 +121,8 @@ func (m *mockClaudeInvoker) Invoke(ctx context.Context, task models.Task) (*agen
 
 // mockErrorClassificationLogger captures error classification logs for assertion
 type mockErrorClassificationLogger struct {
-	mu                  sync.Mutex
-	errorPatterns       []interface{}
+	mu                   sync.Mutex
+	errorPatterns        []interface{}
 	cloudClassifications []interface{}
 }
 
@@ -148,7 +148,8 @@ func (m *mockErrorClassificationLogger) LogCloudClassification(classification in
 
 // Implement other logger methods as no-ops for compatibility
 func (m *mockErrorClassificationLogger) LogTestCommands(entries []models.TestCommandResult) {}
-func (m *mockErrorClassificationLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {}
+func (m *mockErrorClassificationLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
+}
 func (m *mockErrorClassificationLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}
 
 // =============================================================================
@@ -1055,12 +1056,12 @@ func TestErrorClassificationIntegration_FullFlow(t *testing.T) {
 	executor.CommandRunner = runner
 
 	task := models.Task{
-		Number:       "full-flow-test",
-		Name:         "Complete Error Classification Flow",
-		Prompt:       "Implement calculate function with correct signature",
-		Agent:        "test-agent",
-		TestCommands: []string{"go test -v ./..."},
-		DependsOn:    []string{},
+		Number:        "full-flow-test",
+		Name:          "Complete Error Classification Flow",
+		Prompt:        "Implement calculate function with correct signature",
+		Agent:         "test-agent",
+		TestCommands:  []string{"go test -v ./..."},
+		DependsOn:     []string{},
 		EstimatedTime: 30 * time.Minute,
 	}
 

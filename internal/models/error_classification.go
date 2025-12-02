@@ -62,9 +62,9 @@ import (
 
 // ErrorClassificationRequest represents the input to Claude for error analysis
 type ErrorClassificationRequest struct {
-	ErrorOutput string   `json:"error_output"`      // Raw error text from test output
-	Context     string   `json:"context,omitempty"` // Optional: task context, file types
-	FileTypes   []string `json:"file_types,omitempty"` // File extensions being tested
+	ErrorOutput  string   `json:"error_output"`            // Raw error text from test output
+	Context      string   `json:"context,omitempty"`       // Optional: task context, file types
+	FileTypes    []string `json:"file_types,omitempty"`    // File extensions being tested
 	RecentErrors []string `json:"recent_errors,omitempty"` // Previous errors in session (for pattern)
 }
 
@@ -79,10 +79,10 @@ type ErrorClassificationRequest struct {
 // - TimeToResolve provides agents with severity indicators
 type CloudErrorClassification struct {
 	// Core categorization (matches ErrorPattern interface)
-	Category                  string   `json:"category"`                    // CODE_LEVEL, PLAN_LEVEL, ENV_LEVEL
-	Suggestion                string   `json:"suggestion"`                  // Actionable guidance (1-2 sentences)
-	AgentCanFix               bool     `json:"agent_can_fix"`               // Whether agent retry can resolve
-	RequiresHumanIntervention bool     `json:"requires_human_intervention"` // If human action needed
+	Category                  string `json:"category"`                    // CODE_LEVEL, PLAN_LEVEL, ENV_LEVEL
+	Suggestion                string `json:"suggestion"`                  // Actionable guidance (1-2 sentences)
+	AgentCanFix               bool   `json:"agent_can_fix"`               // Whether agent retry can resolve
+	RequiresHumanIntervention bool   `json:"requires_human_intervention"` // If human action needed
 
 	// Classification quality metrics
 	Confidence float64 `json:"confidence"` // 0.0-1.0: Claude's certainty in classification
@@ -92,7 +92,7 @@ type CloudErrorClassification struct {
 
 	// Extended analysis for smarter retry strategies
 	RelatedPatterns []string `json:"related_patterns,omitempty"` // Similar known patterns
-	TimeToResolve   string   `json:"time_to_resolve,omitempty"` // Estimated fix time: "quick", "moderate", "long"
+	TimeToResolve   string   `json:"time_to_resolve,omitempty"`  // Estimated fix time: "quick", "moderate", "long"
 	SeverityLevel   string   `json:"severity_level,omitempty"`   // "critical", "high", "medium", "low"
 
 	// Multi-language support (emerging requirement)
