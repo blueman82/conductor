@@ -224,6 +224,13 @@ type ExecutorConfig struct {
 	// agents edit the exact sections specified in the plan.
 	// Default: true
 	EnforceDocTargets bool `yaml:"enforce_doc_targets"`
+
+	// EnableErrorPatternDetection enables error pattern detection on test failures.
+	// When true (default), Conductor will analyze test command failures and categorize them
+	// into CODE_LEVEL (agent can fix), PLAN_LEVEL (plan needs update), or ENV_LEVEL
+	// (environment issue). Provides actionable suggestions for each category.
+	// Default: true
+	EnableErrorPatternDetection bool `yaml:"enable_error_pattern_detection"`
 }
 
 // Config represents conductor configuration options
@@ -363,11 +370,12 @@ func DefaultConfig() *Config {
 			StrictRubric:     false,
 		},
 		Executor: ExecutorConfig{
-			EnforceDependencyChecks: true,
-			EnforceTestCommands:     true,
-			VerifyCriteria:          true,
-			EnforcePackageGuard:     true,
-			EnforceDocTargets:       true,
+			EnforceDependencyChecks:     true,
+			EnforceTestCommands:         true,
+			VerifyCriteria:              true,
+			EnforcePackageGuard:         true,
+			EnforceDocTargets:           true,
+			EnableErrorPatternDetection: true,
 		},
 	}
 }
@@ -743,6 +751,9 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := executorMap["enforce_doc_targets"]; exists {
 				cfg.Executor.EnforceDocTargets = executor.EnforceDocTargets
+			}
+			if _, exists := executorMap["enable_error_pattern_detection"]; exists {
+				cfg.Executor.EnableErrorPatternDetection = executor.EnableErrorPatternDetection
 			}
 		}
 	}

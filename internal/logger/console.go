@@ -30,6 +30,19 @@ const (
 	levelError int = 4
 )
 
+// ErrorPatternDisplay is an interface for objects that represent detected error patterns.
+// It's used to decouple the logger from specific error pattern implementations.
+type ErrorPatternDisplay interface {
+	// GetCategory returns the error category string (e.g., "ENV_LEVEL", "PLAN_LEVEL", "CODE_LEVEL")
+	GetCategory() string
+	// GetPattern returns the error pattern text
+	GetPattern() string
+	// GetSuggestion returns the actionable suggestion for resolving the error
+	GetSuggestion() string
+	// IsAgentFixable returns whether the agent can fix this error with a retry
+	IsAgentFixable() bool
+}
+
 // ConsoleLogger logs execution progress to a writer with timestamps and thread safety.
 // All output is prefixed with [HH:MM:SS] timestamps for tracking execution flow.
 // It supports log level filtering to control message verbosity.
@@ -1290,6 +1303,87 @@ func (cl *ConsoleLogger) LogTestCommands(results []models.TestCommandResult) {
 	cl.writer.Write([]byte(output.String()))
 }
 
+// LogErrorPattern logs a detected error pattern with categorization and suggestion.
+// Format: Boxed output with category, pattern, and actionable suggestion.
+// Implements the ErrorPatternDisplay interface for logging detected error patterns.
+func (cl *ConsoleLogger) LogErrorPattern(pattern ErrorPatternDisplay) {
+	if cl.writer == nil || pattern == nil {
+		return
+	}
+
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	var output strings.Builder
+	w := getTerminalWidth()
+
+	// Box top and header
+	output.WriteString(drawBoxTop(w) + "\n")
+
+	var headerText string
+	if cl.colorOutput {
+		headerText = color.New(color.FgCyan, color.Bold).Sprint("🔍 Error Pattern Detected")
+	} else {
+		headerText = "🔍 Error Pattern Detected"
+	}
+	output.WriteString(drawBoxLine(headerText, w) + "\n")
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	// Category line with color based on category
+	var categoryLine string
+	categoryStr := pattern.GetCategory()
+	switch categoryStr {
+	case "ENV_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgYellow).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	case "PLAN_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgYellow).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	case "CODE_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgGreen).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	default:
+		categoryLine = "Category: " + categoryStr
+	}
+	output.WriteString(drawBoxLine(categoryLine, w) + "\n")
+
+	// Pattern line
+	patternText := truncateCommand(pattern.GetPattern(), w-12)
+	patternLine := "Pattern: " + patternText
+	output.WriteString(drawBoxLine(patternLine, w) + "\n")
+
+	// Empty line for spacing
+	output.WriteString(drawBoxLine("", w) + "\n")
+
+	// Suggestion header and wrapped suggestion text
+	suggestionHeader := "💡 Suggestion:"
+	output.WriteString(drawBoxLine(suggestionHeader, w) + "\n")
+
+	// Word-wrap the suggestion text
+	wrappedSuggestion := wordWrapText(pattern.GetSuggestion(), w-8)
+	for _, line := range wrappedSuggestion {
+		output.WriteString(drawBoxLine(line, w) + "\n")
+	}
+
+	// Box bottom
+	output.WriteString(drawBoxBottom(w) + "\n")
+
+	cl.writer.Write([]byte(output.String()))
+}
+
 // LogCriterionVerifications logs criterion verification results with boxed output.
 // Format: Box with header, individual criteria results, and summary
 func (cl *ConsoleLogger) LogCriterionVerifications(results []models.CriterionVerificationResult) {
@@ -1484,6 +1578,45 @@ func truncateCommand(cmd string, maxLen int) string {
 		return cmd
 	}
 	return cmd[:maxLen-3] + "..."
+}
+
+// wordWrapText wraps text to fit within maxLen characters per line.
+// Returns a slice of strings, each fitting within the specified width.
+func wordWrapText(text string, maxLen int) []string {
+	if maxLen <= 0 {
+		maxLen = 60
+	}
+
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return []string{}
+	}
+
+	// If text fits on one line, return it as-is
+	if len(text) <= maxLen {
+		return []string{text}
+	}
+
+	var lines []string
+	words := strings.Fields(text)
+	var currentLine string
+
+	for _, word := range words {
+		if currentLine == "" {
+			currentLine = word
+		} else if len(currentLine)+1+len(word) <= maxLen {
+			currentLine += " " + word
+		} else {
+			lines = append(lines, currentLine)
+			currentLine = word
+		}
+	}
+
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	return lines
 }
 
 // LogProgress logs real-time progress of task execution with percentage, counts, and average duration.

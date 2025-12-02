@@ -371,6 +371,12 @@ executor:
   # agents edit the exact sections specified in the plan.
   enforce_doc_targets: true
 
+  # Enable error pattern detection on test failures (default: true)
+  # When enabled, Conductor will analyze test command failures and categorize them
+  # into CODE_LEVEL (agent can fix), PLAN_LEVEL (plan needs update), or ENV_LEVEL
+  # (environment issue). Provides actionable suggestions for each category.
+  enable_error_pattern_detection: true
+
 # Executor Examples
 
 # Example: Disable dependency checks for legacy plans
@@ -392,6 +398,10 @@ executor:
 # Example: Disable documentation target verification
 # executor:
 #   enforce_doc_targets: false
+
+# Example: Disable error pattern detection on test failures
+# executor:
+#   enable_error_pattern_detection: false
 
 # Validation Examples
 

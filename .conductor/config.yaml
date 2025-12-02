@@ -168,3 +168,9 @@ executor:
   # Enforce documentation target verification (default: true)
   # Verifies agents edit exact sections specified in plan
   enforce_doc_targets: true
+
+  # Enable error pattern detection on test failures (default: true)
+  # When enabled, Conductor will analyze test command failures and categorize them
+  # into CODE_LEVEL (agent can fix), PLAN_LEVEL (plan needs update), or ENV_LEVEL
+  # (environment issue). Provides actionable suggestions for each category.
+  enable_error_pattern_detection: true
