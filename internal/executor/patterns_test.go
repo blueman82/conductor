@@ -331,7 +331,7 @@ func TestDetectErrorPatternPriority(t *testing.T) {
 	}
 }
 
-// TestDetectErrorPatternCaseSensitivity verifies pattern matching is case-sensitive.
+// TestDetectErrorPatternCaseSensitivity verifies pattern matching is case-insensitive.
 func TestDetectErrorPatternCaseSensitivity(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -346,7 +346,12 @@ func TestDetectErrorPatternCaseSensitivity(t *testing.T) {
 		{
 			name:        "uppercase variant",
 			output:      "Command Not Found",
-			shouldMatch: false, // Should not match - patterns are case-sensitive
+			shouldMatch: true, // Should match - patterns are case-insensitive
+		},
+		{
+			name:        "Python SyntaxError",
+			output:      "SyntaxError: invalid syntax",
+			shouldMatch: true, // Should match "syntax error" pattern case-insensitively
 		},
 	}
 

@@ -132,7 +132,7 @@ var KnownPatterns = []ErrorPattern{
 		RequiresHumanIntervention: false,
 	},
 	{
-		Pattern:                   "syntax error|unexpected token",
+		Pattern:                   "syntax.?error|unexpected token",
 		Category:                  CODE_LEVEL,
 		Suggestion:                "Syntax error in code. Agent should fix syntax.",
 		AgentCanFix:               true,
@@ -157,6 +157,7 @@ var KnownPatterns = []ErrorPattern{
 // DetectErrorPattern analyzes output and returns matching pattern if found.
 // Returns nil if no pattern matches or output is empty.
 // Pattern priority: first match wins.
+// Matching is case-insensitive for better compatibility.
 func DetectErrorPattern(output string) *ErrorPattern {
 	if output == "" {
 		return nil
@@ -164,7 +165,9 @@ func DetectErrorPattern(output string) *ErrorPattern {
 
 	for i := range KnownPatterns {
 		pattern := &KnownPatterns[i]
-		matched, err := regexp.MatchString(pattern.Pattern, output)
+		// Case-insensitive matching via (?i) prefix
+		caseInsensitivePattern := "(?i)" + pattern.Pattern
+		matched, err := regexp.MatchString(caseInsensitivePattern, output)
 		if err != nil {
 			// Invalid regex - skip this pattern
 			continue
