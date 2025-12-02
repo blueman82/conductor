@@ -38,6 +38,13 @@ type LearningStore interface {
 	GetExecutionHistory(ctx context.Context, planFile, taskNumber string) ([]*learning.TaskExecution, error)
 }
 
+// RuntimeEnforcementLogger logs runtime enforcement events (test commands, criterion verification).
+type RuntimeEnforcementLogger interface {
+	LogTestCommands(entries []models.TestCommandResult)
+	LogCriterionVerifications(entries []models.CriterionVerificationResult)
+	LogDocTargetVerifications(entries []models.DocTargetResult)
+}
+
 // TaskExecution represents a single task execution record for learning storage.
 type TaskExecution struct {
 	PlanFile        string
@@ -131,24 +138,36 @@ type TaskExecutorConfig struct {
 
 // DefaultTaskExecutor executes individual tasks, applying QC review and plan updates.
 type DefaultTaskExecutor struct {
-	invoker                InvokerInterface
-	reviewer               Reviewer
-	planUpdater            PlanUpdater
-	cfg                    TaskExecutorConfig
-	clock                  func() time.Time
-	qcEnabled              bool
-	retryLimit             int
-	SourceFile             string                   // Track which file this task comes from
-	FileLockManager        FileLockManager          // Per-file locking strategy
-	LearningStore          LearningStore            // Adaptive learning store (optional)
-	PlanFile               string                   // Plan file path for learning queries
-	SessionID              string                   // Session ID for learning tracking
-	RunNumber              int                      // Run number for learning tracking
-	metrics                *learning.PatternMetrics // Pattern detection metrics (optional)
-	AutoAdaptAgent         bool                     // Enable automatic agent adaptation
-	MinFailuresBeforeAdapt int                      // Minimum failures before adapting agent
-	SwapDuringRetries      bool                     // Enable inter-retry agent swapping
-	Plan                   *models.Plan             // Plan reference for integration prompt builder
+	invoker                 InvokerInterface
+	reviewer                Reviewer
+	planUpdater             PlanUpdater
+	cfg                     TaskExecutorConfig
+	clock                   func() time.Time
+	qcEnabled               bool
+	retryLimit              int
+	SourceFile              string                   // Track which file this task comes from
+	FileLockManager         FileLockManager          // Per-file locking strategy
+	LearningStore           LearningStore            // Adaptive learning store (optional)
+	PlanFile                string                   // Plan file path for learning queries
+	SessionID               string                   // Session ID for learning tracking
+	RunNumber               int                      // Run number for learning tracking
+	metrics                 *learning.PatternMetrics // Pattern detection metrics (optional)
+	AutoAdaptAgent          bool                     // Enable automatic agent adaptation
+	MinFailuresBeforeAdapt  int                      // Minimum failures before adapting agent
+	SwapDuringRetries       bool                     // Enable inter-retry agent swapping
+	Plan                    *models.Plan             // Plan reference for integration prompt builder
+	EnforceDependencyChecks bool                     // Run dependency checks before task invocation
+	CommandRunner           CommandRunner            // Command runner for dependency checks (optional)
+	WorkDir                 string                   // Working directory for dependency check commands
+	EnforceTestCommands     bool                     // Run test commands after agent output (v2.9+)
+	VerifyCriteria          bool                     // Run optional per-criterion verifications (v2.9+)
+	EnforceDocTargets       bool                     // Run documentation target verification for doc tasks (v2.9+)
+	Logger                  RuntimeEnforcementLogger // Logger for runtime enforcement output (optional)
+
+	// Runtime state for passing to QC
+	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
+	lastCriterionResults []CriterionVerificationResult // Populated after RunCriterionVerifications
+	lastDocTargetResults []DocTargetResult             // Populated after VerifyDocumentationTargets
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -568,6 +587,20 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		// For now, continue without learning adaptation
 	}
 
+	// Run dependency checks before agent invocation (v2.9+)
+	if te.EnforceDependencyChecks && task.RuntimeMetadata != nil && len(task.RuntimeMetadata.DependencyChecks) > 0 {
+		runner := te.CommandRunner
+		if runner == nil {
+			runner = NewShellCommandRunner(te.WorkDir)
+		}
+		if err := RunDependencyChecks(ctx, runner, task); err != nil {
+			result.Status = models.StatusFailed
+			result.Error = fmt.Errorf("preflight dependency check failed: %w", err)
+			_ = te.updatePlanStatus(task, StatusFailed, false)
+			return result, result.Error
+		}
+	}
+
 	// Apply integration context to integration tasks AND any task with dependencies
 	// This helps all dependent tasks understand their dependencies, not just explicit integration tasks
 	// Must be done BEFORE agent invocation to inject file context
@@ -716,6 +749,74 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			Duration:    invocation.Duration,
 		}
 
+		// Run test commands after agent output but BEFORE QC (v2.9+)
+		// Test command failure returns error immediately (task fails, no QC review)
+		if te.EnforceTestCommands && len(task.TestCommands) > 0 {
+			runner := te.CommandRunner
+			if runner == nil {
+				runner = NewShellCommandRunner(te.WorkDir)
+			}
+			testResults, testErr := RunTestCommands(ctx, runner, task)
+			te.lastTestResults = testResults // Store for QC prompt injection
+			if te.Logger != nil {
+				te.Logger.LogTestCommands(testResults)
+			}
+			if testErr != nil {
+				result.Status = models.StatusFailed
+				result.Error = fmt.Errorf("test command failed: %w", testErr)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				return result, result.Error
+			}
+		}
+
+		// Run optional per-criterion verifications (v2.9+)
+		// Verification failures do NOT block - they feed into QC prompt
+		if te.VerifyCriteria && len(task.StructuredCriteria) > 0 {
+			runner := te.CommandRunner
+			if runner == nil {
+				runner = NewShellCommandRunner(te.WorkDir)
+			}
+			criterionResults, verifyErr := RunCriterionVerifications(ctx, runner, task)
+			te.lastCriterionResults = criterionResults // Store for QC prompt injection
+			if te.Logger != nil {
+				te.Logger.LogCriterionVerifications(criterionResults)
+			}
+			if verifyErr != nil && errors.Is(verifyErr, context.Canceled) {
+				// Only fail on context cancellation, not on verification failures
+				result.Status = models.StatusFailed
+				result.Error = verifyErr
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				return result, verifyErr
+			}
+		}
+
+		// Run documentation target verification for documentation tasks (v2.9+)
+		// Verification failures do NOT block - they feed into QC prompt
+		if te.EnforceDocTargets {
+			// Documentation tasks without targets MUST fail validation (criterion #3)
+			if IsDocumentationTask(task) && !HasDocumentationTargets(task) {
+				result.Status = models.StatusFailed
+				result.Error = fmt.Errorf("documentation task %s missing required documentation_targets metadata", task.Number)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				return result, result.Error
+			}
+
+			if HasDocumentationTargets(task) {
+				docResults, docErr := VerifyDocumentationTargets(ctx, task)
+				te.lastDocTargetResults = docResults // Store for QC prompt injection
+				if te.Logger != nil {
+					te.Logger.LogDocTargetVerifications(docResults)
+				}
+				if docErr != nil && errors.Is(docErr, context.Canceled) {
+					// Only fail on context cancellation, not on verification failures
+					result.Status = models.StatusFailed
+					result.Error = docErr
+					_ = te.updatePlanStatus(task, StatusFailed, false)
+					return result, docErr
+				}
+			}
+		}
+
 		if !te.qcEnabled || te.reviewer == nil {
 			// No QC - mark as GREEN and store in history
 			execAttempt.Verdict = models.StatusGreen
@@ -733,6 +834,13 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			}
 			te.postTaskHook(ctx, &task, &result, models.StatusGreen)
 			return result, nil
+		}
+
+		// Pass test/verification results to QC before review (v2.9+)
+		if qc, ok := te.reviewer.(*QualityController); ok {
+			qc.TestCommandResults = te.lastTestResults
+			qc.CriterionVerifyResults = te.lastCriterionResults
+			qc.DocTargetResults = te.lastDocTargetResults
 		}
 
 		review, reviewErr := te.reviewer.Review(ctx, task, output)

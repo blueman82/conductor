@@ -186,6 +186,44 @@ type ValidationConfig struct {
 	// KeyPointCriteria sets how to handle key_point vs success_criteria misalignment:
 	// "warn" (default) logs a warning, "strict" fails validation, "off" disables the check
 	KeyPointCriteria string `yaml:"key_point_criteria"`
+
+	// StrictRubric enables strict rubric validation when PlannerComplianceSpec is present.
+	// When true, validates terminology alignment, task type constraints, and documentation targets.
+	// Default: false (disabled)
+	StrictRubric bool `yaml:"strict_rubric"`
+}
+
+// ExecutorConfig controls task execution behavior
+type ExecutorConfig struct {
+	// EnforceDependencyChecks enables running dependency check commands before task invocation.
+	// When true (default for plans with RuntimeMetadata), dependency checks are executed
+	// and task execution is aborted if any check fails.
+	// Default: true
+	EnforceDependencyChecks bool `yaml:"enforce_dependency_checks"`
+
+	// EnforceTestCommands enables running test commands after agent output but before QC.
+	// When true (default), test commands are executed and task fails immediately if any
+	// command exits non-zero (blocks QC review).
+	// Default: true
+	EnforceTestCommands bool `yaml:"enforce_test_commands"`
+
+	// VerifyCriteria enables running optional per-criterion verification commands.
+	// When true (default), verification blocks on StructuredCriteria are executed
+	// and results are injected into QC prompt for final judgment.
+	// Default: true
+	VerifyCriteria bool `yaml:"verify_criteria"`
+
+	// EnforcePackageGuard enables runtime package conflict guard for Go packages.
+	// When true, prevents concurrent task execution from modifying the same Go package.
+	// Tasks must acquire package locks before execution; conflicts block until released.
+	// Default: true
+	EnforcePackageGuard bool `yaml:"enforce_package_guard"`
+
+	// EnforceDocTargets enables documentation target verification for documentation tasks.
+	// When true (default), documentation targets are verified before QC to ensure
+	// agents edit the exact sections specified in the plan.
+	// Default: true
+	EnforceDocTargets bool `yaml:"enforce_doc_targets"`
 }
 
 // Config represents conductor configuration options
@@ -228,6 +266,9 @@ type Config struct {
 
 	// Validation controls plan validation strictness
 	Validation ValidationConfig `yaml:"validation"`
+
+	// Executor controls task execution behavior
+	Executor ExecutorConfig `yaml:"executor"`
 }
 
 // DefaultConsoleConfig returns ConsoleConfig with sensible default values
@@ -319,6 +360,14 @@ func DefaultConfig() *Config {
 		AgentWatch: DefaultAgentWatchConfig(),
 		Validation: ValidationConfig{
 			KeyPointCriteria: "warn",
+			StrictRubric:     false,
+		},
+		Executor: ExecutorConfig{
+			EnforceDependencyChecks: true,
+			EnforceTestCommands:     true,
+			VerifyCriteria:          true,
+			EnforcePackageGuard:     true,
+			EnforceDocTargets:       true,
 		},
 	}
 }
@@ -410,6 +459,7 @@ func LoadConfig(path string) (*Config, error) {
 		QualityControl QualityControlConfig `yaml:"quality_control"`
 		AgentWatch     AgentWatchConfig     `yaml:"agent_watch"`
 		Validation     ValidationConfig     `yaml:"validation"`
+		Executor       ExecutorConfig       `yaml:"executor"`
 	}
 
 	var yamlCfg yamlConfig
@@ -668,6 +718,31 @@ func LoadConfig(path string) (*Config, error) {
 
 			if _, exists := validationMap["key_point_criteria"]; exists {
 				cfg.Validation.KeyPointCriteria = validation.KeyPointCriteria
+			}
+			if _, exists := validationMap["strict_rubric"]; exists {
+				cfg.Validation.StrictRubric = validation.StrictRubric
+			}
+		}
+
+		// Merge Executor config
+		if executorSection, exists := rawMap["executor"]; exists && executorSection != nil {
+			executor := yamlCfg.Executor
+			executorMap, _ := executorSection.(map[string]interface{})
+
+			if _, exists := executorMap["enforce_dependency_checks"]; exists {
+				cfg.Executor.EnforceDependencyChecks = executor.EnforceDependencyChecks
+			}
+			if _, exists := executorMap["enforce_test_commands"]; exists {
+				cfg.Executor.EnforceTestCommands = executor.EnforceTestCommands
+			}
+			if _, exists := executorMap["verify_criteria"]; exists {
+				cfg.Executor.VerifyCriteria = executor.VerifyCriteria
+			}
+			if _, exists := executorMap["enforce_package_guard"]; exists {
+				cfg.Executor.EnforcePackageGuard = executor.EnforcePackageGuard
+			}
+			if _, exists := executorMap["enforce_doc_targets"]; exists {
+				cfg.Executor.EnforceDocTargets = executor.EnforceDocTargets
 			}
 		}
 	}

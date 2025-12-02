@@ -1331,3 +1331,100 @@ func TestInjectFilesIntoPrompt(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Runtime Enforcement Tests - Markdown Parity (v2.9+)
+// =============================================================================
+
+func TestMarkdown_PlannerComplianceSpec(t *testing.T) {
+	markdown := `---
+planner_compliance:
+  planner_version: "1.2.0"
+  strict_enforcement: false
+  required_features:
+    - dependency_checks
+    - documentation_targets
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`
+
+	parser := NewMarkdownParser()
+	plan, err := parser.Parse(strings.NewReader(markdown))
+	if err != nil {
+		t.Fatalf("Failed to parse markdown: %v", err)
+	}
+
+	if plan.PlannerCompliance == nil {
+		t.Fatal("expected PlannerCompliance to be populated")
+	}
+
+	if plan.PlannerCompliance.PlannerVersion != "1.2.0" {
+		t.Errorf("expected planner_version '1.2.0', got %q", plan.PlannerCompliance.PlannerVersion)
+	}
+
+	if plan.PlannerCompliance.StrictEnforcement {
+		t.Error("expected strict_enforcement to be false")
+	}
+
+	if len(plan.PlannerCompliance.RequiredFeatures) != 2 {
+		t.Errorf("expected 2 required_features, got %d", len(plan.PlannerCompliance.RequiredFeatures))
+	}
+}
+
+func TestMarkdown_PlannerComplianceMissingVersion(t *testing.T) {
+	markdown := `---
+planner_compliance:
+  strict_enforcement: true
+---
+
+# Test Plan
+
+## Task 1: Test Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`
+
+	parser := NewMarkdownParser()
+	_, err := parser.Parse(strings.NewReader(markdown))
+	if err == nil {
+		t.Error("expected error for missing planner_version")
+	}
+	if !strings.Contains(err.Error(), "planner_version") {
+		t.Errorf("expected error about planner_version, got: %v", err)
+	}
+}
+
+func TestMarkdown_LegacyPlanNoPlannerCompliance(t *testing.T) {
+	markdown := `---
+conductor:
+  default_agent: "golang-pro"
+---
+
+# Test Plan
+
+## Task 1: Legacy Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`
+
+	parser := NewMarkdownParser()
+	plan, err := parser.Parse(strings.NewReader(markdown))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if plan.PlannerCompliance != nil {
+		t.Error("expected nil PlannerCompliance for legacy plan")
+	}
+}

@@ -6,7 +6,7 @@ plan:
     - task_number: 7
       name: "User Handler"
       files:
-        - handlers/user.go
+        - handlers/user/user.go
       depends_on:
         - file: 02-middleware.yaml
           task: 5
@@ -15,7 +15,7 @@ plan:
     - task_number: 8
       name: "Product Handler"
       files:
-        - handlers/product.go
+        - handlers/product/product.go
       depends_on:
         - file: 02-middleware.yaml
           task: 4
@@ -26,7 +26,7 @@ plan:
     - task_number: 9
       name: "Order Handler"
       files:
-        - handlers/order.go
+        - handlers/order/order.go
       depends_on:
         - file: 02-middleware.yaml
           task: 4

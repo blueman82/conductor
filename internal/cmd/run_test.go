@@ -2862,3 +2862,94 @@ Do something.
 		})
 	}
 }
+
+// TestRunCommand_EnforcementFlags verifies runtime enforcement flags are registered and parsed
+func TestRunCommand_EnforcementFlags(t *testing.T) {
+	planContent := `# Test Plan
+
+## Task 1: Simple task
+**Status**: pending
+
+Test task.
+`
+
+	tests := []struct {
+		name      string
+		args      []string
+		wantErr   bool
+		checkHelp bool
+	}{
+		{
+			name:    "no-enforce-dependency-checks flag accepted",
+			args:    []string{"run", "--dry-run", "--no-enforce-dependency-checks"},
+			wantErr: false,
+		},
+		{
+			name:    "no-enforce-test-commands flag accepted",
+			args:    []string{"run", "--dry-run", "--no-enforce-test-commands"},
+			wantErr: false,
+		},
+		{
+			name:    "no-verify-criteria flag accepted",
+			args:    []string{"run", "--dry-run", "--no-verify-criteria"},
+			wantErr: false,
+		},
+		{
+			name:    "no-enforce-package-guard flag accepted",
+			args:    []string{"run", "--dry-run", "--no-enforce-package-guard"},
+			wantErr: false,
+		},
+		{
+			name:    "no-enforce-doc-targets flag accepted",
+			args:    []string{"run", "--dry-run", "--no-enforce-doc-targets"},
+			wantErr: false,
+		},
+		{
+			name:    "all enforcement flags combined",
+			args:    []string{"run", "--dry-run", "--no-enforce-dependency-checks", "--no-enforce-test-commands", "--no-verify-criteria", "--no-enforce-package-guard", "--no-enforce-doc-targets"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			planFile := createTestPlanFile(t, planContent)
+
+			// Append plan file to args
+			args := append(tt.args, planFile)
+
+			output, err := executeRunCommand(t, args)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v\nOutput: %s", err, output)
+				}
+			}
+		})
+	}
+}
+
+// TestRunCommand_EnforcementFlagsHelp verifies enforcement flags appear in help
+func TestRunCommand_EnforcementFlagsHelp(t *testing.T) {
+	cmd := NewRunCommand()
+
+	// Check each flag is registered
+	expectedFlags := []string{
+		"no-enforce-dependency-checks",
+		"no-enforce-test-commands",
+		"no-verify-criteria",
+		"no-enforce-package-guard",
+		"no-enforce-doc-targets",
+	}
+
+	for _, flagName := range expectedFlags {
+		flag := cmd.Flags().Lookup(flagName)
+		if flag == nil {
+			t.Errorf("Expected flag --%s to be registered", flagName)
+		}
+	}
+}

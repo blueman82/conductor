@@ -5,6 +5,13 @@
 # Usage:
 #   ./scripts/build.sh              # Build for all platforms
 #   ./scripts/build.sh linux amd64  # Build for specific platform
+#   ./scripts/build.sh test         # Run unit and integration tests
+#   ./scripts/build.sh ci           # Full CI: test + build
+#
+# Environment variables:
+#   SKIP_TESTS=1        Skip test execution
+#   SKIP_INTEGRATION=1  Skip integration tests (unit tests only)
+#   VERBOSE=1           Enable verbose test output
 #
 
 set -euo pipefail
@@ -59,6 +66,75 @@ print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+# Run unit tests
+run_unit_tests() {
+    print_info "Running unit tests..."
+
+    local test_flags="-race"
+    if [ "${VERBOSE:-0}" = "1" ]; then
+        test_flags="${test_flags} -v"
+    fi
+
+    if ! go test ${test_flags} ./internal/...; then
+        print_error "Unit tests failed"
+        return 1
+    fi
+
+    print_info "Unit tests passed"
+}
+
+# Run integration tests
+run_integration_tests() {
+    print_info "Running integration tests..."
+
+    local test_flags=""
+    if [ "${VERBOSE:-0}" = "1" ]; then
+        test_flags="-v"
+    fi
+
+    # Run all integration tests including runtime enforcement
+    if ! go test ${test_flags} ./test/integration/...; then
+        print_error "Integration tests failed"
+        return 1
+    fi
+
+    print_info "Integration tests passed"
+}
+
+# Run runtime enforcement integration tests specifically
+run_runtime_enforcement_tests() {
+    print_info "Running runtime enforcement integration tests..."
+
+    local test_flags=""
+    if [ "${VERBOSE:-0}" = "1" ]; then
+        test_flags="-v"
+    fi
+
+    if ! go test ${test_flags} ./test/integration -run RuntimeEnforcement; then
+        print_error "Runtime enforcement tests failed"
+        return 1
+    fi
+
+    print_info "Runtime enforcement tests passed"
+}
+
+# Run all tests (unit + integration)
+run_all_tests() {
+    if [ "${SKIP_TESTS:-0}" = "1" ]; then
+        print_warning "Skipping tests (SKIP_TESTS=1)"
+        return 0
+    fi
+
+    run_unit_tests || return 1
+
+    if [ "${SKIP_INTEGRATION:-0}" = "1" ]; then
+        print_warning "Skipping integration tests (SKIP_INTEGRATION=1)"
+        return 0
+    fi
+
+    run_integration_tests || return 1
+}
+
 # Build for a specific platform
 build_platform() {
     local os=$1
@@ -89,6 +165,43 @@ build_platform() {
     fi
 }
 
+# Build all platforms
+build_all() {
+    print_info "Building for all platforms..."
+    echo ""
+
+    # Create dist directory
+    mkdir -p "${DIST_DIR}"
+
+    local success_count=0
+    local fail_count=0
+
+    for platform in "${PLATFORMS[@]}"; do
+        local os="${platform%/*}"
+        local arch="${platform#*/}"
+
+        if build_platform "$os" "$arch"; then
+            ((success_count++))
+        else
+            ((fail_count++))
+        fi
+        echo ""
+    done
+
+    # Summary
+    print_info "Build Summary:"
+    print_info "  Success: ${success_count}"
+    if [ $fail_count -gt 0 ]; then
+        print_error "  Failed: ${fail_count}"
+        return 1
+    fi
+
+    # List all built binaries
+    echo ""
+    print_info "Built binaries in ${DIST_DIR}:"
+    ls -lh "${DIST_DIR}" | tail -n +2 || true
+}
+
 # Main function
 main() {
     print_info "Conductor Cross-Compilation Build Script"
@@ -96,6 +209,28 @@ main() {
     print_info "Build Time: ${BUILD_TIME}"
     print_info "Git Commit: ${GIT_COMMIT}"
     echo ""
+
+    # Handle special commands
+    case "${1:-}" in
+        test)
+            # Run tests only
+            run_all_tests
+            exit $?
+            ;;
+        ci)
+            # Full CI: tests + build
+            print_info "Running CI pipeline..."
+            run_all_tests || exit 1
+            echo ""
+            build_all
+            exit $?
+            ;;
+        runtime-enforcement)
+            # Run runtime enforcement tests only
+            run_runtime_enforcement_tests
+            exit $?
+            ;;
+    esac
 
     # Create dist directory
     mkdir -p "${DIST_DIR}"
@@ -108,36 +243,8 @@ main() {
         build_platform "$os" "$arch"
     else
         # Build for all platforms
-        print_info "Building for all platforms..."
-        echo ""
-
-        local success_count=0
-        local fail_count=0
-
-        for platform in "${PLATFORMS[@]}"; do
-            local os="${platform%/*}"
-            local arch="${platform#*/}"
-
-            if build_platform "$os" "$arch"; then
-                ((success_count++))
-            else
-                ((fail_count++))
-            fi
-            echo ""
-        done
-
-        # Summary
-        print_info "Build Summary:"
-        print_info "  Success: ${success_count}"
-        if [ $fail_count -gt 0 ]; then
-            print_error "  Failed: ${fail_count}"
-        fi
+        build_all
     fi
-
-    # List all built binaries
-    echo ""
-    print_info "Built binaries in ${DIST_DIR}:"
-    ls -lh "${DIST_DIR}" | tail -n +2 || true
 
     echo ""
     print_info "Build complete!"

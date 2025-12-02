@@ -22,6 +22,7 @@ Conductor is a production-ready Go CLI tool that executes implementation plans b
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Your First Execution](#your-first-execution)
+- [Runtime enforcement quickstart](#runtime-enforcement-quickstart)
 - [Basic Usage](#basic-usage)
   - [Validate a Plan](#validate-a-plan)
   - [Run a Plan](#run-a-plan)
@@ -131,6 +132,11 @@ Conductor automates complex multi-step implementations by:
   - Uses Claude CLI `--json-schema` flag for agent/QC responses
   - Eliminates parse failures and retry logic
   - Simpler, more reliable agent invocations
+- **Runtime Enforcement** (v2.9+): Hard gates and soft signals for quality assurance
+  - Test commands as hard gates (must pass for task success)
+  - Criterion verification as soft signals (influences QC review)
+  - Doc target verification for documentation requirements
+  - Dynamic terminal width for adaptive box rendering
 
 [⬆ back to top](#table-of-contents)
 
@@ -236,6 +242,51 @@ Implement main logic.
 ```bash
 ./conductor run my-plan.md --verbose
 ```
+
+[⬆ back to top](#table-of-contents)
+
+## Runtime enforcement quickstart
+
+Conductor v2.9+ enforces runtime checks that ensure tasks execute correctly. All enforcement flags default to **enabled**.
+
+### Enforcement Modes
+
+| Mode | Flag to Disable | What It Does |
+|------|-----------------|--------------|
+| Dependency Checks | `--no-enforce-dependency-checks` | Runs commands from `runtime_metadata.dependency_checks` before task execution |
+| Test Commands | `--no-enforce-test-commands` | Runs `test_commands` after agent output, blocking on failure |
+| Package Guard | `--no-enforce-package-guard` | Prevents concurrent modifications to same Go package |
+| Doc Targets | `--no-enforce-doc-targets` | Verifies `documentation_targets` exist before QC |
+| Criteria Verification | `--no-verify-criteria` | Runs verification commands from `success_criteria[].verification` blocks |
+
+### Quick Examples
+
+```bash
+# Run with all enforcement (default)
+conductor run plan.yaml
+
+# Disable test command execution (agent output not blocked by test failures)
+conductor run plan.yaml --no-enforce-test-commands
+
+# Disable package guard (allow concurrent Go package modifications)
+conductor run plan.yaml --no-enforce-package-guard
+
+# Disable all enforcement (not recommended)
+conductor run plan.yaml \
+  --no-enforce-dependency-checks \
+  --no-enforce-test-commands \
+  --no-enforce-package-guard \
+  --no-enforce-doc-targets \
+  --no-verify-criteria
+```
+
+### Failure Behavior
+
+- **Test command failures** → Task blocked immediately (before QC review)
+- **Dependency check failures** → Task blocked at preflight
+- **Criterion verification failures** → Fed into QC prompt for human judgment
+
+See [Runtime Enforcement Guide](docs/examples/runtime-enforcement.md) for detailed walkthrough.
 
 [⬆ back to top](#table-of-contents)
 

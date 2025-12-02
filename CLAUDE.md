@@ -222,12 +222,13 @@ tasks:
 
 ## Production Status
 
-**v2.8.0**: 86%+ test coverage (465+ tests). Complete pipeline with JSON schema enforcement.
+**v2.9.0**: 86%+ test coverage (465+ tests). Complete pipeline with runtime enforcement.
 
 **Major Features**:
 - Multi-agent orchestration with dependency resolution
 - QC reviews with structured JSON responses
 - JSON schema enforcement (v2.8+) - guaranteed response structure
+- Runtime enforcement (v2.9+) - hard gates and soft signals
 - Adaptive learning from execution history
 - Multi-file plans with cross-file dependencies (v2.6+)
 - Resumable execution with state tracking
@@ -244,6 +245,7 @@ tasks:
 - v2.6+: Explicit cross-file dependencies, enhanced validation
 - v2.7: Agent Watch integration, behavioral analytics
 - v2.8: JSON schema enforcement via --json-schema flag
+- v2.9: Runtime enforcement with test commands, criterion verification, dynamic terminal width
 
 ## Module Path
 

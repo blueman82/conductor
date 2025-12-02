@@ -127,6 +127,13 @@ Examples:
 	cmd.Flags().String("qc-agents", "", "Override QC agents (comma-separated, e.g., golang-pro,code-reviewer)")
 	cmd.Flags().String("qc-mode", "", "Override QC agent selection mode (auto, explicit, mixed)")
 
+	// Runtime enforcement flags (v2.9+)
+	cmd.Flags().Bool("no-enforce-dependency-checks", false, "Disable dependency check commands before task execution")
+	cmd.Flags().Bool("no-enforce-test-commands", false, "Disable test command execution after agent output")
+	cmd.Flags().Bool("no-verify-criteria", false, "Disable per-criterion verification commands")
+	cmd.Flags().Bool("no-enforce-package-guard", false, "Disable Go package conflict guard")
+	cmd.Flags().Bool("no-enforce-doc-targets", false, "Disable documentation target verification")
+
 	return cmd
 }
 
@@ -255,6 +262,24 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 		cfg.QualityControl.Agents.Mode = "explicit"
 		cfg.QualityControl.Agents.ExplicitList = agentsList
+	}
+
+	// Process runtime enforcement flags (v2.9+)
+	// These flags disable enforcement features (defaults are true in config)
+	if cmd.Flags().Changed("no-enforce-dependency-checks") {
+		cfg.Executor.EnforceDependencyChecks = false
+	}
+	if cmd.Flags().Changed("no-enforce-test-commands") {
+		cfg.Executor.EnforceTestCommands = false
+	}
+	if cmd.Flags().Changed("no-verify-criteria") {
+		cfg.Executor.VerifyCriteria = false
+	}
+	if cmd.Flags().Changed("no-enforce-package-guard") {
+		cfg.Executor.EnforcePackageGuard = false
+	}
+	if cmd.Flags().Changed("no-enforce-doc-targets") {
+		cfg.Executor.EnforceDocTargets = false
 	}
 
 	// Validate merged configuration
@@ -551,9 +576,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.AutoAdaptAgent = cfg.Learning.AutoAdaptAgent
 	taskExec.MinFailuresBeforeAdapt = cfg.Learning.MinFailuresBeforeAdapt
 	taskExec.SwapDuringRetries = cfg.Learning.SwapDuringRetries
+	taskExec.Logger = consoleLog // Runtime enforcement logging
 
 	// Create wave executor with task executor and config
-	waveExec := executor.NewWaveExecutorWithConfig(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed)
+	waveExec := executor.NewWaveExecutorWithPackageGuard(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed, cfg.Executor.EnforcePackageGuard)
 
 	// Create orchestrator with learning integration
 	orch := executor.NewOrchestratorFromConfig(executor.OrchestratorConfig{

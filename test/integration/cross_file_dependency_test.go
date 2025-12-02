@@ -760,6 +760,166 @@ func TestCrossFileDependency_ContextualExecution(t *testing.T) {
 }
 
 // =============================================================================
+// Registry Enforcement Tests
+// =============================================================================
+
+// TestCrossFileDependency_RegistryEnforcement verifies that data flow registry
+// is enforced during cross-file validation.
+func TestCrossFileDependency_RegistryEnforcement(t *testing.T) {
+	tests := []struct {
+		name        string
+		plan1       *models.Plan
+		plan2       *models.Plan
+		registry    *models.DataFlowRegistry
+		shouldError bool
+		errorMsg    string
+	}{
+		{
+			name: "ValidRegistry_ConsumerDependsOnProducer",
+			plan1: &models.Plan{
+				Tasks: []models.Task{
+					{Number: "1", Name: "Producer", Prompt: "Produce data", DependsOn: []string{}},
+				},
+			},
+			plan2: &models.Plan{
+				Tasks: []models.Task{
+					{Number: "2", Name: "Consumer", Prompt: "Consume data", DependsOn: []string{"1"}},
+				},
+			},
+			registry: &models.DataFlowRegistry{
+				Producers: map[string][]models.DataFlowEntry{
+					"DataSymbol": {{TaskNumber: "1", Description: "Produces data"}},
+				},
+				Consumers: map[string][]models.DataFlowEntry{
+					"DataSymbol": {{TaskNumber: "2", Description: "Consumes data"}},
+				},
+			},
+			shouldError: false,
+		},
+		{
+			name: "InvalidRegistry_ConsumerMissingDependency",
+			plan1: &models.Plan{
+				Tasks: []models.Task{
+					{Number: "1", Name: "Producer", Prompt: "Produce data", DependsOn: []string{}},
+				},
+			},
+			plan2: &models.Plan{
+				Tasks: []models.Task{
+					{Number: "2", Name: "Consumer", Prompt: "Consume data", DependsOn: []string{}}, // No dependency!
+				},
+			},
+			registry: &models.DataFlowRegistry{
+				Producers: map[string][]models.DataFlowEntry{
+					"DataSymbol": {{TaskNumber: "1", Description: "Produces data"}},
+				},
+				Consumers: map[string][]models.DataFlowEntry{
+					"DataSymbol": {{TaskNumber: "2", Description: "Consumes data"}},
+				},
+			},
+			shouldError: true,
+			errorMsg:    "task 2",
+		},
+		{
+			name: "InvalidRegistry_NoProducer",
+			plan1: &models.Plan{
+				Tasks: []models.Task{
+					{Number: "1", Name: "Task 1", Prompt: "Task 1", DependsOn: []string{}},
+				},
+			},
+			plan2: &models.Plan{
+				Tasks: []models.Task{
+					{Number: "2", Name: "Consumer", Prompt: "Consume data", DependsOn: []string{}},
+				},
+			},
+			registry: &models.DataFlowRegistry{
+				Producers: map[string][]models.DataFlowEntry{}, // No producer!
+				Consumers: map[string][]models.DataFlowEntry{
+					"MissingSymbol": {{TaskNumber: "2", Description: "Consumes missing symbol"}},
+				},
+			},
+			// NOTE: ValidateRegistryPrerequisites only checks dependency ordering,
+			// not missing producers. Missing producer is caught by rubric.ValidateRegistryBindings
+			shouldError: false, // Graph validation doesn't catch missing producers
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Merge plans
+			mergedPlan, err := parser.MergePlans(tt.plan1, tt.plan2)
+			if err != nil {
+				t.Fatalf("Failed to merge plans: %v", err)
+			}
+
+			// Attach registry and validate
+			mergedPlan.DataFlowRegistry = tt.registry
+
+			// Validate registry
+			err = executor.ValidateRegistryPrerequisites(mergedPlan.Tasks, tt.registry)
+
+			if tt.shouldError && err == nil {
+				t.Errorf("Expected error containing %q, got nil", tt.errorMsg)
+			}
+			if !tt.shouldError && err != nil {
+				t.Errorf("Expected no error, got: %v", err)
+			}
+			if tt.shouldError && err != nil && !containsString(err.Error(), tt.errorMsg) {
+				t.Errorf("Expected error to contain %q, got: %v", tt.errorMsg, err)
+			}
+		})
+	}
+}
+
+// TestCrossFileDependency_RegistryTransitive verifies transitive dependencies satisfy registry
+func TestCrossFileDependency_RegistryTransitive(t *testing.T) {
+	// Plan with transitive dependency: 1 -> 2 -> 3
+	// Registry says 3 consumes from 1
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Producer", Prompt: "Produce", DependsOn: []string{}},
+			{Number: "2", Name: "Middle", Prompt: "Middle", DependsOn: []string{"1"}},
+			{Number: "3", Name: "Consumer", Prompt: "Consume", DependsOn: []string{"2"}}, // Transitively depends on 1
+		},
+	}
+
+	registry := &models.DataFlowRegistry{
+		Producers: map[string][]models.DataFlowEntry{
+			"Symbol": {{TaskNumber: "1", Description: "Produces"}},
+		},
+		Consumers: map[string][]models.DataFlowEntry{
+			"Symbol": {{TaskNumber: "3", Description: "Consumes"}},
+		},
+	}
+
+	err := executor.ValidateRegistryPrerequisites(plan.Tasks, registry)
+	if err != nil {
+		t.Errorf("Expected transitive dependency to satisfy registry, got: %v", err)
+	}
+}
+
+// TestCrossFileDependency_RegistryWithCrossFileDeps verifies registry works with cross-file dependencies
+func TestCrossFileDependency_RegistryWithCrossFileDeps(t *testing.T) {
+	tasks := []models.Task{
+		{Number: "1", Name: "Producer", Prompt: "Produce", DependsOn: []string{}},
+		{Number: "2", Name: "Consumer", Prompt: "Consume", DependsOn: []string{"file:plan-01.yaml:task:1"}},
+	}
+
+	registry := &models.DataFlowRegistry{
+		Producers: map[string][]models.DataFlowEntry{
+			"Symbol": {{TaskNumber: "1", Description: "Produces"}},
+		},
+		Consumers: map[string][]models.DataFlowEntry{
+			"Symbol": {{TaskNumber: "2", Description: "Consumes"}},
+		},
+	}
+
+	err := executor.ValidateRegistryPrerequisites(tasks, registry)
+	if err != nil {
+		t.Errorf("Expected cross-file dependency to satisfy registry, got: %v", err)
+	}
+}
+
+// =============================================================================
 // Helper Functions
 // =============================================================================
 

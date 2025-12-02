@@ -1,0 +1,187 @@
+# Runtime Enforcement Integration Test Fixture
+# Tests all enforcement modes: dependency_checks, test_commands, package_guard, documentation_targets
+#
+# This fixture is designed for integration tests that verify the runtime enforcement
+# pipeline without requiring external agent execution.
+
+conductor:
+  default_agent: "golang-pro"
+  quality_control:
+    enabled: true
+    retry_on_red: 1
+
+# PlannerComplianceSpec for strict rubric validation
+planner_compliance:
+  planner_version: "2.9.0"
+  strict_enforcement: false  # Set false for test fixture to avoid strict validation issues
+  required_features:
+    - dependency_checks
+    - test_commands
+    - package_guard
+    - documentation_targets
+
+# Data flow registry demonstrating producer/consumer relationships
+data_flow_registry:
+  producers:
+    RuntimeConfig:
+      - task: "1"
+        description: "Produces runtime configuration settings"
+    EnforcementResult:
+      - task: "2"
+        description: "Produces enforcement execution results"
+  consumers:
+    RuntimeConfig:
+      - task: "2"
+        description: "Consumes config for enforcement execution"
+      - task: "3"
+        description: "Consumes config for integration tests"
+    EnforcementResult:
+      - task: "3"
+        description: "Consumes results for validation"
+  documentation_targets:
+    "1":
+      - location: "test/integration/fixtures/runtime_doc_target.md"
+        section: "# Configuration"
+    "3":
+      - location: "test/integration/fixtures/runtime_doc_target.md"
+        section: "# Integration"
+
+plan:
+  metadata:
+    feature_name: "Runtime Enforcement Integration"
+    created: "2025-12-02"
+    estimated_tasks: 4
+
+  tasks:
+    # Task 1: Foundation - passes all dependency checks
+    - task_number: 1
+      name: "Setup runtime enforcement config"
+      type: "component"
+      files:
+        - "internal/config/config.go"
+      depends_on: []
+      estimated_time: "10m"
+      agent: "golang-pro"
+      description: "Configure runtime enforcement toggles"
+
+      runtime_metadata:
+        dependency_checks:
+          - command: "test -f go.mod"
+            description: "Verify Go module exists"
+          - command: "go version"
+            description: "Verify Go is available"
+
+        documentation_targets:
+          - location: "test/integration/fixtures/runtime_doc_target.md"
+            section: "# Configuration"
+
+        prompt_blocks:
+          - type: "context"
+            content: "This task sets up enforcement configuration"
+
+      success_criteria:
+        - criterion: "Config struct has enforcement fields"
+        - criterion: "Default values are sensible"
+          verification:
+            command: "echo 'Verification placeholder'"
+            expected: "placeholder"
+
+      test_commands:
+        - "echo 'Task 1 test command passed'"
+
+    # Task 2: Enforcement executor - demonstrates all features
+    - task_number: 2
+      name: "Execute runtime enforcement checks"
+      type: "component"
+      files:
+        - "internal/executor/preflight.go"
+        - "internal/executor/task.go"
+      depends_on: [1]
+      estimated_time: "20m"
+      agent: "golang-pro"
+      description: "Execute preflight dependency checks and test commands"
+
+      runtime_metadata:
+        dependency_checks:
+          - command: "echo 'dependency check passed'"
+            description: "Simulated dependency check"
+
+        documentation_targets: []
+
+        prompt_blocks:
+          - type: "constraint"
+            content: "Must not modify files outside declared scope"
+
+      success_criteria:
+        - criterion: "RunDependencyChecks executes all checks"
+        - criterion: "Test commands run after agent output"
+
+      test_commands:
+        - "echo 'Task 2 test command passed'"
+
+    # Task 3: Integration task with dual criteria
+    - task_number: 3
+      name: "Validate enforcement integration"
+      type: "integration"
+      files:
+        - "internal/executor/wave.go"
+      depends_on: [1, 2]
+      estimated_time: "15m"
+      agent: "golang-pro"
+      description: "Verify all enforcement modes work together"
+
+      runtime_metadata:
+        dependency_checks:
+          - command: "echo 'integration check passed'"
+            description: "Pre-integration validation"
+
+        documentation_targets:
+          - location: "test/integration/fixtures/runtime_doc_target.md"
+            section: "# Integration"
+
+        prompt_blocks: []
+
+      # Component-level success criteria
+      success_criteria:
+        - criterion: "Wave executor respects enforcement toggles"
+        - criterion: "Package guard prevents concurrent conflicts"
+
+      # Integration-level criteria (dual criteria validation)
+      integration_criteria:
+        - "Preflight checks complete before agent invocation"
+        - "Test commands execute after agent output"
+        - "Documentation targets verified before QC"
+
+      test_commands:
+        - "echo 'Task 3 integration test passed'"
+
+    # Task 4: Package guard demonstration
+    # NOTE: depends_on includes task 3 to serialize access to internal/executor package
+    # (Tasks 3 and 4 both touch files in internal/executor)
+    - task_number: 4
+      name: "Package guard enforcement"
+      type: "component"
+      files:
+        - "internal/executor/package_guard.go"
+      depends_on: [3]
+      estimated_time: "10m"
+      agent: "golang-pro"
+      description: "Verify package guard prevents concurrent modifications"
+
+      runtime_metadata:
+        dependency_checks:
+          - command: "echo 'package guard check passed'"
+            description: "Verify package guard module"
+
+        documentation_targets: []
+
+        prompt_blocks:
+          - type: "context"
+            content: "Package guard ensures Go package isolation"
+
+      success_criteria:
+        - criterion: "PackageGuard.Acquire blocks concurrent access"
+        - criterion: "PackageGuard.TryAcquire returns immediately"
+
+      test_commands:
+        - "echo 'Task 4 package guard test passed'"

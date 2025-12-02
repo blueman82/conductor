@@ -41,3 +41,36 @@ func ValidateIntegrationTask(task *models.Task) error {
 
 	return nil
 }
+
+// ValidatePlannerComplianceFields validates that planner_compliance contains only known fields
+// This is used for strict validation when parsing raw YAML
+func ValidatePlannerComplianceFields(rawFields map[string]interface{}) error {
+	knownFields := map[string]bool{
+		"planner_version":    true,
+		"strict_enforcement": true,
+		"required_features":  true,
+	}
+
+	for field := range rawFields {
+		if !knownFields[field] {
+			return fmt.Errorf("planner_compliance: unknown field %q", field)
+		}
+	}
+
+	return nil
+}
+
+// ValidateRuntimeMetadataRequired checks if runtime_metadata is required based on compliance settings
+func ValidateRuntimeMetadataRequired(plan *models.Plan) error {
+	if plan.PlannerCompliance == nil || !plan.PlannerCompliance.StrictEnforcement {
+		return nil
+	}
+
+	for _, task := range plan.Tasks {
+		if task.RuntimeMetadata == nil {
+			return fmt.Errorf("task %s: runtime_metadata is required under strict enforcement", task.Number)
+		}
+	}
+
+	return nil
+}

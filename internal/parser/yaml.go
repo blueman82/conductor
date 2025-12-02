@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -16,8 +17,11 @@ type YAMLParser struct{}
 
 // yamlPlan represents the structure of a YAML plan file
 type yamlPlan struct {
-	Conductor *yamlConductorConfig `yaml:"conductor"`
-	Plan      struct {
+	Conductor            *yamlConductorConfig       `yaml:"conductor"`
+	PlannerCompliance    *yamlPlannerComplianceSpec `yaml:"planner_compliance"`
+	PlannerComplianceRaw map[string]interface{}     `yaml:"-"` // For unknown field validation
+	DataFlowRegistry     *yamlDataFlowRegistry      `yaml:"data_flow_registry"`
+	Plan                 struct {
 		Metadata struct {
 			FeatureName    string `yaml:"feature_name"`
 			Created        string `yaml:"created"`
@@ -27,23 +31,31 @@ type yamlPlan struct {
 	} `yaml:"plan"`
 }
 
+// yamlPlannerComplianceSpec represents the planner compliance section (v2.9+)
+type yamlPlannerComplianceSpec struct {
+	PlannerVersion    string   `yaml:"planner_version"`
+	StrictEnforcement bool     `yaml:"strict_enforcement"`
+	RequiredFeatures  []string `yaml:"required_features"`
+}
+
 // yamlTask represents a single task in the YAML plan
 type yamlTask struct {
-	TaskNumber          interface{}   `yaml:"task_number"` // Accepts int, float, or string
-	Name                string        `yaml:"name"`
-	Files               []string      `yaml:"files"`
-	DependsOn           []interface{} `yaml:"depends_on"` // Accepts int, float, or string
-	EstimatedTime       string        `yaml:"estimated_time"`
-	Agent               string        `yaml:"agent"`
-	WorktreeGroup       string        `yaml:"worktree_group"` // Worktree group for task organization
-	Status              string        `yaml:"status"`
-	CompletedDate       string        `yaml:"completed_date"` // Date format: YYYY-MM-DD
-	CompletedAt         string        `yaml:"completed_at"`   // Timestamp format: RFC3339
-	Description         string        `yaml:"description"`
-	SuccessCriteria     []string      `yaml:"success_criteria"`     // Success criteria for task verification
-	TestCommands        []string      `yaml:"test_commands"`        // Commands to run for verification
-	Type                string        `yaml:"type"`                 // Task type: regular or integration
-	IntegrationCriteria []string      `yaml:"integration_criteria"` // Criteria for integration tasks
+	TaskNumber          interface{}          `yaml:"task_number"` // Accepts int, float, or string
+	Name                string               `yaml:"name"`
+	Files               []string             `yaml:"files"`
+	DependsOn           []interface{}        `yaml:"depends_on"` // Accepts int, float, or string
+	EstimatedTime       string               `yaml:"estimated_time"`
+	Agent               string               `yaml:"agent"`
+	WorktreeGroup       string               `yaml:"worktree_group"` // Worktree group for task organization
+	Status              string               `yaml:"status"`
+	CompletedDate       string               `yaml:"completed_date"` // Date format: YYYY-MM-DD
+	CompletedAt         string               `yaml:"completed_at"`   // Timestamp format: RFC3339
+	Description         string               `yaml:"description"`
+	SuccessCriteria     interface{}          `yaml:"success_criteria"`     // Success criteria - supports both []string and []SuccessCriterion
+	TestCommands        []string             `yaml:"test_commands"`        // Commands to run for verification
+	Type                string               `yaml:"type"`                 // Task type: regular or integration
+	IntegrationCriteria []string             `yaml:"integration_criteria"` // Criteria for integration tasks
+	RuntimeMetadata     *yamlRuntimeMetadata `yaml:"runtime_metadata"`     // Runtime enforcement metadata (v2.9+)
 	TestFirst           struct {
 		TestFile        string   `yaml:"test_file"`
 		Structure       []string `yaml:"structure"`
@@ -119,6 +131,44 @@ type yamlConductorConfig struct {
 	} `yaml:"worktree_groups"`
 }
 
+// yamlRuntimeMetadata represents task runtime metadata (v2.9+)
+type yamlRuntimeMetadata struct {
+	DependencyChecks     []yamlDependencyCheck     `yaml:"dependency_checks"`
+	DocumentationTargets []yamlDocumentationTarget `yaml:"documentation_targets"`
+	PromptBlocks         []yamlPromptBlock         `yaml:"prompt_blocks"`
+}
+
+// yamlDependencyCheck represents a dependency check command
+type yamlDependencyCheck struct {
+	Command     string `yaml:"command"`
+	Description string `yaml:"description"`
+}
+
+// yamlDocumentationTarget represents a documentation location
+type yamlDocumentationTarget struct {
+	Location string `yaml:"location"`
+	Section  string `yaml:"section"`
+}
+
+// yamlPromptBlock represents a structured prompt section
+type yamlPromptBlock struct {
+	Type    string `yaml:"type"`
+	Content string `yaml:"content"`
+}
+
+// yamlSuccessCriterion represents a success criterion with optional verification
+type yamlSuccessCriterion struct {
+	Criterion    string                     `yaml:"criterion"`
+	Verification *yamlCriterionVerification `yaml:"verification"`
+}
+
+// yamlCriterionVerification represents a verification block for a criterion
+type yamlCriterionVerification struct {
+	Command     string `yaml:"command"`
+	Expected    string `yaml:"expected"`
+	Description string `yaml:"description"`
+}
+
 // NewYAMLParser creates a new YAML parser instance
 func NewYAMLParser() *YAMLParser {
 	return &YAMLParser{}
@@ -126,10 +176,26 @@ func NewYAMLParser() *YAMLParser {
 
 // Parse parses a YAML plan from an io.Reader and returns a models.Plan
 func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
+	// Read all content for multiple passes
+	content, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read content: %w", err)
+	}
+
 	var yp yamlPlan
-	decoder := yaml.NewDecoder(r)
+	decoder := yaml.NewDecoder(strings.NewReader(string(content)))
 	if err := decoder.Decode(&yp); err != nil {
 		return nil, fmt.Errorf("failed to decode YAML: %w", err)
+	}
+
+	// Second pass: check for unknown fields in planner_compliance
+	var rawPlan map[string]interface{}
+	if err := yaml.Unmarshal(content, &rawPlan); err == nil {
+		if pc, ok := rawPlan["planner_compliance"].(map[string]interface{}); ok {
+			if err := ValidatePlannerComplianceFields(pc); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	plan := &models.Plan{
@@ -140,6 +206,29 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 	if yp.Conductor != nil {
 		if err := parseConductorConfigYAML(yp.Conductor, plan); err != nil {
 			return nil, fmt.Errorf("failed to parse conductor config: %w", err)
+		}
+	}
+
+	// Parse planner compliance if present (v2.9+)
+	if yp.PlannerCompliance != nil {
+		if err := parsePlannerComplianceYAML(yp.PlannerCompliance, plan); err != nil {
+			return nil, fmt.Errorf("failed to parse planner_compliance: %w", err)
+		}
+	}
+
+	// Parse data flow registry if present (v2.9+)
+	if yp.DataFlowRegistry != nil {
+		registry, err := ParseDataFlowRegistry(yp.DataFlowRegistry)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse data_flow_registry: %w", err)
+		}
+		plan.DataFlowRegistry = registry
+	}
+
+	// Validate data flow registry requirements
+	if IsDataFlowRegistryRequired(plan.PlannerCompliance) {
+		if err := ValidateDataFlowRegistry(plan.DataFlowRegistry, true); err != nil {
+			return nil, err
 		}
 	}
 
@@ -156,6 +245,12 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 			return nil, fmt.Errorf("task %s: %w", taskNum, err)
 		}
 
+		// Parse success criteria (supports both []string and []SuccessCriterion)
+		successCriteria, structuredCriteria, err := parseSuccessCriteria(yt.SuccessCriteria, taskNum)
+		if err != nil {
+			return nil, err
+		}
+
 		task := models.Task{
 			Number:              taskNum,
 			Name:                yt.Name,
@@ -165,10 +260,16 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 			Agent:               yt.Agent,
 			WorktreeGroup:       yt.WorktreeGroup,
 			Status:              yt.Status,
-			SuccessCriteria:     yt.SuccessCriteria,
+			SuccessCriteria:     successCriteria,
+			StructuredCriteria:  structuredCriteria,
 			TestCommands:        yt.TestCommands,
 			Type:                yt.Type,
 			IntegrationCriteria: yt.IntegrationCriteria,
+		}
+
+		// Parse runtime metadata if present (v2.9+)
+		if yt.RuntimeMetadata != nil {
+			task.RuntimeMetadata = parseRuntimeMetadata(yt.RuntimeMetadata)
 		}
 
 		// Parse estimated time
@@ -203,6 +304,15 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 		task.Prompt = buildPromptFromYAML(&yt)
 
 		plan.Tasks = append(plan.Tasks, task)
+	}
+
+	// Validate runtime metadata requirements if strict enforcement is enabled
+	if plan.PlannerCompliance != nil && plan.PlannerCompliance.StrictEnforcement {
+		for _, task := range plan.Tasks {
+			if task.RuntimeMetadata == nil {
+				return nil, fmt.Errorf("task %s: runtime_metadata is required under strict enforcement", task.Number)
+			}
+		}
 	}
 
 	return plan, nil
@@ -663,4 +773,133 @@ func parseCompletionDate(dateStr string) (time.Time, error) {
 // parseCompletionTimestamp parses a timestamp string in RFC3339 format and returns a time.Time
 func parseCompletionTimestamp(timestampStr string) (time.Time, error) {
 	return time.Parse(time.RFC3339, timestampStr)
+}
+
+// parsePlannerComplianceYAML parses planner compliance configuration (v2.9+)
+func parsePlannerComplianceYAML(cfg *yamlPlannerComplianceSpec, plan *models.Plan) error {
+	// Validate required planner_version
+	if cfg.PlannerVersion == "" {
+		return fmt.Errorf("planner_compliance: planner_version is required")
+	}
+
+	plan.PlannerCompliance = &models.PlannerComplianceSpec{
+		PlannerVersion:    cfg.PlannerVersion,
+		StrictEnforcement: cfg.StrictEnforcement,
+		RequiredFeatures:  cfg.RequiredFeatures,
+	}
+
+	return nil
+}
+
+// parseRuntimeMetadata converts yamlRuntimeMetadata to models.TaskMetadataRuntime
+func parseRuntimeMetadata(yrm *yamlRuntimeMetadata) *models.TaskMetadataRuntime {
+	rm := &models.TaskMetadataRuntime{
+		DependencyChecks:     make([]models.DependencyCheck, 0, len(yrm.DependencyChecks)),
+		DocumentationTargets: make([]models.DocumentationTarget, 0, len(yrm.DocumentationTargets)),
+		PromptBlocks:         make([]models.PromptBlock, 0, len(yrm.PromptBlocks)),
+	}
+
+	for _, dc := range yrm.DependencyChecks {
+		rm.DependencyChecks = append(rm.DependencyChecks, models.DependencyCheck{
+			Command:     dc.Command,
+			Description: dc.Description,
+		})
+	}
+
+	for _, dt := range yrm.DocumentationTargets {
+		rm.DocumentationTargets = append(rm.DocumentationTargets, models.DocumentationTarget{
+			Location: dt.Location,
+			Section:  dt.Section,
+		})
+	}
+
+	for _, pb := range yrm.PromptBlocks {
+		rm.PromptBlocks = append(rm.PromptBlocks, models.PromptBlock{
+			Type:    pb.Type,
+			Content: pb.Content,
+		})
+	}
+
+	return rm
+}
+
+// parseSuccessCriteria parses success criteria which can be either []string or []SuccessCriterion
+// Returns both the legacy string array and the new structured criteria array
+func parseSuccessCriteria(input interface{}, taskNum string) ([]string, []models.SuccessCriterion, error) {
+	if input == nil {
+		return nil, nil, nil
+	}
+
+	// Try parsing as []interface{} which could be either strings or structured objects
+	items, ok := input.([]interface{})
+	if !ok {
+		return nil, nil, fmt.Errorf("task %s: success_criteria must be an array", taskNum)
+	}
+
+	var legacyCriteria []string
+	var structuredCriteria []models.SuccessCriterion
+
+	for i, item := range items {
+		switch v := item.(type) {
+		case string:
+			// Legacy format: simple string
+			legacyCriteria = append(legacyCriteria, v)
+			structuredCriteria = append(structuredCriteria, models.SuccessCriterion{
+				Criterion: v,
+			})
+		case map[string]interface{}:
+			// Structured format with criterion and optional verification
+			criterion, ok := v["criterion"].(string)
+			if !ok {
+				return nil, nil, fmt.Errorf("task %s: success_criteria[%d]: criterion must be a string", taskNum, i)
+			}
+
+			sc := models.SuccessCriterion{
+				Criterion: criterion,
+			}
+			legacyCriteria = append(legacyCriteria, criterion)
+
+			// Parse optional verification block
+			if verif, hasVerif := v["verification"]; hasVerif && verif != nil {
+				verifMap, ok := verif.(map[string]interface{})
+				if !ok {
+					return nil, nil, fmt.Errorf("task %s: success_criteria[%d]: verification must be an object", taskNum, i)
+				}
+
+				cv := &models.CriterionVerification{}
+				if cmd, ok := verifMap["command"].(string); ok {
+					cv.Command = cmd
+				}
+				if exp, ok := verifMap["expected"].(string); ok {
+					cv.Expected = exp
+				}
+				if desc, ok := verifMap["description"].(string); ok {
+					cv.Description = desc
+				}
+
+				// Validate verification block has command
+				if cv.Command == "" {
+					return nil, nil, fmt.Errorf("task %s: success_criteria[%d]: verification command cannot be empty", taskNum, i)
+				}
+
+				sc.Verification = cv
+			}
+
+			structuredCriteria = append(structuredCriteria, sc)
+		default:
+			return nil, nil, fmt.Errorf("task %s: success_criteria[%d]: unsupported type %T", taskNum, i, v)
+		}
+	}
+
+	return legacyCriteria, structuredCriteria, nil
+}
+
+// ParseFile parses a YAML plan file and returns a models.Plan
+func (p *YAMLParser) ParseFile(path string) (*models.Plan, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", path, err)
+	}
+	defer file.Close()
+	return p.Parse(file)
 }

@@ -77,6 +77,11 @@ type QualityController struct {
 	Logger              QCLogger                   // Logger for QC events (optional, can be nil)
 	IntelligentSelector *IntelligentSelector       // Intelligent selector for mode="intelligent" (v2.4+)
 	BehavioralMetrics   *BehavioralMetricsProvider // Provider for behavioral metrics context (v2.7+)
+
+	// Test/verification results for QC prompt injection (v2.9+)
+	TestCommandResults      []TestCommandResult           // Results from RunTestCommands
+	CriterionVerifyResults  []CriterionVerificationResult // Results from RunCriterionVerifications
+	DocTargetResults        []DocTargetResult             // Results from VerifyDocumentationTargets
 }
 
 // QCLogger is the minimal interface for QC logging functionality
@@ -251,6 +256,24 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 	sb.WriteString("## AGENT OUTPUT\n```\n")
 	sb.WriteString(output)
 	sb.WriteString("\n```\n\n")
+
+	// Inject test command results (v2.9+)
+	if len(qc.TestCommandResults) > 0 {
+		sb.WriteString(FormatTestResults(qc.TestCommandResults))
+		sb.WriteString("\n")
+	}
+
+	// Inject criterion verification results (v2.9+)
+	if len(qc.CriterionVerifyResults) > 0 {
+		sb.WriteString(FormatCriterionResults(qc.CriterionVerifyResults))
+		sb.WriteString("\n")
+	}
+
+	// Inject documentation target verification results (v2.9+)
+	if len(qc.DocTargetResults) > 0 {
+		sb.WriteString(FormatDocTargetResults(qc.DocTargetResults))
+		sb.WriteString("\n")
+	}
 
 	// Load historical context if learning enabled
 	if qc.LearningStore != nil {
