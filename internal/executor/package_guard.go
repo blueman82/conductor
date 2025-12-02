@@ -124,9 +124,9 @@ func findUnserializedPairs(taskNums []string, deps map[string]map[string]bool) [
 // PackageGuard provides runtime enforcement of package isolation.
 // It ensures no two tasks modify the same Go package concurrently.
 type PackageGuard struct {
-	mu       sync.Mutex
-	locks    map[string]*packageLock // package path -> lock info
-	waiters  map[string][]chan struct{}
+	mu      sync.Mutex
+	locks   map[string]*packageLock // package path -> lock info
+	waiters map[string][]chan struct{}
 }
 
 type packageLock struct {

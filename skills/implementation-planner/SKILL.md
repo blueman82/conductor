@@ -259,6 +259,36 @@ grep -A5 "func <name>" <file>
 □ Files are flat lists (not nested)
 ```
 
+### 6.5 Runtime Enforcement (v2.9+)
+
+Conductor enforces quality gates at runtime:
+
+| Field | Type | Behavior |
+|-------|------|----------|
+| `test_commands` | **Hard gate** | Must pass or task fails |
+| `key_points` | **Soft signal** | Verified, results sent to QC |
+| `documentation_targets` | **Soft signal** | Checked, results sent to QC |
+
+```yaml
+# Hard gate - blocks task if fails:
+test_commands:
+  - "go test ./internal/executor -run TestFoo"
+  - "go build ./..."
+
+# Soft signal - verified before QC:
+implementation:
+  key_points:
+    - point: "Function name"
+      details: "What it does"
+      reference: "path/to/file.go"  # Verified to exist
+
+# Soft signal - for doc tasks:
+documentation_targets:
+  - file: "docs/README.md"
+    section: "## Installation"
+    action: "update"
+```
+
 ---
 
 ## Phase 7: YAML Generation

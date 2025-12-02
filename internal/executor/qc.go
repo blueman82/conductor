@@ -79,9 +79,9 @@ type QualityController struct {
 	BehavioralMetrics   *BehavioralMetricsProvider // Provider for behavioral metrics context (v2.7+)
 
 	// Test/verification results for QC prompt injection (v2.9+)
-	TestCommandResults      []TestCommandResult           // Results from RunTestCommands
-	CriterionVerifyResults  []CriterionVerificationResult // Results from RunCriterionVerifications
-	DocTargetResults        []DocTargetResult             // Results from VerifyDocumentationTargets
+	TestCommandResults     []TestCommandResult           // Results from RunTestCommands
+	CriterionVerifyResults []CriterionVerificationResult // Results from RunCriterionVerifications
+	DocTargetResults       []DocTargetResult             // Results from VerifyDocumentationTargets
 }
 
 // QCLogger is the minimal interface for QC logging functionality

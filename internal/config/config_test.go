@@ -2921,28 +2921,28 @@ func TestValidationConfig_StrictRubricDefault(t *testing.T) {
 // TestValidationConfig_StrictRubricYAMLMerge tests that YAML config overrides StrictRubric
 func TestValidationConfig_StrictRubricYAMLMerge(t *testing.T) {
 	tests := []struct {
-		name         string
-		yaml         string
+		name             string
+		yaml             string
 		wantStrictRubric bool
 	}{
 		{
-			name:         "strict_rubric enabled",
-			yaml:         "validation:\n  strict_rubric: true\n",
+			name:             "strict_rubric enabled",
+			yaml:             "validation:\n  strict_rubric: true\n",
 			wantStrictRubric: true,
 		},
 		{
-			name:         "strict_rubric disabled",
-			yaml:         "validation:\n  strict_rubric: false\n",
+			name:             "strict_rubric disabled",
+			yaml:             "validation:\n  strict_rubric: false\n",
 			wantStrictRubric: false,
 		},
 		{
-			name:         "strict_rubric not set keeps default",
-			yaml:         "validation:\n  key_point_criteria: warn\n",
+			name:             "strict_rubric not set keeps default",
+			yaml:             "validation:\n  key_point_criteria: warn\n",
 			wantStrictRubric: false,
 		},
 		{
-			name:         "no validation section keeps default",
-			yaml:         "max_concurrency: 4\n",
+			name:             "no validation section keeps default",
+			yaml:             "max_concurrency: 4\n",
 			wantStrictRubric: false,
 		},
 	}

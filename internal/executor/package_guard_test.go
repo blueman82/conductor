@@ -324,7 +324,7 @@ func TestGetGoPackage(t *testing.T) {
 	}{
 		{"internal/executor/task.go", "internal/executor"},
 		{"internal/parser/yaml.go", "internal/parser"},
-		{"main.go", ""},             // Root-level Go file - excluded
+		{"main.go", ""}, // Root-level Go file - excluded
 		{"cmd/conductor/main.go", "cmd/conductor"},
 		{"README.md", ""},           // Non-Go file
 		{"docs/guide.md", ""},       // Non-Go file

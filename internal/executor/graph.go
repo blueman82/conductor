@@ -323,8 +323,8 @@ func ValidateRegistryPrerequisites(tasks []models.Task, registry *models.DataFlo
 
 	// Build producer task -> files map from registry
 	// Build consumer task -> required files map from registry
-	producerFiles := make(map[string][]string)  // task -> files it produces
-	consumerNeeds := make(map[string][]string)  // task -> files/symbols it needs
+	producerFiles := make(map[string][]string) // task -> files it produces
+	consumerNeeds := make(map[string][]string) // task -> files/symbols it needs
 
 	for symbol, producers := range registry.Producers {
 		for _, p := range producers {

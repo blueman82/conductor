@@ -546,7 +546,7 @@ func TestValidateRegistryBindings_ConsumerMissingDependency(t *testing.T) {
 
 	tasks := []models.Task{
 		{Number: "1", Name: "Task 1", DependsOn: []string{}},
-		{Number: "2", Name: "Task 2", DependsOn: []string{}}, // Task 2 doesn't depend on 1
+		{Number: "2", Name: "Task 2", DependsOn: []string{}},    // Task 2 doesn't depend on 1
 		{Number: "3", Name: "Task 3", DependsOn: []string{"2"}}, // Task 3 depends on 2, but 2 doesn't depend on 1
 	}
 

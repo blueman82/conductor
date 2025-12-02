@@ -311,8 +311,8 @@ func TestPackageGuard_EnforcePackageIsolation(t *testing.T) {
 	// This test uses a mock runner since we can't control actual git state
 	runner := &mockCommandRunner{
 		outputs: map[string]string{
-			"git diff --name-only HEAD":      "internal/executor/task.go\ninternal/executor/wave.go\n",
-			"git diff --name-only --cached":  "",
+			"git diff --name-only HEAD":     "internal/executor/task.go\ninternal/executor/wave.go\n",
+			"git diff --name-only --cached": "",
 		},
 	}
 
@@ -336,8 +336,8 @@ func TestPackageGuard_EnforcePackageIsolation(t *testing.T) {
 func TestPackageGuard_EnforcePackageIsolation_Violation(t *testing.T) {
 	runner := &mockCommandRunner{
 		outputs: map[string]string{
-			"git diff --name-only HEAD":      "internal/executor/task.go\ninternal/parser/yaml.go\n",
-			"git diff --name-only --cached":  "",
+			"git diff --name-only HEAD":     "internal/executor/task.go\ninternal/parser/yaml.go\n",
+			"git diff --name-only --cached": "",
 		},
 	}
 
@@ -367,8 +367,8 @@ func TestPackageGuard_EnforcePackageIsolation_Violation(t *testing.T) {
 func TestPackageGuard_EnforcePackageIsolation_SamePackage(t *testing.T) {
 	runner := &mockCommandRunner{
 		outputs: map[string]string{
-			"git diff --name-only HEAD":      "internal/executor/task.go\ninternal/executor/qc.go\n",
-			"git diff --name-only --cached":  "",
+			"git diff --name-only HEAD":     "internal/executor/task.go\ninternal/executor/qc.go\n",
+			"git diff --name-only --cached": "",
 		},
 	}
 
