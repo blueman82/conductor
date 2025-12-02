@@ -578,6 +578,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.SwapDuringRetries = cfg.Learning.SwapDuringRetries
 	taskExec.Logger = consoleLog // Runtime enforcement logging
 
+	// Wire runtime enforcement flags (v2.9+)
+	taskExec.EnforceTestCommands = cfg.Executor.EnforceTestCommands
+	taskExec.VerifyCriteria = cfg.Executor.VerifyCriteria
+
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithPackageGuard(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed, cfg.Executor.EnforcePackageGuard)
 
