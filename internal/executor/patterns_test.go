@@ -68,7 +68,7 @@ func TestDetectErrorPatternEnvLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output)
+			pattern := DetectErrorPattern(tt.output, nil)
 
 			if pattern == nil {
 				t.Fatal("expected pattern to be detected")
@@ -155,7 +155,7 @@ func TestDetectErrorPatternPlanLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output)
+			pattern := DetectErrorPattern(tt.output, nil)
 
 			if pattern == nil {
 				t.Fatal("expected pattern to be detected")
@@ -249,7 +249,7 @@ func TestDetectErrorPatternCodeLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output)
+			pattern := DetectErrorPattern(tt.output, nil)
 
 			if pattern == nil {
 				t.Fatal("expected pattern to be detected")
@@ -300,7 +300,7 @@ func TestDetectErrorPatternNoMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output)
+			pattern := DetectErrorPattern(tt.output, nil)
 
 			if pattern != nil {
 				t.Errorf("expected no pattern match, but got: %+v", pattern)
@@ -315,7 +315,7 @@ func TestDetectErrorPatternPriority(t *testing.T) {
 	// The first matching pattern in KnownPatterns should be returned
 	output := "Error: undefined: SomeFunction"
 
-	pattern := DetectErrorPattern(output)
+	pattern := DetectErrorPattern(output, nil)
 
 	if pattern == nil {
 		t.Fatal("expected pattern to be detected")
@@ -357,7 +357,7 @@ func TestDetectErrorPatternCaseSensitivity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output)
+			pattern := DetectErrorPattern(tt.output, nil)
 
 			if tt.shouldMatch && pattern == nil {
 				t.Error("expected pattern to be detected")
@@ -396,7 +396,7 @@ func TestDetectErrorPatternComplexRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output)
+			pattern := DetectErrorPattern(tt.output, nil)
 
 			if pattern == nil {
 				t.Fatal("expected pattern to be detected")
@@ -435,7 +435,7 @@ func TestDetectErrorPatternPartialMatches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output)
+			pattern := DetectErrorPattern(tt.output, nil)
 
 			if pattern == nil {
 				t.Fatal("expected pattern to be detected")
@@ -526,8 +526,8 @@ func TestPatternCategoryCount(t *testing.T) {
 func TestDetectErrorPatternCopy(t *testing.T) {
 	output := "command not found"
 
-	pattern1 := DetectErrorPattern(output)
-	pattern2 := DetectErrorPattern(output)
+	pattern1 := DetectErrorPattern(output, nil)
+	pattern2 := DetectErrorPattern(output, nil)
 
 	if pattern1 == nil || pattern2 == nil {
 		t.Fatal("expected patterns to be detected")
@@ -588,7 +588,7 @@ Summary: 1 failure`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output)
+			pattern := DetectErrorPattern(tt.output, nil)
 
 			if pattern == nil {
 				t.Fatal("expected pattern to be detected")

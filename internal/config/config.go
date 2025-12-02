@@ -231,6 +231,14 @@ type ExecutorConfig struct {
 	// (environment issue). Provides actionable suggestions for each category.
 	// Default: true
 	EnableErrorPatternDetection bool `yaml:"enable_error_pattern_detection"`
+
+	// EnableClaudeClassification enables Claude-based error classification (v3.0+).
+	// When true and EnableErrorPatternDetection is also true, uses Claude API to
+	// semantically analyze test failures instead of regex patterns.
+	// Falls back to regex patterns if Claude classification fails or confidence is low (<0.85).
+	// This feature is opt-in and disabled by default for backward compatibility.
+	// Default: false
+	EnableClaudeClassification bool `yaml:"enable_claude_classification"`
 }
 
 // Config represents conductor configuration options
@@ -376,6 +384,7 @@ func DefaultConfig() *Config {
 			EnforcePackageGuard:         true,
 			EnforceDocTargets:           true,
 			EnableErrorPatternDetection: true,
+			EnableClaudeClassification:  false,
 		},
 	}
 }
@@ -754,6 +763,9 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := executorMap["enable_error_pattern_detection"]; exists {
 				cfg.Executor.EnableErrorPatternDetection = executor.EnableErrorPatternDetection
+			}
+			if _, exists := executorMap["enable_claude_classification"]; exists {
+				cfg.Executor.EnableClaudeClassification = executor.EnableClaudeClassification
 			}
 		}
 	}

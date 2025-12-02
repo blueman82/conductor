@@ -852,7 +852,8 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			if te.EnableErrorPatternDetection {
 				for _, result := range te.lastTestResults {
 					if !result.Passed {
-						pattern := DetectErrorPattern(result.Output)
+						// Pass invoker as second parameter for Claude classification (v3.0+)
+						pattern := DetectErrorPattern(result.Output, te.invoker)
 						if pattern != nil {
 							// Store pattern for learning system
 							if task.Metadata == nil {
