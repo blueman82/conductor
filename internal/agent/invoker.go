@@ -233,13 +233,14 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 			value = value[:maxValueLen-3] + "..."
 		}
 
-		padding := innerWidth - labelLen - len(value) - 2
+		padding := innerWidth - labelLen - len(value) - 1
 		if padding < 0 {
 			padding = 0
 		}
 		spacer := strings.Repeat(" ", padding)
 
-		fmt.Fprintf(os.Stderr, "%s│%s %s%s:%s  %s%s%s%s %s│%s\n",
+		// Borders cyan, label yellow, value colored
+		fmt.Fprintf(os.Stderr, "%s│%s %s%s:%s  %s%s%s%s%s│%s\n",
 			cyan, reset, yellow, label, reset, valueColor, value, reset, spacer, cyan, reset)
 	}
 
