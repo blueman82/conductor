@@ -39,10 +39,12 @@ type LearningStore interface {
 }
 
 // RuntimeEnforcementLogger logs runtime enforcement events (test commands, criterion verification).
+// LogErrorPattern accepts an error pattern display (ErrorPattern implements logger.ErrorPatternDisplay).
 type RuntimeEnforcementLogger interface {
 	LogTestCommands(entries []models.TestCommandResult)
 	LogCriterionVerifications(entries []models.CriterionVerificationResult)
 	LogDocTargetVerifications(entries []models.DocTargetResult)
+	LogErrorPattern(pattern interface{}) // Flexible interface for testing
 }
 
 // TaskExecution represents a single task execution record for learning storage.
@@ -138,31 +140,32 @@ type TaskExecutorConfig struct {
 
 // DefaultTaskExecutor executes individual tasks, applying QC review and plan updates.
 type DefaultTaskExecutor struct {
-	invoker                 InvokerInterface
-	reviewer                Reviewer
-	planUpdater             PlanUpdater
-	cfg                     TaskExecutorConfig
-	clock                   func() time.Time
-	qcEnabled               bool
-	retryLimit              int
-	SourceFile              string                   // Track which file this task comes from
-	FileLockManager         FileLockManager          // Per-file locking strategy
-	LearningStore           LearningStore            // Adaptive learning store (optional)
-	PlanFile                string                   // Plan file path for learning queries
-	SessionID               string                   // Session ID for learning tracking
-	RunNumber               int                      // Run number for learning tracking
-	metrics                 *learning.PatternMetrics // Pattern detection metrics (optional)
-	AutoAdaptAgent          bool                     // Enable automatic agent adaptation
-	MinFailuresBeforeAdapt  int                      // Minimum failures before adapting agent
-	SwapDuringRetries       bool                     // Enable inter-retry agent swapping
-	Plan                    *models.Plan             // Plan reference for integration prompt builder
-	EnforceDependencyChecks bool                     // Run dependency checks before task invocation
-	CommandRunner           CommandRunner            // Command runner for dependency checks (optional)
-	WorkDir                 string                   // Working directory for dependency check commands
-	EnforceTestCommands     bool                     // Run test commands after agent output (v2.9+)
-	VerifyCriteria          bool                     // Run optional per-criterion verifications (v2.9+)
-	EnforceDocTargets       bool                     // Run documentation target verification for doc tasks (v2.9+)
-	Logger                  RuntimeEnforcementLogger // Logger for runtime enforcement output (optional)
+	invoker                     InvokerInterface
+	reviewer                    Reviewer
+	planUpdater                 PlanUpdater
+	cfg                         TaskExecutorConfig
+	clock                       func() time.Time
+	qcEnabled                   bool
+	retryLimit                  int
+	SourceFile                  string                   // Track which file this task comes from
+	FileLockManager             FileLockManager          // Per-file locking strategy
+	LearningStore               LearningStore            // Adaptive learning store (optional)
+	PlanFile                    string                   // Plan file path for learning queries
+	SessionID                   string                   // Session ID for learning tracking
+	RunNumber                   int                      // Run number for learning tracking
+	metrics                     *learning.PatternMetrics // Pattern detection metrics (optional)
+	AutoAdaptAgent              bool                     // Enable automatic agent adaptation
+	MinFailuresBeforeAdapt      int                      // Minimum failures before adapting agent
+	SwapDuringRetries           bool                     // Enable inter-retry agent swapping
+	Plan                        *models.Plan             // Plan reference for integration prompt builder
+	EnforceDependencyChecks     bool                     // Run dependency checks before task invocation
+	CommandRunner               CommandRunner            // Command runner for dependency checks (optional)
+	WorkDir                     string                   // Working directory for dependency check commands
+	EnforceTestCommands         bool                     // Run test commands after agent output (v2.9+)
+	VerifyCriteria              bool                     // Run optional per-criterion verifications (v2.9+)
+	EnforceDocTargets           bool                     // Run documentation target verification for doc tasks (v2.9+)
+	EnableErrorPatternDetection bool                     // Enable error pattern detection on test failures (v2.11+)
+	Logger                      RuntimeEnforcementLogger // Logger for runtime enforcement output (optional)
 
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
@@ -634,6 +637,9 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	// Track execution history for all attempts
 	var executionHistory []models.ExecutionAttempt
 
+	// Track test failure state for retry injection (v2.10+)
+	var testFailureErr error
+
 	for attempt := 0; attempt <= maxAttempt; attempt++ {
 		if err := ctx.Err(); err != nil {
 			// Wrap context errors with TimeoutError for better error handling
@@ -749,8 +755,11 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			Duration:    invocation.Duration,
 		}
 
+		// Clear test failure from previous attempt
+		testFailureErr = nil
+
 		// Run test commands after agent output but BEFORE QC (v2.9+)
-		// Test command failure returns error immediately (task fails, no QC review)
+		// Test command failure is tracked but doesn't return immediately (v2.10+)
 		if te.EnforceTestCommands && len(task.TestCommands) > 0 {
 			runner := te.CommandRunner
 			if runner == nil {
@@ -762,10 +771,8 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 				te.Logger.LogTestCommands(testResults)
 			}
 			if testErr != nil {
-				result.Status = models.StatusFailed
-				result.Error = fmt.Errorf("test command failed: %w", testErr)
-				_ = te.updatePlanStatus(task, StatusFailed, false)
-				return result, result.Error
+				// Track failure but continue to allow retry (v2.10+)
+				testFailureErr = testErr
 			}
 		}
 
@@ -815,6 +822,67 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 					return result, docErr
 				}
 			}
+		}
+
+		// Handle test failures (v2.10+)
+		// Test failures are treated like QC RED verdicts - retry with feedback injection
+		if testFailureErr != nil {
+			if !te.qcEnabled || te.reviewer == nil {
+				// No QC enabled - fail immediately with no retry (backward compat: hard gate)
+				result.Status = models.StatusFailed
+				result.Error = fmt.Errorf("test command failed: %w", testFailureErr)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				return result, result.Error
+			}
+
+			// QC enabled - treat test failure like RED verdict
+			lastErr = fmt.Errorf("test command failed: %w", testFailureErr)
+			result.RetryCount = attempt
+
+			// Check retry budget
+			if attempt >= te.retryLimit {
+				result.Status = models.StatusRed
+				result.Error = lastErr
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				te.postTaskHook(ctx, &task, &result, models.StatusRed)
+				return result, lastErr
+			}
+
+			// Detect error patterns before injecting feedback (v2.11+)
+			if te.EnableErrorPatternDetection {
+				for _, result := range te.lastTestResults {
+					if !result.Passed {
+						// Pass invoker as second parameter for Claude classification (v3.0+)
+						pattern := DetectErrorPattern(result.Output, te.invoker)
+						if pattern != nil {
+							// Store pattern for learning system
+							if task.Metadata == nil {
+								task.Metadata = make(map[string]interface{})
+							}
+							patterns, ok := task.Metadata["error_patterns"].([]string)
+							if !ok {
+								patterns = []string{}
+							}
+							patterns = append(patterns, pattern.Category.String())
+							task.Metadata["error_patterns"] = patterns
+
+							// Log pattern with suggestion
+							if te.Logger != nil {
+								te.Logger.LogErrorPattern(pattern)
+							}
+						}
+					}
+				}
+			}
+
+			// Inject test failure feedback for retry (mirrors QC pattern)
+			testFeedback := FormatTestResults(te.lastTestResults)
+			if testFeedback != "" {
+				task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - TEST COMMANDS FAILED (MUST FIX):\n%s\n---\n\nFix ALL test failures listed above before completing the task.", task.Prompt, testFeedback)
+			}
+
+			// Continue to next retry iteration
+			continue
 		}
 
 		if !te.qcEnabled || te.reviewer == nil {

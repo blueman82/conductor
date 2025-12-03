@@ -17,6 +17,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/mattn/go-isatty"
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
 
@@ -28,6 +29,19 @@ const (
 	levelWarn  int = 3
 	levelError int = 4
 )
+
+// ErrorPatternDisplay is an interface for objects that represent detected error patterns.
+// It's used to decouple the logger from specific error pattern implementations.
+type ErrorPatternDisplay interface {
+	// GetCategory returns the error category string (e.g., "ENV_LEVEL", "PLAN_LEVEL", "CODE_LEVEL")
+	GetCategory() string
+	// GetPattern returns the error pattern text
+	GetPattern() string
+	// GetSuggestion returns the actionable suggestion for resolving the error
+	GetSuggestion() string
+	// IsAgentFixable returns whether the agent can fix this error with a retry
+	IsAgentFixable() bool
+}
 
 // ConsoleLogger logs execution progress to a writer with timestamps and thread safety.
 // All output is prefixed with [HH:MM:SS] timestamps for tracking execution flow.
@@ -1132,22 +1146,28 @@ func getTerminalWidth() int {
 	return width
 }
 
-// drawBoxTop draws the top border of a box
+// ANSI color codes for box drawing
+const (
+	cyanColor  = "\033[36m"
+	resetColor = "\033[0m"
+)
+
+// drawBoxTop draws the top border of a box (colored cyan)
 func drawBoxTop(width int) string {
-	return boxTopLeft + strings.Repeat(boxHorizontal, width-2) + boxTopRight
+	return cyanColor + boxTopLeft + strings.Repeat(boxHorizontal, width-2) + boxTopRight + resetColor
 }
 
-// drawBoxBottom draws the bottom border of a box
+// drawBoxBottom draws the bottom border of a box (colored cyan)
 func drawBoxBottom(width int) string {
-	return boxBottomLeft + strings.Repeat(boxHorizontal, width-2) + boxBottomRight
+	return cyanColor + boxBottomLeft + strings.Repeat(boxHorizontal, width-2) + boxBottomRight + resetColor
 }
 
-// drawBoxDivider draws a horizontal divider within a box
+// drawBoxDivider draws a horizontal divider within a box (colored cyan)
 func drawBoxDivider(width int) string {
-	return boxTeeLeft + strings.Repeat(boxHorizontal, width-2) + boxTeeRight
+	return cyanColor + boxTeeLeft + strings.Repeat(boxHorizontal, width-2) + boxTeeRight + resetColor
 }
 
-// drawBoxLine draws a line of content within a box, padding to width
+// drawBoxLine draws a line of content within a box, padding to width (borders colored cyan)
 func drawBoxLine(content string, width int) string {
 	// Account for visible width (strip ANSI codes for length calculation)
 	visibleLen := visibleLength(content)
@@ -1157,15 +1177,16 @@ func drawBoxLine(content string, width int) string {
 		// Truncate content if too long
 		content = truncateToVisibleWidth(content, width-4)
 	}
-	return boxVertical + " " + content + strings.Repeat(" ", padding) + " " + boxVertical
+	return cyanColor + boxVertical + resetColor + " " + content + strings.Repeat(" ", padding) + " " + cyanColor + boxVertical + resetColor
 }
 
-// visibleLength returns the visible length of a string (excluding ANSI codes)
+// visibleLength returns the visible terminal width of a string (excluding ANSI codes).
+// Uses runewidth to properly handle wide characters like emojis (🧪 = 2 cols, ✓ = 1 col).
 func visibleLength(s string) int {
 	// Strip ANSI escape sequences
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	clean := ansiRegex.ReplaceAllString(s, "")
-	return len([]rune(clean))
+	return runewidth.StringWidth(clean)
 }
 
 // truncateToVisibleWidth truncates a string to a visible width, preserving ANSI codes
@@ -1173,14 +1194,10 @@ func truncateToVisibleWidth(s string, maxWidth int) string {
 	if visibleLength(s) <= maxWidth {
 		return s
 	}
-	// Simple truncation - strip codes, truncate, lose colors
+	// Simple truncation - strip codes, truncate using runewidth, lose colors
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	clean := ansiRegex.ReplaceAllString(s, "")
-	runes := []rune(clean)
-	if len(runes) > maxWidth-3 {
-		return string(runes[:maxWidth-3]) + "..."
-	}
-	return clean
+	return runewidth.Truncate(clean, maxWidth-3, "...")
 }
 
 // LogTestCommands logs test command execution results with boxed colorized output.
@@ -1205,9 +1222,9 @@ func (cl *ConsoleLogger) LogTestCommands(results []models.TestCommandResult) {
 
 	var headerText string
 	if cl.colorOutput {
-		headerText = color.New(color.FgCyan, color.Bold).Sprint("🧪 Test Commands") + " (hard gate)"
+		headerText = color.New(color.FgCyan, color.Bold).Sprint("🧪 Test Commands")
 	} else {
-		headerText = "🧪 Test Commands (hard gate)"
+		headerText = "🧪 Test Commands"
 	}
 	output.WriteString(drawBoxLine(headerText, w) + "\n")
 	output.WriteString(drawBoxDivider(w) + "\n")
@@ -1279,6 +1296,93 @@ func (cl *ConsoleLogger) LogTestCommands(results []models.TestCommandResult) {
 		}
 	}
 	output.WriteString(drawBoxLine(summaryText, w) + "\n")
+
+	// Box bottom
+	output.WriteString(drawBoxBottom(w) + "\n")
+
+	cl.writer.Write([]byte(output.String()))
+}
+
+// LogErrorPattern logs a detected error pattern with categorization and suggestion.
+// Format: Boxed output with category, pattern, and actionable suggestion.
+// Accepts interface{} for flexibility with different pattern types (e.g., ErrorPattern from executor).
+func (cl *ConsoleLogger) LogErrorPattern(pattern interface{}) {
+	if cl.writer == nil || pattern == nil {
+		return
+	}
+
+	// Type assert to ErrorPatternDisplay
+	p, ok := pattern.(ErrorPatternDisplay)
+	if !ok {
+		return // Not the right type, skip
+	}
+
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	var output strings.Builder
+	w := getTerminalWidth()
+
+	// Box top and header
+	output.WriteString(drawBoxTop(w) + "\n")
+
+	var headerText string
+	if cl.colorOutput {
+		headerText = color.New(color.FgCyan, color.Bold).Sprint("🔍 Error Pattern Detected")
+	} else {
+		headerText = "🔍 Error Pattern Detected"
+	}
+	output.WriteString(drawBoxLine(headerText, w) + "\n")
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	// Category line with color based on category
+	var categoryLine string
+	categoryStr := p.GetCategory()
+	switch categoryStr {
+	case "ENV_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgYellow).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	case "PLAN_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgYellow).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	case "CODE_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgGreen).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	default:
+		categoryLine = "Category: " + categoryStr
+	}
+	output.WriteString(drawBoxLine(categoryLine, w) + "\n")
+
+	// Pattern line
+	patternText := truncateCommand(p.GetPattern(), w-12)
+	patternLine := "Pattern: " + patternText
+	output.WriteString(drawBoxLine(patternLine, w) + "\n")
+
+	// Empty line for spacing
+	output.WriteString(drawBoxLine("", w) + "\n")
+
+	// Suggestion header and wrapped suggestion text
+	suggestionHeader := "💡 Suggestion:"
+	output.WriteString(drawBoxLine(suggestionHeader, w) + "\n")
+
+	// Word-wrap the suggestion text
+	wrappedSuggestion := wordWrapText(p.GetSuggestion(), w-8)
+	for _, line := range wrappedSuggestion {
+		output.WriteString(drawBoxLine(line, w) + "\n")
+	}
 
 	// Box bottom
 	output.WriteString(drawBoxBottom(w) + "\n")
@@ -1480,6 +1584,45 @@ func truncateCommand(cmd string, maxLen int) string {
 		return cmd
 	}
 	return cmd[:maxLen-3] + "..."
+}
+
+// wordWrapText wraps text to fit within maxLen characters per line.
+// Returns a slice of strings, each fitting within the specified width.
+func wordWrapText(text string, maxLen int) []string {
+	if maxLen <= 0 {
+		maxLen = 60
+	}
+
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return []string{}
+	}
+
+	// If text fits on one line, return it as-is
+	if len(text) <= maxLen {
+		return []string{text}
+	}
+
+	var lines []string
+	words := strings.Fields(text)
+	var currentLine string
+
+	for _, word := range words {
+		if currentLine == "" {
+			currentLine = word
+		} else if len(currentLine)+1+len(word) <= maxLen {
+			currentLine += " " + word
+		} else {
+			lines = append(lines, currentLine)
+			currentLine = word
+		}
+	}
+
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	return lines
 }
 
 // LogProgress logs real-time progress of task execution with percentage, counts, and average duration.

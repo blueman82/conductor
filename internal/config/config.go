@@ -224,6 +224,21 @@ type ExecutorConfig struct {
 	// agents edit the exact sections specified in the plan.
 	// Default: true
 	EnforceDocTargets bool `yaml:"enforce_doc_targets"`
+
+	// EnableErrorPatternDetection enables error pattern detection on test failures.
+	// When true (default), Conductor will analyze test command failures and categorize them
+	// into CODE_LEVEL (agent can fix), PLAN_LEVEL (plan needs update), or ENV_LEVEL
+	// (environment issue). Provides actionable suggestions for each category.
+	// Default: true
+	EnableErrorPatternDetection bool `yaml:"enable_error_pattern_detection"`
+
+	// EnableClaudeClassification enables Claude-based error classification (v3.0+).
+	// When true and EnableErrorPatternDetection is also true, uses Claude API to
+	// semantically analyze test failures instead of regex patterns.
+	// Falls back to regex patterns if Claude classification fails or confidence is low (<0.85).
+	// This feature is opt-in and disabled by default for backward compatibility.
+	// Default: false
+	EnableClaudeClassification bool `yaml:"enable_claude_classification"`
 }
 
 // Config represents conductor configuration options
@@ -363,11 +378,13 @@ func DefaultConfig() *Config {
 			StrictRubric:     false,
 		},
 		Executor: ExecutorConfig{
-			EnforceDependencyChecks: true,
-			EnforceTestCommands:     true,
-			VerifyCriteria:          true,
-			EnforcePackageGuard:     true,
-			EnforceDocTargets:       true,
+			EnforceDependencyChecks:     true,
+			EnforceTestCommands:         true,
+			VerifyCriteria:              true,
+			EnforcePackageGuard:         true,
+			EnforceDocTargets:           true,
+			EnableErrorPatternDetection: true,
+			EnableClaudeClassification:  false,
 		},
 	}
 }
@@ -743,6 +760,12 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := executorMap["enforce_doc_targets"]; exists {
 				cfg.Executor.EnforceDocTargets = executor.EnforceDocTargets
+			}
+			if _, exists := executorMap["enable_error_pattern_detection"]; exists {
+				cfg.Executor.EnableErrorPatternDetection = executor.EnableErrorPatternDetection
+			}
+			if _, exists := executorMap["enable_claude_classification"]; exists {
+				cfg.Executor.EnableClaudeClassification = executor.EnableClaudeClassification
 			}
 		}
 	}
