@@ -10,10 +10,14 @@
 **Agent**: python-pro
 
 ### What you're building
-This is the first task in a simple linear plan for integration testing.
+A Python script that prints "Hello from Task 1" to the console.
 
 ### Implementation
-Complete the first task as part of the integration test.
+Create a file `main.py` with a simple Python script that prints "Hello from Task 1" when executed. The script should run without errors.
+
+**Success Criteria:**
+- File `main.py` created with valid Python code
+- Script prints 'Hello from Task 1' when executed
 
 ---
 
@@ -25,7 +29,11 @@ Complete the first task as part of the integration test.
 **Agent**: python-pro
 
 ### What you're building
-This is the second task, which depends on the first task.
+Enhance the Python script from Task 1 to print both "Hello from Task 1" and "Hello from Task 2".
 
 ### Implementation
-Complete the second task after the first task completes.
+Modify the existing file `main.py` to add a line that prints "Hello from Task 2". The script should output both messages in the correct order when executed.
+
+**Success Criteria:**
+- File `main.py` modified correctly
+- Script prints both messages in correct order

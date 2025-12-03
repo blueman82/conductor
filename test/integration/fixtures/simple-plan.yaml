@@ -2,7 +2,6 @@ conductor:
   max_concurrency: 2
   timeout: "5m"
   default_agent: "python-pro"
-
 plan:
   metadata:
     name: "Integration Test Plan: Simple Linear"
@@ -12,23 +11,44 @@ plan:
     - task_number: 1
       type: component
       name: "First Task"
-      prompt: "This is the first task in a simple linear plan for integration testing. Complete the first task as part of the integration test."
+      prompt: |
+        Create a Python script that prints "Hello from Task 1" to the console.
+
+        **Required Actions:**
+        1. Create a file `main.py`
+        2. Write a simple Python script that prints "Hello from Task 1"
+        3. The script should execute without errors
+
+        **Success Criteria:**
+        - File `main.py` exists and is valid Python
+        - Running the script produces the correct output
       files: ["main.py"]
       depends_on: []
       estimated_time: "10m"
       agent: "python-pro"
       success_criteria:
-        - "Task completes without errors"
-        - "Output is generated"
-
+        - "File main.py created with valid Python code"
+        - "Script prints 'Hello from Task 1' when executed"
+      status: "pending"
     - task_number: 2
       type: component
       name: "Second Task"
-      prompt: "This is the second task, which depends on the first task. Complete the second task after the first task completes."
+      prompt: |
+        Enhance the Python script from Task 1 to also print "Hello from Task 2".
+
+        **Required Actions:**
+        1. Modify the existing file `main.py`
+        2. Add a line that prints "Hello from Task 2"
+        3. The script should execute without errors
+        4. Output both messages in order
+
+        **Success Criteria:**
+        - File `main.py` is modified correctly
+        - Running the script produces both output lines
       files: ["main.py"]
       depends_on: [1]
       estimated_time: "10m"
       agent: "python-pro"
       success_criteria:
-        - "Task completes without errors"
-        - "Output builds on first task"
+        - "File main.py modified correctly"
+        - "Script prints both messages in correct order"
