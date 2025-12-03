@@ -147,3 +147,7 @@ go test ./test/integration -run RuntimeEnforcement -v
 3. Verification results flow through QC context
    - Impact: High - affects quality control feedback
    - Reference: internal/executor/qc.go
+
+4. Integration test validates all enforcement modes
+   - Note: Demonstrates complete runtime enforcement pipeline
+   - Reference: internal/executor/integration_test.go
