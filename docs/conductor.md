@@ -1222,6 +1222,13 @@ feedback:
   store_on_red: true         # Store failed executions (default: true)
   store_on_yellow: true      # Store warning executions (default: true)
 
+# Executor settings (v2.11+)
+executor:
+  # Enable Claude-based error classification (default: false)
+  # When enabled, uses Claude to semantically analyze error messages
+  # Falls back to regex patterns on timeout/error/low confidence
+  enable_claude_classification: false
+
 # Logging settings
 log_dir: .conductor/logs  # Log directory (default: .conductor/logs)
 log_level: info           # Log level: debug, info, warn, error (default: info)
