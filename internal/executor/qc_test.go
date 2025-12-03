@@ -3223,7 +3223,7 @@ func TestFormatDetectedErrors(t *testing.T) {
 			errors: []*DetectedError{
 				{
 					Pattern: &ErrorPattern{
-						Category:                  ErrorCategoryCompilation,
+						Category:                  CODE_LEVEL,
 						Suggestion:                "Fix syntax error",
 						AgentCanFix:               true,
 						RequiresHumanIntervention: false,
@@ -3247,7 +3247,7 @@ func TestFormatDetectedErrors(t *testing.T) {
 			errors: []*DetectedError{
 				{
 					Pattern: &ErrorPattern{
-						Category:                  ErrorCategoryMissingDependency,
+						Category:                  CODE_LEVEL,
 						Suggestion:                "Install missing package",
 						AgentCanFix:               false,
 						RequiresHumanIntervention: true,
@@ -3268,7 +3268,7 @@ func TestFormatDetectedErrors(t *testing.T) {
 			errors: []*DetectedError{
 				{
 					Pattern: &ErrorPattern{
-						Category:                  ErrorCategoryCompilation,
+						Category:                  CODE_LEVEL,
 						Suggestion:                "Fix syntax",
 						AgentCanFix:               true,
 						RequiresHumanIntervention: false,
@@ -3278,7 +3278,7 @@ func TestFormatDetectedErrors(t *testing.T) {
 				},
 				{
 					Pattern: &ErrorPattern{
-						Category:                  ErrorCategoryTestFailure,
+						Category:                  CODE_LEVEL,
 						Suggestion:                "Update test assertions",
 						AgentCanFix:               true,
 						RequiresHumanIntervention: false,
@@ -3332,7 +3332,7 @@ func TestBuildStructuredReviewPrompt_WithErrorClassification(t *testing.T) {
 				"detected_errors": []*DetectedError{
 					{
 						Pattern: &ErrorPattern{
-							Category:                  ErrorCategoryTestFailure,
+							Category:                  CODE_LEVEL,
 							Suggestion:                "Fix test assertions",
 							AgentCanFix:               true,
 							RequiresHumanIntervention: false,
