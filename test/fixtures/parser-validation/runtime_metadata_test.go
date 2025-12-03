@@ -12,15 +12,15 @@ import (
 // the task.RuntimeMetadata contains expected values for all subsections.
 func TestRuntimeMetadata(t *testing.T) {
 	tests := []struct {
-		name                      string
-		markdown                  string
-		expectNil                 bool
-		expectedDependencyChecks  int
-		expectedDocTargets        int
-		expectedPromptBlocks      int
-		verifyDependencyChecks    func(t *testing.T, checks []struct{ Command, Description string })
-		verifyDocTargets          func(t *testing.T, targets []struct{ Location, Section string })
-		verifyPromptBlocks        func(t *testing.T, blocks []struct{ Type, Content string })
+		name                     string
+		markdown                 string
+		expectNil                bool
+		expectedDependencyChecks int
+		expectedDocTargets       int
+		expectedPromptBlocks     int
+		verifyDependencyChecks   func(t *testing.T, checks []struct{ Command, Description string })
+		verifyDocTargets         func(t *testing.T, targets []struct{ Location, Section string })
+		verifyPromptBlocks       func(t *testing.T, blocks []struct{ Type, Content string })
 	}{
 		{
 			name: "complete_runtime_metadata",

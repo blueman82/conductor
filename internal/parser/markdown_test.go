@@ -1431,9 +1431,9 @@ conductor:
 
 func TestMarkdown_SuccessCriteria(t *testing.T) {
 	tests := []struct {
-		name              string
-		markdown          string
-		expectedCriteria  []string
+		name             string
+		markdown         string
+		expectedCriteria []string
 	}{
 		{
 			name: "task with success criteria",
@@ -2076,12 +2076,12 @@ go test ./... -race
 // TestMarkdown_KeyPoints tests KeyPoints parsing with optional reference/impact/note fields
 func TestMarkdown_KeyPoints(t *testing.T) {
 	tests := []struct {
-		name                 string
-		markdown             string
-		expectedCount        int
-		expectedPoints       []string
-		expectedReferences   []string
-		expectedDetails      []string
+		name               string
+		markdown           string
+		expectedCount      int
+		expectedPoints     []string
+		expectedReferences []string
+		expectedDetails    []string
 	}{
 		{
 			name: "task with key points",
@@ -2670,14 +2670,14 @@ func TestParseTestCommands_BothFormats(t *testing.T) {
 			expectedCommands: []string{"go test ./...", "go test -race ./..."},
 		},
 		{
-			name: "code block format",
-			content: "**Test Commands**:\n```bash\nnpm test\nnpm run build\n```\n",
+			name:             "code block format",
+			content:          "**Test Commands**:\n```bash\nnpm test\nnpm run build\n```\n",
 			format:           "code_block",
 			expectedCommands: []string{"npm test", "npm run build"},
 		},
 		{
-			name: "mixed - code block takes precedence",
-			content: "**Test Commands**:\n```bash\ngo test ./...\n```\n",
+			name:             "mixed - code block takes precedence",
+			content:          "**Test Commands**:\n```bash\ngo test ./...\n```\n",
 			format:           "mixed",
 			expectedCommands: []string{"go test ./..."},
 		},
@@ -3297,11 +3297,11 @@ func TestMarkdown_StructuredCriteria_NotFound(t *testing.T) {
 // TestParseStructuredCriteria_DirectFunction tests parseStructuredCriteria directly
 func TestParseStructuredCriteria_DirectFunction(t *testing.T) {
 	tests := []struct {
-		name                  string
-		content               string
-		expectedCount         int
-		expectFirstVerifNil   bool
-		expectFirstVerifCmd   string
+		name                string
+		content             string
+		expectedCount       int
+		expectFirstVerifNil bool
+		expectFirstVerifCmd string
 	}{
 		{
 			name: "criteria with verification",

@@ -393,7 +393,7 @@ func parseSuccessCriteriaMarkdown(content string) []string {
 	for _, line := range lines {
 		// Stop at next section heading (## or **)
 		if strings.HasPrefix(strings.TrimSpace(line), "##") ||
-		   (strings.HasPrefix(strings.TrimSpace(line), "**") && strings.Contains(line, ":")) {
+			(strings.HasPrefix(strings.TrimSpace(line), "**") && strings.Contains(line, ":")) {
 			break
 		}
 
