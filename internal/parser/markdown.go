@@ -354,10 +354,114 @@ func removeCodeBlocks(content string) string {
 	return result.String()
 }
 
+// parseType extracts the Type field from task content (component or integration)
+// Returns empty string if Type field not found (backward compatible - defaults to component)
+func parseType(content string) string {
+	// Regex pattern: \*\*Type\*\*:\s*(.+)
+	// Matches **Type**: followed by whitespace and value, capturing value group
+	typeRegex := regexp.MustCompile(`\*\*Type\*\*:\s*(.+)`)
+	if matches := typeRegex.FindStringSubmatch(content); len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+	// Return empty string if Type field not found (backward compatible)
+	return ""
+}
+
+// parseSuccessCriteria: markdown variant (invoked from parseTaskMetadata function)
+// Extracts Success Criteria bullet list from markdown task content
+// Finds **Success Criteria**: heading and extracts following bullet list items
+// Returns []string with all criteria, empty slice if section not found (backward compatible)
+func parseSuccessCriteriaMarkdown(content string) []string {
+	// Find the **Success Criteria**: heading
+	headingRegex := regexp.MustCompile(`(?m)^\*\*Success Criteria\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+
+	if headingMatch == nil {
+		// Section not found, return empty slice (backward compatible)
+		return []string{}
+	}
+
+	// Extract content after the heading
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+
+	// Find lines until next heading (## or **) or double newline
+	lines := strings.Split(remainingContent, "\n")
+	var criteria []string
+	var currentCriterion strings.Builder
+
+	for _, line := range lines {
+		// Stop at next section heading (## or **)
+		if strings.HasPrefix(strings.TrimSpace(line), "##") ||
+		   (strings.HasPrefix(strings.TrimSpace(line), "**") && strings.Contains(line, ":")) {
+			break
+		}
+
+		// Stop at double newline (empty line after content)
+		if strings.TrimSpace(line) == "" && currentCriterion.Len() > 0 {
+			// Finish current criterion if any
+			criterion := strings.TrimSpace(currentCriterion.String())
+			if criterion != "" {
+				criteria = append(criteria, criterion)
+			}
+			currentCriterion.Reset()
+			// Check if this is truly end of section (another empty line follows)
+			continue
+		}
+
+		// Match bullet point: line starts with optional whitespace, then dash, then content
+		bulletRegex := regexp.MustCompile(`^\s*-\s+(.+)$`)
+		if matches := bulletRegex.FindStringSubmatch(line); len(matches) > 1 {
+			// Save previous criterion if exists
+			if currentCriterion.Len() > 0 {
+				criterion := strings.TrimSpace(currentCriterion.String())
+				if criterion != "" {
+					criteria = append(criteria, criterion)
+				}
+			}
+			// Start new criterion
+			currentCriterion.Reset()
+			currentCriterion.WriteString(matches[1])
+		} else if strings.HasPrefix(line, "  ") && currentCriterion.Len() > 0 {
+			// Continuation line (indented with 2+ spaces)
+			currentCriterion.WriteString(" ")
+			currentCriterion.WriteString(strings.TrimLeft(line, " \t"))
+		} else if strings.TrimSpace(line) == "" && currentCriterion.Len() > 0 {
+			// Empty line might mark end of section
+			continue
+		}
+	}
+
+	// Don't forget the last criterion
+	if currentCriterion.Len() > 0 {
+		criterion := strings.TrimSpace(currentCriterion.String())
+		if criterion != "" {
+			criteria = append(criteria, criterion)
+		}
+	}
+
+	return criteria
+}
+
 // parseTaskMetadata extracts metadata fields from task content
 func parseTaskMetadata(task *models.Task, content string) {
 	// Strip code blocks to prevent extracting metadata from code examples
 	contentWithoutCode := removeCodeBlocks(content)
+
+	// Parse **Type**: inline annotation (component or integration)
+	task.Type = parseType(contentWithoutCode)
+
+	// Parse **Success Criteria**: bullet list (called from parseTaskMetadata)
+	task.SuccessCriteria = parseSuccessCriteriaMarkdown(contentWithoutCode) // parseSuccessCriteria extracted
+
+	// Parse **Integration Criteria**: bullet list (for integration tasks)
+	task.IntegrationCriteria = parseIntegrationCriteria(contentWithoutCode)
+
+	// Parse **Runtime Metadata**: structured subsection (v2.9+)
+	task.RuntimeMetadata = parseRuntimeMetadataMarkdown(contentWithoutCode)
+
+	// Parse **Structured Criteria**: criteria with optional verification blocks (v2.9+)
+	task.StructuredCriteria = parseStructuredCriteria(contentWithoutCode)
 
 	// Parse **Status**: inline annotation (takes precedence)
 	statusRegex := regexp.MustCompile(`\*\*Status\*\*:\s*(\w+)`)
@@ -442,6 +546,120 @@ func parseTaskMetadata(task *models.Task, content string) {
 	if matches := worktreeGroupRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
 		task.WorktreeGroup = strings.TrimSpace(matches[1])
 	}
+
+	// Parse **Test Commands**: (supports both bullet list and code block formats)
+	task.TestCommands = parseTestCommands(content)
+
+	// Parse **Key Points**: (implementation guidance with optional reference/impact/note)
+	task.KeyPoints = parseKeyPoints(content)
+}
+
+// parseTestCommands extracts test commands from markdown task content
+// Supports two formats:
+// 1. Code block: **Test Commands**: \n```bash\ncommand1\ncommand2\n```
+// 2. Bullet list: **Test Commands**: \n- command1\n- command2
+// Returns []string with all commands, empty slice if section not found (backward compatible)
+func parseTestCommands(content string) []string {
+	// Find the **Test Commands**: heading
+	headingRegex := regexp.MustCompile(`(?m)^\*\*Test Commands\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+
+	if headingMatch == nil {
+		// Section not found, return empty slice (backward compatible)
+		return []string{}
+	}
+
+	// Extract content after the heading
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+
+	// Check if next non-blank line is a code block or bullet list
+	lines := strings.Split(remainingContent, "\n")
+
+	// Skip empty lines to find the first non-empty line
+	var firstContentLine string
+	var firstContentIdx int
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			firstContentLine = strings.TrimSpace(line)
+			firstContentIdx = i
+			break
+		}
+	}
+
+	// If no content found, return empty slice
+	if firstContentLine == "" {
+		return []string{}
+	}
+
+	// Check if it's a code block (starts with ```)
+	if strings.HasPrefix(firstContentLine, "```") {
+		return parseTestCommandsCodeBlock(lines, firstContentIdx)
+	}
+
+	// Otherwise, assume it's a bullet list
+	return parseTestCommandsBulletList(lines, firstContentIdx)
+}
+
+// parseTestCommandsCodeBlock extracts commands from a code block
+// Starting from the line with opening ``` (at startIdx)
+func parseTestCommandsCodeBlock(lines []string, startIdx int) []string {
+	var commands []string
+
+	// startIdx points to the ```bash line, so skip it
+	for i := startIdx + 1; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+
+		// Stop at closing ```
+		if line == "```" {
+			break
+		}
+
+		// Skip empty lines, but collect non-empty lines as commands
+		if line != "" {
+			commands = append(commands, line)
+		}
+	}
+
+	return commands
+}
+
+// parseTestCommandsBulletList extracts commands from a bullet list
+// Starting from the line with first bullet (at startIdx)
+func parseTestCommandsBulletList(lines []string, startIdx int) []string {
+	var commands []string
+
+	for i := startIdx; i < len(lines); i++ {
+		line := lines[i]
+
+		// Stop at next section heading (## or **) or code block
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "##") ||
+			(strings.HasPrefix(trimmedLine, "**") && strings.Contains(trimmedLine, ":")) ||
+			strings.HasPrefix(trimmedLine, "```") {
+			break
+		}
+
+		// Match bullet point: line starts with optional whitespace, then dash, then content
+		bulletRegex := regexp.MustCompile(`^\s*-\s+(.+)$`)
+		if matches := bulletRegex.FindStringSubmatch(line); len(matches) > 1 {
+			command := strings.TrimSpace(matches[1])
+			if command != "" {
+				commands = append(commands, command)
+			}
+		} else if strings.HasPrefix(line, "  ") && len(commands) > 0 {
+			// Continuation line (indented with 2+ spaces) - append to last command
+			continuation := strings.TrimLeft(line, " \t")
+			if continuation != "" {
+				commands[len(commands)-1] = commands[len(commands)-1] + " " + continuation
+			}
+		} else if strings.TrimSpace(line) == "" {
+			// Empty line might mark end of section, but continue checking for more bullets
+			continue
+		}
+	}
+
+	return commands
 }
 
 // parseDuration parses time strings like "30m", "1h", "2h30m"
@@ -667,4 +885,482 @@ func convertMarkdownTaskNum(val interface{}) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported type: %T", val)
 	}
+}
+
+// parseIntegrationCriteria extracts Integration Criteria bullet list from markdown task content
+// Finds **Integration Criteria**: heading and extracts following bullet list items
+// Returns []string with all criteria, empty slice if section not found (backward compatible)
+func parseIntegrationCriteria(content string) []string {
+	// Find the **Integration Criteria**: heading
+	headingRegex := regexp.MustCompile(`(?m)^\*\*Integration Criteria\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+
+	if headingMatch == nil {
+		// Section not found, return empty slice (backward compatible)
+		return []string{}
+	}
+
+	// Extract content after the heading
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+
+	// Find lines until next heading (## or **) or double newline
+	lines := strings.Split(remainingContent, "\n")
+	var criteria []string
+	var currentCriterion strings.Builder
+
+	for _, line := range lines {
+		// Stop at next section heading (## or **)
+		if strings.HasPrefix(strings.TrimSpace(line), "##") ||
+			(strings.HasPrefix(strings.TrimSpace(line), "**") && strings.Contains(line, ":")) {
+			break
+		}
+
+		// Stop at double newline (empty line after content)
+		if strings.TrimSpace(line) == "" && currentCriterion.Len() > 0 {
+			// Finish current criterion if any
+			criterion := strings.TrimSpace(currentCriterion.String())
+			if criterion != "" {
+				criteria = append(criteria, criterion)
+			}
+			currentCriterion.Reset()
+			continue
+		}
+
+		// Match bullet point: line starts with optional whitespace, then dash, then content
+		bulletRegex := regexp.MustCompile(`^\s*-\s+(.+)$`)
+		if matches := bulletRegex.FindStringSubmatch(line); len(matches) > 1 {
+			// Save previous criterion if exists
+			if currentCriterion.Len() > 0 {
+				criterion := strings.TrimSpace(currentCriterion.String())
+				if criterion != "" {
+					criteria = append(criteria, criterion)
+				}
+			}
+			// Start new criterion
+			currentCriterion.Reset()
+			currentCriterion.WriteString(matches[1])
+		} else if strings.HasPrefix(line, "  ") && currentCriterion.Len() > 0 {
+			// Continuation line (indented with 2+ spaces)
+			currentCriterion.WriteString(" ")
+			currentCriterion.WriteString(strings.TrimLeft(line, " \t"))
+		} else if strings.TrimSpace(line) == "" && currentCriterion.Len() > 0 {
+			// Empty line might mark end of section
+			continue
+		}
+	}
+
+	// Don't forget the last criterion
+	if currentCriterion.Len() > 0 {
+		criterion := strings.TrimSpace(currentCriterion.String())
+		if criterion != "" {
+			criteria = append(criteria, criterion)
+		}
+	}
+
+	return criteria
+}
+
+// parseRuntimeMetadataMarkdown extracts Runtime Metadata subsection from markdown task content
+// Finds **Runtime Metadata**: heading and parses structured subsections:
+// - **Dependency Checks**: list of commands with descriptions
+// - **Documentation Targets**: list of locations with sections
+// - **Prompt Blocks**: list of type/content pairs
+// Returns *models.TaskMetadataRuntime with all metadata, nil if section not found (backward compatible)
+func parseRuntimeMetadataMarkdown(content string) *models.TaskMetadataRuntime {
+	// Find the **Runtime Metadata**: heading
+	headingRegex := regexp.MustCompile(`(?m)^\*\*Runtime Metadata\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+
+	if headingMatch == nil {
+		// Section not found, return nil (backward compatible)
+		return nil
+	}
+
+	// Extract content after the heading until next major section
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+
+	// Find end of runtime metadata section (next ## heading)
+	endIdx := len(remainingContent)
+	endRegex := regexp.MustCompile(`(?m)^##\s`)
+	if match := endRegex.FindStringIndex(remainingContent); match != nil {
+		endIdx = match[0]
+	}
+
+	sectionContent := remainingContent[:endIdx]
+
+	rm := &models.TaskMetadataRuntime{
+		DependencyChecks:     []models.DependencyCheck{},
+		DocumentationTargets: []models.DocumentationTarget{},
+		PromptBlocks:         []models.PromptBlock{},
+	}
+
+	// Parse **Dependency Checks**: subsection
+	rm.DependencyChecks = parseDependencyChecks(sectionContent)
+
+	// Parse **Documentation Targets**: subsection
+	rm.DocumentationTargets = parseDocumentationTargets(sectionContent)
+
+	// Parse **Prompt Blocks**: subsection
+	rm.PromptBlocks = parsePromptBlocks(sectionContent)
+
+	// Only return metadata if at least one subsection has content
+	if len(rm.DependencyChecks) == 0 && len(rm.DocumentationTargets) == 0 && len(rm.PromptBlocks) == 0 {
+		return nil
+	}
+
+	return rm
+}
+
+// parseDependencyChecks parses Dependency Checks from runtime metadata content
+func parseDependencyChecks(content string) []models.DependencyCheck {
+	var checks []models.DependencyCheck
+
+	// Find **Dependency Checks**: subsection
+	headingRegex := regexp.MustCompile(`(?m)^\s*\*\*Dependency Checks\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+	if headingMatch == nil {
+		return checks
+	}
+
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+	lines := strings.Split(remainingContent, "\n")
+
+	for _, line := range lines {
+		// Stop at next subsection
+		if strings.HasPrefix(strings.TrimSpace(line), "**") && strings.Contains(line, ":") {
+			break
+		}
+
+		// Match bullet: - command: description
+		bulletRegex := regexp.MustCompile(`^\s*-\s+(.+?)(?::\s+(.+))?$`)
+		if matches := bulletRegex.FindStringSubmatch(line); len(matches) >= 2 {
+			check := models.DependencyCheck{
+				Command: strings.TrimSpace(matches[1]),
+			}
+			if len(matches) > 2 && matches[2] != "" {
+				check.Description = strings.TrimSpace(matches[2])
+			}
+			if check.Command != "" {
+				checks = append(checks, check)
+			}
+		}
+	}
+
+	return checks
+}
+
+// parseDocumentationTargets parses Documentation Targets from runtime metadata content
+func parseDocumentationTargets(content string) []models.DocumentationTarget {
+	var targets []models.DocumentationTarget
+
+	// Find **Documentation Targets**: subsection
+	headingRegex := regexp.MustCompile(`(?m)^\s*\*\*Documentation Targets\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+	if headingMatch == nil {
+		return targets
+	}
+
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+	lines := strings.Split(remainingContent, "\n")
+
+	for _, line := range lines {
+		// Stop at next subsection
+		if strings.HasPrefix(strings.TrimSpace(line), "**") && strings.Contains(line, ":") {
+			break
+		}
+
+		// Match bullet: - location (section)
+		bulletRegex := regexp.MustCompile(`^\s*-\s+(.+?)(?:\s*\((.+)\))?$`)
+		if matches := bulletRegex.FindStringSubmatch(line); len(matches) >= 2 {
+			target := models.DocumentationTarget{
+				Location: strings.TrimSpace(matches[1]),
+			}
+			if len(matches) > 2 && matches[2] != "" {
+				target.Section = strings.TrimSpace(matches[2])
+			}
+			if target.Location != "" {
+				targets = append(targets, target)
+			}
+		}
+	}
+
+	return targets
+}
+
+// parsePromptBlocks parses Prompt Blocks from runtime metadata content
+func parsePromptBlocks(content string) []models.PromptBlock {
+	var blocks []models.PromptBlock
+
+	// Find **Prompt Blocks**: subsection
+	headingRegex := regexp.MustCompile(`(?m)^\s*\*\*Prompt Blocks\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+	if headingMatch == nil {
+		return blocks
+	}
+
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+	lines := strings.Split(remainingContent, "\n")
+
+	for _, line := range lines {
+		// Stop at next subsection or major section
+		if (strings.HasPrefix(strings.TrimSpace(line), "**") && strings.Contains(line, ":") && !strings.Contains(line, "Prompt Blocks")) ||
+			strings.HasPrefix(strings.TrimSpace(line), "##") {
+			break
+		}
+
+		// Match bullet: - type: content
+		bulletRegex := regexp.MustCompile(`^\s*-\s+(\w+):\s+(.+)$`)
+		if matches := bulletRegex.FindStringSubmatch(line); len(matches) == 3 {
+			block := models.PromptBlock{
+				Type:    strings.TrimSpace(matches[1]),
+				Content: strings.TrimSpace(matches[2]),
+			}
+			if block.Type != "" && block.Content != "" {
+				blocks = append(blocks, block)
+			}
+		}
+	}
+
+	return blocks
+}
+
+// parseStructuredCriteria extracts Structured Criteria from markdown task content
+// Finds **Structured Criteria**: heading and parses numbered list items with optional verification blocks
+// Each criterion can have an optional verification block with command/expected/description
+// Returns []models.SuccessCriterion with all criteria, empty slice if section not found (backward compatible)
+func parseStructuredCriteria(content string) []models.SuccessCriterion {
+	// Find the **Structured Criteria**: heading
+	headingRegex := regexp.MustCompile(`(?m)^\*\*Structured Criteria\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+
+	if headingMatch == nil {
+		// Section not found, return empty slice (backward compatible)
+		return []models.SuccessCriterion{}
+	}
+
+	// Extract content after the heading
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+
+	lines := strings.Split(remainingContent, "\n")
+	var criteria []models.SuccessCriterion
+	var currentCriterion *models.SuccessCriterion
+	var inVerification bool
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+
+		// Stop at next section heading (## or **)
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "##") ||
+			(strings.HasPrefix(trimmedLine, "**") && strings.Contains(trimmedLine, ":") && !strings.Contains(trimmedLine, "Verification")) {
+			// Save current criterion if exists
+			if currentCriterion != nil {
+				criteria = append(criteria, *currentCriterion)
+				currentCriterion = nil // Prevent duplicate append after loop
+			}
+			break
+		}
+
+		// Match numbered criterion (1., 2., etc.)
+		criterionRegex := regexp.MustCompile(`^\s*\d+\.\s+(.+)$`)
+		if matches := criterionRegex.FindStringSubmatch(line); len(matches) > 1 && !strings.HasPrefix(line, "  ") {
+			// Save previous criterion if exists
+			if currentCriterion != nil {
+				criteria = append(criteria, *currentCriterion)
+			}
+			// Start new criterion
+			currentCriterion = &models.SuccessCriterion{
+				Criterion: strings.TrimSpace(matches[1]),
+			}
+			inVerification = false
+			continue
+		}
+
+		// Check for verification block start
+		if currentCriterion != nil && strings.Contains(trimmedLine, "Verification:") {
+			currentCriterion.Verification = &models.CriterionVerification{}
+			inVerification = true
+			continue
+		}
+
+		// Parse verification sub-fields
+		if inVerification && currentCriterion != nil && currentCriterion.Verification != nil {
+			if strings.HasPrefix(trimmedLine, "- Command:") {
+				currentCriterion.Verification.Command = strings.TrimSpace(strings.TrimPrefix(trimmedLine, "- Command:"))
+			} else if strings.HasPrefix(trimmedLine, "- Expected:") {
+				currentCriterion.Verification.Expected = strings.TrimSpace(strings.TrimPrefix(trimmedLine, "- Expected:"))
+			} else if strings.HasPrefix(trimmedLine, "- Description:") {
+				currentCriterion.Verification.Description = strings.TrimSpace(strings.TrimPrefix(trimmedLine, "- Description:"))
+			}
+		}
+	}
+
+	// Don't forget the last criterion
+	if currentCriterion != nil {
+		criteria = append(criteria, *currentCriterion)
+	}
+
+	return criteria
+}
+
+// parseKeyPoints extracts Key Points from markdown task content
+// Finds **Key Points**: heading and parses numbered list items with optional detail fields
+// Each key point is a numbered item (1., 2., 3., etc.) with optional indented sub-bullets:
+// - Reference: link to related docs/code
+// - Impact: priority/importance level
+// - Note: additional context
+// Returns []models.KeyPoint with all key points, empty slice if section not found (backward compatible)
+func parseKeyPoints(content string) []models.KeyPoint {
+	// Find the **Key Points**: heading
+	headingRegex := regexp.MustCompile(`(?m)^\*\*Key Points\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+
+	if headingMatch == nil {
+		// Section not found, return empty slice (backward compatible)
+		return []models.KeyPoint{}
+	}
+
+	// Extract content after the heading
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+
+	lines := strings.Split(remainingContent, "\n")
+	var keyPoints []models.KeyPoint
+	var currentPoint strings.Builder
+	var currentReference strings.Builder
+	var currentImpact strings.Builder
+	var currentNote strings.Builder
+	var inPoint bool
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+
+		// Stop at next section heading (## or **)
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "##") ||
+			(strings.HasPrefix(trimmedLine, "**") && strings.Contains(trimmedLine, ":") && !strings.HasPrefix(trimmedLine, "**Key")) {
+			// Save current key point if exists
+			if inPoint && currentPoint.Len() > 0 {
+				kp := models.KeyPoint{
+					Point:     strings.TrimSpace(currentPoint.String()),
+					Reference: strings.TrimSpace(currentReference.String()),
+				}
+				// Combine Impact and Note into Details
+				var details strings.Builder
+				if currentImpact.Len() > 0 {
+					details.WriteString("Impact: ")
+					details.WriteString(strings.TrimSpace(currentImpact.String()))
+				}
+				if currentNote.Len() > 0 {
+					if details.Len() > 0 {
+						details.WriteString("; ")
+					}
+					details.WriteString("Note: ")
+					details.WriteString(strings.TrimSpace(currentNote.String()))
+				}
+				if details.Len() > 0 {
+					kp.Details = details.String()
+				}
+				keyPoints = append(keyPoints, kp)
+				inPoint = false
+				currentPoint.Reset()
+				currentReference.Reset()
+				currentImpact.Reset()
+				currentNote.Reset()
+			}
+			break
+		}
+
+		// Match numbered list item (1., 2., 3., etc.)
+		// Pattern: optional whitespace, digit(s), period, space, then content
+		numberedRegex := regexp.MustCompile(`^\s*\d+\.\s+(.+)$`)
+		if matches := numberedRegex.FindStringSubmatch(line); len(matches) > 1 && !strings.HasPrefix(line, "  ") {
+			// Save previous key point if exists
+			if inPoint && currentPoint.Len() > 0 {
+				kp := models.KeyPoint{
+					Point:     strings.TrimSpace(currentPoint.String()),
+					Reference: strings.TrimSpace(currentReference.String()),
+				}
+				// Combine Impact and Note into Details
+				var details strings.Builder
+				if currentImpact.Len() > 0 {
+					details.WriteString("Impact: ")
+					details.WriteString(strings.TrimSpace(currentImpact.String()))
+				}
+				if currentNote.Len() > 0 {
+					if details.Len() > 0 {
+						details.WriteString("; ")
+					}
+					details.WriteString("Note: ")
+					details.WriteString(strings.TrimSpace(currentNote.String()))
+				}
+				if details.Len() > 0 {
+					kp.Details = details.String()
+				}
+				keyPoints = append(keyPoints, kp)
+			}
+
+			// Start new key point
+			inPoint = true
+			currentPoint.Reset()
+			currentReference.Reset()
+			currentImpact.Reset()
+			currentNote.Reset()
+			currentPoint.WriteString(matches[1])
+		} else if strings.HasPrefix(line, "  ") && inPoint {
+			// Indented sub-bullet line (detail field) - parse key: value pairs
+			trimmedIndented := strings.TrimLeft(line, " \t")
+
+			// Match "- Reference: value"
+			if strings.HasPrefix(trimmedIndented, "- Reference:") {
+				refVal := strings.TrimPrefix(trimmedIndented, "- Reference:")
+				currentReference.Reset()
+				currentReference.WriteString(strings.TrimSpace(refVal))
+			} else if strings.HasPrefix(trimmedIndented, "- Impact:") {
+				impVal := strings.TrimPrefix(trimmedIndented, "- Impact:")
+				currentImpact.Reset()
+				currentImpact.WriteString(strings.TrimSpace(impVal))
+			} else if strings.HasPrefix(trimmedIndented, "- Note:") {
+				noteVal := strings.TrimPrefix(trimmedIndented, "- Note:")
+				currentNote.Reset()
+				currentNote.WriteString(strings.TrimSpace(noteVal))
+			}
+		} else if strings.TrimSpace(line) == "" && inPoint {
+			// Empty line might mark end of section or space between key points
+			continue
+		}
+	}
+
+	// Save last key point if exists
+	if inPoint && currentPoint.Len() > 0 {
+		kp := models.KeyPoint{
+			Point:     strings.TrimSpace(currentPoint.String()),
+			Reference: strings.TrimSpace(currentReference.String()),
+		}
+		// Combine Impact and Note into Details
+		var details strings.Builder
+		if currentImpact.Len() > 0 {
+			details.WriteString("Impact: ")
+			details.WriteString(strings.TrimSpace(currentImpact.String()))
+		}
+		if currentNote.Len() > 0 {
+			if details.Len() > 0 {
+				details.WriteString("; ")
+			}
+			details.WriteString("Note: ")
+			details.WriteString(strings.TrimSpace(currentNote.String()))
+		}
+		if details.Len() > 0 {
+			kp.Details = details.String()
+		}
+		keyPoints = append(keyPoints, kp)
+	}
+
+	return keyPoints
 }

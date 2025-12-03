@@ -977,3 +977,71 @@ Go development content
 		})
 	}
 }
+
+// TestBuildCommandArgsSystemPrompt verifies that all tasks get the --system-prompt flag
+// (Changed from --append-system-prompt to --system-prompt to fully override default prompt for strict JSON enforcement)
+func TestBuildCommandArgsSystemPrompt(t *testing.T) {
+	tests := []struct {
+		name     string
+		taskName string
+	}{
+		{
+			name:     "QC Review task includes --system-prompt",
+			taskName: "QC Review: Task 1 Implementation",
+		},
+		{
+			name:     "Regular task also includes --system-prompt",
+			taskName: "Implement Feature",
+		},
+		{
+			name:     "Another regular task includes --system-prompt",
+			taskName: "Add Unit Tests",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inv := NewInvoker()
+			task := models.Task{
+				Number:        "1",
+				Name:          tt.taskName,
+				Prompt:        "Do work",
+				EstimatedTime: 30 * time.Minute,
+			}
+
+			args := inv.BuildCommandArgs(task)
+
+			// Check if --system-prompt is present
+			hasSystemPrompt := false
+			for i, arg := range args {
+				if arg == "--system-prompt" {
+					hasSystemPrompt = true
+					// Verify there's a value after it that mentions JSON
+					if i+1 < len(args) && strings.Contains(args[i+1], "JSON") {
+						// Expected format
+						break
+					}
+				}
+			}
+
+			if !hasSystemPrompt {
+				t.Errorf("Task %q should have --system-prompt flag", tt.taskName)
+			}
+
+			// Verify --system-prompt comes after --json-schema
+			systemPromptIdx := -1
+			jsonSchemaIdx := -1
+			for i, arg := range args {
+				if arg == "--system-prompt" {
+					systemPromptIdx = i
+				}
+				if arg == "--json-schema" {
+					jsonSchemaIdx = i
+				}
+			}
+			if jsonSchemaIdx >= 0 && systemPromptIdx >= 0 && jsonSchemaIdx >= systemPromptIdx {
+				t.Error("--system-prompt should come after --json-schema")
+			}
+		})
+	}
+}

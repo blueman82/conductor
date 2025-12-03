@@ -1,0 +1,91 @@
+# ═══════════════════════════════════════════════════════════════
+# QC MODE VERIFICATION TEST PLAN
+# ═══════════════════════════════════════════════════════════════
+# PURPOSE: Verify multi-agent QC with intelligent mode selection
+# RUN: conductor run test/fixtures/qc-mode-test.yaml --verbose
+# ═══════════════════════════════════════════════════════════════
+# DATA FLOW REGISTRY
+# ═══════════════════════════════════════════════════════════════
+# PRODUCERS: Task 1 → greet() function
+# CONSUMERS: None (single task)
+# VALIDATION: N/A ✓
+# ═══════════════════════════════════════════════════════════════
+
+conductor:
+  default_agent: golang-pro
+  quality_control:
+    enabled: true
+    retry_on_red: 1
+    agents:
+      mode: intelligent
+      explicit_list:
+        - code-reviewer
+        - golang-pro
+plan:
+  metadata:
+    feature_name: "QC Mode Verification"
+    created: "2025-12-03"
+    target: "Verify QC agent selection and mode logging"
+  context:
+    framework: "Go"
+    architecture: "CLI"
+    test_framework: "go test"
+  tasks:
+    - task_number: 1
+      name: "Create greeting utility"
+      agent: golang-pro
+      files:
+        - test/fixtures/greeting/greet.go
+      depends_on: []
+      estimated_time: "2m"
+      success_criteria:
+        - "greet() function accepts name string parameter"
+        - "greet() returns formatted greeting string"
+        - "Package declaration is 'greeting'"
+        - "No TODO comments in production code paths."
+        - "No placeholder empty structs."
+      test_commands:
+        - "test -f test/fixtures/greeting/greet.go"
+        - "grep -q 'func greet' test/fixtures/greeting/greet.go"
+        - "grep -q 'package greeting' test/fixtures/greeting/greet.go"
+      description: |
+        ## TASK DESCRIPTION
+        Create a simple Go greeting utility function.
+
+        Requirements:
+        - Create greet(name string) string function
+        - Return "Hello, {name}!" format
+        - Package name: greeting
+      implementation:
+        approach: |
+          Create minimal Go file with single function.
+        key_points:
+          - point: "greet() function signature"
+            details: "Accepts name string, returns greeting string"
+            reference: "test/fixtures/greeting/greet.go"
+          - point: "Package declaration"
+            details: "Package greeting at top of file"
+            reference: "test/fixtures/greeting/greet.go"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "gofmt -l test/fixtures/greeting/"
+            exit_on_failure: false
+      commit:
+        type: "test"
+        message: "add greeting utility for QC mode verification"
+        files:
+          - "test/fixtures/greeting/**"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: golang-pro
+          verdict: GREEN
+          agent_output: |
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":32034,"duration_api_ms":43882,"num_turns":7,"result":"","session_id":"104b8dce-d3f4-4999-85ef-25796a2712ea","total_cost_usd":0.4055572500000001,"usage":{"input_tokens":9,"cache_creation_input_tokens":37329,"cache_read_input_tokens":220646,"output_tokens":669,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":37329}},"modelUsage":{"claude-opus-4-5-20251101":{"inputTokens":12,"outputTokens":689,"cacheReadInputTokens":220646,"cacheCreationInputTokens":42661,"webSearchRequests":0,"costUSD":0.39423925000000004,"contextWindow":200000},"claude-haiku-4-5-20251001":{"inputTokens":2848,"outputTokens":393,"cacheReadInputTokens":0,"cacheCreationInputTokens":5204,"webSearchRequests":0,"costUSD":0.011318,"contextWindow":200000}},"permission_denials":[],"structured_output":{"status":"success","summary":"Created greeting utility function in test/fixtures/greeting/greet.go","output":"Created test/fixtures/greeting/greet.go with:\n- Package: greeting\n- Function: greet(name string) string\n- Returns: \"Hello, {name}!\" format\n- Verified: Package compiles successfully with go build","errors":[],"files_modified":["test/fixtures/greeting/greet.go"]},"uuid":"07e5f081-6c95-406a-82a2-91d0b667941d"}
+          qc_feedback: |-
+            [code-reviewer] All success criteria verified. The file test/fixtures/greeting/greet.go exists at the exact expected path with correct implementation: package declaration is 'greeting', greet() function accepts name string parameter and returns formatted greeting string "Hello, {name}!". All test commands passed. No TODO comments or placeholder empty structs in the code.
+            [golang-pro] All success criteria verified. The greeting utility was correctly implemented at the exact expected path test/fixtures/greeting/greet.go. The greet() function accepts a name string parameter, returns the formatted "Hello, {name}!" greeting string, and the package is correctly declared as 'greeting'. No TODO comments or placeholder empty structs are present. All three test commands passed successfully.
+            [qa-expert] All success criteria verified. The greeting utility was created correctly at the exact expected path with proper implementation.
+          timestamp: "2025-12-03T16:06:19Z"
+      completed_date: "2025-12-03"

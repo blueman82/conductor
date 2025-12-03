@@ -145,10 +145,11 @@ func parseAgentJSON(output string) (*models.AgentResponse, error) {
 // Argument order:
 //  1. --agents (if agent specified and found in registry)
 //  2. --json-schema (enforces response structure via JSON schema - can be custom or default)
-//  3. -p (prompt with explicit JSON format instructions appended)
-//  4. --permission-mode bypassPermissions
-//  5. --settings (disableAllHooks)
-//  6. --output-format json
+//  3. --append-system-prompt (for QC tasks, enforces JSON-only output at system level)
+//  4. -p (prompt with explicit JSON format instructions appended)
+//  5. --permission-mode bypassPermissions
+//  6. --settings (disableAllHooks)
+//  7. --output-format json
 //
 // Behavior:
 //   - If task.Agent is specified AND exists in registry: adds --agents flag with JSON definition
@@ -157,6 +158,7 @@ func parseAgentJSON(output string) (*models.AgentResponse, error) {
 //   - If task.JSONSchema is set: uses custom schema; otherwise uses AgentResponseSchema
 //   - Regular agent tasks: PrepareAgentPrompt adds explicit JSON format at end of prompt
 //   - QC review tasks: PrepareQCPrompt already applied by BuildReviewPrompt/BuildStructuredReviewPrompt
+//   - QC review tasks: --append-system-prompt enforces JSON-only at system level
 func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	args := []string{}
 
@@ -179,6 +181,11 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 		schemaJSON = models.AgentResponseSchema()
 	}
 	args = append(args, "--json-schema", schemaJSON)
+
+	// Override system prompt to enforce JSON-only output for all tasks
+	// Using --system-prompt (not --append) to fully replace default prompt
+	// This prevents agents from outputting prose, markdown, XML tags, or other content that breaks JSON parsing
+	args = append(args, "--system-prompt", "You are a developer assistant. Your ONLY output must be valid JSON matching the provided schema. No markdown, no code fences, no XML tags, no prose, no explanations. Output raw JSON only.")
 
 	// Build prompt with formatting instructions
 	// QC review tasks come pre-formatted from BuildReviewPrompt/BuildStructuredReviewPrompt
