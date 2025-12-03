@@ -367,6 +367,81 @@ func parseType(content string) string {
 	return ""
 }
 
+// parseSuccessCriteriaMarkdown extracts Success Criteria bullet list from markdown task content
+// Finds **Success Criteria**: heading and extracts following bullet list items
+// Returns []string with all criteria, empty slice if section not found (backward compatible)
+func parseSuccessCriteriaMarkdown(content string) []string {
+	// Find the **Success Criteria**: heading
+	headingRegex := regexp.MustCompile(`(?m)^\*\*Success Criteria\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+
+	if headingMatch == nil {
+		// Section not found, return empty slice (backward compatible)
+		return []string{}
+	}
+
+	// Extract content after the heading
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+
+	// Find lines until next heading (## or **) or double newline
+	lines := strings.Split(remainingContent, "\n")
+	var criteria []string
+	var currentCriterion strings.Builder
+
+	for _, line := range lines {
+		// Stop at next section heading (## or **)
+		if strings.HasPrefix(strings.TrimSpace(line), "##") ||
+		   (strings.HasPrefix(strings.TrimSpace(line), "**") && strings.Contains(line, ":")) {
+			break
+		}
+
+		// Stop at double newline (empty line after content)
+		if strings.TrimSpace(line) == "" && currentCriterion.Len() > 0 {
+			// Finish current criterion if any
+			criterion := strings.TrimSpace(currentCriterion.String())
+			if criterion != "" {
+				criteria = append(criteria, criterion)
+			}
+			currentCriterion.Reset()
+			// Check if this is truly end of section (another empty line follows)
+			continue
+		}
+
+		// Match bullet point: line starts with optional whitespace, then dash, then content
+		bulletRegex := regexp.MustCompile(`^\s*-\s+(.+)$`)
+		if matches := bulletRegex.FindStringSubmatch(line); len(matches) > 1 {
+			// Save previous criterion if exists
+			if currentCriterion.Len() > 0 {
+				criterion := strings.TrimSpace(currentCriterion.String())
+				if criterion != "" {
+					criteria = append(criteria, criterion)
+				}
+			}
+			// Start new criterion
+			currentCriterion.Reset()
+			currentCriterion.WriteString(matches[1])
+		} else if strings.HasPrefix(line, "  ") && currentCriterion.Len() > 0 {
+			// Continuation line (indented with 2+ spaces)
+			currentCriterion.WriteString(" ")
+			currentCriterion.WriteString(strings.TrimLeft(line, " \t"))
+		} else if strings.TrimSpace(line) == "" && currentCriterion.Len() > 0 {
+			// Empty line might mark end of section
+			continue
+		}
+	}
+
+	// Don't forget the last criterion
+	if currentCriterion.Len() > 0 {
+		criterion := strings.TrimSpace(currentCriterion.String())
+		if criterion != "" {
+			criteria = append(criteria, criterion)
+		}
+	}
+
+	return criteria
+}
+
 // parseTaskMetadata extracts metadata fields from task content
 func parseTaskMetadata(task *models.Task, content string) {
 	// Strip code blocks to prevent extracting metadata from code examples
@@ -374,6 +449,9 @@ func parseTaskMetadata(task *models.Task, content string) {
 
 	// Parse **Type**: inline annotation (component or integration)
 	task.Type = parseType(contentWithoutCode)
+
+	// Parse **Success Criteria**: bullet list
+	task.SuccessCriteria = parseSuccessCriteriaMarkdown(contentWithoutCode)
 
 	// Parse **Status**: inline annotation (takes precedence)
 	statusRegex := regexp.MustCompile(`\*\*Status\*\*:\s*(\w+)`)
