@@ -354,10 +354,26 @@ func removeCodeBlocks(content string) string {
 	return result.String()
 }
 
+// parseType extracts the Type field from task content (component or integration)
+// Returns empty string if Type field not found (backward compatible - defaults to component)
+func parseType(content string) string {
+	// Regex pattern: \*\*Type\*\*:\s*(.+)
+	// Matches **Type**: followed by whitespace and value, capturing value group
+	typeRegex := regexp.MustCompile(`\*\*Type\*\*:\s*(.+)`)
+	if matches := typeRegex.FindStringSubmatch(content); len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+	// Return empty string if Type field not found (backward compatible)
+	return ""
+}
+
 // parseTaskMetadata extracts metadata fields from task content
 func parseTaskMetadata(task *models.Task, content string) {
 	// Strip code blocks to prevent extracting metadata from code examples
 	contentWithoutCode := removeCodeBlocks(content)
+
+	// Parse **Type**: inline annotation (component or integration)
+	task.Type = parseType(contentWithoutCode)
 
 	// Parse **Status**: inline annotation (takes precedence)
 	statusRegex := regexp.MustCompile(`\*\*Status\*\*:\s*(\w+)`)
