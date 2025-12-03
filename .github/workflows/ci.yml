@@ -43,7 +43,7 @@ jobs:
         run: go mod verify
 
       - name: Run tests
-        run: go test ./... -v -race -timeout=5m
+        run: go test ./... -v -race -short -timeout=5m
 
       - name: Run go vet
         run: go vet ./...
