@@ -31,7 +31,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-          cache: true
+          cache: false
 
       - name: Display Go version
         run: go version
@@ -82,7 +82,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
-          cache: true
+          cache: false
 
       - name: Build binary for ${{ matrix.goos }}/${{ matrix.goarch }}
         env:
