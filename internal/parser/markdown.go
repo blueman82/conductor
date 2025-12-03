@@ -367,7 +367,8 @@ func parseType(content string) string {
 	return ""
 }
 
-// parseSuccessCriteriaMarkdown extracts Success Criteria bullet list from markdown task content
+// parseSuccessCriteria: markdown variant (invoked from parseTaskMetadata function)
+// Extracts Success Criteria bullet list from markdown task content
 // Finds **Success Criteria**: heading and extracts following bullet list items
 // Returns []string with all criteria, empty slice if section not found (backward compatible)
 func parseSuccessCriteriaMarkdown(content string) []string {
@@ -450,8 +451,8 @@ func parseTaskMetadata(task *models.Task, content string) {
 	// Parse **Type**: inline annotation (component or integration)
 	task.Type = parseType(contentWithoutCode)
 
-	// Parse **Success Criteria**: bullet list
-	task.SuccessCriteria = parseSuccessCriteriaMarkdown(contentWithoutCode)
+	// Parse **Success Criteria**: bullet list (called from parseTaskMetadata)
+	task.SuccessCriteria = parseSuccessCriteriaMarkdown(contentWithoutCode) // parseSuccessCriteria extracted
 
 	// Parse **Status**: inline annotation (takes precedence)
 	statusRegex := regexp.MustCompile(`\*\*Status\*\*:\s*(\w+)`)
@@ -536,6 +537,117 @@ func parseTaskMetadata(task *models.Task, content string) {
 	if matches := worktreeGroupRegex.FindStringSubmatch(contentWithoutCode); len(matches) > 1 {
 		task.WorktreeGroup = strings.TrimSpace(matches[1])
 	}
+
+	// Parse **Test Commands**: (supports both bullet list and code block formats)
+	task.TestCommands = parseTestCommands(content)
+}
+
+// parseTestCommands extracts test commands from markdown task content
+// Supports two formats:
+// 1. Code block: **Test Commands**: \n```bash\ncommand1\ncommand2\n```
+// 2. Bullet list: **Test Commands**: \n- command1\n- command2
+// Returns []string with all commands, empty slice if section not found (backward compatible)
+func parseTestCommands(content string) []string {
+	// Find the **Test Commands**: heading
+	headingRegex := regexp.MustCompile(`(?m)^\*\*Test Commands\*\*:\s*$`)
+	headingMatch := headingRegex.FindStringIndex(content)
+
+	if headingMatch == nil {
+		// Section not found, return empty slice (backward compatible)
+		return []string{}
+	}
+
+	// Extract content after the heading
+	startPos := headingMatch[1]
+	remainingContent := content[startPos:]
+
+	// Check if next non-blank line is a code block or bullet list
+	lines := strings.Split(remainingContent, "\n")
+
+	// Skip empty lines to find the first non-empty line
+	var firstContentLine string
+	var firstContentIdx int
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			firstContentLine = strings.TrimSpace(line)
+			firstContentIdx = i
+			break
+		}
+	}
+
+	// If no content found, return empty slice
+	if firstContentLine == "" {
+		return []string{}
+	}
+
+	// Check if it's a code block (starts with ```)
+	if strings.HasPrefix(firstContentLine, "```") {
+		return parseTestCommandsCodeBlock(lines, firstContentIdx)
+	}
+
+	// Otherwise, assume it's a bullet list
+	return parseTestCommandsBulletList(lines, firstContentIdx)
+}
+
+// parseTestCommandsCodeBlock extracts commands from a code block
+// Starting from the line with opening ``` (at startIdx)
+func parseTestCommandsCodeBlock(lines []string, startIdx int) []string {
+	var commands []string
+
+	// startIdx points to the ```bash line, so skip it
+	for i := startIdx + 1; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+
+		// Stop at closing ```
+		if line == "```" {
+			break
+		}
+
+		// Skip empty lines, but collect non-empty lines as commands
+		if line != "" {
+			commands = append(commands, line)
+		}
+	}
+
+	return commands
+}
+
+// parseTestCommandsBulletList extracts commands from a bullet list
+// Starting from the line with first bullet (at startIdx)
+func parseTestCommandsBulletList(lines []string, startIdx int) []string {
+	var commands []string
+
+	for i := startIdx; i < len(lines); i++ {
+		line := lines[i]
+
+		// Stop at next section heading (## or **) or code block
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "##") ||
+			(strings.HasPrefix(trimmedLine, "**") && strings.Contains(trimmedLine, ":")) ||
+			strings.HasPrefix(trimmedLine, "```") {
+			break
+		}
+
+		// Match bullet point: line starts with optional whitespace, then dash, then content
+		bulletRegex := regexp.MustCompile(`^\s*-\s+(.+)$`)
+		if matches := bulletRegex.FindStringSubmatch(line); len(matches) > 1 {
+			command := strings.TrimSpace(matches[1])
+			if command != "" {
+				commands = append(commands, command)
+			}
+		} else if strings.HasPrefix(line, "  ") && len(commands) > 0 {
+			// Continuation line (indented with 2+ spaces) - append to last command
+			continuation := strings.TrimLeft(line, " \t")
+			if continuation != "" {
+				commands[len(commands)-1] = commands[len(commands)-1] + " " + continuation
+			}
+		} else if strings.TrimSpace(line) == "" {
+			// Empty line might mark end of section, but continue checking for more bullets
+			continue
+		}
+	}
+
+	return commands
 }
 
 // parseDuration parses time strings like "30m", "1h", "2h30m"

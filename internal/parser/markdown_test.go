@@ -1644,3 +1644,431 @@ No success criteria section here`
 		t.Errorf("expected empty criteria when section not found, got %v", criteria)
 	}
 }
+
+// =============================================================================
+// Test Commands Parsing Tests
+// =============================================================================
+
+func TestParseTestCommands_CodeBlockFormat(t *testing.T) {
+	tests := []struct {
+		name             string
+		markdown         string
+		expectedCommands []string
+	}{
+		{
+			name: "code block with single command",
+			markdown: `# Test Plan
+
+## Task 1: Task with Test Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+` + "```bash" + `
+go test ./...
+` + "```" + `
+`,
+			expectedCommands: []string{"go test ./..."},
+		},
+		{
+			name: "code block with multiple commands",
+			markdown: `# Test Plan
+
+## Task 1: Task with Multiple Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+` + "```bash" + `
+npm test
+npm run build
+npm run lint
+` + "```" + `
+`,
+			expectedCommands: []string{"npm test", "npm run build", "npm run lint"},
+		},
+		{
+			name: "code block with empty lines",
+			markdown: `# Test Plan
+
+## Task 1: Task with Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+` + "```bash" + `
+go test ./...
+
+go test -race ./...
+` + "```" + `
+`,
+			expectedCommands: []string{"go test ./...", "go test -race ./..."},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewMarkdownParser()
+			plan, err := parser.Parse(strings.NewReader(tt.markdown))
+			if err != nil {
+				t.Fatalf("Failed to parse markdown: %v", err)
+			}
+
+			if len(plan.Tasks) == 0 {
+				t.Fatal("expected at least 1 task")
+			}
+
+			task := plan.Tasks[0]
+
+			// Check command count
+			if len(task.TestCommands) != len(tt.expectedCommands) {
+				t.Errorf("expected %d commands, got %d", len(tt.expectedCommands), len(task.TestCommands))
+				t.Logf("Expected: %v", tt.expectedCommands)
+				t.Logf("Got: %v", task.TestCommands)
+			}
+
+			// Check each command
+			for i, expected := range tt.expectedCommands {
+				if i >= len(task.TestCommands) {
+					break
+				}
+				if task.TestCommands[i] != expected {
+					t.Errorf("command %d: expected %q, got %q", i, expected, task.TestCommands[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseTestCommands_BulletListFormat(t *testing.T) {
+	tests := []struct {
+		name             string
+		markdown         string
+		expectedCommands []string
+	}{
+		{
+			name: "bullet list with single command",
+			markdown: `# Test Plan
+
+## Task 1: Task with Test Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+- go test ./...
+`,
+			expectedCommands: []string{"go test ./..."},
+		},
+		{
+			name: "bullet list with multiple commands",
+			markdown: `# Test Plan
+
+## Task 1: Task with Multiple Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+- npm test
+- npm run build
+- npm run lint
+`,
+			expectedCommands: []string{"npm test", "npm run build", "npm run lint"},
+		},
+		{
+			name: "bullet list followed by other section",
+			markdown: `# Test Plan
+
+## Task 1: Task with Commands and More
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+- go test ./...
+- go test -race ./...
+
+**Success Criteria**:
+- Test passes
+`,
+			expectedCommands: []string{"go test ./...", "go test -race ./..."},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewMarkdownParser()
+			plan, err := parser.Parse(strings.NewReader(tt.markdown))
+			if err != nil {
+				t.Fatalf("Failed to parse markdown: %v", err)
+			}
+
+			if len(plan.Tasks) == 0 {
+				t.Fatal("expected at least 1 task")
+			}
+
+			task := plan.Tasks[0]
+
+			// Check command count
+			if len(task.TestCommands) != len(tt.expectedCommands) {
+				t.Errorf("expected %d commands, got %d", len(tt.expectedCommands), len(task.TestCommands))
+				t.Logf("Expected: %v", tt.expectedCommands)
+				t.Logf("Got: %v", task.TestCommands)
+			}
+
+			// Check each command
+			for i, expected := range tt.expectedCommands {
+				if i >= len(task.TestCommands) {
+					break
+				}
+				if task.TestCommands[i] != expected {
+					t.Errorf("command %d: expected %q, got %q", i, expected, task.TestCommands[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseTestCommands_EmptySection(t *testing.T) {
+	markdown := `# Test Plan
+
+## Task 1: Task with Empty Test Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+
+**Status**: pending
+`
+
+	parser := NewMarkdownParser()
+	plan, err := parser.Parse(strings.NewReader(markdown))
+	if err != nil {
+		t.Fatalf("Failed to parse markdown: %v", err)
+	}
+
+	if len(plan.Tasks) == 0 {
+		t.Fatal("expected at least 1 task")
+	}
+
+	task := plan.Tasks[0]
+
+	if len(task.TestCommands) != 0 {
+		t.Errorf("expected empty test commands, got %v", task.TestCommands)
+	}
+}
+
+func TestParseTestCommands_NotFound(t *testing.T) {
+	markdown := `# Test Plan
+
+## Task 1: Task without Test Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+### Implementation
+No test commands section here
+`
+
+	parser := NewMarkdownParser()
+	plan, err := parser.Parse(strings.NewReader(markdown))
+	if err != nil {
+		t.Fatalf("Failed to parse markdown: %v", err)
+	}
+
+	if len(plan.Tasks) == 0 {
+		t.Fatal("expected at least 1 task")
+	}
+
+	task := plan.Tasks[0]
+
+	if len(task.TestCommands) != 0 {
+		t.Errorf("expected empty test commands when section not found, got %v", task.TestCommands)
+	}
+}
+
+func TestParseTestCommands_DirectFunction(t *testing.T) {
+	tests := []struct {
+		name             string
+		content          string
+		expectedCommands []string
+	}{
+		{
+			name: "code block format",
+			content: `**Test Commands**:
+` + "```bash" + `
+go test ./...
+go test -race ./...
+` + "```" + ``,
+			expectedCommands: []string{"go test ./...", "go test -race ./..."},
+		},
+		{
+			name: "bullet list format",
+			content: `**Test Commands**:
+- npm test
+- npm run build`,
+			expectedCommands: []string{"npm test", "npm run build"},
+		},
+		{
+			name: "empty content",
+			content: `**Test Commands**:
+
+**Status**: pending`,
+			expectedCommands: []string{},
+		},
+		{
+			name: "section not found",
+			content: `**File(s)**: test.go
+**Depends on**: None`,
+			expectedCommands: []string{},
+		},
+		{
+			name: "code block with mixed language identifier",
+			content: `**Test Commands**:
+` + "```go" + `
+go test ./...
+` + "```" + ``,
+			expectedCommands: []string{"go test ./..."},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			commands := parseTestCommands(tt.content)
+
+			if len(commands) != len(tt.expectedCommands) {
+				t.Errorf("expected %d commands, got %d", len(tt.expectedCommands), len(commands))
+				t.Logf("Expected: %v", tt.expectedCommands)
+				t.Logf("Got: %v", commands)
+			}
+
+			for i, expected := range tt.expectedCommands {
+				if i >= len(commands) {
+					break
+				}
+				if commands[i] != expected {
+					t.Errorf("command %d: expected %q, got %q", i, expected, commands[i])
+				}
+			}
+		})
+	}
+}
+
+func TestMarkdown_TestCommands(t *testing.T) {
+	tests := []struct {
+		name             string
+		markdown         string
+		expectedCommands []string
+	}{
+		{
+			name: "task with test commands in code block",
+			markdown: `# Test Plan
+
+## Task 1: Task with Test Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+` + "```bash" + `
+go test ./...
+go test ./... -race
+` + "```" + `
+`,
+			expectedCommands: []string{"go test ./...", "go test ./... -race"},
+		},
+		{
+			name: "task with test commands in bullet list",
+			markdown: `# Test Plan
+
+## Task 1: Task with Test Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+- npm test
+- npm run build
+- npm run lint
+`,
+			expectedCommands: []string{"npm test", "npm run build", "npm run lint"},
+		},
+		{
+			name: "task without test commands",
+			markdown: `# Test Plan
+
+## Task 1: Task without Test Commands
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`,
+			expectedCommands: []string{},
+		},
+		{
+			name: "task with test commands followed by success criteria",
+			markdown: `# Test Plan
+
+## Task 1: Complete Task
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Test Commands**:
+- go test ./...
+
+**Success Criteria**:
+- Tests pass
+- Code builds
+`,
+			expectedCommands: []string{"go test ./..."},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewMarkdownParser()
+			plan, err := parser.Parse(strings.NewReader(tt.markdown))
+			if err != nil {
+				t.Fatalf("Failed to parse markdown: %v", err)
+			}
+
+			if len(plan.Tasks) == 0 {
+				t.Fatal("expected at least 1 task")
+			}
+
+			task := plan.Tasks[0]
+
+			if len(task.TestCommands) != len(tt.expectedCommands) {
+				t.Errorf("expected %d commands, got %d", len(tt.expectedCommands), len(task.TestCommands))
+				t.Logf("Expected: %v", tt.expectedCommands)
+				t.Logf("Got: %v", task.TestCommands)
+			}
+
+			for i, expected := range tt.expectedCommands {
+				if i >= len(task.TestCommands) {
+					break
+				}
+				if task.TestCommands[i] != expected {
+					t.Errorf("command %d: expected %q, got %q", i, expected, task.TestCommands[i])
+				}
+			}
+		})
+	}
+}
