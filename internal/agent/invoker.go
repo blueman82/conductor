@@ -89,22 +89,44 @@ func serializeAgentToJSON(agent *Agent) (string, error) {
 }
 
 // PrepareAgentPrompt adds formatting instructions to agent prompts for consistent output
-// Includes minimal JSON instruction - structure is enforced via --json-schema flag
+// Includes explicit JSON format instruction at end of prompt for guaranteed valid JSON output
+// Note: --json-schema is not enforced with --agents flag, so explicit format instruction is critical
 func PrepareAgentPrompt(prompt string) string {
 	const instructionSuffix = `
 
-After completing all work, respond with JSON containing: status ("success" or "failed"), summary, output, errors (array), files_modified (array).`
+CRITICAL: Respond with ONLY this exact JSON, nothing else - no prose, no explanation, no markdown, no tags:
+{"status":"success","summary":"...","output":"...","errors":[],"files_modified":[]}`
+	return prompt + instructionSuffix
+}
+
+// PrepareQCPrompt adds formatting instructions to QC review prompts
+// Includes explicit JSON format instruction at end of prompt for guaranteed valid QC response
+// Note: --json-schema is not enforced with --agents flag, so explicit format instruction is critical
+func PrepareQCPrompt(prompt string) string {
+	const instructionSuffix = `
+
+CRITICAL: Respond with ONLY this exact JSON, nothing else - no prose, no explanation, no markdown, no tags:
+{"verdict":"GREEN","feedback":"...","criteria_results":[],"should_retry":false}`
 	return prompt + instructionSuffix
 }
 
 // parseAgentJSON parses JSON response from agent
-// With --json-schema enforcement, responses are guaranteed to be valid JSON
+// Extracts JSON object from output (skips any prose before opening brace)
 // Returns error if response is invalid
 func parseAgentJSON(output string) (*models.AgentResponse, error) {
 	var resp models.AgentResponse
 
-	// Parse as JSON (schema enforcement should guarantee valid JSON)
-	err := json.Unmarshal([]byte(output), &resp)
+	// Extract JSON portion - find opening and closing braces
+	// This handles agents outputting prose before JSON, or wrapping in markdown code blocks
+	jsonStart := strings.Index(output, "{")
+	jsonEnd := strings.LastIndex(output, "}")
+	if jsonStart < 0 || jsonEnd < 0 || jsonEnd <= jsonStart {
+		return nil, fmt.Errorf("failed to parse agent response as JSON: no complete JSON object found in output")
+	}
+	jsonStr := output[jsonStart : jsonEnd+1]
+
+	// Parse as JSON
+	err := json.Unmarshal([]byte(jsonStr), &resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse agent response as JSON: %w", err)
 	}
@@ -118,12 +140,12 @@ func parseAgentJSON(output string) (*models.AgentResponse, error) {
 }
 
 // BuildCommandArgs constructs the command-line arguments for invoking claude CLI
-// Enforces JSON-structured responses using --json-schema flag
+// Enforces JSON-structured responses using explicit format instructions (since --json-schema doesn't work with --agents)
 //
 // Argument order:
 //  1. --agents (if agent specified and found in registry)
-//  2. --json-schema (enforces response structure via JSON schema - can be custom or default AgentResponseSchema)
-//  3. -p (prompt without JSON instructions)
+//  2. --json-schema (enforces response structure via JSON schema - can be custom or default)
+//  3. -p (prompt with explicit JSON format instructions appended)
 //  4. --permission-mode bypassPermissions
 //  5. --settings (disableAllHooks)
 //  6. --output-format json
@@ -133,7 +155,8 @@ func parseAgentJSON(output string) (*models.AgentResponse, error) {
 //   - If task.Agent is specified but not found: falls back to plain prompt (no agent)
 //   - If task.Agent is empty: plain prompt (no agent flags)
 //   - If task.JSONSchema is set: uses custom schema; otherwise uses AgentResponseSchema
-//   - --json-schema enforces the response structure, eliminating need for prompt-based JSON instructions
+//   - Regular agent tasks: PrepareAgentPrompt adds explicit JSON format at end of prompt
+//   - QC review tasks: PrepareQCPrompt already applied by BuildReviewPrompt/BuildStructuredReviewPrompt
 func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	args := []string{}
 
@@ -158,8 +181,13 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	args = append(args, "--json-schema", schemaJSON)
 
 	// Build prompt with formatting instructions
+	// QC review tasks come pre-formatted from BuildReviewPrompt/BuildStructuredReviewPrompt
+	// Regular agent tasks need PrepareAgentPrompt for guaranteed JSON output
 	prompt := task.Prompt
-	prompt = PrepareAgentPrompt(prompt)
+	if !strings.Contains(task.Name, "QC Review:") {
+		// Regular agent task - add agent-specific JSON format instructions
+		prompt = PrepareAgentPrompt(prompt)
+	}
 
 	// Add -p flag for non-interactive print mode (essential for automation)
 	args = append(args, "-p", prompt)

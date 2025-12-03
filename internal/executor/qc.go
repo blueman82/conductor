@@ -158,8 +158,8 @@ Agent Output:
 		basePrompt += "\n\n" + behaviorContext
 	}
 
-	// Add formatting instructions
-	return agent.PrepareAgentPrompt(basePrompt)
+	// Add formatting instructions (QC-specific JSON format)
+	return agent.PrepareQCPrompt(basePrompt)
 }
 
 // getCombinedCriteria merges success_criteria and integration_criteria into single array
@@ -295,7 +295,8 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
-	return sb.String()
+	// Add formatting instructions (QC-specific JSON format)
+	return agent.PrepareQCPrompt(sb.String())
 }
 
 // ParseReviewResponse extracts the QC flag and feedback from agent output
@@ -720,10 +721,19 @@ func parseQCJSON(output string) (*models.QCResponse, error) {
 
 	var resp models.QCResponse
 
-	// Parse JSON - schema enforcement guarantees valid structure
-	err := json.Unmarshal([]byte(actualOutput), &resp)
+	// Extract JSON portion - find opening and closing braces
+	// This handles agents outputting prose before JSON, or wrapping in markdown code blocks
+	jsonStart := strings.Index(actualOutput, "{")
+	jsonEnd := strings.LastIndex(actualOutput, "}")
+	if jsonStart < 0 || jsonEnd < 0 || jsonEnd <= jsonStart {
+		return nil, fmt.Errorf("failed to parse QC response as JSON: no complete JSON object found in output")
+	}
+	jsonStr := actualOutput[jsonStart : jsonEnd+1]
+
+	// Parse JSON
+	err := json.Unmarshal([]byte(jsonStr), &resp)
 	if err != nil {
-		return nil, fmt.Errorf("JSON schema enforcement failed: %w", err)
+		return nil, fmt.Errorf("failed to parse QC response as JSON: %w", err)
 	}
 
 	// Validate parsed JSON structure

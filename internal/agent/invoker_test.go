@@ -138,7 +138,7 @@ func TestBuildCommandArgs(t *testing.T) {
 					// Verify prompt includes JSON instruction suffix and task prompt
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "respond with JSON containing") &&
+						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
 							strings.Contains(arg, "Do something") {
 							hasPrompt = true
 							break
@@ -183,7 +183,7 @@ Swift agent content
 					// Verify JSON instruction suffix (formatting instruction removed)
 					hasFormatting := false
 					for _, arg := range args {
-						if strings.Contains(arg, "respond with JSON containing") {
+						if strings.Contains(arg, "Respond with ONLY this exact JSON") {
 							hasFormatting = true
 							break
 						}
@@ -213,7 +213,7 @@ Swift agent content
 					// Verify prompt includes JSON instruction suffix
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "respond with JSON containing") &&
+						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
 							strings.Contains(arg, "Do work") {
 							hasPrompt = true
 							break
@@ -224,12 +224,16 @@ Swift agent content
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Verify JSON instruction is NOT in prompt (now in --json-schema)
+					// Verify new JSON instruction format is present
+					hasNewFormat := false
 					for _, arg := range args {
-						if strings.Contains(arg, "After completing all implementation work") {
-							t.Error("Prompt should NOT include JSON instruction (moved to --json-schema)")
+						if strings.Contains(arg, "Respond with ONLY this exact JSON") {
+							hasNewFormat = true
 							break
 						}
+					}
+					if !hasNewFormat {
+						t.Error("Prompt should include new JSON instruction format")
 					}
 				},
 			},
@@ -249,7 +253,7 @@ Swift agent content
 					// Verify prompt includes JSON instruction suffix
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "respond with JSON containing") &&
+						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
 							strings.Contains(arg, "Create something") {
 							hasPrompt = true
 							break
