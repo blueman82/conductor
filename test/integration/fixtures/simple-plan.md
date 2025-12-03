@@ -5,10 +5,9 @@
 
 ## Task 1: First Task
 
-**File(s)**: `main.go`
-**Depends on**: None
+**File(s)**: `main.py`
 **Estimated time**: 10m
-**Agent**: general-purpose
+**Agent**: python-pro
 
 ### What you're building
 This is the first task in a simple linear plan for integration testing.
@@ -20,10 +19,10 @@ Complete the first task as part of the integration test.
 
 ## Task 2: Second Task
 
-**File(s)**: `main.go`
+**File(s)**: `main.py`
 **Depends on**: 1
 **Estimated time**: 10m
-**Agent**: general-purpose
+**Agent**: python-pro
 
 ### What you're building
 This is the second task, which depends on the first task.

@@ -1,24 +1,34 @@
 conductor:
   max_concurrency: 2
   timeout: "5m"
-  default_agent: "general-purpose"
+  default_agent: "python-pro"
 
 plan:
   metadata:
-    name: "Simple YAML Plan"
+    name: "Integration Test Plan: Simple Linear"
+    created: "2025-11-10"
     estimated_tasks: 2
   tasks:
     - task_number: 1
       type: component
-      name: "First YAML Task"
-      prompt: "This is the first task in YAML format"
-      files: ["config.yaml"]
+      name: "First Task"
+      prompt: "This is the first task in a simple linear plan for integration testing. Complete the first task as part of the integration test."
+      files: ["main.py"]
       depends_on: []
       estimated_time: "10m"
+      agent: "python-pro"
+      success_criteria:
+        - "Task completes without errors"
+        - "Output is generated"
+
     - task_number: 2
       type: component
-      name: "Second YAML Task"
-      prompt: "This is the second task, depends on first"
-      files: ["output.yaml"]
+      name: "Second Task"
+      prompt: "This is the second task, which depends on the first task. Complete the second task after the first task completes."
+      files: ["main.py"]
       depends_on: [1]
       estimated_time: "10m"
+      agent: "python-pro"
+      success_criteria:
+        - "Task completes without errors"
+        - "Output builds on first task"
