@@ -11,22 +11,26 @@ Run all demos in sequence:
 
 Or run individual demos:
 ```bash
-./demo_validate.sh        # Plan validation
-./demo_run_dry.sh         # Dry-run execution
-./demo_run.sh             # Full execution with QC
-./demo_run_failure.sh     # Execution with failures
-./demo_learning.sh        # Learning system commands
-./demo_observe_stats.sh   # Observe statistics
-./demo_observe_project.sh # Observe project analysis
-./demo_observe_session.sh # Observe session analysis
-./demo_observe_tools.sh   # Observe tool analysis
-./demo_observe_bash.sh    # Observe bash analysis
-./demo_observe_files.sh   # Observe file analysis
-./demo_observe_errors.sh  # Observe error analysis
-./demo_observe_ingest.sh  # Observe ingestion daemon
-./demo_observe_live.sh    # Observe live streaming
-./demo_observe_transcript.sh  # Observe session transcript
-./demo_observe_export.sh  # Observe data export
+./demo_validate.sh              # Plan validation
+./demo_run_dry.sh               # Dry-run execution
+./demo_run.sh                   # Full execution with QC
+./demo_run_failure.sh           # Execution with failures
+./demo_run_enforcement.sh       # Runtime enforcement gates
+./demo_run_error_classification.sh  # Error pattern detection
+./demo_qc_selection.sh          # QC agent selection modes
+./demo_run_integration_tasks.sh # Dual criteria validation
+./demo_learning.sh              # Learning system commands
+./demo_observe_stats.sh         # Observe statistics
+./demo_observe_project.sh       # Observe project analysis
+./demo_observe_session.sh       # Observe session analysis
+./demo_observe_tools.sh         # Observe tool analysis
+./demo_observe_bash.sh          # Observe bash analysis
+./demo_observe_files.sh         # Observe file analysis
+./demo_observe_errors.sh        # Observe error analysis
+./demo_observe_ingest.sh        # Observe ingestion daemon
+./demo_observe_live.sh          # Observe live streaming
+./demo_observe_transcript.sh    # Observe session transcript
+./demo_observe_export.sh        # Observe data export
 ```
 
 ## Demo Scripts
@@ -39,6 +43,10 @@ Or run individual demos:
 | `demo_run_dry.sh` | `conductor run --dry-run` | Simulates dry-run mode showing execution waves |
 | `demo_run.sh` | `conductor run --verbose` | Full execution with QC reviews, retries, and summary |
 | `demo_run_failure.sh` | `conductor run --verbose` | Execution with failures and blocked tasks |
+| `demo_run_enforcement.sh` | `conductor run` | Shows runtime enforcement (test commands, package guard, etc.) |
+| `demo_run_error_classification.sh` | `conductor run` | Shows error pattern detection and classification |
+| `demo_qc_selection.sh` | `conductor run --qc-mode/--qc-agents` | Shows intelligent QC agent selection |
+| `demo_run_integration_tasks.sh` | `conductor run` | Shows integration tasks with dual criteria validation |
 
 ### Learning System
 
@@ -79,5 +87,5 @@ Or run individual demos:
 ## Notes
 
 - These scripts simulate output only - they don't execute actual Conductor commands
-- Output format matches Conductor v2.8.0
+- Output format matches Conductor v2.13.0
 - Scripts work best in terminals with ANSI color support
