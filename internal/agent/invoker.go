@@ -182,9 +182,10 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	}
 	args = append(args, "--json-schema", schemaJSON)
 
-	// Enforce JSON-only output at system prompt level for all tasks expecting JSON
-	// This prevents agents from outputting prose, markdown, or other content that breaks JSON parsing
-	args = append(args, "--append-system-prompt", "Output ONLY valid JSON. No markdown, no explanations, no code fences, no XML tags, no prose.")
+	// Override system prompt to enforce JSON-only output for all tasks
+	// Using --system-prompt (not --append) to fully replace default prompt
+	// This prevents agents from outputting prose, markdown, XML tags, or other content that breaks JSON parsing
+	args = append(args, "--system-prompt", "You are a developer assistant. Your ONLY output must be valid JSON matching the provided schema. No markdown, no code fences, no XML tags, no prose, no explanations. Output raw JSON only.")
 
 	// Build prompt with formatting instructions
 	// QC review tasks come pre-formatted from BuildReviewPrompt/BuildStructuredReviewPrompt
