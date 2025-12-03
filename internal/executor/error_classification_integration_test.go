@@ -160,9 +160,9 @@ func (m *mockErrorClassificationLogger) LogCloudClassification(classification in
 func (m *mockErrorClassificationLogger) LogTestCommands(entries []models.TestCommandResult) {}
 func (m *mockErrorClassificationLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
 }
-func (m *mockErrorClassificationLogger) Warnf(format string, args ...interface{}) {}
-func (m *mockErrorClassificationLogger) Info(message string)                      {}
-func (m *mockErrorClassificationLogger) Infof(format string, args ...interface{}) {}
+func (m *mockErrorClassificationLogger) Warnf(format string, args ...interface{})                   {}
+func (m *mockErrorClassificationLogger) Info(message string)                                        {}
+func (m *mockErrorClassificationLogger) Infof(format string, args ...interface{})                   {}
 func (m *mockErrorClassificationLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}
 
 // =============================================================================

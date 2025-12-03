@@ -45,11 +45,11 @@ type RuntimeEnforcementLogger interface {
 	LogTestCommands(entries []models.TestCommandResult)
 	LogCriterionVerifications(entries []models.CriterionVerificationResult)
 	LogDocTargetVerifications(entries []models.DocTargetResult)
-	LogErrorPattern(pattern interface{})       // Flexible interface for testing (deprecated, use LogDetectedError)
-	LogDetectedError(detected interface{})     // Flexible interface for testing (v2.12+)
-	Warnf(format string, args ...interface{})  // Warning messages
-	Info(message string)                       // Info messages
-	Infof(format string, args ...interface{})  // Formatted info messages
+	LogErrorPattern(pattern interface{})      // Flexible interface for testing (deprecated, use LogDetectedError)
+	LogDetectedError(detected interface{})    // Flexible interface for testing (v2.12+)
+	Warnf(format string, args ...interface{}) // Warning messages
+	Info(message string)                      // Info messages
+	Infof(format string, args ...interface{}) // Formatted info messages
 }
 
 // TaskExecution represents a single task execution record for learning storage.

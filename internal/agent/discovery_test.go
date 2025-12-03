@@ -990,8 +990,8 @@ Content
 	}
 
 	tests := []struct {
-		name       string
-		agentName  string
+		name        string
+		agentName   string
 		shouldExist bool
 	}{
 		{"exists - agent-one", "agent-one", true},

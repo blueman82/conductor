@@ -1424,9 +1424,9 @@ func TestDetectedErrorMethodField(t *testing.T) {
 // TestDetectedErrorConfidenceField verifies Confidence field values.
 func TestDetectedErrorConfidenceField(t *testing.T) {
 	tests := []struct {
-		name            string
-		output          string
-		wantConfidence  float64
+		name           string
+		output         string
+		wantConfidence float64
 	}{
 		{
 			name:           "regex detection always 1.0",

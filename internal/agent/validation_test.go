@@ -352,10 +352,10 @@ func TestValidationError_ErrorMessageQC(t *testing.T) {
 // TestValidationError_NoAvailableAgents tests error message when no agents are available
 func TestValidationError_NoAvailableAgents(t *testing.T) {
 	err := &ValidationError{
-		AgentName: "python-pro",
-		UsageType: "task",
+		AgentName:  "python-pro",
+		UsageType:  "task",
 		TaskNumber: 1,
-		Available: []string{},
+		Available:  []string{},
 	}
 
 	msg := err.Error()
@@ -389,7 +389,7 @@ func TestValidationError_TaskNumberZero(t *testing.T) {
 // TestValidateTaskAgents_TableDriven comprehensive table-driven test
 func TestValidateTaskAgents_TableDriven(t *testing.T) {
 	type args struct {
-		taskAgent     string
+		taskAgent      string
 		registryAgents []string
 	}
 

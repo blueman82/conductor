@@ -1633,8 +1633,8 @@ func (sp *stubPatternDisplay) IsAgentFixable() bool {
 type stubLogger struct {
 	mu            sync.Mutex
 	errorPatterns []interface{} // Will store ErrorPattern pointers or wrappers
-	warnMessages  []string       // Store warn messages for adaptive retry tests
-	infoMessages  []string       // Store info messages for adaptive retry tests
+	warnMessages  []string      // Store warn messages for adaptive retry tests
+	infoMessages  []string      // Store info messages for adaptive retry tests
 }
 
 func newStubLogger() *stubLogger {
@@ -2120,6 +2120,7 @@ func TestExecute_DetectedErrorStorage(t *testing.T) {
 		EnforceTestCommands:         true,
 		EnableErrorPatternDetection: true,
 		EnableClaudeClassification:  false, // Disable Claude for simpler test
+		FileLockManager:             filelock.NewManager(),
 	}
 
 	ctx := context.Background()
@@ -2185,8 +2186,8 @@ func TestAdaptiveRetry_CodeLevel_AllowsRetry(t *testing.T) {
 
 	reviewer := &stubReviewer{
 		results: []*ReviewResult{
-			{Flag: models.StatusRed, Feedback: "Compilation error"},   // First attempt RED
-			{Flag: models.StatusGreen, Feedback: "Fixed on retry"},    // Second attempt GREEN
+			{Flag: models.StatusRed, Feedback: "Compilation error"}, // First attempt RED
+			{Flag: models.StatusGreen, Feedback: "Fixed on retry"},  // Second attempt GREEN
 		},
 		retryDecisions: map[int]bool{0: true}, // Allow retry after first RED
 	}
