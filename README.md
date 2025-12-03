@@ -255,7 +255,7 @@ For complete configuration options, see [Configuration Guide](docs/conductor.md#
 
 ## Plan Format
 
-Conductor supports both Markdown and YAML formats:
+Both Markdown and YAML formats support all conductor features (v2.14+) — feature parity between formats means you can choose based on your preference.
 
 ### Markdown Example
 
@@ -267,6 +267,10 @@ Conductor supports both Markdown and YAML formats:
 **Depends on**: None
 **Estimated time**: 5 minutes
 **Agent**: code-implementation
+
+**Success Criteria**:
+- Criterion 1
+- Criterion 2
 
 Task description and requirements.
 ```
@@ -297,8 +301,12 @@ plan:
 - **Cross-File Dependencies** (v2.6+): Reference tasks in other files with explicit notation
 - **Test Commands**: Automated testing and validation
 - **Runtime Metadata**: Dependency checks and documentation targets
+- **Structured Criteria** (v2.9+): Advanced verification with commands and expected results
+- **Key Points** (v2.9+): Implementation notes and references
 
-For complete format specifications and examples, see [Plan Format Guide](docs/conductor.md#plan-format).
+For complete format specifications and examples:
+- **Markdown Format**: [Markdown Format Guide](docs/MARKDOWN_FORMAT.md)
+- **YAML Format**: [Plan Format Guide](docs/conductor.md#plan-format)
 
 [⬆ back to top](#table-of-contents)
 

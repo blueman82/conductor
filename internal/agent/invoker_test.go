@@ -977,3 +977,70 @@ Go development content
 		})
 	}
 }
+
+// TestBuildCommandArgsAppendSystemPrompt verifies that all tasks get the --append-system-prompt flag
+func TestBuildCommandArgsAppendSystemPrompt(t *testing.T) {
+	tests := []struct {
+		name     string
+		taskName string
+	}{
+		{
+			name:     "QC Review task includes --append-system-prompt",
+			taskName: "QC Review: Task 1 Implementation",
+		},
+		{
+			name:     "Regular task also includes --append-system-prompt",
+			taskName: "Implement Feature",
+		},
+		{
+			name:     "Another regular task includes --append-system-prompt",
+			taskName: "Add Unit Tests",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inv := NewInvoker()
+			task := models.Task{
+				Number:        "1",
+				Name:          tt.taskName,
+				Prompt:        "Do work",
+				EstimatedTime: 30 * time.Minute,
+			}
+
+			args := inv.BuildCommandArgs(task)
+
+			// Check if --append-system-prompt is present
+			hasAppendSystemPrompt := false
+			for i, arg := range args {
+				if arg == "--append-system-prompt" {
+					hasAppendSystemPrompt = true
+					// Verify there's a value after it
+					if i+1 < len(args) && strings.Contains(args[i+1], "JSON") {
+						// Expected format
+						break
+					}
+				}
+			}
+
+			if !hasAppendSystemPrompt {
+				t.Errorf("Task %q should have --append-system-prompt flag", tt.taskName)
+			}
+
+			// Verify --append-system-prompt comes after --json-schema
+			appendIdx := -1
+			jsonSchemaIdx := -1
+			for i, arg := range args {
+				if arg == "--append-system-prompt" {
+					appendIdx = i
+				}
+				if arg == "--json-schema" {
+					jsonSchemaIdx = i
+				}
+			}
+			if jsonSchemaIdx >= 0 && appendIdx >= 0 && jsonSchemaIdx >= appendIdx {
+				t.Error("--append-system-prompt should come after --json-schema")
+			}
+		})
+	}
+}

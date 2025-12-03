@@ -1428,3 +1428,219 @@ conductor:
 		t.Error("expected nil PlannerCompliance for legacy plan")
 	}
 }
+
+func TestMarkdown_SuccessCriteria(t *testing.T) {
+	tests := []struct {
+		name              string
+		markdown          string
+		expectedCriteria  []string
+	}{
+		{
+			name: "task with success criteria",
+			markdown: `# Test Plan
+
+## Task 1: Task with Criteria
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Success Criteria**:
+- Function returns correct value
+- Error handling works for edge cases
+- Performance meets requirements
+`,
+			expectedCriteria: []string{
+				"Function returns correct value",
+				"Error handling works for edge cases",
+				"Performance meets requirements",
+			},
+		},
+		{
+			name: "task with multi-line success criteria",
+			markdown: `# Test Plan
+
+## Task 1: Task with Multi-line Criteria
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Success Criteria**:
+- Long criterion that spans
+  multiple lines with proper indentation
+- Another criterion
+`,
+			expectedCriteria: []string{
+				"Long criterion that spans multiple lines with proper indentation",
+				"Another criterion",
+			},
+		},
+		{
+			name: "task without success criteria",
+			markdown: `# Test Plan
+
+## Task 1: Task without Criteria
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+`,
+			expectedCriteria: []string{},
+		},
+		{
+			name: "task with empty success criteria section",
+			markdown: `# Test Plan
+
+## Task 1: Task with Empty Criteria
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Success Criteria**:
+
+**Status**: pending
+`,
+			expectedCriteria: []string{},
+		},
+		{
+			name: "task with criteria followed by other sections",
+			markdown: `# Test Plan
+
+## Task 1: Task with Multiple Sections
+
+**File(s)**: ` + "`test.go`" + `
+**Depends on**: None
+**Estimated time**: 30m
+
+**Success Criteria**:
+- Criteria 1
+- Criteria 2
+
+**Test Commands**:
+` + "```bash" + `
+go test ./...
+` + "```" + `
+`,
+			expectedCriteria: []string{
+				"Criteria 1",
+				"Criteria 2",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewMarkdownParser()
+			plan, err := parser.Parse(strings.NewReader(tt.markdown))
+			if err != nil {
+				t.Fatalf("Failed to parse markdown: %v", err)
+			}
+
+			if len(plan.Tasks) == 0 {
+				t.Fatal("expected at least 1 task")
+			}
+
+			task := plan.Tasks[0]
+
+			// Check criteria count
+			if len(task.SuccessCriteria) != len(tt.expectedCriteria) {
+				t.Errorf("expected %d criteria, got %d", len(tt.expectedCriteria), len(task.SuccessCriteria))
+				t.Logf("Expected: %v", tt.expectedCriteria)
+				t.Logf("Got: %v", task.SuccessCriteria)
+			}
+
+			// Check each criterion
+			for i, expected := range tt.expectedCriteria {
+				if i >= len(task.SuccessCriteria) {
+					break
+				}
+				if task.SuccessCriteria[i] != expected {
+					t.Errorf("criterion %d: expected %q, got %q", i, expected, task.SuccessCriteria[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseSuccessCriteria_ExtractsBulletListItems(t *testing.T) {
+	// Success criteria #0: parseSuccessCriteria() extracts bullet list items
+	content := `**Success Criteria**:
+- First criterion
+- Second criterion
+- Third criterion
+
+**Status**: pending`
+
+	criteria := parseSuccessCriteriaMarkdown(content)
+
+	if len(criteria) != 3 {
+		t.Errorf("expected 3 criteria, got %d", len(criteria))
+	}
+
+	expectedCriteria := []string{
+		"First criterion",
+		"Second criterion",
+		"Third criterion",
+	}
+
+	for i, expected := range expectedCriteria {
+		if i >= len(criteria) {
+			break
+		}
+		if criteria[i] != expected {
+			t.Errorf("criterion %d: expected %q, got %q", i, expected, criteria[i])
+		}
+	}
+}
+
+func TestParseSuccessCriteria_HandlesMultilineCriteria(t *testing.T) {
+	content := `**Success Criteria**:
+- First criterion spanning
+  multiple lines with indentation
+- Second criterion
+  continued on next line
+  and another line
+- Single line criterion
+
+**Test Commands**:`
+
+	criteria := parseSuccessCriteriaMarkdown(content)
+
+	if len(criteria) != 3 {
+		t.Errorf("expected 3 criteria, got %d", len(criteria))
+		t.Logf("Got: %v", criteria)
+	}
+
+	if len(criteria) > 0 && !strings.Contains(criteria[0], "First criterion spanning") {
+		t.Errorf("first criterion should contain 'First criterion spanning', got %q", criteria[0])
+	}
+}
+
+func TestParseSuccessCriteria_EmptySection(t *testing.T) {
+	content := `**Success Criteria**:
+
+**Status**: pending`
+
+	criteria := parseSuccessCriteriaMarkdown(content)
+
+	if len(criteria) != 0 {
+		t.Errorf("expected empty criteria, got %v", criteria)
+	}
+}
+
+func TestParseSuccessCriteria_NotFound(t *testing.T) {
+	content := `**File(s)**: test.go
+**Depends on**: None
+**Estimated time**: 30m
+
+### Implementation
+No success criteria section here`
+
+	criteria := parseSuccessCriteriaMarkdown(content)
+
+	if len(criteria) != 0 {
+		t.Errorf("expected empty criteria when section not found, got %v", criteria)
+	}
+}
