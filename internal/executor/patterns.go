@@ -2,7 +2,10 @@ package executor
 
 import (
 	"encoding/json"
+	"os/exec"
 	"regexp"
+	"strings"
+	"time"
 
 	"github.com/harrison/conductor/internal/models"
 )
@@ -63,6 +66,39 @@ func (ep *ErrorPattern) GetSuggestion() string {
 // IsAgentFixable returns whether the agent can fix this error (satisfies logger.ErrorPatternDisplay interface).
 func (ep *ErrorPattern) IsAgentFixable() bool {
 	return ep.AgentCanFix
+}
+
+// DetectedError represents an error detection result with classification metadata.
+// Wraps ErrorPattern with detection method, confidence score, and timestamp.
+type DetectedError struct {
+	Pattern    *ErrorPattern // The detected error pattern
+	RawOutput  string        // The original error output that was classified
+	Method     string        // Detection method: "claude" or "regex"
+	Confidence float64       // Confidence score (0.0-1.0, always 1.0 for regex)
+	Timestamp  time.Time     // When the error was detected
+}
+
+// GetErrorPattern returns the underlying error pattern (satisfies logger.DetectedErrorDisplay interface).
+func (de *DetectedError) GetErrorPattern() interface{} {
+	return de.Pattern
+}
+
+// GetMethod returns the detection method (satisfies logger.DetectedErrorDisplay interface).
+func (de *DetectedError) GetMethod() string {
+	return de.Method
+}
+
+// GetConfidence returns the confidence score (satisfies logger.DetectedErrorDisplay interface).
+func (de *DetectedError) GetConfidence() float64 {
+	return de.Confidence
+}
+
+// GetRequiresHumanIntervention returns whether manual intervention is needed (satisfies logger.DetectedErrorDisplay interface).
+func (de *DetectedError) GetRequiresHumanIntervention() bool {
+	if de.Pattern == nil {
+		return false
+	}
+	return de.Pattern.RequiresHumanIntervention
 }
 
 // KnownPatterns is the comprehensive library of error patterns
@@ -171,32 +207,34 @@ type invokerInterface interface {
 }
 
 // DetectErrorPattern analyzes output and returns matching pattern if found.
-// Signature: DetectErrorPattern(output, invoker)
+// Signature: DetectErrorPattern(output, invoker, enableClaude)
 // The invoker parameter (second) is optional. Pass nil or interface{} to skip Claude classification.
+// The enableClaude parameter (third) controls whether to attempt Claude classification.
 //
 // BEHAVIOR:
-// 1. If invoker is provided and Claude classification is enabled (config):
+// 1. If enableClaude=true, invoker is provided, and Claude classification succeeds:
 //   - Attempts Claude-based semantic classification
-//   - On success + confidence >= 0.85: Returns pattern converted from CloudErrorClassification
+//   - On success + confidence >= 0.85: Returns DetectedError with "claude" method
 //   - On failure (timeout, network, low confidence): Falls back to regex
 //
 // 2. Falls back to regex patterns in all cases
 // 3. Returns nil if no pattern matches or output is empty
 //
 // BACKWARD COMPATIBILITY:
-// - Old signature: DetectErrorPattern(output string) still works (pass nil as second param)
 // - Regex patterns never removed or changed
 // - Claude classification is opt-in via config.Executor.EnableClaudeClassification
 // - All existing tests continue passing
-func DetectErrorPattern(output string, invoker interface{}) *ErrorPattern {
+func DetectErrorPattern(output string, invoker interface{}, enableClaude bool) *DetectedError {
 	if output == "" {
 		return nil
 	}
 
-	// Try Claude classification if invoker is provided and Claude is enabled
-	pattern := tryClaudeClassification(output, invoker)
-	if pattern != nil {
-		return pattern
+	// Try Claude classification if enabled and invoker is provided
+	if enableClaude {
+		detected := tryClaudeClassification(output, invoker)
+		if detected != nil {
+			return detected
+		}
 	}
 
 	// Fall back to regex patterns
@@ -205,7 +243,7 @@ func DetectErrorPattern(output string, invoker interface{}) *ErrorPattern {
 
 // detectErrorPatternByRegex is the original regex-based error detection logic.
 // Now a private function that's part of the fallback strategy.
-func detectErrorPatternByRegex(output string) *ErrorPattern {
+func detectErrorPatternByRegex(output string) *DetectedError {
 	if output == "" {
 		return nil
 	}
@@ -222,7 +260,13 @@ func detectErrorPatternByRegex(output string) *ErrorPattern {
 		if matched {
 			// Return a copy to avoid external modifications
 			patternCopy := *pattern
-			return &patternCopy
+			return &DetectedError{
+				Pattern:    &patternCopy,
+				RawOutput:  output,
+				Method:     "regex",
+				Confidence: 1.0,
+				Timestamp:  time.Now(),
+			}
 		}
 	}
 	return nil
@@ -248,8 +292,8 @@ func detectErrorPatternByRegex(output string) *ErrorPattern {
 //   - Claude responds with valid JSON
 //   - Confidence >= 0.85
 //   - Category is one of: CODE_LEVEL, PLAN_LEVEL, ENV_LEVEL
-//   - Returns converted ErrorPattern for consistency with regex path
-func tryClaudeClassification(output string, invoker interface{}) *ErrorPattern {
+//   - Returns DetectedError with "claude" method
+func tryClaudeClassification(output string, invoker interface{}) *DetectedError {
 	// Guard: invoker must be non-nil
 	if invoker == nil {
 		return nil
@@ -262,11 +306,72 @@ func tryClaudeClassification(output string, invoker interface{}) *ErrorPattern {
 		return nil
 	}
 
-	// TODO: Would add actual Claude invocation here in full implementation
-	// For now, return nil to always fall back to regex
-	// This implements the graceful fallback by default
+	// Build classification prompt with context
+	prompt := models.ErrorClassificationPromptWithContext(output, "")
 
-	return nil
+	// Get JSON schema for response validation
+	schema := models.ErrorClassificationSchema()
+
+	// Call Claude CLI directly with schema enforcement
+	// No timeout - allow Claude to take as long as needed for deep analysis
+	cmd := exec.Command("claude", "-p", prompt, "--json-schema", schema, "--output-format", "json")
+	outputBytes, err := cmd.Output()
+	if err != nil {
+		// Network error or command failure - fall back to regex
+		return nil
+	}
+
+	// Try parsing as CLI envelope - check structured_output first (--json-schema), then result field
+	var cliOutput struct {
+		StructuredOutput json.RawMessage `json:"structured_output"`
+		Result           string          `json:"result"`
+	}
+	var jsonData string
+	if err := json.Unmarshal(outputBytes, &cliOutput); err == nil {
+		if len(cliOutput.StructuredOutput) > 0 {
+			// --json-schema returns data in structured_output field
+			jsonData = string(cliOutput.StructuredOutput)
+		} else if cliOutput.Result != "" {
+			// CLI wrapper format - strip markdown fences if present
+			jsonData = cliOutput.Result
+			jsonData = strings.TrimSpace(jsonData)
+			jsonData = strings.TrimPrefix(jsonData, "```json")
+			jsonData = strings.TrimPrefix(jsonData, "```")
+			jsonData = strings.TrimSuffix(jsonData, "```")
+			jsonData = strings.TrimSpace(jsonData)
+		} else {
+			// No wrapper, use raw
+			jsonData = string(outputBytes)
+		}
+	} else {
+		// Unmarshal failed, use raw
+		jsonData = string(outputBytes)
+	}
+
+	// Parse classification response
+	cc, err := parseClaudeClassificationResponse(jsonData)
+	if err != nil {
+		return nil
+	}
+
+	// Check confidence threshold
+	if cc.Confidence < 0.85 {
+		return nil
+	}
+
+	// Convert to DetectedError with claude method
+	pattern := convertCloudClassificationToPattern(cc)
+	if pattern == nil {
+		return nil
+	}
+
+	return &DetectedError{
+		Pattern:    pattern,
+		RawOutput:  output,
+		Method:     "claude",
+		Confidence: cc.Confidence,
+		Timestamp:  time.Now(),
+	}
 }
 
 // hasInvokeMethod checks if an interface{} has an Invoke method
