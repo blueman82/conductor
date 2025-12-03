@@ -45,28 +45,28 @@ func TestDetectErrorPatternEnvLevel(t *testing.T) {
 			output:   "xcrun: error: multiple devices matched",
 			wantCat:  ENV_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "command not found",
 			output:   "xcodebuild: command not found",
 			wantCat:  ENV_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "permission denied",
 			output:   "Error: permission denied when accessing /usr/local/bin/tool",
 			wantCat:  ENV_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "no space left on device",
 			output:   "Error writing file: No space left on device",
 			wantCat:  ENV_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 	}
 
@@ -111,49 +111,49 @@ func TestDetectErrorPatternPlanLevel(t *testing.T) {
 			output:   "Error: no test bundles available for testing",
 			wantCat:  PLAN_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "There are no test bundles",
 			output:   "Build output: There are no test bundles in this project",
 			wantCat:  PLAN_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "Tests in target cannot be run",
 			output:   "Build failed: Tests in the target 'UITests' can't be run",
 			wantCat:  PLAN_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "No such file test path",
 			output:   "Error: No such file or directory: /path/to/test_file.swift",
 			wantCat:  PLAN_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "scheme does not exist",
 			output:   "Error: The scheme 'InvalidScheme' does not exist.",
 			wantCat:  PLAN_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "Could not find test host",
 			output:   "Build error: Could not find test host bundle",
 			wantCat:  PLAN_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 		{
 			name:     "test host not found",
 			output:   "Error: test host not found for UI testing",
 			wantCat:  PLAN_LEVEL,
 			wantFix:  false,
-			wantHelp: true,
+			wantHelp: false,
 		},
 	}
 
@@ -486,9 +486,10 @@ func TestKnownPatternsConsistency(t *testing.T) {
 				t.Errorf("pattern[%d]: CODE_LEVEL errors should have AgentCanFix=true", i)
 			}
 
-			// For ENV_LEVEL and PLAN_LEVEL, require human intervention
-			if (pattern.Category == ENV_LEVEL || pattern.Category == PLAN_LEVEL) && !pattern.RequiresHumanIntervention {
-				t.Errorf("pattern[%d]: %v errors should have RequiresHumanIntervention=true", i, pattern.Category)
+			// ENV_LEVEL and PLAN_LEVEL: agents cannot fix directly (AgentCanFix=false)
+			// but can be informed by QC feedback (RequiresHumanIntervention=false allows retries)
+			if (pattern.Category == ENV_LEVEL || pattern.Category == PLAN_LEVEL) && pattern.AgentCanFix {
+				t.Errorf("pattern[%d]: %v errors should have AgentCanFix=false", i, pattern.Category)
 			}
 		})
 	}

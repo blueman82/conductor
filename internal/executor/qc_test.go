@@ -3234,7 +3234,7 @@ func TestFormatDetectedErrors(t *testing.T) {
 			},
 			wantContains: []string{
 				"## Error Classification Analysis",
-				"Error 1: CompilationError",
+				"Error 1: CODE_LEVEL",
 				"**Method**: regex",
 				"**Agent Can Fix**: true",
 				"**Requires Human**: false",
@@ -3288,8 +3288,8 @@ func TestFormatDetectedErrors(t *testing.T) {
 				},
 			},
 			wantContains: []string{
-				"Error 1: CompilationError",
-				"Error 2: TestFailure",
+				"Error 1: CODE_LEVEL",
+				"Error 2: CODE_LEVEL",
 				"confidence: 92%",
 			},
 		},
@@ -3351,7 +3351,7 @@ func TestBuildStructuredReviewPrompt_WithErrorClassification(t *testing.T) {
 		if !contains(prompt, "## Error Classification Analysis") {
 			t.Error("BuildStructuredReviewPrompt() missing error classification section")
 		}
-		if !contains(prompt, "Error 1: TestFailure") {
+		if !contains(prompt, "Error 1: CODE_LEVEL") {
 			t.Error("BuildStructuredReviewPrompt() missing error category")
 		}
 		if !contains(prompt, "confidence: 90%") {
