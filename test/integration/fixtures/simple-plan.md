@@ -19,6 +19,13 @@ Create a file `main.py` with a simple Python script that prints "Hello from Task
 - File `main.py` created with valid Python code
 - Script prints 'Hello from Task 1' when executed
 
+**Dependency Checks:**
+- Python 3.8+: `python3 --version`
+
+**Test Commands:**
+- `python3 -m py_compile main.py`
+- `python3 main.py | grep 'Hello from Task 1'`
+
 ---
 
 ## Task 2: Second Task
@@ -37,3 +44,10 @@ Modify the existing file `main.py` to add a line that prints "Hello from Task 2"
 **Success Criteria:**
 - File `main.py` modified correctly
 - Script prints both messages in correct order
+
+**Dependency Checks:**
+- Python 3.8+: `python3 --version`
+
+**Test Commands:**
+- `python3 -m py_compile main.py`
+- `python3 main.py | grep 'Hello from Task 1' && python3 main.py | grep 'Hello from Task 2'`
