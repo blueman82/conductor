@@ -3199,3 +3199,203 @@ func TestBuildStructuredReviewPrompt_KeyPointsWithIntegrationTask(t *testing.T) 
 		t.Error("Second key point should be included")
 	}
 }
+
+// TestFormatDetectedErrors tests the formatting of error classifications
+func TestFormatDetectedErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		errors       []*DetectedError
+		wantContains []string
+		wantEmpty    bool
+	}{
+		{
+			name:      "nil errors",
+			errors:    nil,
+			wantEmpty: true,
+		},
+		{
+			name:      "empty errors",
+			errors:    []*DetectedError{},
+			wantEmpty: true,
+		},
+		{
+			name: "single regex error",
+			errors: []*DetectedError{
+				{
+					Pattern: &ErrorPattern{
+						Category:                  ErrorCategoryCompilation,
+						Suggestion:                "Fix syntax error",
+						AgentCanFix:               true,
+						RequiresHumanIntervention: false,
+					},
+					Method:     "regex",
+					Confidence: 1.0,
+				},
+			},
+			wantContains: []string{
+				"## Error Classification Analysis",
+				"Error 1: CompilationError",
+				"**Method**: regex",
+				"**Agent Can Fix**: true",
+				"**Requires Human**: false",
+				"**Suggestion**: Fix syntax error",
+				"Use this context when reviewing code quality",
+			},
+		},
+		{
+			name: "claude error with confidence",
+			errors: []*DetectedError{
+				{
+					Pattern: &ErrorPattern{
+						Category:                  ErrorCategoryMissingDependency,
+						Suggestion:                "Install missing package",
+						AgentCanFix:               false,
+						RequiresHumanIntervention: true,
+					},
+					Method:     "claude",
+					Confidence: 0.85,
+				},
+			},
+			wantContains: []string{
+				"**Method**: claude (confidence: 85%)",
+				"**Agent Can Fix**: false",
+				"**Requires Human**: true",
+				"**Suggestion**: Install missing package",
+			},
+		},
+		{
+			name: "multiple errors",
+			errors: []*DetectedError{
+				{
+					Pattern: &ErrorPattern{
+						Category:                  ErrorCategoryCompilation,
+						Suggestion:                "Fix syntax",
+						AgentCanFix:               true,
+						RequiresHumanIntervention: false,
+					},
+					Method:     "regex",
+					Confidence: 1.0,
+				},
+				{
+					Pattern: &ErrorPattern{
+						Category:                  ErrorCategoryTestFailure,
+						Suggestion:                "Update test assertions",
+						AgentCanFix:               true,
+						RequiresHumanIntervention: false,
+					},
+					Method:     "claude",
+					Confidence: 0.92,
+				},
+			},
+			wantContains: []string{
+				"Error 1: CompilationError",
+				"Error 2: TestFailure",
+				"confidence: 92%",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatDetectedErrors(tt.errors)
+
+			if tt.wantEmpty {
+				if result != "" {
+					t.Errorf("FormatDetectedErrors() expected empty string, got: %s", result)
+				}
+				return
+			}
+
+			for _, want := range tt.wantContains {
+				if !contains(result, want) {
+					t.Errorf("FormatDetectedErrors() missing expected content %q\nGot: %s", want, result)
+				}
+			}
+		})
+	}
+}
+
+// TestBuildStructuredReviewPrompt_WithErrorClassification tests error classification injection in QC prompt
+func TestBuildStructuredReviewPrompt_WithErrorClassification(t *testing.T) {
+	qc := NewQualityController(nil)
+
+	t.Run("includes error classification when present", func(t *testing.T) {
+		task := models.Task{
+			Number: "1",
+			Name:   "Task with detected errors",
+			Prompt: "Implement feature",
+			SuccessCriteria: []string{
+				"Feature works",
+				"Tests pass",
+			},
+			Metadata: map[string]interface{}{
+				"detected_errors": []*DetectedError{
+					{
+						Pattern: &ErrorPattern{
+							Category:                  ErrorCategoryTestFailure,
+							Suggestion:                "Fix test assertions",
+							AgentCanFix:               true,
+							RequiresHumanIntervention: false,
+						},
+						Method:     "claude",
+						Confidence: 0.9,
+					},
+				},
+			},
+		}
+
+		ctx := context.Background()
+		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+		// Should include error classification section
+		if !contains(prompt, "## Error Classification Analysis") {
+			t.Error("BuildStructuredReviewPrompt() missing error classification section")
+		}
+		if !contains(prompt, "Error 1: TestFailure") {
+			t.Error("BuildStructuredReviewPrompt() missing error category")
+		}
+		if !contains(prompt, "confidence: 90%") {
+			t.Error("BuildStructuredReviewPrompt() missing confidence percentage")
+		}
+		if !contains(prompt, "Fix test assertions") {
+			t.Error("BuildStructuredReviewPrompt() missing suggestion")
+		}
+	})
+
+	t.Run("no error section when metadata missing", func(t *testing.T) {
+		task := models.Task{
+			Number:          "2",
+			Name:            "Task without errors",
+			Prompt:          "Implement feature",
+			SuccessCriteria: []string{"Feature works"},
+			Metadata:        nil,
+		}
+
+		ctx := context.Background()
+		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+		// Should NOT include error classification section
+		if contains(prompt, "## Error Classification Analysis") {
+			t.Error("BuildStructuredReviewPrompt() should not include error section when no metadata")
+		}
+	})
+
+	t.Run("no error section when detected_errors empty", func(t *testing.T) {
+		task := models.Task{
+			Number: "3",
+			Name:   "Task with empty detected errors",
+			Prompt: "Implement feature",
+			Metadata: map[string]interface{}{
+				"detected_errors": []*DetectedError{},
+			},
+		}
+
+		ctx := context.Background()
+		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+		// Should NOT include error classification section
+		if contains(prompt, "## Error Classification Analysis") {
+			t.Error("BuildStructuredReviewPrompt() should not include error section when detected_errors empty")
+		}
+	})
+}

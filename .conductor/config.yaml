@@ -174,3 +174,9 @@ executor:
   # into CODE_LEVEL (agent can fix), PLAN_LEVEL (plan needs update), or ENV_LEVEL
   # (environment issue). Provides actionable suggestions for each category.
   enable_error_pattern_detection: true
+
+  # Enable Claude-based error classification (v2.11+, default: false)
+  # When enabled, uses Claude to semantically analyze error messages for more accurate
+  # classification. Falls back to regex patterns on timeout/error/low confidence.
+  # Confidence threshold: 0.85 minimum (filters low-quality classifications)
+  enable_claude_classification: true

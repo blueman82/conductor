@@ -544,6 +544,29 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStderr(), "Warning: agent discovery failed, QC auto-selection may be limited: %v\n", err)
 	}
 
+	// Validate agent references (v2.13+)
+	// Check task agents
+	if taskErrors := agent.ValidateTaskAgents(plan.Tasks, agentRegistry); len(taskErrors) > 0 {
+		fmt.Fprintf(cmd.OutOrStderr(), "Agent validation failed:\n")
+		for _, err := range taskErrors {
+			fmt.Fprintf(cmd.OutOrStderr(), "  • %s\n", err.Error())
+		}
+		return fmt.Errorf("cannot execute: %d agent(s) not found in registry", len(taskErrors))
+	}
+
+	// Check QC agents if QC enabled
+	if plan.QualityControl.Enabled && len(plan.QualityControl.Agents.ExplicitList) > 0 {
+		if qcErrors := agent.ValidateQCAgents(plan.QualityControl.Agents.ExplicitList, agentRegistry); len(qcErrors) > 0 {
+			fmt.Fprintf(cmd.OutOrStderr(), "Quality control agent validation failed:\n")
+			for _, err := range qcErrors {
+				fmt.Fprintf(cmd.OutOrStderr(), "  • %s\n", err.Error())
+			}
+			return fmt.Errorf("cannot execute: %d QC agent(s) not found in registry", len(qcErrors))
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "✓ Agent validation passed\n\n")
+
 	// Create invoker for Claude CLI calls WITH registry
 	invoker := agent.NewInvokerWithRegistry(agentRegistry)
 

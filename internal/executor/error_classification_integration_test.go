@@ -136,6 +136,16 @@ func (m *mockErrorClassificationLogger) LogErrorPattern(pattern interface{}) {
 	m.errorPatterns = append(m.errorPatterns, pattern)
 }
 
+// LogDetectedError implements RuntimeEnforcementLogger (v2.12+)
+func (m *mockErrorClassificationLogger) LogDetectedError(detected interface{}) {
+	if detected == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.errorPatterns = append(m.errorPatterns, detected)
+}
+
 // LogCloudClassification logs Claude-based classification (if logger supports it)
 func (m *mockErrorClassificationLogger) LogCloudClassification(classification interface{}) {
 	if classification == nil {
@@ -150,6 +160,9 @@ func (m *mockErrorClassificationLogger) LogCloudClassification(classification in
 func (m *mockErrorClassificationLogger) LogTestCommands(entries []models.TestCommandResult) {}
 func (m *mockErrorClassificationLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
 }
+func (m *mockErrorClassificationLogger) Warnf(format string, args ...interface{}) {}
+func (m *mockErrorClassificationLogger) Info(message string)                      {}
+func (m *mockErrorClassificationLogger) Infof(format string, args ...interface{}) {}
 func (m *mockErrorClassificationLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}
 
 // =============================================================================

@@ -22,32 +22,14 @@ Conductor is a production-ready Go CLI tool that executes implementation plans b
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Your First Execution](#your-first-execution)
-- [Runtime enforcement quickstart](#runtime-enforcement-quickstart)
 - [Basic Usage](#basic-usage)
-  - [Validate a Plan](#validate-a-plan)
-  - [Run a Plan](#run-a-plan)
-  - [Resume Interrupted Plans](#resume-interrupted-plans)
-  - [Command-Line Flags](#command-line-flags)
 - [Configuration](#configuration)
-  - [Config File Location](#config-file-location)
-  - [Setup](#setup)
-  - [Configuration Priority](#configuration-priority)
-  - [Example Configuration](#example-configuration)
-  - [Build-Time Configuration](#build-time-configuration)
-- [Adaptive Learning System](#adaptive-learning-system-v20)
 - [Plan Format](#plan-format)
-  - [Markdown Format](#markdown-format)
-  - [YAML Format](#yaml-format)
 - [Documentation](#documentation)
-- [Architecture Overview](#architecture-overview)
-- [Development](#development)
-- [Multi-File Plans](#multi-file-plans)
 - [Project Status](#project-status)
-- [Dependencies](#dependencies)
 - [Contributing](#contributing)
 - [License](#license)
 - [Support](#support)
-- [Acknowledgments](#acknowledgments)
 
 ---
 
@@ -60,83 +42,28 @@ Conductor automates complex multi-step implementations by:
 3. **Orchestrating** parallel execution of tasks within each wave
 4. **Spawning** Claude Code CLI agents to execute individual tasks
 5. **Reviewing** task outputs with quality control agents
-6. **Managing** retries on failures and marking completed tasks
-7. **Logging** detailed execution progress with file-based output
+6. **Managing** retries on failures and tracking completed tasks
+7. **Learning** from execution history to improve future runs
 
 [⬆ back to top](#table-of-contents)
 
 ## Key Features
 
 - **Wave-Based Execution**: Tasks execute in parallel within waves, sequentially between waves
-- **Dependency Management**: Automatic dependency graph calculation with cycle detection
-  - Local dependencies within single files
-  - Cross-file dependencies with explicit notation (v2.6+)
-  - Automatic validation of all dependency links
-- **Quality Control**: Automated review of task outputs (GREEN/RED/YELLOW verdicts)
+- **Dependency Management**: Automatic dependency graph calculation with cycle detection, cross-file dependencies (v2.6+), and validation
+- **Quality Control**: Automated review of task outputs with GREEN/RED/YELLOW verdicts
 - **Retry Logic**: Automatic retry on failures (up to 2 attempts per task)
 - **Skip Completed Tasks**: Resume interrupted plans by skipping already-completed tasks
-- **File Locking**: Safe concurrent updates to plan files
-- **Agent Discovery**: Automatic detection of available Claude agents
-- **Dual Format Support**: Both Markdown and YAML plan formats
 - **Dry Run Mode**: Test execution without actually running tasks
-- **Progress Logging**: Real-time console output and file-based logs
-- **Multi-File Plans** (v2.5+): Split large plans across multiple files
-  - Objective splitting by feature/component/service
-  - Cross-file dependency management (v2.6+)
-  - Worktree groups for execution organization
-  - File-to-task mapping for precise tracking and resumability
-  - 100% backward compatible with single-file plans
+- **Multi-File Plans** (v2.5+): Split large plans across multiple files with cross-file dependencies
 - **Adaptive Learning** (v2.0+): AI-powered learning system that improves over time
-  - Tracks execution history and failure patterns
-  - Automatically adapts agent selection after failures
-  - Inter-retry agent swapping based on QC suggestions
-  - Dual feedback storage (plain text + structured JSON)
-  - Learns from past successes to optimize future runs
-  - CLI commands for statistics and insights
-- **Structured QC Responses** (v2.1+): Quality control returns JSON with verdicts, issues, and recommendations
-  - JSON schema enforcement (v2.8+) guarantees valid response structure
-  - Agent suggestions for improved retry success rates
-  - Enhanced context loading from plan files and database
 - **Structured Success Criteria** (v2.3+): Per-criterion verification with multi-agent consensus
-  - Define explicit success criteria per task
-  - QC agents verify each criterion individually (PASS/FAIL)
-  - Multi-agent unanimous consensus required (all agents must agree)
-  - Backward compatible with legacy blob review
-- **Intelligent QC Agent Selection** (v2.4+): Claude-based agent recommendations
-  - Analyzes task context (name, files, description) + executing agent
-  - Recommends domain specialists (security-auditor, database-optimizer)
-  - Deterministic guardrails (max agents cap, code-reviewer baseline)
-  - Caches results to minimize API calls during retries
-  - **Critical fix**: Respects agent RED verdicts even when criteria pass
-  - Domain-specific review criteria (Go/SQL/TypeScript/Python)
-  - File path verification in QC prompts
-- **Integration Tasks with Dual Criteria** (v2.5+): Component and cross-component validation
-  - Define component tasks (`type: "component"`) vs integration tasks (`type: "integration"`)
-  - Dual-level validation: `success_criteria` for component checks, `integration_criteria` for cross-component
-  - QC system verifies both criteria types for comprehensive quality control
-  - Automatic dependency context injection for tasks with dependencies
-  - Better task organization and clearer separation of concerns
-- **Cross-File Dependencies** (v2.6+): Explicit task linking across plan files
-  - Reference tasks in other files with `file` and `task` notation
-  - Automatic validation of all cross-file links during parsing
-  - Better control over multi-file execution order
-  - Supports complex microservices and multi-component orchestration
-- **Agent Watch Behavioral Analytics** (v2.7+): Observability for Claude Code agents
-  - Parse JSONL session files from `~/.claude/projects/`
-  - Pattern detection, failure prediction, performance scoring
-  - Export to JSON/Markdown/CSV formats
-  - Integration with learning system for comprehensive analytics
-  - **Real-time streaming** with `observe ingest --watch` daemon
-  - Incremental file processing with offset tracking
-- **JSON Schema Enforcement** (v2.8+): Guaranteed response structure
-  - Uses Claude CLI `--json-schema` flag for agent/QC responses
-  - Eliminates parse failures and retry logic
-  - Simpler, more reliable agent invocations
-- **Runtime Enforcement** (v2.9+): Hard gates and soft signals for quality assurance
-  - Test commands as hard gates (must pass for task success)
-  - Criterion verification as soft signals (influences QC review)
-  - Doc target verification for documentation requirements
-  - Dynamic terminal width for adaptive box rendering
+- **Intelligent QC Agent Selection** (v2.4+): Claude-based recommendations for domain specialists
+- **Integration Tasks** (v2.5+): Dual-level validation for component and cross-component interactions
+- **Agent Watch** (v2.7+): Behavioral analytics for Claude Code agents with real-time streaming
+- **JSON Schema Enforcement** (v2.8+): Guaranteed response structure from agents
+- **Runtime Enforcement** (v2.9+): Hard gates (test commands) and soft signals (criterion verification)
+- **Agent Validation** (v2.13+): Pre-execution validation of agent availability and configuration
 
 [⬆ back to top](#table-of-contents)
 
@@ -148,21 +75,6 @@ Conductor automates complex multi-step implementations by:
 - Claude Code authenticated and configured
 - **Go 1.21+** (optional, only needed for building from source)
 
-### Live Monitoring (Quick Start)
-
-Monitor Claude Code activity in real-time:
-
-```bash
-# Terminal 1: Start the ingestion daemon
-conductor observe ingest --watch
-
-# Terminal 2: Stream live activity
-conductor observe stream
-
-# Terminal 3: Use Claude Code normally
-claude -p "implement my feature"
-```
-
 ### Installation
 
 #### Option 1: Quick Install (Recommended)
@@ -171,23 +83,22 @@ Download pre-built binary from the latest release:
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.5.2/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.13.0/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.5.2/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.13.0/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux (x86_64)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.5.2/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.13.0/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Verify installation
 conductor --version
-# v2.5.2
 ```
 
 #### Option 2: Build from Source
@@ -195,19 +106,10 @@ conductor --version
 Clone and build locally (requires Go 1.21+):
 
 ```bash
-# Clone the repository
 git clone https://github.com/blueman82/conductor.git
 cd conductor
-
-# Install to $GOPATH/bin using Make (Recommended)
 make install
-
-# Or manual build
-go build ./cmd/conductor
-
-# Verify installation
 conductor --version
-# v2.5.2
 ```
 
 ### Your First Execution
@@ -234,59 +136,14 @@ Implement main logic.
 2. **Validate the plan**
 
 ```bash
-./conductor validate my-plan.md
+conductor validate my-plan.md
 ```
 
 3. **Run the plan**
 
 ```bash
-./conductor run my-plan.md --verbose
+conductor run my-plan.md --verbose
 ```
-
-[⬆ back to top](#table-of-contents)
-
-## Runtime enforcement quickstart
-
-Conductor v2.9+ enforces runtime checks that ensure tasks execute correctly. All enforcement flags default to **enabled**.
-
-### Enforcement Modes
-
-| Mode | Flag to Disable | What It Does |
-|------|-----------------|--------------|
-| Dependency Checks | `--no-enforce-dependency-checks` | Runs commands from `runtime_metadata.dependency_checks` before task execution |
-| Test Commands | `--no-enforce-test-commands` | Runs `test_commands` after agent output, blocking on failure |
-| Package Guard | `--no-enforce-package-guard` | Prevents concurrent modifications to same Go package |
-| Doc Targets | `--no-enforce-doc-targets` | Verifies `documentation_targets` exist before QC |
-| Criteria Verification | `--no-verify-criteria` | Runs verification commands from `success_criteria[].verification` blocks |
-
-### Quick Examples
-
-```bash
-# Run with all enforcement (default)
-conductor run plan.yaml
-
-# Disable test command execution (agent output not blocked by test failures)
-conductor run plan.yaml --no-enforce-test-commands
-
-# Disable package guard (allow concurrent Go package modifications)
-conductor run plan.yaml --no-enforce-package-guard
-
-# Disable all enforcement (not recommended)
-conductor run plan.yaml \
-  --no-enforce-dependency-checks \
-  --no-enforce-test-commands \
-  --no-enforce-package-guard \
-  --no-enforce-doc-targets \
-  --no-verify-criteria
-```
-
-### Failure Behavior
-
-- **Test command failures** → Task blocked immediately (before QC review)
-- **Dependency check failures** → Task blocked at preflight
-- **Criterion verification failures** → Fed into QC prompt for human judgment
-
-See [Runtime Enforcement Guide](docs/examples/runtime-enforcement.md) for detailed walkthrough.
 
 [⬆ back to top](#table-of-contents)
 
@@ -298,6 +155,7 @@ Validates plan syntax, dependencies, and detects cycles:
 
 ```bash
 conductor validate plan.md
+conductor validate *.md                    # Multi-file validation
 ```
 
 ### Run a Plan
@@ -314,68 +172,39 @@ conductor run plan.md --dry-run
 # With custom concurrency limit
 conductor run plan.md --max-concurrency 5
 
-# With timeout
-conductor run plan.md --timeout 30m
-
-# Verbose output
-conductor run plan.md --verbose
-
-# Custom log directory
-conductor run plan.md --log-dir ./execution-logs
-
 # Skip completed tasks and retry failed ones
 conductor run plan.md --skip-completed --retry-failed
-```
 
-### Resume Interrupted Plans
-
-Conductor supports resumable execution by skipping tasks marked as completed:
-
-```bash
-# Run plan, marking completed tasks in the file
-conductor run plan.md
-
-# Resume the plan later, skipping completed tasks
-conductor run plan.md --skip-completed
-
-# Retry failed tasks on resume
-conductor run plan.md --skip-completed --retry-failed
+# Multi-file execution
+conductor run setup.md features.md deployment.md
 ```
 
 ### Command-Line Flags
 
-**`conductor run` flags:**
-
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--config` | string | `.conductor/config.yaml` | Path to config file (loaded from conductor repo root) |
-| `--dry-run` | bool | false | Validate plan without executing tasks |
-| `--max-concurrency` | int | -1 | Max concurrent tasks per wave (-1 = use config, 0 = unlimited) |
-| `--timeout` | duration | 10h | Maximum execution time (e.g., 30m, 2h, 1h30m) |
-| `--verbose` | bool | false | Show detailed execution information |
-| `--log-dir` | string | `.conductor/logs` | Directory for execution logs |
-| `--skip-completed` | bool | false | Skip tasks marked as completed in plan |
-| `--no-skip-completed` | bool | false | Do not skip completed tasks (overrides config) |
-| `--retry-failed` | bool | false | Retry tasks marked as failed in plan |
-| `--no-retry-failed` | bool | false | Do not retry failed tasks (overrides config) |
+| `--config` | string | `.conductor/config.yaml` | Path to config file |
+| `--dry-run` | bool | false | Validate without executing |
+| `--max-concurrency` | int | -1 | Max parallel tasks per wave |
+| `--timeout` | duration | 10h | Maximum execution time |
+| `--verbose` | bool | false | Show detailed output |
+| `--log-dir` | string | `.conductor/logs` | Log directory |
+| `--skip-completed` | bool | false | Skip completed tasks on resume |
+| `--retry-failed` | bool | false | Retry failed tasks on resume |
 
-**`conductor validate` flags:**
-
-No flags required. Simply pass the plan file path.
-
-**`conductor learning` commands:**
+### Learning Commands
 
 ```bash
-# View statistics and insights for a plan
-conductor learning stats <plan-file>
+# View statistics for a plan
+conductor learning stats plan.md
 
-# Show detailed history for a specific task
-conductor learning show <plan-file> <task-name>
+# Show task execution history
+conductor learning show plan.md "Task Name"
 
-# Export learning data to JSON for analysis
-conductor learning export <output-file>
+# Export learning data
+conductor learning export output.json
 
-# Clear learning history (with confirmation)
+# Clear learning history
 conductor learning clear
 ```
 
@@ -383,217 +212,52 @@ conductor learning clear
 
 ## Configuration
 
-### Config File Location
+### Config File
 
-Configuration file is automatically loaded from the **conductor repository root**:
-```
-{conductor-repo-root}/.conductor/config.yaml
-```
-
-This ensures consistent configuration regardless of your current working directory.
-
-### Setup
-
-```bash
-# Copy example config to your conductor repository
-cp .conductor/config.yaml.example .conductor/config.yaml
-
-# Edit configuration
-vim .conductor/config.yaml
-```
-
-### Configuration Priority
-
-Settings are applied in this order (highest to lowest priority):
-1. **CLI Flags** (e.g., `--max-concurrency 5`)
-2. **Config File** (`.conductor/config.yaml`)
-3. **Built-in Defaults**
-
-CLI flags always override config file settings.
-
-### Example Configuration
+Configuration is loaded from `.conductor/config.yaml` in the conductor repository root:
 
 ```yaml
 # Execution settings
-max_concurrency: 3        # Parallel tasks per wave (0 = unlimited)
-timeout: 10h              # Total execution timeout
-dry_run: false            # Simulate without executing
+max_concurrency: 3           # Parallel tasks per wave (0 = unlimited)
+timeout: 10h                 # Total execution timeout
 
 # Resume & retry settings
-skip_completed: false     # Skip tasks marked as completed
-retry_failed: false       # Retry tasks marked as failed
+skip_completed: false        # Skip completed tasks
+retry_failed: false          # Retry failed tasks
 
 # Logging settings
-log_dir: .conductor/logs  # Log directory
-log_level: info           # Log level (debug/info/warn/error)
+log_dir: .conductor/logs     # Log directory
+log_level: info              # Log level (debug/info/warn/error)
 
-# Adaptive Learning (v2.0+)
+# Adaptive Learning
 learning:
-  enabled: true           # Enable learning system (default: true)
-  auto_adapt_agent: false # Auto-switch agents on failures (default: false)
-  enhance_prompts: true   # Add learned context to prompts (default: true)
-  min_failures_before_adapt: 2  # Failure threshold before adapting
-  keep_executions_days: 90      # Retention period for learning data
+  enabled: true
+  enhance_prompts: true
+  swap_during_retries: true
 
-# Structured QC Responses (v2.1+)
-feedback:
-  store_in_plan_file: true    # Write feedback to plan files (human-readable)
-  store_in_database: true     # Write feedback to database (long-term learning)
-  format: json                # Structured JSON output from QC
-
-# Intelligent QC Agent Selection (v2.4+)
+# Quality Control
 quality_control:
   enabled: true
   retry_on_red: 2
   agents:
-    mode: intelligent         # Claude-based selection (auto|explicit|mixed|intelligent)
-    max_agents: 3             # Maximum QC agents to use
-    cache_ttl_seconds: 1800   # Cache duration for agent selections
-    require_code_review: true # Always include code-reviewer as baseline
-    blocked: []               # Agents to never use
+    mode: intelligent        # auto|explicit|mixed|intelligent
+    max_agents: 3
 ```
 
-For detailed configuration options, see [Usage Guide](docs/conductor.md#usage--commands).
+**Priority** (highest to lowest):
+1. CLI Flags
+2. Config File (`.conductor/config.yaml`)
+3. Built-in Defaults
 
-### Build-Time Configuration
-
-When you build conductor with `make build`, two values are automatically injected into the binary:
-
-1. **Version** - From the VERSION file (e.g., 2.0.1)
-2. **Repository Root** - Path to conductor repository
-
-This ensures:
-- Database always created in conductor repo (`.conductor/learning/executions.db`)
-- Config always loaded from conductor repo (`.conductor/config.yaml`)
-- Works correctly from any directory
-
-[⬆ back to top](#table-of-contents)
-
-## Adaptive Learning System (v2.0+)
-
-Conductor v2.0 introduces an intelligent learning system that automatically improves task execution over time by learning from past successes and failures. **v2.1** adds structured QC responses, inter-retry agent swapping, and enhanced context loading.
-
-### What It Does
-
-- **Records Execution History**: Tracks every task execution with agent, verdict, patterns, and timing
-- **Detects Failure Patterns**: Identifies common issues (compilation errors, test failures, missing dependencies)
-- **Adapts Agent Selection**: Automatically switches to better-performing agents after repeated failures
-- **Enhances Prompts**: Enriches task prompts with learned context from execution history
-- **Provides Insights**: CLI commands for viewing statistics, history, and trends
-- **Structured QC Responses** (v2.1+): QC returns JSON with verdicts, issues, recommendations, and agent suggestions
-- **Inter-Retry Agent Swapping** (v2.1+): Automatically swaps agents during retry loop based on QC suggestions
-- **Dual Feedback Storage** (v2.1+): Stores feedback in both plan files and database for redundancy
-
-### Quick Example
-
-```bash
-# Run with inter-retry agent swapping enabled
-$ conductor run plan.md --verbose
-
-# Task fails with backend-developer agent
-# [ERROR] Task 3 failed: compilation error
-
-# QC suggests golang-pro agent
-# [INFO] QC suggested agent: golang-pro
-
-# Conductor automatically swaps to golang-pro for retry
-# [INFO] Adapting agent: backend-developer → golang-pro
-# [SUCCESS] Task 3 completed successfully with golang-pro
-```
-
-### CLI Commands
-
-```bash
-# View learning statistics for a plan
-$ conductor learning stats plan.md
-
-# Show execution history for a specific task
-$ conductor learning show plan.md "Task 3"
-
-# Export learning data for analysis
-$ conductor learning export plan.md --format json
-
-# Clear learning data
-$ conductor learning clear plan.md
-```
-
-### Configuration
-
-Enable learning in `.conductor/config.yaml`:
-
-```yaml
-learning:
-  enabled: true                    # Master switch (default: true)
-  auto_adapt_agent: true          # Auto-switch agents on failures (default: false)
-  enhance_prompts: true           # Add learned context to prompts (default: true)
-  min_failures_before_adapt: 2    # Failure threshold (default: 2)
-  keep_executions_days: 90        # Data retention (default: 90)
-
-  # v2.1+ Inter-retry agent swapping
-  swap_during_retries: true       # Swap agents during retry loop (default: true)
-
-  # v2.1+ QC context loading
-  qc_reads_plan_context: true     # Load context from plan file
-  qc_reads_db_context: true       # Load context from database
-  max_context_entries: 10         # Limit context to last N attempts
-
-# v2.1+ Feedback storage
-feedback:
-  store_in_plan_file: true        # Human-readable, git-trackable
-  store_in_database: true         # Long-term learning, pattern analysis
-  format: json                    # Structured JSON output
-```
-
-### How It Works
-
-1. **Pre-Task Hook**: Analyzes execution history and adapts strategy before task runs
-2. **Task Execution**: Runs task with selected agent, captures structured JSON output
-3. **QC Review**: Quality control agent evaluates output with historical context, returns structured JSON
-4. **Structured Response Parsing** (v2.1+): Extracts verdict, issues, recommendations from nested JSON envelopes
-5. **Inter-Retry Swapping**: On RED verdict with suggested agent, automatically swaps for retry
-6. **Dual Storage**: Persists feedback to both plan files (human-readable) and database (pattern analysis)
-7. **Post-Task Hook**: Records execution results to SQLite database for pattern analysis
-
-Learning data is stored locally in `.conductor/learning/` (excluded from git).
-
-### QC JSON Response Format (v2.1+)
-
-Quality control now returns structured JSON responses that conductor automatically parses:
-
-```json
-{
-  "verdict": "GREEN",           // GREEN, RED, or YELLOW
-  "feedback": "Task completed successfully with comprehensive implementation",
-  "issues": [
-    {
-      "severity": "warning",
-      "description": "Missing error handling in edge case",
-      "location": "internal/executor/task.go:145"
-    }
-  ],
-  "recommendations": [
-    "Add unit tests for new functions",
-    "Consider extracting helper method"
-  ],
-  "should_retry": false,
-  "suggested_agent": ""         // Alternative agent suggestion on RED verdict
-}
-```
-
-Conductor handles Claude CLI JSON envelopes automatically:
-- Extracts nested JSON from `{"type":"result",...,"result":"..."}`
-- Strips markdown code fences (`\`\`\`json ... \`\`\``)
-- Falls back gracefully on parse errors
-
-**See [Learning System Guide](docs/conductor.md#adaptive-learning-system) for complete documentation.**
+For complete configuration options, see [Configuration Guide](docs/conductor.md#configuration).
 
 [⬆ back to top](#table-of-contents)
 
 ## Plan Format
 
-Conductor supports two plan formats:
+Conductor supports both Markdown and YAML formats:
 
-### Markdown Format
+### Markdown Example
 
 ```markdown
 # Plan Title
@@ -607,7 +271,7 @@ Conductor supports two plan formats:
 Task description and requirements.
 ```
 
-### YAML Format
+### YAML Example
 
 ```yaml
 plan:
@@ -619,312 +283,51 @@ plan:
       depends_on: []
       estimated_time: 5 minutes
       agent: code-implementation
-      description: Task description and requirements.
+      success_criteria:
+        - "Criterion 1"
+        - "Criterion 2"
+      description: Task description.
 ```
 
-### YAML Format with Success Criteria (v2.3+)
+### Key Features
 
-```yaml
-plan:
-  name: Plan Title
-  tasks:
-    - id: 1
-      name: Add JWT Authentication
-      files: [internal/auth/jwt.go, internal/auth/jwt_test.go]
-      depends_on: []
-      estimated_time: 10 minutes
-      agent: golang-pro
-      success_criteria:
-        - "JWT validation function implemented"
-        - "Supports HS256 algorithm"
-        - "Unit tests achieve 90% coverage"
-      test_commands:
-        - "go test ./internal/auth/ -v"
-      description: Implement JWT authentication with proper validation.
-```
+- **Single & Multi-File Plans**: Support for splitting large plans across multiple files
+- **Success Criteria** (v2.3+): Define per-task success criteria for QC verification
+- **Integration Tasks** (v2.5+): Distinguish component tasks from integration tasks
+- **Cross-File Dependencies** (v2.6+): Reference tasks in other files with explicit notation
+- **Test Commands**: Automated testing and validation
+- **Runtime Metadata**: Dependency checks and documentation targets
 
-### YAML Format with Integration Tasks (v2.5+)
-
-```yaml
-plan:
-  name: Plan Title
-  tasks:
-    # Component task: single responsibility with focused success criteria
-    - id: 1
-      name: Implement JWT Module
-      type: component
-      files: [internal/auth/jwt.go, internal/auth/jwt_test.go]
-      depends_on: []
-      estimated_time: 10 minutes
-      agent: golang-pro
-      success_criteria:
-        - "JWT validation function implemented"
-        - "Supports HS256 and RS256 algorithms"
-        - "Unit tests achieve 95% coverage"
-      description: Implement JWT authentication module.
-
-    # Integration task: verifies cross-component interactions
-    - id: 2
-      name: Integrate JWT with API Server
-      type: integration
-      files: [internal/api/middleware.go, internal/api/server.go]
-      depends_on: [1]
-      estimated_time: 5 minutes
-      agent: golang-pro
-      success_criteria:
-        - "JWT middleware correctly applied to protected routes"
-        - "API routes properly configured"
-      integration_criteria:
-        - "JWT module integrates seamlessly with API server"
-        - "Protected routes reject invalid tokens"
-        - "Token validation happens before handler execution"
-        - "Cross-component error handling works end-to-end"
-      test_commands:
-        - "go test ./internal/api/ -v"
-        - "go test ./internal/integration/ -v"
-      description: Integrate JWT authentication into the API server.
-```
-
-**Key differences:**
-- **Component tasks** (`type: "component"`): Single module responsibility with focused `success_criteria`
-- **Integration tasks** (`type: "integration"`): Verify cross-component interactions using both `success_criteria` and `integration_criteria`
-- QC agents verify each criterion individually and require unanimous consensus. Integration criteria validate component interactions end-to-end.
-- Tasks without explicit types default to component behavior.
-
-For complete format specifications, see [Plan Format Guide](docs/conductor.md#plan-format).
+For complete format specifications and examples, see [Plan Format Guide](docs/conductor.md#plan-format).
 
 [⬆ back to top](#table-of-contents)
-
 
 ## Documentation
 
-- **[Complete Reference Guide](docs/conductor.md)** - Comprehensive guide covering usage, plan formats, multi-file plans, learning system, and troubleshooting
-- **[Development Setup](docs/setup.md)** - Local development environment setup
-- **[Split Plan Examples](docs/examples/split-plan-README.md)** - Example split plans
+- **[Complete Reference Guide](docs/conductor.md)** - Comprehensive usage, plan formats, learning system, and troubleshooting
+- **[Development Setup](docs/setup.md)** - Local development environment
+- **[Example Plans](docs/examples/)** - Sample split and multi-file plans
 - **[CLAUDE.md](CLAUDE.md)** - Developer guide for Claude Code integration
-
-[⬆ back to top](#table-of-contents)
-
-## Architecture Overview
-
-### Execution Pipeline
-
-**Single-File Plans:**
-```
-Plan File (.md/.yaml)
-  → Parser (auto-detects format)
-  → Dependency Graph (Kahn's algorithm for topological sort)
-  → Wave Calculator (groups parallel-executable tasks)
-  → Orchestrator (coordinates execution)
-  → Wave Executor (manages parallel task execution)
-  → Task Executor (spawns claude CLI, handles retries)
-  → Quality Control (reviews output, GREEN/RED/YELLOW)
-  → Plan Updater (marks tasks complete)
-```
-
-**Multi-File Plans:**
-```
-Multiple Plan Files (.md/.yaml)
-  → Multi-File Loader (auto-detects format per file)
-  → Plan Merger (validates, deduplicates, merges)
-  → Dependency Graph (cross-file dependencies)
-  → Wave Calculator (respects worktree groups)
-  → [Rest of pipeline as above]
-  → Plan Updater (file-aware task tracking)
-```
-
-**Key Components:**
-
-- **Parser**: Auto-detects and parses Markdown/YAML plan files
-- **Multi-File Loader**: Loads and merges multiple plans with cross-file dependency validation
-- **Graph Builder**: Calculates dependencies using Kahn's algorithm
-- **Orchestrator**: Coordinates wave-based execution with bounded concurrency
-- **Task Executor**: Spawns Claude CLI agents with timeout and retry logic
-- **Quality Control**: Reviews task outputs using dedicated QC agent
-- **Plan Updater**: Thread-safe updates to plan files with file locking
-- **Worktree Groups**: Organize tasks into execution groups with isolation levels
-
-[⬆ back to top](#table-of-contents)
-
-## Development
-
-### Build from Source
-
-```bash
-# Build binary
-go build ./cmd/conductor
-
-# Run tests
-go test ./...
-
-# Run tests with coverage
-go test ./... -cover
-
-# Run specific package tests
-go test ./internal/executor/ -v
-```
-
-### Testing
-
-- Extensively tested for reliability and concurrency
-- Test-driven development workflow
-- Validated across task orchestration, dependency resolution, and multi-agent coordination
-
-### Code Quality
-
-```bash
-# Format code
-go fmt ./...
-
-# Run linter
-golangci-lint run
-
-# Vet code
-go vet ./...
-```
-
-### Version Management
-
-Conductor uses semantic versioning with automatic version bumping.
-
-**Recommended**: Download pre-built binaries from [GitHub Releases](https://github.com/blueman82/conductor/releases) to ensure version consistency without needing to build locally.
-
-**For developers** building from source:
-
-```bash
-# View current version
-cat VERSION
-
-# Build with current version
-make build
-
-# Bump patch version (1.1.0 → 1.1.1) and build
-make build-patch
-
-# Bump minor version (1.1.0 → 1.2.0) and build
-make build-minor
-
-# Bump major version (1.1.0 → 2.0.0) and build
-make build-major
-```
-
-The VERSION file serves as the single source of truth and is automatically injected into the binary at build time. When using pre-built releases, versions always match - no build step needed.
-
-[⬆ back to top](#table-of-contents)
-
-## Multi-File Plans
-
-Conductor supports splitting large implementation plans across multiple files with automatic merging, explicit cross-file dependencies (v2.6+), and intelligent dependency management:
-
-```bash
-# Load and execute multiple plan files
-conductor run setup.md features.md deployment.md
-
-# Validate split plans before execution
-conductor validate *.md
-
-# Validate with cross-file dependency checking
-conductor validate infrastructure.yaml services.yaml deployment.yaml
-```
-
-**Features:**
-- Multi-file plan loading with auto-format detection
-- Objective plan splitting by feature/component/service
-- Explicit cross-file dependencies with validation (v2.6+)
-  - Reference tasks in other files: `file: path.yaml, task: 5`
-  - Automatic link validation during parsing
-  - Works with both YAML and Markdown formats
-- Implicit ordering for simpler use cases (v2.5)
-- Worktree groups for execution control
-- File-to-task mapping for resume operations
-- 100% backward compatible with single-file plans
-
-### Cross-File Dependency Example (v2.6+)
-
-**infrastructure.yaml:**
-```yaml
-tasks:
-  - id: 1
-    name: Setup Database
-    depends_on: []
-```
-
-**services.yaml:**
-```yaml
-tasks:
-  - id: 1
-    name: Auth Service
-    depends_on:
-      - file: infrastructure.yaml
-        task: 1
-```
-
-Execute together with automatic validation:
-```bash
-conductor run infrastructure.yaml services.yaml
-```
-
-See [Multi-File Plans Guide](docs/conductor.md#multi-file-plans--objective-splitting) and [Cross-File Dependencies Guide](docs/CROSS_FILE_DEPENDENCIES.md) for detailed documentation and examples.
 
 [⬆ back to top](#table-of-contents)
 
 ## Project Status
 
-**Current Status**: Production-ready v2.5.2
+**Current Status**: Production-ready v2.13.0
 
 Conductor is feature-complete with:
-- Complete implementation with 86%+ test coverage
-- `conductor validate` and `conductor run` commands
 - Wave-based parallel execution with dependency management
-- Quality control reviews with automated retries
-- Multi-file plan loading and merging
-- Worktree group organization with isolation levels
-- Auto-incrementing version management (VERSION file)
-- File locking for concurrent updates
-- Agent discovery system
-- **Adaptive learning system** (v2.0)
-  - SQLite-based execution history
-  - Automatic agent adaptation
-  - Pattern detection and analysis
-  - Four CLI learning commands
-- **Structured QC responses** (v2.1)
-  - JSON schema enforcement (v2.8+)
-  - Detailed issues and recommendations
-- **Inter-retry agent swapping** (v2.1)
-  - QC suggests alternative agents on failures
-  - Automatic agent swap during retry loop
-  - Configurable swap behavior
-- **Dual feedback storage** (v2.1)
-  - Plan file storage (human-readable, git-trackable)
-  - Database storage (long-term learning)
-  - No duplicate entries
-- **Structured success criteria** (v2.3)
-  - Per-criterion QC verification
-  - Multi-agent unanimous consensus
-  - Backward compatible with legacy review
-- **Intelligent QC agent selection** (v2.4)
-  - Claude-based agent recommendations
-  - Task context + executing agent analysis
-  - Deterministic guardrails and caching
-  - Critical fix: Respects agent RED verdicts even when criteria pass
-  - Domain-specific review criteria (Go/SQL/TypeScript/Python)
-  - File path verification in QC prompts
-- **Integration tasks with dual criteria** (v2.5)
-  - Component vs integration task type distinction
-  - Dual-level validation (success_criteria + integration_criteria)
-  - Automatic dependency context injection
-  - Comprehensive cross-component validation
-  - Clearer task organization and separation of concerns
-- **Agent Watch behavioral analytics** (v2.7)
-  - JSONL session parsing from `~/.claude/projects/`
-  - Pattern detection and failure prediction
-  - Export to JSON/Markdown/CSV
-  - Real-time ingestion daemon (`observe ingest --watch`)
-- **JSON schema enforcement** (v2.8)
-  - Uses Claude CLI `--json-schema` flag
-  - Guaranteed valid agent/QC responses
-  - Eliminates parse failures and retry logic
-- Comprehensive documentation
+- Quality control reviews with automated retries (up to 2 attempts)
+- Multi-file plan support with cross-file dependencies
+- Adaptive learning system with execution history and pattern detection
+- Structured success criteria with per-criterion verification
+- Intelligent QC agent selection with domain-specific expertise
+- Integration tasks with dual-level validation
+- Agent Watch behavioral analytics with real-time streaming
+- JSON schema enforcement for guaranteed response structure
+- Runtime enforcement with test commands and criterion verification
+- 86%+ test coverage with 465+ tests
+- Comprehensive documentation and examples
 
 [⬆ back to top](#table-of-contents)
 
@@ -965,7 +368,3 @@ Contributions are welcome! Please:
 - **Troubleshooting**: [Troubleshooting Guide](docs/conductor.md#troubleshooting--faq)
 
 [⬆ back to top](#table-of-contents)
-
-## Acknowledgments
-
-Built with Go and powered by Claude Code CLI agents.

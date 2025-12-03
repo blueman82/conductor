@@ -269,6 +269,12 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
+	// Inject error classification context (v2.12+)
+	if detectedErrors := getDetectedErrors(&task); len(detectedErrors) > 0 {
+		sb.WriteString(FormatDetectedErrors(detectedErrors))
+		sb.WriteString("\n")
+	}
+
 	// Inject documentation target verification results (v2.9+)
 	if len(qc.DocTargetResults) > 0 {
 		sb.WriteString(FormatDocTargetResults(qc.DocTargetResults))
@@ -919,4 +925,30 @@ func (qc *QualityController) LoadContext(ctx context.Context, task models.Task, 
 	}
 
 	return sb.String(), nil
+}
+
+// FormatDetectedErrors formats error classifications for QC agent context
+func FormatDetectedErrors(errors []*DetectedError) string {
+	if len(errors) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n## Error Classification Analysis\n\n")
+	sb.WriteString("Claude has analyzed test failures and classified them:\n\n")
+
+	for i, err := range errors {
+		sb.WriteString(fmt.Sprintf("### Error %d: %s\n", i+1, err.Pattern.Category))
+		sb.WriteString(fmt.Sprintf("- **Method**: %s", err.Method))
+		if err.Method == "claude" {
+			sb.WriteString(fmt.Sprintf(" (confidence: %.0f%%)", err.Confidence*100))
+		}
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf("- **Agent Can Fix**: %v\n", err.Pattern.AgentCanFix))
+		sb.WriteString(fmt.Sprintf("- **Requires Human**: %v\n", err.Pattern.RequiresHumanIntervention))
+		sb.WriteString(fmt.Sprintf("- **Suggestion**: %s\n\n", err.Pattern.Suggestion))
+	}
+
+	sb.WriteString("**Use this context when reviewing code quality and deciding retry strategy.**\n\n")
+	return sb.String()
 }

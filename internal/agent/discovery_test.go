@@ -962,3 +962,325 @@ This agent has extra whitespace in tools list.
 		}
 	}
 }
+
+// TestRegistryExists tests the Exists() method
+func TestRegistryExists(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create test agent files
+	agentNames := []string{"agent-one", "agent-two", "agent-three"}
+	for _, name := range agentNames {
+		content := fmt.Sprintf(`---
+name: %s
+description: Test agent
+---
+Content
+`, name)
+		path := filepath.Join(tmpDir, name+".md")
+		err := os.WriteFile(path, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	registry := NewRegistry(tmpDir)
+	_, err := registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		agentName  string
+		shouldExist bool
+	}{
+		{"exists - agent-one", "agent-one", true},
+		{"exists - agent-two", "agent-two", true},
+		{"exists - agent-three", "agent-three", true},
+		{"not exists - nonexistent", "nonexistent", false},
+		{"not exists - empty string", "", false},
+		{"not exists - case sensitive", "Agent-One", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exists := registry.Exists(tt.agentName)
+			if exists != tt.shouldExist {
+				t.Errorf("Exists(%q) = %v, want %v", tt.agentName, exists, tt.shouldExist)
+			}
+		})
+	}
+}
+
+// TestRegistryExists_EmptyRegistry tests Exists() on empty registry
+func TestRegistryExists_EmptyRegistry(t *testing.T) {
+	registry := NewRegistry(t.TempDir())
+
+	if registry.Exists("any-agent") {
+		t.Error("Exists() should return false for empty registry")
+	}
+}
+
+// TestListNames tests the ListNames() method returns sorted agent names
+func TestListNames(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create agents with names in non-alphabetical order
+	agentNames := []string{"zebra-agent", "apple-agent", "monkey-agent", "beta-agent"}
+	for _, name := range agentNames {
+		content := fmt.Sprintf(`---
+name: %s
+description: Test agent
+---
+Content
+`, name)
+		path := filepath.Join(tmpDir, name+".md")
+		err := os.WriteFile(path, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	registry := NewRegistry(tmpDir)
+	_, err := registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	names := registry.ListNames()
+
+	// Check count
+	if len(names) != len(agentNames) {
+		t.Errorf("Expected %d names, got %d", len(agentNames), len(names))
+	}
+
+	// Check sorted order
+	expectedOrder := []string{"apple-agent", "beta-agent", "monkey-agent", "zebra-agent"}
+	for i, expected := range expectedOrder {
+		if i >= len(names) {
+			t.Errorf("Missing name at index %d", i)
+			break
+		}
+		if names[i] != expected {
+			t.Errorf("names[%d] = %q, want %q", i, names[i], expected)
+		}
+	}
+}
+
+// TestListNames_EmptyRegistry tests ListNames() on empty registry
+func TestListNames_EmptyRegistry(t *testing.T) {
+	registry := NewRegistry(t.TempDir())
+
+	names := registry.ListNames()
+
+	if len(names) != 0 {
+		t.Errorf("Expected 0 names for empty registry, got %d", len(names))
+	}
+}
+
+// TestListNames_SingleAgent tests ListNames() with single agent
+func TestListNames_SingleAgent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	content := `---
+name: single-agent
+description: Only agent
+---
+Content
+`
+	path := filepath.Join(tmpDir, "single-agent.md")
+	err := os.WriteFile(path, []byte(content), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry(tmpDir)
+	_, err = registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	names := registry.ListNames()
+
+	if len(names) != 1 {
+		t.Errorf("Expected 1 name, got %d", len(names))
+	}
+	if names[0] != "single-agent" {
+		t.Errorf("Expected 'single-agent', got '%s'", names[0])
+	}
+}
+
+// TestListNames_ReturnsCopy tests that ListNames() returns a new slice
+// (modifications don't affect the registry)
+func TestListNames_ReturnsCopy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	content := `---
+name: test-agent
+description: Test agent
+---
+Content
+`
+	path := filepath.Join(tmpDir, "test-agent.md")
+	err := os.WriteFile(path, []byte(content), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry(tmpDir)
+	_, err = registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	names1 := registry.ListNames()
+	names2 := registry.ListNames()
+
+	// Both should be equal
+	if len(names1) != len(names2) {
+		t.Errorf("Expected equal lengths, got %d and %d", len(names1), len(names2))
+	}
+
+	// But modifying names1 should not affect names2
+	if len(names1) > 0 {
+		names1[0] = "modified"
+		if names2[0] == "modified" {
+			t.Error("Modifying returned slice should not affect next call")
+		}
+	}
+}
+
+// TestListNames_Sorting tests that ListNames() correctly sorts with special characters
+func TestListNames_Sorting(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create agents with special characters and numbers
+	agentNames := []string{"agent-10", "agent-2", "agent-1", "python-pro", "golang-pro"}
+	for _, name := range agentNames {
+		content := fmt.Sprintf(`---
+name: %s
+description: Test agent
+---
+Content
+`, name)
+		path := filepath.Join(tmpDir, name+".md")
+		err := os.WriteFile(path, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	registry := NewRegistry(tmpDir)
+	_, err := registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	names := registry.ListNames()
+
+	// sort.Strings uses lexicographic ordering
+	// So "agent-1" < "agent-10" < "agent-2" (string comparison, not numeric)
+	expectedOrder := []string{"agent-1", "agent-10", "agent-2", "golang-pro", "python-pro"}
+	for i, expected := range expectedOrder {
+		if names[i] != expected {
+			t.Errorf("names[%d] = %q, want %q", i, names[i], expected)
+		}
+	}
+}
+
+// TestListNames_MultipleCallsConsistent tests that ListNames() returns consistent results
+func TestListNames_MultipleCallsConsistent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	agentNames := []string{"zebra", "apple", "banana"}
+	for _, name := range agentNames {
+		content := fmt.Sprintf(`---
+name: %s
+description: Test agent
+---
+Content
+`, name)
+		path := filepath.Join(tmpDir, name+".md")
+		err := os.WriteFile(path, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	registry := NewRegistry(tmpDir)
+	_, err := registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	// Call ListNames() multiple times
+	names1 := registry.ListNames()
+	names2 := registry.ListNames()
+	names3 := registry.ListNames()
+
+	// All should be equal
+	for i, name := range names1 {
+		if names2[i] != name || names3[i] != name {
+			t.Errorf("Inconsistent results at index %d: %v vs %v vs %v", i, name, names2[i], names3[i])
+		}
+	}
+}
+
+// TestListNames_WithSpecialDirectories tests ListNames() correctly handles agents from numbered directories
+func TestListNames_WithSpecialDirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create agents in numbered directory
+	numberedDir := filepath.Join(tmpDir, "01-core")
+	err := os.Mkdir(numberedDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	agentContent := `---
+name: core-agent
+description: Core agent
+---
+Content
+`
+	err = os.WriteFile(filepath.Join(numberedDir, "core-agent.md"), []byte(agentContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root agent
+	rootContent := `---
+name: root-agent
+description: Root agent
+---
+Content
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "root-agent.md"), []byte(rootContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry(tmpDir)
+	_, err = registry.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	names := registry.ListNames()
+
+	// Should contain both agents, sorted
+	expectedOrder := []string{"core-agent", "root-agent"}
+	if len(names) != len(expectedOrder) {
+		t.Errorf("Expected %d names, got %d", len(expectedOrder), len(names))
+	}
+
+	for i, expected := range expectedOrder {
+		if i >= len(names) {
+			t.Errorf("Missing name at index %d", i)
+			break
+		}
+		if names[i] != expected {
+			t.Errorf("names[%d] = %q, want %q", i, names[i], expected)
+		}
+	}
+}

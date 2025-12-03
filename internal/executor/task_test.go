@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1631,11 +1633,15 @@ func (sp *stubPatternDisplay) IsAgentFixable() bool {
 type stubLogger struct {
 	mu            sync.Mutex
 	errorPatterns []interface{} // Will store ErrorPattern pointers or wrappers
+	warnMessages  []string       // Store warn messages for adaptive retry tests
+	infoMessages  []string       // Store info messages for adaptive retry tests
 }
 
 func newStubLogger() *stubLogger {
 	return &stubLogger{
 		errorPatterns: make([]interface{}, 0),
+		warnMessages:  make([]string, 0),
+		infoMessages:  make([]string, 0),
 	}
 }
 
@@ -1647,6 +1653,35 @@ func (sl *stubLogger) LogErrorPattern(pattern interface{}) {
 	sl.mu.Lock()
 	defer sl.mu.Unlock()
 	sl.errorPatterns = append(sl.errorPatterns, pattern)
+}
+
+// LogDetectedError implements RuntimeEnforcementLogger (v2.12+)
+func (sl *stubLogger) LogDetectedError(detected interface{}) {
+	if detected == nil {
+		return
+	}
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+	sl.errorPatterns = append(sl.errorPatterns, detected)
+}
+
+// Implement logger methods for adaptive retry
+func (sl *stubLogger) Warnf(format string, args ...interface{}) {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+	sl.warnMessages = append(sl.warnMessages, fmt.Sprintf(format, args...))
+}
+
+func (sl *stubLogger) Info(msg string) {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+	sl.infoMessages = append(sl.infoMessages, msg)
+}
+
+func (sl *stubLogger) Infof(format string, args ...interface{}) {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+	sl.infoMessages = append(sl.infoMessages, fmt.Sprintf(format, args...))
 }
 
 // Override to match RuntimeEnforcementLogger interface signature if needed
@@ -1916,4 +1951,806 @@ func TestExecute_ErrorPatternDetection_Disabled(t *testing.T) {
 	}
 
 	t.Logf("Task status: %s (as expected, detection disabled)", result.Status)
+}
+
+// TestGetDetectedErrors_ValidMetadata verifies getDetectedErrors extracts DetectedError list
+func TestGetDetectedErrors_ValidMetadata(t *testing.T) {
+	now := time.Now()
+	detected1 := &DetectedError{
+		Pattern: &ErrorPattern{
+			Category:   ENV_LEVEL,
+			Pattern:    "missing environment variable",
+			Suggestion: "Set FOO=bar",
+		},
+		RawOutput:  "error: FOO not set",
+		Method:     "regex",
+		Confidence: 1.0,
+		Timestamp:  now,
+	}
+	detected2 := &DetectedError{
+		Pattern: &ErrorPattern{
+			Category:   CODE_LEVEL,
+			Pattern:    "undefined variable",
+			Suggestion: "Check variable declaration",
+		},
+		RawOutput:  "error: x is undefined",
+		Method:     "claude",
+		Confidence: 0.95,
+		Timestamp:  now.Add(1 * time.Second),
+	}
+
+	task := &models.Task{
+		Number: "1",
+		Name:   "test task",
+		Metadata: map[string]interface{}{
+			"detected_errors": []*DetectedError{detected1, detected2},
+		},
+	}
+
+	result := getDetectedErrors(task)
+
+	if result == nil {
+		t.Fatal("getDetectedErrors returned nil, expected 2 errors")
+	}
+	if len(result) != 2 {
+		t.Errorf("Expected 2 errors, got %d", len(result))
+	}
+	if result[0] != detected1 {
+		t.Error("First error doesn't match")
+	}
+	if result[1] != detected2 {
+		t.Error("Second error doesn't match")
+	}
+}
+
+// TestGetDetectedErrors_NilTask verifies nil task handling
+func TestGetDetectedErrors_NilTask(t *testing.T) {
+	result := getDetectedErrors(nil)
+	if result != nil {
+		t.Error("Expected nil for nil task")
+	}
+}
+
+// TestGetDetectedErrors_NilMetadata verifies nil metadata handling
+func TestGetDetectedErrors_NilMetadata(t *testing.T) {
+	task := &models.Task{
+		Number:   "1",
+		Name:     "test task",
+		Metadata: nil,
+	}
+
+	result := getDetectedErrors(task)
+	if result != nil {
+		t.Error("Expected nil for nil metadata")
+	}
+}
+
+// TestGetDetectedErrors_MissingKey verifies missing detected_errors key handling
+func TestGetDetectedErrors_MissingKey(t *testing.T) {
+	task := &models.Task{
+		Number: "1",
+		Name:   "test task",
+		Metadata: map[string]interface{}{
+			"other_key": "other_value",
+		},
+	}
+
+	result := getDetectedErrors(task)
+	if result != nil {
+		t.Error("Expected nil when detected_errors key missing")
+	}
+}
+
+// TestGetDetectedErrors_WrongType verifies type assertion failure handling
+func TestGetDetectedErrors_WrongType(t *testing.T) {
+	task := &models.Task{
+		Number: "1",
+		Name:   "test task",
+		Metadata: map[string]interface{}{
+			"detected_errors": "wrong type",
+		},
+	}
+
+	result := getDetectedErrors(task)
+	if result != nil {
+		t.Error("Expected nil for wrong type")
+	}
+}
+
+// TestGetDetectedErrors_EmptySlice verifies empty slice handling
+func TestGetDetectedErrors_EmptySlice(t *testing.T) {
+	task := &models.Task{
+		Number: "1",
+		Name:   "test task",
+		Metadata: map[string]interface{}{
+			"detected_errors": []*DetectedError{},
+		},
+	}
+
+	result := getDetectedErrors(task)
+	if result == nil {
+		t.Fatal("Expected empty slice, got nil")
+	}
+	if len(result) != 0 {
+		t.Errorf("Expected empty slice, got %d elements", len(result))
+	}
+}
+
+// TestExecute_DetectedErrorStorage verifies full DetectedError is stored in metadata
+func TestExecute_DetectedErrorStorage(t *testing.T) {
+	// Use existing stub invoker with success response
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output: "task completed successfully",
+		Error:  nil,
+	})
+
+	// Mock reviewer that always passes
+	reviewer := &mockReviewer{
+		reviewFunc: func(ctx context.Context, task models.Task, output string) (*ReviewResult, error) {
+			return &ReviewResult{
+				Flag:     models.StatusGreen,
+				Feedback: "looks good",
+			}, nil
+		},
+	}
+
+	logger := newStubLogger()
+
+	// Create a test file with failing test command
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "test.sh")
+	if err := os.WriteFile(testFile, []byte("#!/bin/bash\necho 'error: FOO not set'\nexit 1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Test Task",
+		Agent:        "test-agent",
+		TestCommands: []string{testFile},
+		Metadata:     make(map[string]interface{}),
+	}
+
+	executor := &DefaultTaskExecutor{
+		invoker:                     invoker,
+		reviewer:                    reviewer,
+		Logger:                      logger,
+		retryLimit:                  1,
+		clock:                       func() time.Time { return time.Now() },
+		EnforceTestCommands:         true,
+		EnableErrorPatternDetection: true,
+		EnableClaudeClassification:  false, // Disable Claude for simpler test
+	}
+
+	ctx := context.Background()
+	_, _ = executor.Execute(ctx, task)
+
+	// Verify DetectedError was stored in metadata
+	detectedErrors := getDetectedErrors(&task)
+	if detectedErrors == nil || len(detectedErrors) == 0 {
+		t.Fatal("Expected detected_errors in metadata")
+	}
+
+	// Verify DetectedError structure
+	detected := detectedErrors[0]
+	if detected == nil {
+		t.Fatal("First detected error is nil")
+	}
+	if detected.Pattern == nil {
+		t.Fatal("DetectedError.Pattern is nil")
+	}
+	if detected.Method != "regex" {
+		t.Errorf("Expected regex method (Claude disabled), got %s", detected.Method)
+	}
+	if detected.Confidence != 1.0 {
+		t.Errorf("Expected confidence 1.0 for regex, got %.2f", detected.Confidence)
+	}
+	if detected.RawOutput != "error: FOO not set\n" {
+		t.Errorf("Expected raw output 'error: FOO not set\\n', got %q", detected.RawOutput)
+	}
+	if detected.Timestamp.IsZero() {
+		t.Error("Expected non-zero timestamp")
+	}
+
+	// Verify logger was called with DetectedError
+	if len(logger.errorPatterns) == 0 {
+		t.Fatal("Expected logger.LogDetectedError to be called")
+	}
+
+	// Verify the logged object is a DetectedError
+	loggedDetected, ok := logger.errorPatterns[0].(*DetectedError)
+	if !ok {
+		t.Fatalf("Expected DetectedError in logger, got %T", logger.errorPatterns[0])
+	}
+	if loggedDetected != detected {
+		t.Error("Logged DetectedError doesn't match stored DetectedError")
+	}
+
+	t.Logf("Detected errors stored: %d", len(detectedErrors))
+	t.Logf("Detection method: %s, confidence: %.2f, category: %s",
+		detected.Method, detected.Confidence, detected.Pattern.Category.String())
+}
+
+// Adaptive Retry Logic Tests (v2.12+)
+
+// TestAdaptiveRetry_CodeLevel_AllowsRetry verifies CODE_LEVEL errors allow retry
+func TestAdaptiveRetry_CodeLevel_AllowsRetry(t *testing.T) {
+	// CODE_LEVEL errors (AgentCanFix=true, RequiresHuman=false) should allow retry
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: `{"result": "attempt1"}`, ExitCode: 0},
+		&agent.InvocationResult{Output: `{"result": "attempt2"}`, ExitCode: 0},
+	)
+
+	logger := newStubLogger()
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "Compilation error"},   // First attempt RED
+			{Flag: models.StatusGreen, Feedback: "Fixed on retry"},    // Second attempt GREEN
+		},
+		retryDecisions: map[int]bool{0: true}, // Allow retry after first RED
+	}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, nil, TaskExecutorConfig{
+		PlanPath: "plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2, // Allow 2 retries
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnableErrorPatternDetection = true
+	executor.EnforceTestCommands = true
+	executor.Logger = logger
+
+	runner := NewFakeCommandRunner()
+	// First attempt: CODE_LEVEL error (syntax error)
+	runner.SetError("go test", fmt.Errorf("exit status 2"))
+	runner.SetOutput("go test", "syntax error: unexpected token")
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number:       "1",
+		Name:         "Code Level Error Test",
+		Prompt:       "Fix the code",
+		TestCommands: []string{"go test"},
+	}
+
+	result, _ := executor.Execute(context.Background(), task)
+
+	// Verify retry was allowed (should complete on second attempt)
+	if result.Status != models.StatusGreen {
+		t.Errorf("Expected GREEN (retry allowed for CODE_LEVEL), got: %s", result.Status)
+	}
+
+	// Verify retry actually happened
+	if result.RetryCount < 1 {
+		t.Errorf("Expected at least 1 retry, got: %d", result.RetryCount)
+	}
+
+	t.Logf("SUCCESS: CODE_LEVEL error allowed retry, final status: %s", result.Status)
+}
+
+// TestAdaptiveRetry_EnvLevel_SkipsRetry verifies ENV_LEVEL errors skip retry
+func TestAdaptiveRetry_EnvLevel_SkipsRetry(t *testing.T) {
+	// ENV_LEVEL errors (RequiresHumanIntervention=true) should skip retry
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: `{"result": "attempt1"}`, ExitCode: 0},
+	)
+
+	logger := newStubLogger()
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "Environment error"},
+		},
+		retryDecisions: map[int]bool{0: true}, // Would allow retry
+	}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, nil, TaskExecutorConfig{
+		PlanPath: "plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2, // Allow 2 retries
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnableErrorPatternDetection = true
+	executor.EnforceTestCommands = true
+	executor.Logger = logger
+
+	runner := NewFakeCommandRunner()
+	// First attempt: ENV_LEVEL error (duplicate simulators)
+	runner.SetError("xcodebuild test", fmt.Errorf("exit status 70"))
+	runner.SetOutput("xcodebuild test", "xcodebuild: error: multiple devices matched")
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number:       "2",
+		Name:         "Env Level Error Test",
+		Prompt:       "Run tests",
+		TestCommands: []string{"xcodebuild test"},
+	}
+
+	result, _ := executor.Execute(context.Background(), task)
+
+	// Verify retry was SKIPPED (should fail immediately)
+	if result.Status != models.StatusRed {
+		t.Errorf("Expected RED (retry skipped for ENV_LEVEL), got: %s", result.Status)
+	}
+
+	// Verify NO retry happened (should be attempt 0)
+	if result.RetryCount != 0 {
+		t.Errorf("Expected 0 retries (skipped), got: %d", result.RetryCount)
+	}
+
+	// Verify error message indicates human intervention
+	if result.Error == nil || !strings.Contains(result.Error.Error(), "human intervention required") {
+		t.Errorf("Expected 'human intervention required' in error, got: %v", result.Error)
+	}
+
+	// Verify warning was logged
+	if len(logger.warnMessages) == 0 {
+		t.Error("Expected warning message about human intervention")
+	} else {
+		if !strings.Contains(logger.warnMessages[0], "All detected errors require human intervention") {
+			t.Errorf("Expected warning about human intervention, got: %s", logger.warnMessages[0])
+		}
+	}
+
+	// Verify suggestions were logged
+	if len(logger.infoMessages) < 2 { // "Suggestions:" + at least one suggestion
+		t.Errorf("Expected suggestions in info messages, got: %d messages", len(logger.infoMessages))
+	}
+
+	t.Logf("SUCCESS: ENV_LEVEL error skipped retry, final status: %s", result.Status)
+}
+
+// TestAdaptiveRetry_PlanLevel_SkipsRetry verifies PLAN_LEVEL errors skip retry
+func TestAdaptiveRetry_PlanLevel_SkipsRetry(t *testing.T) {
+	// PLAN_LEVEL errors (RequiresHumanIntervention=true) should skip retry
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: `{"result": "attempt1"}`, ExitCode: 0},
+	)
+
+	logger := newStubLogger()
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "Missing test target"},
+		},
+		retryDecisions: map[int]bool{0: true}, // Would allow retry
+	}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, nil, TaskExecutorConfig{
+		PlanPath: "plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnableErrorPatternDetection = true
+	executor.EnforceTestCommands = true
+	executor.Logger = logger
+
+	runner := NewFakeCommandRunner()
+	// First attempt: PLAN_LEVEL error (no test bundles)
+	runner.SetError("xcodebuild test", fmt.Errorf("exit status 1"))
+	runner.SetOutput("xcodebuild test", "error: There are no test bundles available")
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number:       "3",
+		Name:         "Plan Level Error Test",
+		Prompt:       "Run tests",
+		TestCommands: []string{"xcodebuild test"},
+	}
+
+	result, _ := executor.Execute(context.Background(), task)
+
+	// Verify retry was SKIPPED
+	if result.Status != models.StatusRed {
+		t.Errorf("Expected RED (retry skipped for PLAN_LEVEL), got: %s", result.Status)
+	}
+
+	if result.RetryCount != 0 {
+		t.Errorf("Expected 0 retries (skipped), got: %d", result.RetryCount)
+	}
+
+	// Verify error message
+	if result.Error == nil || !strings.Contains(result.Error.Error(), "human intervention required") {
+		t.Errorf("Expected 'human intervention required' in error, got: %v", result.Error)
+	}
+
+	// Verify warning logged
+	if len(logger.warnMessages) == 0 {
+		t.Error("Expected warning message")
+	}
+
+	t.Logf("SUCCESS: PLAN_LEVEL error skipped retry, final status: %s", result.Status)
+}
+
+// TestAdaptiveRetry_MixedErrors_AllowsRetry verifies mixed errors allow retry if ANY is fixable
+func TestAdaptiveRetry_MixedErrors_AllowsRetry(t *testing.T) {
+	// If we have CODE_LEVEL + ENV_LEVEL errors, retry should be allowed
+	// (only skip if ALL errors require human intervention)
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: `{"result": "attempt1"}`, ExitCode: 0},
+		&agent.InvocationResult{Output: `{"result": "attempt2"}`, ExitCode: 0},
+	)
+
+	logger := newStubLogger()
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "Multiple errors"},
+			{Flag: models.StatusGreen, Feedback: "Fixed on retry"},
+		},
+		retryDecisions: map[int]bool{0: true},
+	}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, nil, TaskExecutorConfig{
+		PlanPath: "plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnableErrorPatternDetection = true
+	executor.EnforceTestCommands = true
+	executor.Logger = logger
+
+	// Use custom runner function to simulate multiple test command results
+	callCount := 0
+	runner := &customRunner{
+		runFunc: func(ctx context.Context, command string) (string, error) {
+			callCount++
+			// First call (test1): CODE_LEVEL error
+			if callCount == 1 {
+				return "syntax error: unexpected token", fmt.Errorf("exit status 2")
+			}
+			// Second call (test2): ENV_LEVEL error
+			if callCount == 2 {
+				return "permission denied", fmt.Errorf("exit status 1")
+			}
+			// Subsequent calls succeed (after retry)
+			return "", nil
+		},
+	}
+	executor.CommandRunner = runner
+
+	task := models.Task{
+		Number:       "4",
+		Name:         "Mixed Error Test",
+		Prompt:       "Fix code and environment",
+		TestCommands: []string{"test1", "test2"}, // Two test commands
+	}
+
+	result, _ := executor.Execute(context.Background(), task)
+
+	// Verify retry WAS allowed (at least one fixable error)
+	if result.Status != models.StatusGreen {
+		t.Errorf("Expected GREEN (retry allowed for mixed errors), got: %s", result.Status)
+	}
+
+	// Verify retry actually happened
+	if result.RetryCount < 1 {
+		t.Errorf("Expected at least 1 retry, got: %d", result.RetryCount)
+	}
+
+	// Should NOT have warning about skipping retry
+	hasSkipWarning := false
+	for _, msg := range logger.warnMessages {
+		if strings.Contains(msg, "All detected errors require human intervention") {
+			hasSkipWarning = true
+			break
+		}
+	}
+	if hasSkipWarning {
+		t.Error("Should NOT skip retry when mixed errors present")
+	}
+
+	t.Logf("SUCCESS: Mixed errors allowed retry, final status: %s", result.Status)
+}
+
+// Classification Injection Tests (v2.12+)
+
+// TestFormatClassificationForRetry tests the helper function that formats classification for retry
+func TestFormatClassificationForRetry(t *testing.T) {
+	tests := []struct {
+		name     string
+		errors   []*DetectedError
+		expected string
+		contains []string
+	}{
+		{
+			name:     "nil errors",
+			errors:   nil,
+			expected: "",
+		},
+		{
+			name:     "empty errors",
+			errors:   []*DetectedError{},
+			expected: "",
+		},
+		{
+			name: "single regex detection",
+			errors: []*DetectedError{
+				{
+					Pattern: &ErrorPattern{
+						Pattern:    "command not found",
+						Category:   2, // ENV_LEVEL
+						Suggestion: "Install missing tool",
+					},
+					Method:     "regex",
+					Confidence: 1.0,
+				},
+			},
+			contains: []string{
+				"Error Classification Guidance",
+				"Error 1",
+				"ENV_LEVEL",
+				"Install missing tool",
+			},
+		},
+		{
+			name: "single claude detection with confidence",
+			errors: []*DetectedError{
+				{
+					Pattern: &ErrorPattern{
+						Pattern:    "type mismatch",
+						Category:   3, // CODE_LEVEL
+						Suggestion: "Fix type conversion",
+					},
+					Method:     "claude",
+					Confidence: 0.85,
+				},
+			},
+			contains: []string{
+				"Error Classification Guidance",
+				"Error 1",
+				"CODE_LEVEL",
+				"85% confidence",
+				"Fix type conversion",
+			},
+		},
+		{
+			name: "multiple errors",
+			errors: []*DetectedError{
+				{
+					Pattern: &ErrorPattern{
+						Pattern:    "command not found",
+						Category:   2, // ENV_LEVEL
+						Suggestion: "Install missing tool",
+					},
+					Method:     "regex",
+					Confidence: 1.0,
+				},
+				{
+					Pattern: &ErrorPattern{
+						Pattern:    "test assertion failed",
+						Category:   1, // TEST_FAILURE
+						Suggestion: "Update test expectation",
+					},
+					Method:     "claude",
+					Confidence: 0.92,
+				},
+			},
+			contains: []string{
+				"Error Classification Guidance",
+				"Error 1",
+				"Error 2",
+				"ENV_LEVEL",
+				"TEST_FAILURE",
+				"92% confidence",
+				"Install missing tool",
+				"Update test expectation",
+			},
+		},
+		{
+			name: "nil error in slice - should skip",
+			errors: []*DetectedError{
+				nil,
+				{
+					Pattern: &ErrorPattern{
+						Pattern:    "test failed",
+						Category:   1,
+						Suggestion: "Fix test",
+					},
+					Method:     "regex",
+					Confidence: 1.0,
+				},
+			},
+			contains: []string{
+				"Error Classification Guidance",
+				"Error 2",
+				"Fix test",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatClassificationForRetry(tt.errors)
+
+			if tt.expected != "" && result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+
+			for _, substr := range tt.contains {
+				if !strings.Contains(result, substr) {
+					t.Errorf("Expected result to contain %q, got:\n%s", substr, result)
+				}
+			}
+		})
+	}
+}
+
+// TestRetry_ClassificationInjection_QCFailure tests classification injection in QC failure retries
+func TestRetry_ClassificationInjection_QCFailure(t *testing.T) {
+	invocations := 0
+	var lastPrompt string
+
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: "attempt1", ExitCode: 0},
+		&agent.InvocationResult{Output: "attempt2", ExitCode: 0},
+	)
+	invoker.InvokeFunc = func(ctx context.Context, agentName, prompt string) (*agent.InvocationResult, error) {
+		invocations++
+		lastPrompt = prompt
+		return &agent.InvocationResult{
+			Output:   fmt.Sprintf("attempt%d", invocations),
+			ExitCode: 0,
+		}, nil
+	}
+
+	logger := newStubLogger()
+
+	// Reviewer returns RED then GREEN
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "Code has issues"},
+			{Flag: models.StatusGreen, Feedback: "Fixed"},
+		},
+		retryDecisions: map[int]bool{0: true},
+	}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, nil, TaskExecutorConfig{
+		PlanPath: "plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnableErrorPatternDetection = true
+	executor.Logger = logger
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test QC Classification Injection",
+		Prompt: "Do the task",
+		Metadata: map[string]interface{}{
+			"detected_errors": []*DetectedError{
+				{
+					Pattern: &ErrorPattern{
+						Pattern:    "undefined variable",
+						Category:   3, // CODE_LEVEL
+						Suggestion: "Declare the variable before use",
+					},
+					Method:     "claude",
+					Confidence: 0.95,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	result, err := executor.Execute(ctx, task)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Should have attempted twice
+	if invocations != 2 {
+		t.Errorf("Expected 2 invocations, got %d", invocations)
+	}
+
+	// Check that classification was injected in retry
+	if !strings.Contains(lastPrompt, "Error Classification Guidance") {
+		t.Error("Expected classification guidance in retry prompt")
+	}
+	if !strings.Contains(lastPrompt, "CODE_LEVEL") {
+		t.Error("Expected CODE_LEVEL category in retry prompt")
+	}
+	if !strings.Contains(lastPrompt, "95% confidence") {
+		t.Error("Expected confidence percentage in retry prompt")
+	}
+	if !strings.Contains(lastPrompt, "Declare the variable before use") {
+		t.Error("Expected suggestion in retry prompt")
+	}
+	if !strings.Contains(lastPrompt, "PREVIOUS ATTEMPT FAILED - QC FEEDBACK") {
+		t.Error("Expected QC feedback header in retry prompt")
+	}
+
+	if result.Status != models.StatusGreen {
+		t.Errorf("Expected GREEN status after successful retry, got %s", result.Status)
+	}
+
+	t.Logf("Result status: %s", result.Status)
+	t.Logf("Retry count: %d", result.RetryCount)
+}
+
+// TestRetry_ClassificationInjection_NoErrors tests retry without detected errors
+func TestRetry_ClassificationInjection_NoErrors(t *testing.T) {
+	var lastPrompt string
+
+	invoker := newStubInvoker(
+		&agent.InvocationResult{Output: "attempt1", ExitCode: 0},
+		&agent.InvocationResult{Output: "attempt2", ExitCode: 0},
+	)
+	invoker.InvokeFunc = func(ctx context.Context, agentName, prompt string) (*agent.InvocationResult, error) {
+		lastPrompt = prompt
+		return &agent.InvocationResult{Output: "output", ExitCode: 0}, nil
+	}
+
+	logger := newStubLogger()
+
+	reviewer := &stubReviewer{
+		results: []*ReviewResult{
+			{Flag: models.StatusRed, Feedback: "Generic failure"},
+			{Flag: models.StatusGreen, Feedback: "Fixed"},
+		},
+		retryDecisions: map[int]bool{0: true},
+	}
+
+	executor, err := NewTaskExecutor(invoker, reviewer, nil, TaskExecutorConfig{
+		PlanPath: "plan.md",
+		QualityControl: models.QualityControlConfig{
+			Enabled:    true,
+			RetryOnRed: 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	executor.EnableErrorPatternDetection = true
+	executor.Logger = logger
+
+	task := models.Task{
+		Number:   "1",
+		Name:     "Test No Errors",
+		Prompt:   "Do the task",
+		Metadata: nil, // No detected errors
+	}
+
+	ctx := context.Background()
+	_, _ = executor.Execute(ctx, task)
+
+	// Should NOT contain classification guidance since no errors detected
+	if strings.Contains(lastPrompt, "Error Classification Guidance") {
+		t.Error("Should not contain classification guidance when no errors detected")
+	}
+	if strings.Contains(lastPrompt, "PREVIOUS ATTEMPT FAILED - QC FEEDBACK") {
+		t.Log("Contains QC feedback (expected)")
+	}
 }

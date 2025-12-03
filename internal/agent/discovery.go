@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -189,6 +190,17 @@ func (r *Registry) List() []*Agent {
 		agents = append(agents, agent)
 	}
 	return agents
+}
+
+// ListNames returns all registered agent names in sorted order.
+// This is useful for validation and error messaging.
+func (r *Registry) ListNames() []string {
+	names := make([]string, 0, len(r.agents))
+	for name := range r.agents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // parseAgentFile parses a single agent file

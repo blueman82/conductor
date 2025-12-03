@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/harrison/conductor/internal/models"
 )
@@ -71,25 +72,25 @@ func TestDetectErrorPatternEnvLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Fatal("expected pattern to be detected")
 			}
 
-			if pattern.Category != tt.wantCat {
-				t.Errorf("Category = %v, want %v", pattern.Category, tt.wantCat)
+			if detected.Pattern.Category != tt.wantCat {
+				t.Errorf("Category = %v, want %v", detected.Pattern.Category, tt.wantCat)
 			}
 
-			if pattern.AgentCanFix != tt.wantFix {
-				t.Errorf("AgentCanFix = %v, want %v", pattern.AgentCanFix, tt.wantFix)
+			if detected.Pattern.AgentCanFix != tt.wantFix {
+				t.Errorf("AgentCanFix = %v, want %v", detected.Pattern.AgentCanFix, tt.wantFix)
 			}
 
-			if pattern.RequiresHumanIntervention != tt.wantHelp {
-				t.Errorf("RequiresHumanIntervention = %v, want %v", pattern.RequiresHumanIntervention, tt.wantHelp)
+			if detected.Pattern.RequiresHumanIntervention != tt.wantHelp {
+				t.Errorf("RequiresHumanIntervention = %v, want %v", detected.Pattern.RequiresHumanIntervention, tt.wantHelp)
 			}
 
-			if pattern.Suggestion == "" {
+			if detected.Pattern.Suggestion == "" {
 				t.Error("Suggestion should not be empty")
 			}
 		})
@@ -158,25 +159,25 @@ func TestDetectErrorPatternPlanLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Fatal("expected pattern to be detected")
 			}
 
-			if pattern.Category != tt.wantCat {
-				t.Errorf("Category = %v, want %v", pattern.Category, tt.wantCat)
+			if detected.Pattern.Category != tt.wantCat {
+				t.Errorf("Category = %v, want %v", detected.Pattern.Category, tt.wantCat)
 			}
 
-			if pattern.AgentCanFix != tt.wantFix {
-				t.Errorf("AgentCanFix = %v, want %v", pattern.AgentCanFix, tt.wantFix)
+			if detected.Pattern.AgentCanFix != tt.wantFix {
+				t.Errorf("AgentCanFix = %v, want %v", detected.Pattern.AgentCanFix, tt.wantFix)
 			}
 
-			if pattern.RequiresHumanIntervention != tt.wantHelp {
-				t.Errorf("RequiresHumanIntervention = %v, want %v", pattern.RequiresHumanIntervention, tt.wantHelp)
+			if detected.Pattern.RequiresHumanIntervention != tt.wantHelp {
+				t.Errorf("RequiresHumanIntervention = %v, want %v", detected.Pattern.RequiresHumanIntervention, tt.wantHelp)
 			}
 
-			if pattern.Suggestion == "" {
+			if detected.Pattern.Suggestion == "" {
 				t.Error("Suggestion should not be empty")
 			}
 		})
@@ -252,25 +253,25 @@ func TestDetectErrorPatternCodeLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Fatal("expected pattern to be detected")
 			}
 
-			if pattern.Category != tt.wantCat {
-				t.Errorf("Category = %v, want %v", pattern.Category, tt.wantCat)
+			if detected.Pattern.Category != tt.wantCat {
+				t.Errorf("Category = %v, want %v", detected.Pattern.Category, tt.wantCat)
 			}
 
-			if pattern.AgentCanFix != tt.wantFix {
-				t.Errorf("AgentCanFix = %v, want %v", pattern.AgentCanFix, tt.wantFix)
+			if detected.Pattern.AgentCanFix != tt.wantFix {
+				t.Errorf("AgentCanFix = %v, want %v", detected.Pattern.AgentCanFix, tt.wantFix)
 			}
 
-			if pattern.RequiresHumanIntervention != tt.wantHelp {
-				t.Errorf("RequiresHumanIntervention = %v, want %v", pattern.RequiresHumanIntervention, tt.wantHelp)
+			if detected.Pattern.RequiresHumanIntervention != tt.wantHelp {
+				t.Errorf("RequiresHumanIntervention = %v, want %v", detected.Pattern.RequiresHumanIntervention, tt.wantHelp)
 			}
 
-			if pattern.Suggestion == "" {
+			if detected.Pattern.Suggestion == "" {
 				t.Error("Suggestion should not be empty")
 			}
 		})
@@ -303,10 +304,10 @@ func TestDetectErrorPatternNoMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if pattern != nil {
-				t.Errorf("expected no pattern match, but got: %+v", pattern)
+			if detected != nil {
+				t.Errorf("expected no pattern match, but got: %+v", detected)
 			}
 		})
 	}
@@ -318,19 +319,19 @@ func TestDetectErrorPatternPriority(t *testing.T) {
 	// The first matching pattern in KnownPatterns should be returned
 	output := "Error: undefined: SomeFunction"
 
-	pattern := DetectErrorPattern(output, nil)
+	detected := DetectErrorPattern(output, nil, false)
 
-	if pattern == nil {
+	if detected == nil {
 		t.Fatal("expected pattern to be detected")
 	}
 
-	if pattern.Category != CODE_LEVEL {
-		t.Errorf("Category = %v, want %v", pattern.Category, CODE_LEVEL)
+	if detected.Pattern.Category != CODE_LEVEL {
+		t.Errorf("Category = %v, want %v", detected.Pattern.Category, CODE_LEVEL)
 	}
 
 	// Verify it matches the "undefined" pattern by checking the suggestion
-	if pattern.Suggestion != "Missing import or undefined identifier. Agent should add import or define missing symbol." {
-		t.Errorf("unexpected suggestion: %q", pattern.Suggestion)
+	if detected.Pattern.Suggestion != "Missing import or undefined identifier. Agent should add import or define missing symbol." {
+		t.Errorf("unexpected suggestion: %q", detected.Pattern.Suggestion)
 	}
 }
 
@@ -360,14 +361,14 @@ func TestDetectErrorPatternCaseSensitivity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if tt.shouldMatch && pattern == nil {
+			if tt.shouldMatch && detected == nil {
 				t.Error("expected pattern to be detected")
 			}
 
-			if !tt.shouldMatch && pattern != nil {
-				t.Errorf("expected no pattern match, but got: %+v", pattern)
+			if !tt.shouldMatch && detected != nil {
+				t.Errorf("expected no pattern match, but got: %+v", detected)
 			}
 		})
 	}
@@ -399,14 +400,14 @@ func TestDetectErrorPatternComplexRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Fatal("expected pattern to be detected")
 			}
 
-			if pattern.Category != tt.wantCat {
-				t.Errorf("Category = %v, want %v", pattern.Category, tt.wantCat)
+			if detected.Pattern.Category != tt.wantCat {
+				t.Errorf("Category = %v, want %v", detected.Pattern.Category, tt.wantCat)
 			}
 		})
 	}
@@ -438,14 +439,14 @@ func TestDetectErrorPatternPartialMatches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Fatal("expected pattern to be detected")
 			}
 
-			if pattern.Category != tt.wantCat {
-				t.Errorf("Category = %v, want %v", pattern.Category, tt.wantCat)
+			if detected.Pattern.Category != tt.wantCat {
+				t.Errorf("Category = %v, want %v", detected.Pattern.Category, tt.wantCat)
 			}
 		})
 	}
@@ -529,32 +530,32 @@ func TestPatternCategoryCount(t *testing.T) {
 func TestDetectErrorPatternCopy(t *testing.T) {
 	output := "command not found"
 
-	pattern1 := DetectErrorPattern(output, nil)
-	pattern2 := DetectErrorPattern(output, nil)
+	detected1 := DetectErrorPattern(output, nil, false)
+	detected2 := DetectErrorPattern(output, nil, false)
 
-	if pattern1 == nil || pattern2 == nil {
+	if detected1 == nil || detected2 == nil {
 		t.Fatal("expected patterns to be detected")
 	}
 
 	// Patterns should have same values
-	if pattern1.Category != pattern2.Category {
+	if detected1.Pattern.Category != detected2.Pattern.Category {
 		t.Error("Categories should match")
 	}
 
-	if pattern1.Suggestion != pattern2.Suggestion {
+	if detected1.Pattern.Suggestion != detected2.Pattern.Suggestion {
 		t.Error("Suggestions should match")
 	}
 
 	// But should be different pointers (independent copies)
-	if pattern1 == pattern2 {
+	if detected1.Pattern == detected2.Pattern {
 		t.Error("returned patterns should be independent copies")
 	}
 
 	// Modifying one should not affect the other
-	originalSuggestion := pattern2.Suggestion
-	pattern1.Suggestion = "modified"
+	originalSuggestion := detected2.Pattern.Suggestion
+	detected1.Pattern.Suggestion = "modified"
 
-	if pattern2.Suggestion != originalSuggestion {
+	if detected2.Pattern.Suggestion != originalSuggestion {
 		t.Error("modifying one pattern should not affect another")
 	}
 }
@@ -591,14 +592,14 @@ Summary: 1 failure`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Fatal("expected pattern to be detected")
 			}
 
-			if pattern.Category != tt.wantCat {
-				t.Errorf("Category = %v, want %v", pattern.Category, tt.wantCat)
+			if detected.Pattern.Category != tt.wantCat {
+				t.Errorf("Category = %v, want %v", detected.Pattern.Category, tt.wantCat)
 			}
 		})
 	}
@@ -731,17 +732,17 @@ func TestDetectErrorPatternWithClaudeSuccess(t *testing.T) {
 				Error:    nil,
 			}
 
-			pattern := DetectErrorPattern(tt.output, mock)
+			detected := DetectErrorPattern(tt.output, mock, false)
 
 			// For now, with invoker provided, we still fall back to regex
 			// This test documents the expected behavior when Claude is implemented
-			if pattern == nil {
+			if detected == nil {
 				t.Error("expected pattern to be detected (from regex fallback)")
 			}
 
 			// The regex patterns should still work as fallback
-			if pattern != nil && pattern.Category != tt.wantCategory {
-				t.Errorf("Category (from regex) = %v, want %v (may differ when Claude implemented)", pattern.Category, tt.wantCategory)
+			if detected != nil && detected.Pattern.Category != tt.wantCategory {
+				t.Errorf("Category (from regex) = %v, want %v (may differ when Claude implemented)", detected.Pattern.Category, tt.wantCategory)
 			}
 		})
 	}
@@ -794,15 +795,15 @@ func TestDetectErrorPatternWithClaudeLowConfidence(t *testing.T) {
 
 			// DetectErrorPattern with low-confidence Claude response
 			// should fall back to regex patterns
-			pattern := DetectErrorPattern(tt.output, mock)
+			detected := DetectErrorPattern(tt.output, mock, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Error("expected regex fallback pattern, got nil")
 			}
 
 			// Verify it matched via regex (which should return the known pattern)
-			if pattern != nil && pattern.Category != tt.wantCategory {
-				t.Errorf("Category = %v, want %v (from regex fallback)", pattern.Category, tt.wantCategory)
+			if detected != nil && detected.Pattern.Category != tt.wantCategory {
+				t.Errorf("Category = %v, want %v (from regex fallback)", detected.Pattern.Category, tt.wantCategory)
 			}
 		})
 	}
@@ -847,14 +848,14 @@ func TestDetectErrorPatternWithClaudeError(t *testing.T) {
 				Error:    testError(tt.errorMsg),
 			}
 
-			pattern := DetectErrorPattern(tt.output, mock)
+			detected := DetectErrorPattern(tt.output, mock, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Error("expected regex fallback pattern, got nil")
 			}
 
-			if pattern != nil && pattern.Category != tt.wantCategory {
-				t.Errorf("Category = %v, want %v (from regex fallback)", pattern.Category, tt.wantCategory)
+			if detected != nil && detected.Pattern.Category != tt.wantCategory {
+				t.Errorf("Category = %v, want %v (from regex fallback)", detected.Pattern.Category, tt.wantCategory)
 			}
 
 			// Note: CallCount may be 0 if tryClaudeClassification returns nil early
@@ -891,14 +892,14 @@ func TestDetectErrorPatternWithNilInvoker(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Pass nil as invoker - should fall back to regex without error
-			pattern := DetectErrorPattern(tt.output, nil)
+			detected := DetectErrorPattern(tt.output, nil, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Error("expected regex fallback pattern, got nil")
 			}
 
-			if pattern != nil && pattern.Category != tt.wantCategory {
-				t.Errorf("Category = %v, want %v", pattern.Category, tt.wantCategory)
+			if detected != nil && detected.Pattern.Category != tt.wantCategory {
+				t.Errorf("Category = %v, want %v", detected.Pattern.Category, tt.wantCategory)
 			}
 		})
 	}
@@ -941,14 +942,14 @@ func TestDetectErrorPatternWithWrongType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pattern := DetectErrorPattern(tt.output, tt.invoker)
+			detected := DetectErrorPattern(tt.output, tt.invoker, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Error("expected regex fallback pattern, got nil")
 			}
 
-			if pattern != nil && pattern.Category != tt.wantCategory {
-				t.Errorf("Category = %v, want %v (from regex fallback)", pattern.Category, tt.wantCategory)
+			if detected != nil && detected.Pattern.Category != tt.wantCategory {
+				t.Errorf("Category = %v, want %v (from regex fallback)", detected.Pattern.Category, tt.wantCategory)
 			}
 		})
 	}
@@ -1018,14 +1019,14 @@ func TestCloudErrorClassificationResponseFormats(t *testing.T) {
 				Error:    nil,
 			}
 
-			pattern := DetectErrorPattern(tt.output, mock)
+			detected := DetectErrorPattern(tt.output, mock, false)
 
-			if pattern == nil {
+			if detected == nil {
 				t.Error("expected pattern (from regex fallback), got nil")
 			}
 
-			if pattern != nil && pattern.Category != tt.wantCategory {
-				t.Errorf("Category = %v, want %v", pattern.Category, tt.wantCategory)
+			if detected != nil && detected.Pattern.Category != tt.wantCategory {
+				t.Errorf("Category = %v, want %v", detected.Pattern.Category, tt.wantCategory)
 			}
 		})
 	}
@@ -1338,5 +1339,147 @@ func formatFloat(f float64) string {
 		return "0.98"
 	default:
 		return "0.0"
+	}
+}
+
+// ============================================================================
+// DETECTED ERROR STRUCTURE TESTS
+// ============================================================================
+
+// TestDetectedErrorStructure verifies DetectedError contains all expected fields.
+func TestDetectedErrorStructure(t *testing.T) {
+	output := "Error: undefined: SomeVariable"
+
+	detected := DetectErrorPattern(output, nil, false)
+
+	if detected == nil {
+		t.Fatal("expected pattern to be detected")
+	}
+
+	// Verify all fields are populated
+	if detected.Pattern == nil {
+		t.Error("Pattern field should not be nil")
+	}
+
+	if detected.RawOutput != output {
+		t.Errorf("RawOutput = %q, want %q", detected.RawOutput, output)
+	}
+
+	if detected.Method == "" {
+		t.Error("Method field should not be empty")
+	}
+
+	if detected.Confidence == 0 {
+		t.Error("Confidence field should not be zero")
+	}
+
+	if detected.Timestamp.IsZero() {
+		t.Error("Timestamp field should not be zero")
+	}
+}
+
+// TestDetectedErrorMethodField verifies Method field is set correctly.
+func TestDetectedErrorMethodField(t *testing.T) {
+	tests := []struct {
+		name         string
+		output       string
+		enableClaude bool
+		wantMethod   string
+	}{
+		{
+			name:         "regex detection",
+			output:       "Error: undefined: Variable",
+			enableClaude: false,
+			wantMethod:   "regex",
+		},
+		{
+			name:         "regex fallback when claude disabled",
+			output:       "command not found",
+			enableClaude: false,
+			wantMethod:   "regex",
+		},
+		{
+			name:         "regex fallback when no invoker",
+			output:       "syntax error",
+			enableClaude: true, // enabled but no invoker
+			wantMethod:   "regex",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detected := DetectErrorPattern(tt.output, nil, tt.enableClaude)
+
+			if detected == nil {
+				t.Fatal("expected pattern to be detected")
+			}
+
+			if detected.Method != tt.wantMethod {
+				t.Errorf("Method = %q, want %q", detected.Method, tt.wantMethod)
+			}
+		})
+	}
+}
+
+// TestDetectedErrorConfidenceField verifies Confidence field values.
+func TestDetectedErrorConfidenceField(t *testing.T) {
+	tests := []struct {
+		name            string
+		output          string
+		wantConfidence  float64
+	}{
+		{
+			name:           "regex detection always 1.0",
+			output:         "Error: undefined: Variable",
+			wantConfidence: 1.0,
+		},
+		{
+			name:           "ENV_LEVEL regex confidence",
+			output:         "command not found",
+			wantConfidence: 1.0,
+		},
+		{
+			name:           "PLAN_LEVEL regex confidence",
+			output:         "scheme Test does not exist",
+			wantConfidence: 1.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detected := DetectErrorPattern(tt.output, nil, false)
+
+			if detected == nil {
+				t.Fatal("expected pattern to be detected")
+			}
+
+			if detected.Confidence != tt.wantConfidence {
+				t.Errorf("Confidence = %v, want %v", detected.Confidence, tt.wantConfidence)
+			}
+		})
+	}
+}
+
+// TestDetectedErrorTimestampField verifies Timestamp is populated.
+func TestDetectedErrorTimestampField(t *testing.T) {
+	output := "Error: undefined: Variable"
+
+	detected := DetectErrorPattern(output, nil, false)
+
+	if detected == nil {
+		t.Fatal("expected pattern to be detected")
+	}
+
+	if detected.Timestamp.IsZero() {
+		t.Error("Timestamp should not be zero")
+	}
+
+	// Timestamp should be recent (within last second)
+	if detected.Timestamp.After(time.Now()) {
+		t.Error("Timestamp should not be in the future")
+	}
+
+	if time.Since(detected.Timestamp) > time.Second {
+		t.Error("Timestamp should be recent (within last second)")
 	}
 }

@@ -377,6 +377,13 @@ executor:
   # (environment issue). Provides actionable suggestions for each category.
   enable_error_pattern_detection: true
 
+  # Enable Claude-based error classification (v2.11+, default: false)
+  # When enabled, uses Claude to semantically analyze error messages for more accurate
+  # classification. Falls back to regex patterns on timeout/error/low confidence.
+  # Confidence threshold: 0.85 minimum (filters low-quality classifications)
+  # Cost: ~1-2 cents per error classification (Claude API call)
+  enable_claude_classification: false
+
 # Executor Examples
 
 # Example: Disable dependency checks for legacy plans
@@ -402,6 +409,10 @@ executor:
 # Example: Disable error pattern detection on test failures
 # executor:
 #   enable_error_pattern_detection: false
+
+# Example: Enable Claude-based error classification (v2.11+)
+# executor:
+#   enable_claude_classification: true
 
 # Validation Examples
 

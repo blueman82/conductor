@@ -40,11 +40,16 @@ type LearningStore interface {
 
 // RuntimeEnforcementLogger logs runtime enforcement events (test commands, criterion verification).
 // LogErrorPattern accepts an error pattern display (ErrorPattern implements logger.ErrorPatternDisplay).
+// LogDetectedError accepts a detected error display (DetectedError implements logger.DetectedErrorDisplay).
 type RuntimeEnforcementLogger interface {
 	LogTestCommands(entries []models.TestCommandResult)
 	LogCriterionVerifications(entries []models.CriterionVerificationResult)
 	LogDocTargetVerifications(entries []models.DocTargetResult)
-	LogErrorPattern(pattern interface{}) // Flexible interface for testing
+	LogErrorPattern(pattern interface{})       // Flexible interface for testing (deprecated, use LogDetectedError)
+	LogDetectedError(detected interface{})     // Flexible interface for testing (v2.12+)
+	Warnf(format string, args ...interface{})  // Warning messages
+	Info(message string)                       // Info messages
+	Infof(format string, args ...interface{})  // Formatted info messages
 }
 
 // TaskExecution represents a single task execution record for learning storage.
@@ -165,6 +170,7 @@ type DefaultTaskExecutor struct {
 	VerifyCriteria              bool                     // Run optional per-criterion verifications (v2.9+)
 	EnforceDocTargets           bool                     // Run documentation target verification for doc tasks (v2.9+)
 	EnableErrorPatternDetection bool                     // Enable error pattern detection on test failures (v2.11+)
+	EnableClaudeClassification  bool                     // Enable Claude-based error classification (v2.11+)
 	Logger                      RuntimeEnforcementLogger // Logger for runtime enforcement output (optional)
 
 	// Runtime state for passing to QC
@@ -852,33 +858,77 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			if te.EnableErrorPatternDetection {
 				for _, result := range te.lastTestResults {
 					if !result.Passed {
-						// Pass invoker as second parameter for Claude classification (v3.0+)
-						pattern := DetectErrorPattern(result.Output, te.invoker)
-						if pattern != nil {
-							// Store pattern for learning system
+						// Pass invoker + enableClaude flag for Claude classification (v2.11+)
+						detected := DetectErrorPattern(result.Output, te.invoker, te.EnableClaudeClassification)
+						if detected != nil {
+							// Store full DetectedError (v2.12+)
 							if task.Metadata == nil {
 								task.Metadata = make(map[string]interface{})
 							}
-							patterns, ok := task.Metadata["error_patterns"].([]string)
-							if !ok {
-								patterns = []string{}
+							if task.Metadata["detected_errors"] == nil {
+								task.Metadata["detected_errors"] = []*DetectedError{}
 							}
-							patterns = append(patterns, pattern.Category.String())
-							task.Metadata["error_patterns"] = patterns
+							task.Metadata["detected_errors"] = append(
+								task.Metadata["detected_errors"].([]*DetectedError),
+								detected,
+							)
 
-							// Log pattern with suggestion
+							// Log with new method (v2.12+)
 							if te.Logger != nil {
-								te.Logger.LogErrorPattern(pattern)
+								te.Logger.LogDetectedError(detected)
 							}
 						}
 					}
 				}
 			}
 
+			// Check if retry is futile based on error classification (v2.12+)
+			// CRITICAL: Check BEFORE building retry prompt to avoid wasted agent invocation
+			if te.EnableErrorPatternDetection {
+				detectedErrors := getDetectedErrors(&task)
+
+				// Check if ALL detected errors require human intervention
+				allRequireHuman := len(detectedErrors) > 0
+				for _, detected := range detectedErrors {
+					if detected != nil && detected.Pattern != nil && !detected.Pattern.RequiresHumanIntervention {
+						allRequireHuman = false
+						break
+					}
+				}
+
+				// If all errors require human intervention, skip retry immediately
+				if allRequireHuman {
+					if te.Logger != nil {
+						te.Logger.Warnf("Task %s: All detected errors require human intervention - skipping retry", task.Number)
+						te.Logger.Info("Suggestions:")
+						for i, detected := range detectedErrors {
+							if detected != nil && detected.Pattern != nil {
+								te.Logger.Infof("  %d. [%s] %s", i+1, detected.Pattern.Category.String(), detected.Pattern.Suggestion)
+							}
+						}
+					}
+					result.Status = models.StatusRed
+					result.RetryCount = attempt
+					result.Error = fmt.Errorf("human intervention required: all detected errors cannot be fixed by agent")
+					_ = te.updatePlanStatus(task, StatusFailed, false)
+					te.postTaskHook(ctx, &task, &result, models.StatusRed)
+					return result, result.Error
+				}
+			}
+
 			// Inject test failure feedback for retry (mirrors QC pattern)
 			testFeedback := FormatTestResults(te.lastTestResults)
 			if testFeedback != "" {
-				task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - TEST COMMANDS FAILED (MUST FIX):\n%s\n---\n\nFix ALL test failures listed above before completing the task.", task.Prompt, testFeedback)
+				// Build classification context from stored detected errors
+				classificationContext := ""
+				if task.Metadata != nil {
+					if detectedErrors, ok := task.Metadata["detected_errors"].([]*DetectedError); ok && len(detectedErrors) > 0 {
+						classificationContext = formatClassificationForRetry(detectedErrors)
+					}
+				}
+
+				task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - TEST COMMANDS FAILED (MUST FIX):\n%s\n%s\n---\n\nFix ALL test failures listed above before completing the task.",
+					task.Prompt, testFeedback, classificationContext)
 			}
 
 			// Continue to next retry iteration
@@ -1050,6 +1100,8 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			lastErr = ErrQualityGateFailed
 		}
 
+		// Adaptive check moved to BEFORE retry (task.go:885-916) to avoid wasted agent invocation
+
 		// Determine whether to retry.
 		if attempt >= te.retryLimit || !te.reviewer.ShouldRetry(review, attempt) {
 			result.Status = models.StatusRed
@@ -1063,7 +1115,16 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		// Inject QC feedback into prompt for next retry (v2.9+)
 		// This ensures the agent sees what failed and can address specific issues
 		if review.Feedback != "" {
-			task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - QC FEEDBACK (MUST ADDRESS):\n%s\n---\n\nFix ALL issues listed above before completing the task.", task.Prompt, review.Feedback)
+			// Build classification context from stored detected errors
+			classificationContext := ""
+			if task.Metadata != nil {
+				if detectedErrors, ok := task.Metadata["detected_errors"].([]*DetectedError); ok && len(detectedErrors) > 0 {
+					classificationContext = formatClassificationForRetry(detectedErrors)
+				}
+			}
+
+			task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - QC FEEDBACK (MUST ADDRESS):\n%s\n%s\n---\n\nFix ALL issues listed above before completing the task.",
+				task.Prompt, review.Feedback, classificationContext)
 		}
 	}
 
@@ -1077,6 +1138,42 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	_ = te.updatePlanStatus(task, StatusFailed, false)
 	te.postTaskHook(ctx, &task, &result, models.StatusRed)
 	return result, lastErr
+}
+
+// getDetectedErrorPatterns extracts ErrorPattern objects from task metadata.
+// Returns a slice of patterns that were detected and stored during test command execution.
+func getDetectedErrorPatterns(task *models.Task) []*ErrorPattern {
+	if task.Metadata == nil {
+		return nil
+	}
+
+	// Extract DetectedError objects from metadata (v2.12+)
+	detectedErrors, ok := task.Metadata["detected_errors"].([]*DetectedError)
+	if !ok || len(detectedErrors) == 0 {
+		return nil
+	}
+
+	// Extract ErrorPattern from each DetectedError
+	var patterns []*ErrorPattern
+	for _, detected := range detectedErrors {
+		if detected != nil && detected.Pattern != nil {
+			patterns = append(patterns, detected.Pattern)
+		}
+	}
+
+	return patterns
+}
+
+// getDetectedErrors extracts DetectedError list from task metadata.
+// Returns nil if no detected errors are stored (v2.12+).
+func getDetectedErrors(task *models.Task) []*DetectedError {
+	if task == nil || task.Metadata == nil {
+		return nil
+	}
+	if detected, ok := task.Metadata["detected_errors"].([]*DetectedError); ok {
+		return detected
+	}
+	return nil
 }
 
 func (te *DefaultTaskExecutor) updatePlanStatus(task models.Task, status string, markComplete bool) error {
@@ -1102,4 +1199,32 @@ func (te *DefaultTaskExecutor) updatePlanStatus(task models.Task, status string,
 	}
 
 	return te.planUpdater.Update(fileToUpdate, task.Number, status, completedAt)
+}
+
+// formatClassificationForRetry formats classification suggestions for retry agent
+func formatClassificationForRetry(errors []*DetectedError) string {
+	if len(errors) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n### Error Classification Guidance\n\n")
+
+	for i, err := range errors {
+		if err == nil || err.Pattern == nil {
+			continue
+		}
+
+		category := err.Pattern.Category.String()
+		suggestion := err.Pattern.Suggestion
+
+		sb.WriteString(fmt.Sprintf("**Error %d** (%s", i+1, category))
+		if err.Method == "claude" {
+			sb.WriteString(fmt.Sprintf(", %.0f%% confidence", err.Confidence*100))
+		}
+		sb.WriteString("):\n")
+		sb.WriteString(fmt.Sprintf("- %s\n\n", suggestion))
+	}
+
+	return sb.String()
 }

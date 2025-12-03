@@ -3481,6 +3481,73 @@ ls ~/.claude/agents/custom-agent.md
 
 3. Use existing agent or create missing agent
 
+#### "Agent Not Found Errors"
+
+**Symptoms:**
+
+When executing a plan with agent validation enabled, you may see errors like:
+```
+Agent 'code-reviewer' not found in registry (referenced in quality_control.agents config)
+
+Available agents: python-pro, golang-pro, javascript-pro
+```
+
+Or for task-specific agents:
+```
+Agent 'ml-specialist' not found in registry (referenced in task 5)
+
+Available agents: python-pro, golang-pro, javascript-pro
+```
+
+**Common Causes:**
+
+1. **Misspelled agent name**: Agent name in plan or config doesn't match available agents
+2. **Missing agent directory**: Agent file not present in `~/.claude/agents/`
+3. **Invalid agent format**: Agent file exists but has incorrect format or structure
+
+**Solutions:**
+
+**Solution 1: Check agent name spelling**
+```bash
+# Validate plan and show agent names used
+conductor validate plan.yaml
+
+# List available agents
+ls ~/.claude/agents/
+```
+
+**Solution 2: List all available agents**
+```bash
+# View agent directory
+ls -la ~/.claude/agents/
+
+# Search for specific agent by name pattern
+ls ~/.claude/agents/ | grep code
+```
+
+**Solution 3: Verify agent file format**
+
+Valid agent file at `~/.claude/agents/code-reviewer.md`:
+```markdown
+# Code Reviewer Agent
+
+Description of the agent's role and capabilities.
+```
+
+Check the agent file exists and is readable:
+```bash
+cat ~/.claude/agents/code-reviewer.md
+```
+
+**Next Steps:**
+
+- Fix agent name spelling in plan or config
+- Create missing agent if needed
+- Re-run with corrected agent references
+```bash
+conductor run plan.yaml
+```
+
 #### "Context deadline exceeded" / "Timeout"
 
 **Symptoms:**

@@ -8,16 +8,43 @@ import (
 
 // mockErrorPattern implements ErrorPatternDisplay for testing
 type mockErrorPattern struct {
-	category   string
-	pattern    string
-	suggestion string
-	fixable    bool
+	category                  string
+	pattern                   string
+	suggestion                string
+	fixable                   bool
+	requiresHumanIntervention bool
 }
 
 func (m *mockErrorPattern) GetCategory() string   { return m.category }
 func (m *mockErrorPattern) GetPattern() string    { return m.pattern }
 func (m *mockErrorPattern) GetSuggestion() string { return m.suggestion }
 func (m *mockErrorPattern) IsAgentFixable() bool  { return m.fixable }
+
+// mockDetectedError implements DetectedErrorDisplay interface for testing
+type mockDetectedError struct {
+	pattern    *mockErrorPattern
+	method     string
+	confidence float64
+}
+
+func (m *mockDetectedError) GetErrorPattern() interface{} {
+	return m.pattern
+}
+
+func (m *mockDetectedError) GetMethod() string {
+	return m.method
+}
+
+func (m *mockDetectedError) GetConfidence() float64 {
+	return m.confidence
+}
+
+func (m *mockDetectedError) GetRequiresHumanIntervention() bool {
+	if m.pattern == nil {
+		return false
+	}
+	return m.pattern.requiresHumanIntervention
+}
 
 // TestLogErrorPatternENVLevel verifies ENV_LEVEL error pattern logging with yellow color.
 func TestLogErrorPatternENVLevel(t *testing.T) {

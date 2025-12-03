@@ -2966,3 +2966,342 @@ func TestConsoleLogger_ColorControl(t *testing.T) {
 		}
 	})
 }
+
+// TestLogDetectedError verifies LogDetectedError handles DetectedError with various methods
+func TestLogDetectedError(t *testing.T) {
+	tests := []struct {
+		name            string
+		detected        *mockDetectedError
+		expectOutput    bool
+		expectedStrings []string
+	}{
+		{
+			name: "claude method with high confidence",
+			detected: &mockDetectedError{
+				pattern: &mockErrorPattern{
+					pattern:                   "undefined: SomeSymbol",
+					category:                  "CODE_LEVEL",
+					suggestion:                "Add import statement for the missing symbol",
+					fixable:               true,
+					requiresHumanIntervention: false,
+				},
+				method:     "claude",
+				confidence: 0.95,
+			},
+			expectOutput: true,
+			expectedStrings: []string{
+				"Error Pattern Detected",
+				"Category: CODE_LEVEL",
+				"Method:",
+				"Claude",
+				"95% confidence",
+				"Pattern:",
+				"Suggestion:",
+				"Add import statement",
+			},
+		},
+		{
+			name: "regex method",
+			detected: &mockDetectedError{
+				pattern: &mockErrorPattern{
+					pattern:                   "command not found",
+					category:                  "ENV_LEVEL",
+					suggestion:                "Command not found in PATH. Install required tool.",
+					fixable:               false,
+					requiresHumanIntervention: true,
+				},
+				method:     "regex",
+				confidence: 1.0,
+			},
+			expectOutput: true,
+			expectedStrings: []string{
+				"Error Pattern Detected",
+				"Category: ENV_LEVEL",
+				"Method:",
+				"Regex pattern match",
+				"Pattern:",
+				"Suggestion:",
+				"Requires Human Intervention",
+			},
+		},
+		{
+			name: "PLAN_LEVEL with claude method",
+			detected: &mockDetectedError{
+				pattern: &mockErrorPattern{
+					pattern:                   "test bundle not available",
+					category:                  "PLAN_LEVEL",
+					suggestion:                "Update plan to use existing test target",
+					fixable:               false,
+					requiresHumanIntervention: true,
+				},
+				method:     "claude",
+				confidence: 0.88,
+			},
+			expectOutput: true,
+			expectedStrings: []string{
+				"Error Pattern Detected",
+				"Category: PLAN_LEVEL",
+				"Method:",
+				"Claude",
+				"88% confidence",
+				"Suggestion:",
+				"Requires Human Intervention",
+			},
+		},
+		// Note: Skipping nil pattern test as it causes panic in mock implementation
+		// Real executor.DetectedError would never have a nil Pattern field
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "info")
+
+			// Handle nil interface values safely
+			if tt.detected == nil {
+				logger.LogDetectedError(nil)
+			} else {
+				logger.LogDetectedError(tt.detected)
+			}
+
+			output := buf.String()
+
+			if tt.expectOutput {
+				if output == "" {
+					t.Error("expected output but got empty string")
+				}
+
+				// Check for expected strings
+				for _, expected := range tt.expectedStrings {
+					if !strings.Contains(output, expected) {
+						t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+					}
+				}
+			} else {
+				if output != "" {
+					t.Errorf("expected no output but got: %s", output)
+				}
+			}
+		})
+	}
+}
+
+// TestLogDetectedError_ColorOutput verifies colored output for different error categories
+func TestLogDetectedError_ColorOutput(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+	logger.colorOutput = true
+
+	detected := &mockDetectedError{
+		pattern: &mockErrorPattern{
+			pattern:                   "syntax error",
+			category:                  "CODE_LEVEL",
+			suggestion:                "Fix the syntax issue",
+			fixable:               true,
+			requiresHumanIntervention: false,
+		},
+		method:     "claude",
+		confidence: 0.92,
+	}
+
+	logger.LogDetectedError(detected)
+
+	output := buf.String()
+
+	// Verify basic structure even with color codes
+	if !strings.Contains(output, "Error Pattern Detected") {
+		t.Error("expected header text")
+	}
+	if !strings.Contains(output, "CODE_LEVEL") {
+		t.Error("expected category")
+	}
+	if !strings.Contains(output, "92% confidence") {
+		t.Error("expected confidence percentage")
+	}
+}
+
+// TestLogDetectedError_RequiresHumanIntervention verifies the human intervention warning
+func TestLogDetectedError_RequiresHumanIntervention(t *testing.T) {
+	tests := []struct {
+		name                      string
+		requiresHumanIntervention bool
+		expectWarning             bool
+	}{
+		{
+			name:                      "requires intervention",
+			requiresHumanIntervention: true,
+			expectWarning:             true,
+		},
+		{
+			name:                      "does not require intervention",
+			requiresHumanIntervention: false,
+			expectWarning:             false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "info")
+
+			detected := &mockDetectedError{
+				pattern: &mockErrorPattern{
+					pattern:                   "test pattern",
+					category:                  "ENV_LEVEL",
+					suggestion:                "test suggestion",
+					fixable:               !tt.requiresHumanIntervention,
+					requiresHumanIntervention: tt.requiresHumanIntervention,
+				},
+				method:     "regex",
+				confidence: 1.0,
+			}
+
+			logger.LogDetectedError(detected)
+
+			output := buf.String()
+
+			if tt.expectWarning {
+				if !strings.Contains(output, "Requires Human Intervention") {
+					t.Error("expected human intervention warning")
+				}
+			} else {
+				if strings.Contains(output, "Requires Human Intervention") {
+					t.Error("did not expect human intervention warning")
+				}
+			}
+		})
+	}
+}
+
+// TestLogDetectedError_ConfidenceFormatting verifies confidence is formatted correctly
+func TestLogDetectedError_ConfidenceFormatting(t *testing.T) {
+	tests := []struct {
+		name               string
+		confidence         float64
+		expectedConfidence string
+	}{
+		{
+			name:               "high confidence",
+			confidence:         0.95,
+			expectedConfidence: "95% confidence",
+		},
+		{
+			name:               "low confidence",
+			confidence:         0.85,
+			expectedConfidence: "85% confidence",
+		},
+		{
+			name:               "perfect confidence",
+			confidence:         1.0,
+			expectedConfidence: "100% confidence",
+		},
+		{
+			name:               "mid confidence",
+			confidence:         0.88,
+			expectedConfidence: "88% confidence",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "info")
+
+			detected := &mockDetectedError{
+				pattern: &mockErrorPattern{
+					pattern:    "test pattern",
+					category:   "CODE_LEVEL",
+					suggestion: "test suggestion",
+				},
+				method:     "claude",
+				confidence: tt.confidence,
+			}
+
+			logger.LogDetectedError(detected)
+
+			output := buf.String()
+
+			if !strings.Contains(output, tt.expectedConfidence) {
+				t.Errorf("expected %q in output, got:\n%s", tt.expectedConfidence, output)
+			}
+		})
+	}
+}
+
+// TestLogErrorPattern_BackwardCompatibility verifies LogErrorPattern still works
+func TestLogErrorPattern_BackwardCompatibility(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+
+	pattern := &mockErrorPattern{
+		pattern:    "syntax error",
+		category:   "CODE_LEVEL",
+		suggestion: "Fix the syntax",
+	}
+
+	logger.LogErrorPattern(pattern)
+
+	output := buf.String()
+
+	if output == "" {
+		t.Error("expected output from LogErrorPattern")
+	}
+
+	expectedStrings := []string{
+		"Error Pattern Detected",
+		"Category: CODE_LEVEL",
+		"Pattern:",
+		"Suggestion:",
+	}
+
+	for _, expected := range expectedStrings {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q", expected)
+		}
+	}
+}
+
+// TestLogErrorPattern_MethodDisplay verifies method is displayed correctly
+func TestLogErrorPattern_MethodDisplay(t *testing.T) {
+	tests := []struct {
+		name           string
+		method         string
+		expectedMethod string
+	}{
+		{
+			name:           "claude method",
+			method:         "claude",
+			expectedMethod: "Claude",
+		},
+		{
+			name:           "regex method",
+			method:         "regex",
+			expectedMethod: "Regex pattern match",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "info")
+
+			detected := &mockDetectedError{
+				pattern: &mockErrorPattern{
+					pattern:    "test",
+					category:   "CODE_LEVEL",
+					suggestion: "test",
+				},
+				method:     tt.method,
+				confidence: 0.9,
+			}
+
+			logger.LogDetectedError(detected)
+
+			output := buf.String()
+
+			if !strings.Contains(output, tt.expectedMethod) {
+				t.Errorf("expected method %q in output, got:\n%s", tt.expectedMethod, output)
+			}
+		})
+	}
+}

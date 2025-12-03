@@ -43,6 +43,19 @@ type ErrorPatternDisplay interface {
 	IsAgentFixable() bool
 }
 
+// DetectedErrorDisplay is an interface for objects that represent detected errors with metadata.
+// It extends ErrorPatternDisplay with detection method and confidence information.
+type DetectedErrorDisplay interface {
+	// GetErrorPattern returns the underlying error pattern (as interface{}, caller must assert to ErrorPatternDisplay)
+	GetErrorPattern() interface{}
+	// GetMethod returns the detection method ("claude", "regex", etc.)
+	GetMethod() string
+	// GetConfidence returns the confidence score (0.0-1.0)
+	GetConfidence() float64
+	// GetRequiresHumanIntervention returns whether manual intervention is needed
+	GetRequiresHumanIntervention() bool
+}
+
 // ConsoleLogger logs execution progress to a writer with timestamps and thread safety.
 // All output is prefixed with [HH:MM:SS] timestamps for tracking execution flow.
 // It supports log level filtering to control message verbosity.
@@ -189,6 +202,21 @@ func (cl *ConsoleLogger) LogWarn(message string) {
 // Format: "[HH:MM:SS] [ERROR] <message>"
 func (cl *ConsoleLogger) LogError(message string) {
 	cl.logWithLevel("ERROR", message)
+}
+
+// Info logs an info-level message (alias for LogInfo, satisfies RuntimeEnforcementLogger).
+func (cl *ConsoleLogger) Info(message string) {
+	cl.LogInfo(message)
+}
+
+// Infof logs a formatted info-level message.
+func (cl *ConsoleLogger) Infof(format string, args ...interface{}) {
+	cl.LogInfo(fmt.Sprintf(format, args...))
+}
+
+// Warnf logs a formatted warning-level message.
+func (cl *ConsoleLogger) Warnf(format string, args ...interface{}) {
+	cl.LogWarn(fmt.Sprintf(format, args...))
 }
 
 // logWithLevel is a helper that logs a message at the specified level if filtering allows it.
@@ -1303,7 +1331,141 @@ func (cl *ConsoleLogger) LogTestCommands(results []models.TestCommandResult) {
 	cl.writer.Write([]byte(output.String()))
 }
 
+// LogDetectedError logs a detected error with classification context.
+// Format: Boxed output with category, method, confidence, pattern, and actionable suggestion.
+// Shows detection method (Claude vs regex) and confidence score for transparency.
+// Accepts DetectedErrorDisplay interface for decoupling from specific implementations.
+func (cl *ConsoleLogger) LogDetectedError(detected interface{}) {
+	if cl.writer == nil || detected == nil {
+		return
+	}
+
+	// Type assert to DetectedErrorDisplay interface
+	detectedErr, ok := detected.(DetectedErrorDisplay)
+	if !ok {
+		// If not DetectedErrorDisplay, log error
+		cl.LogError(fmt.Sprintf("LogDetectedError received invalid type: %T", detected))
+		return
+	}
+
+	patternRaw := detectedErr.GetErrorPattern()
+	if patternRaw == nil {
+		return
+	}
+
+	// Type assert to ErrorPatternDisplay
+	pattern, ok := patternRaw.(ErrorPatternDisplay)
+	if !ok {
+		return // Not the right type
+	}
+
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	var output strings.Builder
+	w := getTerminalWidth()
+
+	// Box top and header
+	output.WriteString(drawBoxTop(w) + "\n")
+
+	var headerText string
+	if cl.colorOutput {
+		headerText = color.New(color.FgCyan, color.Bold).Sprint("🔍 Error Pattern Detected")
+	} else {
+		headerText = "🔍 Error Pattern Detected"
+	}
+	output.WriteString(drawBoxLine(headerText, w) + "\n")
+	output.WriteString(drawBoxDivider(w) + "\n")
+
+	// Category line with color based on category
+	var categoryLine string
+	categoryStr := pattern.GetCategory()
+	switch categoryStr {
+	case "ENV_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgYellow).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	case "PLAN_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgYellow).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	case "CODE_LEVEL":
+		if cl.colorOutput {
+			categoryLine = "Category: " + color.New(color.FgGreen).Sprint(categoryStr)
+		} else {
+			categoryLine = "Category: " + categoryStr
+		}
+	default:
+		categoryLine = "Category: " + categoryStr
+	}
+	output.WriteString(drawBoxLine(categoryLine, w) + "\n")
+
+	// Method line with confidence
+	var methodLine string
+	method := detectedErr.GetMethod()
+	if method == "claude" {
+		if cl.colorOutput {
+			methodLine = fmt.Sprintf("Method: %s (%.0f%% confidence)",
+				color.New(color.FgMagenta).Sprint("Claude"),
+				detectedErr.GetConfidence()*100)
+		} else {
+			methodLine = fmt.Sprintf("Method: Claude (%.0f%% confidence)", detectedErr.GetConfidence()*100)
+		}
+	} else {
+		if cl.colorOutput {
+			methodLine = "Method: " + color.New(color.FgCyan).Sprint("Regex pattern match")
+		} else {
+			methodLine = "Method: Regex pattern match"
+		}
+	}
+	output.WriteString(drawBoxLine(methodLine, w) + "\n")
+
+	// Pattern line
+	patternText := truncateCommand(pattern.GetPattern(), w-12)
+	patternLine := "Pattern: " + patternText
+	output.WriteString(drawBoxLine(patternLine, w) + "\n")
+
+	// Empty line for spacing
+	output.WriteString(drawBoxLine("", w) + "\n")
+
+	// Suggestion header and wrapped suggestion text
+	suggestionHeader := "💡 Suggestion:"
+	output.WriteString(drawBoxLine(suggestionHeader, w) + "\n")
+
+	// Word-wrap the suggestion text
+	wrappedSuggestion := wordWrapText(pattern.GetSuggestion(), w-8)
+	for _, line := range wrappedSuggestion {
+		output.WriteString(drawBoxLine(line, w) + "\n")
+	}
+
+	// RequiresHumanIntervention flag
+	if detectedErr.GetRequiresHumanIntervention() {
+		output.WriteString(drawBoxLine("", w) + "\n")
+		var warningLine string
+		if cl.colorOutput {
+			warningLine = color.New(color.FgRed, color.Bold).Sprint("⚠️  Requires Human Intervention")
+		} else {
+			warningLine = "⚠️  Requires Human Intervention"
+		}
+		output.WriteString(drawBoxLine(warningLine, w) + "\n")
+	}
+
+	// Box bottom
+	output.WriteString(drawBoxBottom(w) + "\n")
+
+	cl.writer.Write([]byte(output.String()))
+}
+
 // LogErrorPattern logs a detected error pattern with categorization and suggestion.
+// DEPRECATED: Use LogDetectedError for new code. Kept for backward compatibility.
 // Format: Boxed output with category, pattern, and actionable suggestion.
 // Accepts interface{} for flexibility with different pattern types (e.g., ErrorPattern from executor).
 func (cl *ConsoleLogger) LogErrorPattern(pattern interface{}) {
@@ -1317,6 +1479,7 @@ func (cl *ConsoleLogger) LogErrorPattern(pattern interface{}) {
 		return // Not the right type, skip
 	}
 
+	// Fallback to inline implementation for backward compatibility
 	if !cl.shouldLog("info") {
 		return
 	}
