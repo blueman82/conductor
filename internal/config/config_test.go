@@ -3052,3 +3052,218 @@ func TestLoadConfigExecutorDefaults(t *testing.T) {
 		t.Errorf("Executor.EnforceDependencyChecks = %v, want true (default)", cfg.Executor.EnforceDependencyChecks)
 	}
 }
+
+// TestDefaultTTSConfig tests default TTS configuration values
+func TestDefaultTTSConfig(t *testing.T) {
+	cfg := DefaultTTSConfig()
+
+	// TTS should be DISABLED by default
+	if cfg.Enabled != false {
+		t.Errorf("Enabled = %v, want false", cfg.Enabled)
+	}
+	if cfg.BaseURL != "http://localhost:5005" {
+		t.Errorf("BaseURL = %q, want %q", cfg.BaseURL, "http://localhost:5005")
+	}
+	if cfg.Model != "orpheus" {
+		t.Errorf("Model = %q, want %q", cfg.Model, "orpheus")
+	}
+	if cfg.Voice != "tara" {
+		t.Errorf("Voice = %q, want %q", cfg.Voice, "tara")
+	}
+	if cfg.Timeout != 2*time.Second {
+		t.Errorf("Timeout = %v, want 2s", cfg.Timeout)
+	}
+}
+
+// TestDefaultConfigIncludesTTS tests that DefaultConfig includes TTS config
+func TestDefaultConfigIncludesTTS(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Verify TTS config is included with correct defaults
+	if cfg.TTS.Enabled != false {
+		t.Errorf("TTS.Enabled = %v, want false (default)", cfg.TTS.Enabled)
+	}
+	if cfg.TTS.BaseURL != "http://localhost:5005" {
+		t.Errorf("TTS.BaseURL = %q, want %q (default)", cfg.TTS.BaseURL, "http://localhost:5005")
+	}
+	if cfg.TTS.Model != "orpheus" {
+		t.Errorf("TTS.Model = %q, want %q (default)", cfg.TTS.Model, "orpheus")
+	}
+	if cfg.TTS.Voice != "tara" {
+		t.Errorf("TTS.Voice = %q, want %q (default)", cfg.TTS.Voice, "tara")
+	}
+	if cfg.TTS.Timeout != 2*time.Second {
+		t.Errorf("TTS.Timeout = %v, want 2s (default)", cfg.TTS.Timeout)
+	}
+}
+
+// TestLoadTTSConfigFullSettings tests loading complete TTS configuration
+func TestLoadTTSConfigFullSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `tts:
+  enabled: true
+  base_url: http://custom-tts:8080
+  model: custom-model
+  voice: custom-voice
+  timeout: 5s
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.TTS.Enabled != true {
+		t.Errorf("TTS.Enabled = %v, want true", cfg.TTS.Enabled)
+	}
+	if cfg.TTS.BaseURL != "http://custom-tts:8080" {
+		t.Errorf("TTS.BaseURL = %q, want %q", cfg.TTS.BaseURL, "http://custom-tts:8080")
+	}
+	if cfg.TTS.Model != "custom-model" {
+		t.Errorf("TTS.Model = %q, want %q", cfg.TTS.Model, "custom-model")
+	}
+	if cfg.TTS.Voice != "custom-voice" {
+		t.Errorf("TTS.Voice = %q, want %q", cfg.TTS.Voice, "custom-voice")
+	}
+	if cfg.TTS.Timeout != 5*time.Second {
+		t.Errorf("TTS.Timeout = %v, want 5s", cfg.TTS.Timeout)
+	}
+}
+
+// TestLoadTTSConfigPartialSettings tests partial TTS configuration merges with defaults
+func TestLoadTTSConfigPartialSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Only set enabled and voice, leave other fields to defaults
+	configContent := `tts:
+  enabled: true
+  voice: emma
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Set fields should be overwritten
+	if cfg.TTS.Enabled != true {
+		t.Errorf("TTS.Enabled = %v, want true", cfg.TTS.Enabled)
+	}
+	if cfg.TTS.Voice != "emma" {
+		t.Errorf("TTS.Voice = %q, want %q", cfg.TTS.Voice, "emma")
+	}
+
+	// Unset fields should retain defaults
+	if cfg.TTS.BaseURL != "http://localhost:5005" {
+		t.Errorf("TTS.BaseURL = %q, want %q (default)", cfg.TTS.BaseURL, "http://localhost:5005")
+	}
+	if cfg.TTS.Model != "orpheus" {
+		t.Errorf("TTS.Model = %q, want %q (default)", cfg.TTS.Model, "orpheus")
+	}
+	if cfg.TTS.Timeout != 2*time.Second {
+		t.Errorf("TTS.Timeout = %v, want 2s (default)", cfg.TTS.Timeout)
+	}
+}
+
+// TestLoadTTSConfigDisabledByDefault tests TTS stays disabled without explicit config
+func TestLoadTTSConfigDisabledByDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Config with no TTS section
+	configContent := `max_concurrency: 4
+log_level: debug
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// TTS should remain disabled
+	if cfg.TTS.Enabled != false {
+		t.Errorf("TTS.Enabled = %v, want false (default)", cfg.TTS.Enabled)
+	}
+}
+
+// TestLoadTTSConfigInvalidTimeout tests error handling for invalid timeout
+func TestLoadTTSConfigInvalidTimeout(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `tts:
+  enabled: true
+  timeout: invalid-duration
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("LoadConfig() expected error for invalid timeout duration, got nil")
+	}
+	if !strings.Contains(err.Error(), "tts.timeout") {
+		t.Errorf("error message should mention tts.timeout, got: %v", err)
+	}
+}
+
+// TestLoadTTSConfigTimeoutFormats tests various timeout duration formats
+func TestLoadTTSConfigTimeoutFormats(t *testing.T) {
+	tests := []struct {
+		name     string
+		timeout  string
+		expected time.Duration
+	}{
+		{
+			name:     "seconds",
+			timeout:  "3s",
+			expected: 3 * time.Second,
+		},
+		{
+			name:     "milliseconds",
+			timeout:  "500ms",
+			expected: 500 * time.Millisecond,
+		},
+		{
+			name:     "combined",
+			timeout:  "1s500ms",
+			expected: 1*time.Second + 500*time.Millisecond,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			configContent := fmt.Sprintf(`tts:
+  timeout: %s
+`, tt.timeout)
+			if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			if cfg.TTS.Timeout != tt.expected {
+				t.Errorf("TTS.Timeout = %v, want %v", cfg.TTS.Timeout, tt.expected)
+			}
+		})
+	}
+}

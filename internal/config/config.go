@@ -193,6 +193,24 @@ type ValidationConfig struct {
 	StrictRubric bool `yaml:"strict_rubric"`
 }
 
+// TTSConfig controls text-to-speech functionality
+type TTSConfig struct {
+	// Enabled enables TTS functionality (default: false for zero behavior change)
+	Enabled bool `yaml:"enabled"`
+
+	// BaseURL is the TTS server endpoint
+	BaseURL string `yaml:"base_url"`
+
+	// Model is the TTS model to use
+	Model string `yaml:"model"`
+
+	// Voice is the TTS voice to use
+	Voice string `yaml:"voice"`
+
+	// Timeout is the maximum time to wait for TTS response
+	Timeout time.Duration `yaml:"timeout"`
+}
+
 // ExecutorConfig controls task execution behavior
 type ExecutorConfig struct {
 	// EnforceDependencyChecks enables running dependency check commands before task invocation.
@@ -284,6 +302,9 @@ type Config struct {
 
 	// Executor controls task execution behavior
 	Executor ExecutorConfig `yaml:"executor"`
+
+	// TTS controls text-to-speech functionality
+	TTS TTSConfig `yaml:"tts"`
 }
 
 // DefaultConsoleConfig returns ConsoleConfig with sensible default values
@@ -310,6 +331,18 @@ func DefaultCostModelConfig() CostModelConfig {
 		HaikuOutput:  4.0,
 		OpusInput:    15.0,
 		OpusOutput:   75.0,
+	}
+}
+
+// DefaultTTSConfig returns TTSConfig with sensible default values
+// TTS is DISABLED by default to ensure zero behavior change unless explicitly enabled
+func DefaultTTSConfig() TTSConfig {
+	return TTSConfig{
+		Enabled: false,
+		BaseURL: "http://localhost:5005",
+		Model:   "orpheus",
+		Voice:   "tara",
+		Timeout: 2 * time.Second,
 	}
 }
 
@@ -386,6 +419,7 @@ func DefaultConfig() *Config {
 			EnableErrorPatternDetection: true,
 			EnableClaudeClassification:  false,
 		},
+		TTS: DefaultTTSConfig(),
 	}
 }
 
@@ -462,6 +496,13 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Parse YAML
 	// Use a temporary struct to handle duration parsing
+	type yamlTTSConfig struct {
+		Enabled bool   `yaml:"enabled"`
+		BaseURL string `yaml:"base_url"`
+		Model   string `yaml:"model"`
+		Voice   string `yaml:"voice"`
+		Timeout string `yaml:"timeout"`
+	}
 	type yamlConfig struct {
 		MaxConcurrency int                  `yaml:"max_concurrency"`
 		Timeout        string               `yaml:"timeout"`
@@ -477,6 +518,7 @@ func LoadConfig(path string) (*Config, error) {
 		AgentWatch     AgentWatchConfig     `yaml:"agent_watch"`
 		Validation     ValidationConfig     `yaml:"validation"`
 		Executor       ExecutorConfig       `yaml:"executor"`
+		TTS            yamlTTSConfig        `yaml:"tts"`
 	}
 
 	var yamlCfg yamlConfig
@@ -766,6 +808,32 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := executorMap["enable_claude_classification"]; exists {
 				cfg.Executor.EnableClaudeClassification = executor.EnableClaudeClassification
+			}
+		}
+
+		// Merge TTS config
+		if ttsSection, exists := rawMap["tts"]; exists && ttsSection != nil {
+			tts := yamlCfg.TTS
+			ttsMap, _ := ttsSection.(map[string]interface{})
+
+			if _, exists := ttsMap["enabled"]; exists {
+				cfg.TTS.Enabled = tts.Enabled
+			}
+			if _, exists := ttsMap["base_url"]; exists {
+				cfg.TTS.BaseURL = tts.BaseURL
+			}
+			if _, exists := ttsMap["model"]; exists {
+				cfg.TTS.Model = tts.Model
+			}
+			if _, exists := ttsMap["voice"]; exists {
+				cfg.TTS.Voice = tts.Voice
+			}
+			if _, exists := ttsMap["timeout"]; exists && tts.Timeout != "" {
+				timeout, err := time.ParseDuration(tts.Timeout)
+				if err != nil {
+					return nil, fmt.Errorf("invalid tts.timeout format %q: %w", tts.Timeout, err)
+				}
+				cfg.TTS.Timeout = timeout
 			}
 		}
 	}
