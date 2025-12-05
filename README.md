@@ -64,6 +64,7 @@ Conductor automates complex multi-step implementations by:
 - **JSON Schema Enforcement** (v2.8+): Guaranteed response structure from agents
 - **Runtime Enforcement** (v2.9+): Hard gates (test commands) and soft signals (criterion verification)
 - **Agent Validation** (v2.13+): Pre-execution validation of agent availability and configuration
+- **Voice Feedback** (v2.14+): Optional TTS announcements via local Orpheus server for hands-free monitoring
 
 [⬆ back to top](#table-of-contents)
 
@@ -83,17 +84,17 @@ Download pre-built binary from the latest release:
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.13.0/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.14.0/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.13.0/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.14.0/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux (x86_64)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.13.0/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.14.0/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
@@ -242,6 +243,12 @@ quality_control:
   agents:
     mode: intelligent        # auto|explicit|mixed|intelligent
     max_agents: 3
+
+# Voice Feedback (optional, requires Orpheus TTS server)
+tts:
+  enabled: false             # Set true to enable voice announcements
+  base_url: "http://localhost:5005"
+  voice: "tara"              # tara, leah, jess, leo, dan, mia, zac, zoe
 ```
 
 **Priority** (highest to lowest):
@@ -321,7 +328,7 @@ For complete format specifications and examples:
 
 ## Project Status
 
-**Current Status**: Production-ready v2.13.0
+**Current Status**: Production-ready v2.14.0
 
 Conductor is feature-complete with:
 - Wave-based parallel execution with dependency management
@@ -334,6 +341,7 @@ Conductor is feature-complete with:
 - Agent Watch behavioral analytics with real-time streaming
 - JSON schema enforcement for guaranteed response structure
 - Runtime enforcement with test commands and criterion verification
+- Optional TTS voice feedback for hands-free monitoring
 - 86%+ test coverage with 465+ tests
 - Comprehensive documentation and examples
 

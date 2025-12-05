@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.5.2 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, and auto-incrementing version management.
+**Current Status**: Production-ready v2.14.0 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, optional TTS voice feedback (v2.14+), and auto-incrementing version management.
 
 ## Codebase Search
 
@@ -222,7 +222,7 @@ tasks:
 
 ## Production Status
 
-**v2.9.0**: 86%+ test coverage (465+ tests). Complete pipeline with runtime enforcement.
+**v2.14.0**: 86%+ test coverage (465+ tests). Complete pipeline with runtime enforcement and optional TTS.
 
 **Major Features**:
 - Multi-agent orchestration with dependency resolution
@@ -235,6 +235,7 @@ tasks:
 - Dual feedback storage (plan files + database)
 - Integration tasks with dual criteria
 - Agent Watch behavioral analytics (v2.7+)
+- Optional TTS voice feedback (v2.14+)
 - Comprehensive logging and error handling
 
 **Recent Enhancements**:
@@ -246,6 +247,7 @@ tasks:
 - v2.7: Agent Watch integration, behavioral analytics
 - v2.8: JSON schema enforcement via --json-schema flag
 - v2.9: Runtime enforcement with test commands, criterion verification, dynamic terminal width
+- v2.14: Optional Orpheus TTS voice feedback for hands-free monitoring
 
 ## Module Path
 
@@ -382,3 +384,94 @@ conductor observe export --format csv --output data.csv
 - [Usage Examples](docs/examples/agent-watch-usage.md)
 - [Filtering Guide](docs/examples/agent-watch-filtering.md)
 - [Analytics Features](docs/examples/agent-watch-analytics.md)
+
+## Text-to-Speech (TTS) Voice Feedback (v2.14+)
+
+### Overview
+
+Conductor supports optional voice announcements via a local Orpheus TTS server. When enabled, Conductor announces execution events audibly, providing hands-free monitoring of long-running plans.
+
+### What Gets Announced
+
+| Event | Example Announcement |
+|-------|---------------------|
+| Wave start | "Starting Wave 1 with 3 tasks" |
+| Agent deployment | "Deploying agent golang-pro" |
+| QC agent selection | "Deploying QC agents code-reviewer and qa-expert" |
+| QC selection rationale | Full intelligent selection reasoning |
+| Individual QC verdicts | "code-reviewer says GREEN" |
+| Aggregated QC result | "QC passed" / "QC failed" / "QC passed with warnings" |
+| Wave complete | "Wave 1 completed, all tasks passed" |
+| Run complete | "Run completed. All 5 tasks passed" |
+
+### Prerequisites
+
+| Component | Purpose | Installation |
+|-----------|---------|--------------|
+| **Ollama** | Local LLM runtime | Download from [ollama.ai](https://ollama.ai) |
+| **Orpheus Model** | TTS model | `ollama pull legraphista/Orpheus` (~2.4GB) |
+| **Orpheus-FastAPI** | OpenAI-compatible API server | Clone from GitHub, run on port 5005 |
+| **afplay** (macOS) | Audio playback | Built-in |
+| **aplay** (Linux) | Audio playback | Install `alsa-utils` package |
+
+### Server Setup
+
+```bash
+# 1. Install Ollama
+# Download from https://ollama.ai
+
+# 2. Pull Orpheus model
+ollama pull legraphista/Orpheus
+
+# 3. Clone and run Orpheus-FastAPI
+git clone https://github.com/Lex-au/Orpheus-FastAPI.git
+cd Orpheus-FastAPI
+pip install -r requirements.txt
+python main.py  # Runs on http://localhost:5005
+
+# 4. Verify server is running
+curl http://localhost:5005/
+```
+
+### Configuration
+
+Add to `.conductor/config.yaml`:
+
+```yaml
+tts:
+  enabled: true                        # Enable TTS (default: false)
+  base_url: "http://localhost:5005"    # Orpheus server URL
+  model: "orpheus"                     # TTS model
+  voice: "tara"                        # Voice: tara, leah, jess, leo, dan, mia, zac, zoe
+  timeout: 30s                         # Request timeout (Orpheus takes ~2-3s per phrase)
+```
+
+### Key Packages
+
+- `internal/tts/client.go` - HTTP client with serialized speech queue
+- `internal/tts/announcer.go` - Human-readable message generation
+- `internal/tts/logger.go` - executor.Logger implementation for TTS
+- `internal/config/config.go` - TTSConfig struct and defaults
+
+### Architecture
+
+```
+Execution Event → Logger Interface → TTSLogger → Announcer → Client → HTTP POST → Orpheus
+                                                                    → WAV bytes → afplay/aplay
+```
+
+**Key Design Decisions:**
+- **Fire-and-forget**: TTS errors are silently ignored (never blocks execution)
+- **Lazy health check**: Server availability checked once on first announcement
+- **Serialized queue**: 100-message buffer prevents overlapping audio
+- **Graceful degradation**: Disabled TTS = zero behavior change
+
+### Graceful Degradation
+
+| Condition | Behavior |
+|-----------|----------|
+| `tts.enabled: false` | No TTS API calls |
+| Server unavailable | Silently ignored |
+| Queue full (100 msgs) | New announcements dropped |
+| Unsupported OS | Silently ignored |
+| HTTP timeout | Silent failure, continues |
