@@ -243,6 +243,11 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 				defer releasePackages()
 			}
 
+			// Announce agent deployment before execution
+			if w.logger != nil {
+				w.logger.LogTaskAgentInvoke(task)
+			}
+
 			result, err := w.taskExecutor.Execute(ctx, task)
 			if result.Task.Number == "" {
 				result.Task = task

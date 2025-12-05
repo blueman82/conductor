@@ -49,8 +49,14 @@ func (l *TTSLogger) LogSummary(result models.ExecutionResult) {
 	l.announcer.RunComplete(result)
 }
 
-// LogQCAgentSelection is a no-op implementation.
+// LogTaskAgentInvoke delegates to announcer.TaskAgentInvoke.
+func (l *TTSLogger) LogTaskAgentInvoke(task models.Task) {
+	l.announcer.TaskAgentInvoke(task)
+}
+
+// LogQCAgentSelection delegates to announcer.QCAgentSelection.
 func (l *TTSLogger) LogQCAgentSelection(agents []string, mode string) {
+	l.announcer.QCAgentSelection(agents)
 }
 
 // LogQCIndividualVerdicts is a no-op implementation.

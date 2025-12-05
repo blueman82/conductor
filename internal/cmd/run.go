@@ -715,6 +715,13 @@ func (ml *multiLogger) LogSummary(result models.ExecutionResult) {
 	}
 }
 
+// LogTaskAgentInvoke forwards to all loggers
+func (ml *multiLogger) LogTaskAgentInvoke(task models.Task) {
+	for _, logger := range ml.loggers {
+		logger.LogTaskAgentInvoke(task)
+	}
+}
+
 // LogQCAgentSelection forwards to all loggers
 func (ml *multiLogger) LogQCAgentSelection(agents []string, mode string) {
 	for _, logger := range ml.loggers {

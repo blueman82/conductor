@@ -36,6 +36,7 @@ type Logger interface {
 	LogTaskResult(result models.TaskResult) error
 	LogProgress(results []models.TaskResult)
 	LogSummary(result models.ExecutionResult)
+	LogTaskAgentInvoke(task models.Task)
 	LogQCAgentSelection(agents []string, mode string)
 	LogQCIndividualVerdicts(verdicts map[string]string)
 	LogQCAggregatedResult(verdict string, strategy string)

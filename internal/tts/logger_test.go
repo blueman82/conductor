@@ -177,16 +177,39 @@ func TestTTSLogger_LogSummary_AllPassed(t *testing.T) {
 	}
 }
 
+func TestTTSLogger_LogTaskAgentInvoke(t *testing.T) {
+	mock := &mockSpeaker{}
+	announcer := NewAnnouncer(mock)
+	logger := NewTTSLogger(announcer)
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test Task",
+		Agent:  "fullstack-developer",
+	}
+	logger.LogTaskAgentInvoke(task)
+
+	if len(mock.spokenText) != 1 {
+		t.Errorf("expected 1 spoken message, got %d", len(mock.spokenText))
+	}
+	if mock.spokenText[0] != "Deploying agent fullstack-developer" {
+		t.Errorf("unexpected message: %s", mock.spokenText[0])
+	}
+}
+
 func TestTTSLogger_LogQCAgentSelection(t *testing.T) {
 	mock := &mockSpeaker{}
 	announcer := NewAnnouncer(mock)
 	logger := NewTTSLogger(announcer)
 
-	// Should not panic and should not speak
-	logger.LogQCAgentSelection([]string{"agent1", "agent2"}, "auto")
+	// Should announce QC agents
+	logger.LogQCAgentSelection([]string{"code-reviewer", "qa-expert"}, "auto")
 
-	if len(mock.spokenText) != 0 {
-		t.Errorf("expected no spoken messages for no-op method, got %d", len(mock.spokenText))
+	if len(mock.spokenText) != 1 {
+		t.Errorf("expected 1 spoken message, got %d", len(mock.spokenText))
+	}
+	if mock.spokenText[0] != "Deploying QC agents code-reviewer and qa-expert" {
+		t.Errorf("unexpected message: %s", mock.spokenText[0])
 	}
 }
 

@@ -4,7 +4,11 @@ package tts
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
+	"os/exec"
+	"runtime"
 	"sync"
 
 	"github.com/harrison/conductor/internal/config"
@@ -12,9 +16,11 @@ import (
 
 // speechRequest is the JSON body for TTS synthesis requests.
 type speechRequest struct {
-	Model string `json:"model"`
-	Input string `json:"input"`
-	Voice string `json:"voice"`
+	Model          string  `json:"model"`
+	Input          string  `json:"input"`
+	Voice          string  `json:"voice"`
+	ResponseFormat string  `json:"response_format"`
+	Speed          float64 `json:"speed"`
 }
 
 // Client provides TTS functionality with lazy health checking.
@@ -71,7 +77,9 @@ func (c *Client) Config() config.TTSConfig {
 
 // Speak sends text to the TTS service for synthesis in a fire-and-forget manner.
 // If the service is not available, it returns immediately without doing anything.
-// The actual HTTP request is made in a goroutine, so this method never blocks.
+// The audio is fetched from the TTS server, saved to a temp file, and played using
+// the system's audio player (afplay on macOS, aplay on Linux).
+// This method never blocks - playback happens in a goroutine.
 // All errors are silently ignored.
 func (c *Client) Speak(text string) {
 	if !c.IsAvailable() {
@@ -80,9 +88,11 @@ func (c *Client) Speak(text string) {
 
 	go func() {
 		reqBody := speechRequest{
-			Model: c.config.Model,
-			Input: text,
-			Voice: c.config.Voice,
+			Model:          c.config.Model,
+			Input:          text,
+			Voice:          c.config.Voice,
+			ResponseFormat: "wav",
+			Speed:          1.0,
 		}
 
 		body, err := json.Marshal(reqBody)
@@ -100,6 +110,58 @@ func (c *Client) Speak(text string) {
 		if err != nil {
 			return
 		}
-		resp.Body.Close()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return
+		}
+
+		// Read audio bytes from response
+		audioData, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return
+		}
+
+		// Play the audio
+		playAudio(audioData)
 	}()
+}
+
+// playAudio writes audio bytes to a temp file and plays it using the system audio player.
+// On macOS, uses afplay. On Linux, uses aplay.
+// The temp file is cleaned up after playback completes.
+func playAudio(audioData []byte) {
+	// Create temp file
+	tmpFile, err := os.CreateTemp("", "conductor-tts-*.wav")
+	if err != nil {
+		return
+	}
+	tmpPath := tmpFile.Name()
+
+	// Write audio data
+	_, err = tmpFile.Write(audioData)
+	tmpFile.Close()
+	if err != nil {
+		os.Remove(tmpPath)
+		return
+	}
+
+	// Determine audio player based on OS
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("afplay", tmpPath)
+	case "linux":
+		cmd = exec.Command("aplay", "-q", tmpPath)
+	default:
+		// Unsupported platform, clean up and return
+		os.Remove(tmpPath)
+		return
+	}
+
+	// Play audio (blocking within this goroutine)
+	cmd.Run()
+
+	// Clean up temp file
+	os.Remove(tmpPath)
 }

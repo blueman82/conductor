@@ -884,6 +884,12 @@ func (cl *ConsoleLogger) LogTaskStart(task models.Task, current int, total int) 
 	cl.writer.Write([]byte(message))
 }
 
+// LogTaskAgentInvoke is called when a task agent is about to be invoked.
+// This is a no-op for console logger since the invoker already displays agent info.
+func (cl *ConsoleLogger) LogTaskAgentInvoke(task models.Task) {
+	// No-op: agent invocation display is handled by the invoker's displayAgentInfo
+}
+
 // LogQCAgentSelection logs which QC agents were selected for review.
 // Format: "[HH:MM:SS] [QC] Selected agents: [agent1, agent2] (mode: auto)"
 // Thread-safe with mutex protection.
@@ -1994,6 +2000,10 @@ func (n *NoOpLogger) LogProgress(results []models.TaskResult) {
 
 // LogSummary is a no-op implementation.
 func (n *NoOpLogger) LogSummary(result models.ExecutionResult) {
+}
+
+// LogTaskAgentInvoke is a no-op implementation.
+func (n *NoOpLogger) LogTaskAgentInvoke(task models.Task) {
 }
 
 // LogQCAgentSelection is a no-op implementation.

@@ -271,7 +271,9 @@ func TestClient_Speak_SendsCorrectRequest(t *testing.T) {
 		receivedContentType = r.Header.Get("Content-Type")
 		body, _ := io.ReadAll(r.Body)
 		json.Unmarshal(body, &receivedReq)
+		// Return fake audio data (minimal WAV header)
 		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("RIFF----WAVEfmt "))
 		wg.Done()
 	}))
 	defer server.Close()
@@ -307,6 +309,12 @@ func TestClient_Speak_SendsCorrectRequest(t *testing.T) {
 	}
 	if receivedReq.Voice != "tara" {
 		t.Errorf("expected voice tara, got %s", receivedReq.Voice)
+	}
+	if receivedReq.ResponseFormat != "wav" {
+		t.Errorf("expected response_format wav, got %s", receivedReq.ResponseFormat)
+	}
+	if receivedReq.Speed != 1.0 {
+		t.Errorf("expected speed 1.0, got %f", receivedReq.Speed)
 	}
 }
 

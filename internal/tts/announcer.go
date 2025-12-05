@@ -66,3 +66,51 @@ func (a *Announcer) RunComplete(result models.ExecutionResult) {
 	}
 	a.client.Speak(msg)
 }
+
+// TaskAgentInvoke announces when a task agent is being deployed.
+func (a *Announcer) TaskAgentInvoke(task models.Task) {
+	agentName := task.Agent
+	if agentName == "" {
+		agentName = "default agent"
+	}
+	msg := fmt.Sprintf("Deploying agent %s", agentName)
+	a.client.Speak(msg)
+}
+
+// QCAgentSelection announces when QC agents are being deployed for review.
+func (a *Announcer) QCAgentSelection(agents []string) {
+	if len(agents) == 0 {
+		return
+	}
+	var msg string
+	if len(agents) == 1 {
+		msg = fmt.Sprintf("Deploying QC agent %s", agents[0])
+	} else {
+		// Multiple agents - list them
+		msg = fmt.Sprintf("Deploying QC agents %s", joinAgents(agents))
+	}
+	a.client.Speak(msg)
+}
+
+// joinAgents creates a human-readable list of agents ("a, b, and c").
+func joinAgents(agents []string) string {
+	if len(agents) == 0 {
+		return ""
+	}
+	if len(agents) == 1 {
+		return agents[0]
+	}
+	if len(agents) == 2 {
+		return agents[0] + " and " + agents[1]
+	}
+	// 3 or more: "a, b, and c"
+	result := ""
+	for i, a := range agents {
+		if i == len(agents)-1 {
+			result += "and " + a
+		} else {
+			result += a + ", "
+		}
+	}
+	return result
+}

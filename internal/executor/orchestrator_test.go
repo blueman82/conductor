@@ -59,6 +59,10 @@ func (m *mockLogger) LogSummary(result models.ExecutionResult) {
 	m.summaryCalls = append(m.summaryCalls, result)
 }
 
+func (m *mockLogger) LogTaskAgentInvoke(task models.Task) {
+	// no-op for mock
+}
+
 func (m *mockLogger) LogQCAgentSelection(agents []string, mode string) {
 	// no-op for mock
 }

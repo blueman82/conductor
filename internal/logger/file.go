@@ -312,6 +312,12 @@ func (fl *FileLogger) LogProgress(results []models.TaskResult) {
 	// No-op: progress bars are console-only for now
 }
 
+// LogTaskAgentInvoke is called when a task agent is about to be invoked.
+// This is a no-op for file logger.
+func (fl *FileLogger) LogTaskAgentInvoke(task models.Task) {
+	// No-op: agent invocation details are logged elsewhere
+}
+
 // LogQCAgentSelection logs which QC agents were selected for review.
 // Format: "[HH:MM:SS] [QC] Selected agents: [agent1, agent2] (mode: auto)"
 func (fl *FileLogger) LogQCAgentSelection(agents []string, mode string) {

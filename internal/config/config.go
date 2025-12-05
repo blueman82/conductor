@@ -342,7 +342,7 @@ func DefaultTTSConfig() TTSConfig {
 		BaseURL: "http://localhost:5005",
 		Model:   "orpheus",
 		Voice:   "tara",
-		Timeout: 2 * time.Second,
+		Timeout: 30 * time.Second,
 	}
 }
 
