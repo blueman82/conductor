@@ -39,6 +39,11 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [Execution History Format](#execution-history-format-v210)
   - [Configuration](#configuration-learning)
   - [CLI Commands](#cli-commands-learning)
+- [Text-to-Speech Voice Feedback](#text-to-speech-voice-feedback-v214)
+  - [Prerequisites](#prerequisites-1)
+  - [Server Setup](#server-setup)
+  - [Configuration](#configuration-1)
+  - [Available Voices](#available-voices)
 - [Troubleshooting & FAQ](#troubleshooting--faq)
 - [Development Workflow](#development-workflow)
 
@@ -1271,6 +1276,26 @@ learning:
 
   # Maximum execution records per task (default: 100)
   max_executions_per_task: 100
+
+# Text-to-Speech settings (v2.14+)
+# Optional voice feedback via local Orpheus TTS server
+tts:
+  # Enable/disable TTS (default: false)
+  # When disabled, no TTS API calls are made
+  enabled: false
+
+  # Orpheus TTS server URL
+  base_url: "http://localhost:5005"
+
+  # TTS model name
+  model: "orpheus"
+
+  # Voice selection: tara, leah, jess, leo, dan, mia, zac, zoe
+  voice: "tara"
+
+  # Request timeout (default: 30s)
+  # Orpheus typically takes 2-3s per phrase
+  timeout: 30s
 ```
 
 ### Configuration Priority
@@ -3368,6 +3393,106 @@ feedback:
   store_in_plan_file: false  # Disable plan file storage
   store_in_database: true    # Keep database storage only
 ```
+
+---
+
+## Text-to-Speech Voice Feedback (v2.14+)
+
+### Overview
+
+Conductor supports optional voice announcements via a local Orpheus TTS server. When enabled, execution events are announced audibly, enabling hands-free monitoring of long-running plans.
+
+### What Gets Announced
+
+| Event | Example |
+|-------|---------|
+| Wave start | "Starting Wave 1 with 3 tasks" |
+| Agent deployment | "Deploying agent golang-pro" |
+| QC agent selection | "Deploying QC agents code-reviewer and qa-expert" |
+| QC selection rationale | Full intelligent selection reasoning |
+| Individual QC verdicts | "code-reviewer says GREEN" |
+| Aggregated QC result | "QC passed" / "QC failed" / "QC passed with warnings" |
+| Wave complete | "Wave 1 completed, all tasks passed" |
+| Run complete | "Run completed. All 5 tasks passed" |
+
+### Prerequisites
+
+| Component | Purpose | Installation |
+|-----------|---------|--------------|
+| **Ollama** | Local LLM runtime | [ollama.ai](https://ollama.ai) |
+| **Orpheus Model** | TTS model (~2.4GB) | `ollama pull legraphista/Orpheus` |
+| **Orpheus-FastAPI** | OpenAI-compatible API | [GitHub](https://github.com/Lex-au/Orpheus-FastAPI) |
+| **afplay** (macOS) | Audio playback | Built-in |
+| **aplay** (Linux) | Audio playback | `apt install alsa-utils` |
+
+### Server Setup
+
+```bash
+# 1. Install Ollama from https://ollama.ai
+
+# 2. Pull Orpheus model
+ollama pull legraphista/Orpheus
+
+# 3. Clone and run Orpheus-FastAPI
+git clone https://github.com/Lex-au/Orpheus-FastAPI.git
+cd Orpheus-FastAPI
+pip install -r requirements.txt
+python main.py  # Runs on http://localhost:5005
+
+# 4. Verify server
+curl http://localhost:5005/
+```
+
+### Configuration
+
+Add to `.conductor/config.yaml`:
+
+```yaml
+tts:
+  enabled: true                        # Enable TTS (default: false)
+  base_url: "http://localhost:5005"    # Orpheus server URL
+  model: "orpheus"                     # TTS model
+  voice: "tara"                        # Voice: tara, leah, jess, leo, dan, mia, zac, zoe
+  timeout: 30s                         # Request timeout
+```
+
+### Available Voices
+
+| Voice | Description |
+|-------|-------------|
+| tara | Female, clear and professional |
+| leah | Female, warm tone |
+| jess | Female, energetic |
+| leo | Male, neutral |
+| dan | Male, deep |
+| mia | Female, soft |
+| zac | Male, casual |
+| zoe | Female, bright |
+
+### Graceful Degradation
+
+TTS is designed to never block execution:
+
+| Condition | Behavior |
+|-----------|----------|
+| `tts.enabled: false` | No TTS API calls |
+| Server unavailable | Silently ignored |
+| Queue full (100 msgs) | New announcements dropped |
+| Unsupported OS | Silently ignored |
+| HTTP timeout | Silent failure, continues |
+
+### Architecture
+
+```
+Execution Event → Logger Interface → TTSLogger → Announcer → Client → Orpheus
+                                                                    → WAV → afplay/aplay
+```
+
+**Design decisions:**
+- **Fire-and-forget**: TTS errors never block task execution
+- **Lazy health check**: Server availability checked once on first announcement
+- **Serialized queue**: 100-message buffer prevents overlapping audio
+- **Graceful degradation**: Disabled TTS = zero behavior change from pre-TTS versions
 
 ---
 
