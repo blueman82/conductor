@@ -172,6 +172,7 @@ type DefaultTaskExecutor struct {
 	EnableErrorPatternDetection bool                     // Enable error pattern detection on test failures (v2.11+)
 	EnableClaudeClassification  bool                     // Enable Claude-based error classification (v2.11+)
 	Logger                      RuntimeEnforcementLogger // Logger for runtime enforcement output (optional)
+	EventLogger                 Logger                   // Logger for execution events (task agent invoke, etc.)
 
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
@@ -625,6 +626,11 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 	// Update result task to reflect any changes from hook
 	result.Task = task
+
+	// Announce agent deployment (after any agent swaps/defaults have been applied)
+	if te.EventLogger != nil {
+		te.EventLogger.LogTaskAgentInvoke(task)
+	}
 
 	if err := te.updatePlanStatus(task, StatusInProgress, false); err != nil {
 		result.Status = models.StatusFailed

@@ -610,7 +610,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.AutoAdaptAgent = cfg.Learning.AutoAdaptAgent
 	taskExec.MinFailuresBeforeAdapt = cfg.Learning.MinFailuresBeforeAdapt
 	taskExec.SwapDuringRetries = cfg.Learning.SwapDuringRetries
-	taskExec.Logger = consoleLog // Runtime enforcement logging
+	taskExec.Logger = consoleLog      // Runtime enforcement logging
+	taskExec.EventLogger = multiLog   // Event logging (TTS agent announcements, etc.)
 
 	// Wire runtime enforcement flags (v2.9+)
 	taskExec.EnforceTestCommands = cfg.Executor.EnforceTestCommands
