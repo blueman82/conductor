@@ -23,12 +23,14 @@ type speechRequest struct {
 	Speed          float64 `json:"speed"`
 }
 
-// Client provides TTS functionality with lazy health checking.
+// Client provides TTS functionality with lazy health checking and serialized speech.
 type Client struct {
-	config     config.TTSConfig
-	httpClient *http.Client
-	available  bool
-	once       sync.Once
+	config      config.TTSConfig
+	httpClient  *http.Client
+	available   bool
+	once        sync.Once
+	speechQueue chan string
+	queueOnce   sync.Once
 }
 
 // NewClient creates a new TTS client with the given configuration.
@@ -39,6 +41,7 @@ func NewClient(cfg config.TTSConfig) *Client {
 		httpClient: &http.Client{
 			Timeout: cfg.Timeout,
 		},
+		speechQueue: make(chan string, 100), // Buffer up to 100 announcements
 	}
 }
 
@@ -75,56 +78,76 @@ func (c *Client) Config() config.TTSConfig {
 	return c.config
 }
 
-// Speak sends text to the TTS service for synthesis in a fire-and-forget manner.
+// startSpeechWorker starts the background worker that processes speech requests sequentially.
+// This is called once when the first Speak() is invoked.
+func (c *Client) startSpeechWorker() {
+	go func() {
+		for text := range c.speechQueue {
+			c.speakSync(text)
+		}
+	}()
+}
+
+// speakSync performs synchronous TTS - fetches audio and plays it, blocking until complete.
+func (c *Client) speakSync(text string) {
+	reqBody := speechRequest{
+		Model:          c.config.Model,
+		Input:          text,
+		Voice:          c.config.Voice,
+		ResponseFormat: "wav",
+		Speed:          1.0,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.config.BaseURL+"/v1/audio/speech", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+
+	// Read audio bytes from response
+	audioData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	// Play the audio (blocking)
+	playAudio(audioData)
+}
+
+// Speak queues text to be spoken by the TTS service.
 // If the service is not available, it returns immediately without doing anything.
-// The audio is fetched from the TTS server, saved to a temp file, and played using
-// the system's audio player (afplay on macOS, aplay on Linux).
-// This method never blocks - playback happens in a goroutine.
+// Speech requests are processed sequentially to prevent overlapping audio.
+// This method never blocks - it just adds to the queue.
 // All errors are silently ignored.
 func (c *Client) Speak(text string) {
 	if !c.IsAvailable() {
 		return
 	}
 
-	go func() {
-		reqBody := speechRequest{
-			Model:          c.config.Model,
-			Input:          text,
-			Voice:          c.config.Voice,
-			ResponseFormat: "wav",
-			Speed:          1.0,
-		}
+	// Start the speech worker on first use
+	c.queueOnce.Do(c.startSpeechWorker)
 
-		body, err := json.Marshal(reqBody)
-		if err != nil {
-			return
-		}
-
-		req, err := http.NewRequest(http.MethodPost, c.config.BaseURL+"/v1/audio/speech", bytes.NewReader(body))
-		if err != nil {
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return
-		}
-
-		// Read audio bytes from response
-		audioData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return
-		}
-
-		// Play the audio
-		playAudio(audioData)
-	}()
+	// Non-blocking send to queue (drops if queue is full)
+	select {
+	case c.speechQueue <- text:
+	default:
+		// Queue full, drop this announcement
+	}
 }
 
 // playAudio writes audio bytes to a temp file and plays it using the system audio player.
