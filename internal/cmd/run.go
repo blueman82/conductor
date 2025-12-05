@@ -18,6 +18,7 @@ import (
 	"github.com/harrison/conductor/internal/logger"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/parser"
+	"github.com/harrison/conductor/internal/tts"
 	"github.com/spf13/cobra"
 )
 
@@ -535,6 +536,16 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Create multi-logger that writes to both console and file
 	multiLog := &multiLogger{
 		loggers: []executor.Logger{consoleLog, fileLog},
+	}
+
+	// Wire optional TTS logger if enabled and available
+	if cfg.TTS.Enabled {
+		ttsClient := tts.NewClient(cfg.TTS)
+		if ttsClient.IsAvailable() {
+			announcer := tts.NewAnnouncer(ttsClient)
+			ttsLogger := tts.NewTTSLogger(announcer)
+			multiLog.loggers = append(multiLog.loggers, ttsLogger)
+		}
 	}
 
 	// Create agent registry for agent discovery

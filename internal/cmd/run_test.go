@@ -2953,3 +2953,76 @@ func TestRunCommand_EnforcementFlagsHelp(t *testing.T) {
 		}
 	}
 }
+
+// TestRunCommand_TTSWiringDisabledByDefault verifies TTS is disabled by default
+func TestRunCommand_TTSWiringDisabledByDefault(t *testing.T) {
+	// Test that TTS is disabled by default in config
+	cfg := config.DefaultConfig()
+
+	if cfg.TTS.Enabled {
+		t.Error("Expected TTS to be disabled by default")
+	}
+
+	// When TTS is disabled, dry-run should work normally without attempting TTS
+	simplePlan := `# TTS Test Plan
+
+## Task 1: First task
+**Status**: pending
+
+Test TTS wiring.
+`
+
+	planFile := createTestPlanFile(t, simplePlan)
+	args := []string{"run", "--dry-run", planFile}
+
+	output, err := executeRunCommand(t, args)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\nOutput: %s", err, output)
+	}
+
+	// Verify plan executed successfully (TTS disabled doesn't affect execution)
+	if !strings.Contains(output, "Dry-run mode") {
+		t.Error("Expected dry-run mode message in output")
+	}
+}
+
+// TestRunCommand_TTSConfigFromFile verifies TTS config is loaded from config file
+func TestRunCommand_TTSConfigFromFile(t *testing.T) {
+	// Create a config file with TTS enabled but pointing to non-existent server
+	configContent := `
+tts:
+  enabled: true
+  base_url: "http://localhost:65432"
+  model: "test-model"
+  voice: "test-voice"
+  timeout: "500ms"
+`
+	tmpDir := t.TempDir()
+	conductorDir := filepath.Join(tmpDir, ".conductor")
+	if err := os.MkdirAll(conductorDir, 0755); err != nil {
+		t.Fatalf("Failed to create .conductor dir: %v", err)
+	}
+	configPath := filepath.Join(conductorDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Load config and verify TTS settings
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if !cfg.TTS.Enabled {
+		t.Error("Expected TTS to be enabled from config")
+	}
+	if cfg.TTS.BaseURL != "http://localhost:65432" {
+		t.Errorf("Expected TTS BaseURL to be http://localhost:65432, got %s", cfg.TTS.BaseURL)
+	}
+	if cfg.TTS.Model != "test-model" {
+		t.Errorf("Expected TTS Model to be test-model, got %s", cfg.TTS.Model)
+	}
+	if cfg.TTS.Voice != "test-voice" {
+		t.Errorf("Expected TTS Voice to be test-voice, got %s", cfg.TTS.Voice)
+	}
+}

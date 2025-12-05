@@ -180,3 +180,23 @@ executor:
   # classification. Falls back to regex patterns on timeout/error/low confidence.
   # Confidence threshold: 0.85 minimum (filters low-quality classifications)
   enable_claude_classification: true
+
+# Text-to-Speech (TTS) configuration (v2.10+)
+# Enables voice feedback for task completion events
+tts:
+  # Enable/disable TTS functionality (default: false)
+  # When false, no TTS requests are made - zero behavior change from pre-TTS
+  enabled: true
+
+  # TTS server endpoint URL - local Orpheus server
+  base_url: "http://localhost:5005"
+
+  # TTS model to use for speech synthesis
+  model: "orpheus"
+
+  # Voice to use for speech synthesis
+  # Orpheus voices: tara, leah, jess, leo, dan, mia, zac, zoe
+  voice: "tara"
+
+  # Maximum time to wait for TTS health check (default: 2s)
+  timeout: 2s
