@@ -123,6 +123,15 @@ func (a *Announcer) QCAggregatedResult(verdict string, strategy string) {
 	a.client.Speak(msg)
 }
 
+// QCIntelligentSelectionRationale announces the QC agent selection rationale.
+func (a *Announcer) QCIntelligentSelectionRationale(rationale string) {
+	if rationale == "" {
+		return
+	}
+	// Speak the full rationale
+	a.client.Speak(rationale)
+}
+
 // joinAgents creates a human-readable list of agents ("a, b, and c").
 func joinAgents(agents []string) string {
 	if len(agents) == 0 {

@@ -74,6 +74,7 @@ func (l *TTSLogger) LogQCAggregatedResult(verdict string, strategy string) {
 func (l *TTSLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
 }
 
-// LogQCIntelligentSelectionMetadata is a no-op implementation.
+// LogQCIntelligentSelectionMetadata delegates to announcer.QCIntelligentSelectionRationale.
 func (l *TTSLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+	l.announcer.QCIntelligentSelectionRationale(rationale)
 }
