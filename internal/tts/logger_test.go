@@ -218,11 +218,12 @@ func TestTTSLogger_LogQCIndividualVerdicts(t *testing.T) {
 	announcer := NewAnnouncer(mock)
 	logger := NewTTSLogger(announcer)
 
-	// Should not panic and should not speak
-	logger.LogQCIndividualVerdicts(map[string]string{"agent1": "GREEN", "agent2": "RED"})
+	// Should announce each agent's verdict
+	logger.LogQCIndividualVerdicts(map[string]string{"code-reviewer": "GREEN", "qa-expert": "RED"})
 
-	if len(mock.spokenText) != 0 {
-		t.Errorf("expected no spoken messages for no-op method, got %d", len(mock.spokenText))
+	// Note: map iteration order is not guaranteed, so we check both messages exist
+	if len(mock.spokenText) != 2 {
+		t.Errorf("expected 2 spoken messages, got %d", len(mock.spokenText))
 	}
 }
 
@@ -231,11 +232,14 @@ func TestTTSLogger_LogQCAggregatedResult(t *testing.T) {
 	announcer := NewAnnouncer(mock)
 	logger := NewTTSLogger(announcer)
 
-	// Should not panic and should not speak
+	// Should announce the aggregated result
 	logger.LogQCAggregatedResult("GREEN", "unanimous")
 
-	if len(mock.spokenText) != 0 {
-		t.Errorf("expected no spoken messages for no-op method, got %d", len(mock.spokenText))
+	if len(mock.spokenText) != 1 {
+		t.Errorf("expected 1 spoken message, got %d", len(mock.spokenText))
+	}
+	if mock.spokenText[0] != "QC passed" {
+		t.Errorf("unexpected message: %s", mock.spokenText[0])
 	}
 }
 

@@ -12,8 +12,9 @@ import (
 var _ executor.Logger = (*TTSLogger)(nil)
 
 // TTSLogger wraps an Announcer and implements executor.Logger.
-// Only LogWaveStart, LogWaveComplete, and LogSummary delegate to the announcer;
-// all other methods are no-ops.
+// Delegates execution events to the announcer for voice feedback:
+// - LogWaveStart, LogWaveComplete, LogSummary
+// - LogQCAgentSelection, LogQCIndividualVerdicts, LogQCAggregatedResult
 type TTSLogger struct {
 	announcer *Announcer
 }
@@ -59,12 +60,14 @@ func (l *TTSLogger) LogQCAgentSelection(agents []string, mode string) {
 	l.announcer.QCAgentSelection(agents)
 }
 
-// LogQCIndividualVerdicts is a no-op implementation.
+// LogQCIndividualVerdicts delegates to announcer.QCIndividualVerdicts.
 func (l *TTSLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
+	l.announcer.QCIndividualVerdicts(verdicts)
 }
 
-// LogQCAggregatedResult is a no-op implementation.
+// LogQCAggregatedResult delegates to announcer.QCAggregatedResult.
 func (l *TTSLogger) LogQCAggregatedResult(verdict string, strategy string) {
+	l.announcer.QCAggregatedResult(verdict, strategy)
 }
 
 // LogQCCriteriaResults is a no-op implementation.

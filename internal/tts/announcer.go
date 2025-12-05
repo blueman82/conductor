@@ -92,6 +92,37 @@ func (a *Announcer) QCAgentSelection(agents []string) {
 	a.client.Speak(msg)
 }
 
+// QCIndividualVerdicts announces verdicts from individual QC agents.
+func (a *Announcer) QCIndividualVerdicts(verdicts map[string]string) {
+	if len(verdicts) == 0 {
+		return
+	}
+	// Announce each agent's verdict
+	for agent, verdict := range verdicts {
+		msg := fmt.Sprintf("%s says %s", agent, verdict)
+		a.client.Speak(msg)
+	}
+}
+
+// QCAggregatedResult announces the final QC result.
+func (a *Announcer) QCAggregatedResult(verdict string, strategy string) {
+	if verdict == "" {
+		return
+	}
+	var msg string
+	switch verdict {
+	case "GREEN":
+		msg = "QC passed"
+	case "RED":
+		msg = "QC failed"
+	case "YELLOW":
+		msg = "QC passed with warnings"
+	default:
+		msg = fmt.Sprintf("QC result: %s", verdict)
+	}
+	a.client.Speak(msg)
+}
+
 // joinAgents creates a human-readable list of agents ("a, b, and c").
 func joinAgents(agents []string) string {
 	if len(agents) == 0 {
