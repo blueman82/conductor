@@ -1230,9 +1230,11 @@ feedback:
 # Executor settings (v2.11+)
 executor:
   # Enable Claude-based error classification (default: false)
-  # When enabled, uses Claude to semantically analyze error messages
-  # Falls back to regex patterns on timeout/error/low confidence
   enable_claude_classification: false
+
+  # Enable intelligent task agent selection (v2.15+, default: false)
+  # When task.Agent is empty, uses Claude to select the best agent
+  intelligent_agent_selection: true
 
 # Logging settings
 log_dir: .conductor/logs  # Log directory (default: .conductor/logs)

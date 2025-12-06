@@ -55,30 +55,21 @@ func TaskAgentSelectionSchema() string {
 }
 
 // SelectAgent uses Claude to recommend an agent for task execution.
-func (tas *TaskAgentSelector) SelectAgent(
-	ctx context.Context,
-	task models.Task,
-) (*TaskAgentSelectionResult, error) {
-	// Build list of available agents from registry
+func (tas *TaskAgentSelector) SelectAgent(ctx context.Context, task models.Task) (*TaskAgentSelectionResult, error) {
 	availableAgents := tas.getAvailableAgents()
 	if len(availableAgents) == 0 {
 		return nil, fmt.Errorf("no agents available in registry")
 	}
 
-	// Build prompt for Claude
 	prompt := tas.buildSelectionPrompt(task, availableAgents)
-
-	// Invoke Claude for recommendation
 	result, err := tas.invokeClaudeForSelection(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("intelligent task agent selection failed: %w", err)
 	}
 
-	// Validate the selected agent exists
 	if !tas.agentExists(result.Agent) {
-		// Fallback to general-purpose if recommendation is invalid
 		result.Agent = "general-purpose"
-		result.Rationale = fmt.Sprintf("Fallback to general-purpose (recommended agent not found in registry): %s", result.Rationale)
+		result.Rationale = fmt.Sprintf("Fallback (agent not in registry): %s", result.Rationale)
 	}
 
 	return result, nil
@@ -157,13 +148,10 @@ Return JSON with "agent" (single agent name) and "rationale" (brief explanation)
 	return prompt
 }
 
-// invokeClaudeForSelection calls Claude to get agent recommendation.
-// Mirrors the QC intelligent selection invocation pattern.
 func (tas *TaskAgentSelector) invokeClaudeForSelection(ctx context.Context, prompt string) (*TaskAgentSelectionResult, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, tas.Timeout)
 	defer cancel()
 
-	// Build command args with JSON schema enforcement (mirrors QC pattern)
 	args := []string{
 		"-p", prompt,
 		"--json-schema", TaskAgentSelectionSchema(),
@@ -177,31 +165,26 @@ func (tas *TaskAgentSelector) invokeClaudeForSelection(ctx context.Context, prom
 		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
 	}
 
-	// Parse Claude's JSON envelope using the same parser as QC
 	parsed, err := agent.ParseClaudeOutput(string(output))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse claude output: %w", err)
 	}
 
-	// Extract the actual content
-	content := parsed.Content
-	if content == "" {
+	if parsed.Content == "" {
 		return nil, fmt.Errorf("empty content in claude response")
 	}
 
-	// Parse the inner JSON result
 	var result TaskAgentSelectionResult
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		// Try extracting JSON from text if schema enforcement didn't work
-		start := strings.Index(content, "{")
-		end := strings.LastIndex(content, "}")
+	if err := json.Unmarshal([]byte(parsed.Content), &result); err != nil {
+		start := strings.Index(parsed.Content, "{")
+		end := strings.LastIndex(parsed.Content, "}")
 		if start >= 0 && end > start {
-			if err := json.Unmarshal([]byte(content[start:end+1]), &result); err != nil {
-				return nil, fmt.Errorf("failed to extract JSON from content: %w", err)
+			if err := json.Unmarshal([]byte(parsed.Content[start:end+1]), &result); err != nil {
+				return nil, fmt.Errorf("failed to extract JSON: %w", err)
 			}
 			return &result, nil
 		}
-		return nil, fmt.Errorf("failed to parse content as JSON: %w", err)
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
 	return &result, nil
