@@ -379,7 +379,7 @@ func (fl *FileLogger) LogQCAggregatedResult(verdict string, strategy string) {
 }
 
 // LogQCCriteriaResults logs the per-criterion verification results from a QC agent.
-// Format: "[HH:MM:SS] [QC] agent-name criteria: [0:PASS, 1:PASS, 2:FAIL, 3:PASS]"
+// Format: "[HH:MM:SS] [QC] agent-name criteria: PASS" or "[PASS, PASS, FAIL]" for multiple
 func (fl *FileLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
 	// Criteria logging is at DEBUG level
 	if !fl.shouldLog("debug") {
@@ -390,17 +390,28 @@ func (fl *FileLogger) LogQCCriteriaResults(agentName string, results []models.Cr
 		return
 	}
 
-	// Build criteria status strings
-	var parts []string
-	for _, cr := range results {
-		status := "FAIL"
-		if cr.Passed {
-			status = "PASS"
+	// Build criteria status display
+	var criteriaStr string
+	if len(results) == 1 {
+		// Single criterion: just show PASS or FAIL
+		if results[0].Passed {
+			criteriaStr = "PASS"
+		} else {
+			criteriaStr = "FAIL"
 		}
-		parts = append(parts, fmt.Sprintf("%d:%s", cr.Index, status))
+	} else {
+		// Multiple criteria: show [PASS, PASS, FAIL]
+		var parts []string
+		for _, cr := range results {
+			if cr.Passed {
+				parts = append(parts, "PASS")
+			} else {
+				parts = append(parts, "FAIL")
+			}
+		}
+		criteriaStr = fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 	}
 
-	criteriaStr := fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 	message := fmt.Sprintf("[%s] [QC] %s criteria: %s\n", time.Now().Format("15:04:05"), agentName, criteriaStr)
 	fl.writeRunLog(message)
 }

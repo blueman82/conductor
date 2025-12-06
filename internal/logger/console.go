@@ -1008,8 +1008,8 @@ func (cl *ConsoleLogger) colorizeVerdicts(verdicts map[string]string, agentNames
 }
 
 // LogQCCriteriaResults logs the per-criterion verification results from a QC agent.
-// Format: "[HH:MM:SS] [QC] agent-name criteria: [0:PASS, 1:PASS, 2:FAIL, 3:PASS]"
-// Thread-safe with mutex protection. Each criterion shows index and PASS/FAIL status.
+// Format: "[HH:MM:SS] [QC] agent-name criteria: [✓, ✓, ✗]" or "PASS" for single criterion
+// Thread-safe with mutex protection. Uses checkmarks for visual clarity.
 func (cl *ConsoleLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
 	if cl.writer == nil {
 		return
@@ -1029,17 +1029,43 @@ func (cl *ConsoleLogger) LogQCCriteriaResults(agentName string, results []models
 
 	ts := timestamp()
 
-	// Build criteria status strings sorted by index
-	var parts []string
-	for _, cr := range results {
-		status := "FAIL"
-		if cr.Passed {
-			status = "PASS"
+	// Build criteria status display
+	var criteriaStr string
+	if len(results) == 1 {
+		// Single criterion: just show PASS or FAIL
+		if results[0].Passed {
+			if cl.colorOutput {
+				criteriaStr = color.New(color.FgGreen).Sprint("PASS")
+			} else {
+				criteriaStr = "PASS"
+			}
+		} else {
+			if cl.colorOutput {
+				criteriaStr = color.New(color.FgRed).Sprint("FAIL")
+			} else {
+				criteriaStr = "FAIL"
+			}
 		}
-		parts = append(parts, fmt.Sprintf("%d:%s", cr.Index, status))
+	} else {
+		// Multiple criteria: show checkmarks [✓, ✓, ✗]
+		var parts []string
+		for _, cr := range results {
+			if cr.Passed {
+				if cl.colorOutput {
+					parts = append(parts, color.New(color.FgGreen).Sprint("✓"))
+				} else {
+					parts = append(parts, "PASS")
+				}
+			} else {
+				if cl.colorOutput {
+					parts = append(parts, color.New(color.FgRed).Sprint("✗"))
+				} else {
+					parts = append(parts, "FAIL")
+				}
+			}
+		}
+		criteriaStr = fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 	}
-
-	criteriaStr := fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 
 	var message string
 	if cl.colorOutput {

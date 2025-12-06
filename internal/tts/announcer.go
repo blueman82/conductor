@@ -132,6 +132,34 @@ func (a *Announcer) QCIntelligentSelectionRationale(rationale string) {
 	a.client.Speak(rationale)
 }
 
+// QCCriteriaResults announces criteria pass/fail summary for an agent.
+// Only announces if there are failures to avoid noise.
+func (a *Announcer) QCCriteriaResults(agentName string, results []models.CriterionResult) {
+	if len(results) == 0 {
+		return
+	}
+
+	// Count passes and failures
+	passed := 0
+	for _, cr := range results {
+		if cr.Passed {
+			passed++
+		}
+	}
+	failed := len(results) - passed
+
+	// Only announce if there are failures (reduce noise)
+	if failed > 0 {
+		var msg string
+		if len(results) == 1 {
+			msg = fmt.Sprintf("%s reports criterion failed", agentName)
+		} else {
+			msg = fmt.Sprintf("%s reports %d of %d criteria failed", agentName, failed, len(results))
+		}
+		a.client.Speak(msg)
+	}
+}
+
 // joinAgents creates a human-readable list of agents ("a, b, and c").
 func joinAgents(agents []string) string {
 	if len(agents) == 0 {

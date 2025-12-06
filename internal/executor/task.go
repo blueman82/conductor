@@ -173,6 +173,8 @@ type DefaultTaskExecutor struct {
 	EnableClaudeClassification  bool                     // Enable Claude-based error classification (v2.11+)
 	Logger                      RuntimeEnforcementLogger // Logger for runtime enforcement output (optional)
 	EventLogger                 Logger                   // Logger for execution events (task agent invoke, etc.)
+	TaskAgentSelector           *TaskAgentSelector       // Intelligent agent selector for task execution (v2.15+)
+	IntelligentAgentSelection   bool                     // Enable intelligent agent selection when task.Agent is empty
 
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
@@ -616,6 +618,20 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 	// Must be done BEFORE agent invocation to inject file context
 	if te.Plan != nil && (task.Type == "integration" || len(task.DependsOn) > 0) {
 		task.Prompt = buildIntegrationPrompt(task, te.Plan)
+	}
+
+	// Apply intelligent agent selection if enabled and task has no agent
+	if task.Agent == "" && te.IntelligentAgentSelection && te.TaskAgentSelector != nil {
+		selResult, err := te.TaskAgentSelector.SelectAgent(ctx, task)
+		if err == nil && selResult.Agent != "" {
+			task.Agent = selResult.Agent
+			result.Task.Agent = selResult.Agent
+			// Log the selection rationale
+			if te.Logger != nil {
+				te.Logger.Infof("[Task] Intelligent agent selection: %s - %s", selResult.Agent, selResult.Rationale)
+			}
+		}
+		// If intelligent selection fails, fall through to default agent
 	}
 
 	// Apply default agent if provided and task still has no agent.

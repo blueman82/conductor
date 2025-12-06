@@ -70,8 +70,10 @@ func (l *TTSLogger) LogQCAggregatedResult(verdict string, strategy string) {
 	l.announcer.QCAggregatedResult(verdict, strategy)
 }
 
-// LogQCCriteriaResults is a no-op implementation.
+// LogQCCriteriaResults delegates to announcer.QCCriteriaResults.
+// Only announces failures to reduce noise.
 func (l *TTSLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
+	l.announcer.QCCriteriaResults(agentName, results)
 }
 
 // LogQCIntelligentSelectionMetadata delegates to announcer.QCIntelligentSelectionRationale.

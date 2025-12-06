@@ -619,6 +619,15 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.EnableErrorPatternDetection = cfg.Executor.EnableErrorPatternDetection
 	taskExec.EnableClaudeClassification = cfg.Executor.EnableClaudeClassification
 
+	// Wire intelligent task agent selection (v2.15+)
+	// Enable when either:
+	// 1. executor.intelligent_agent_selection is true in config, OR
+	// 2. quality_control.agents.mode is "intelligent" (backward compatibility)
+	if agentRegistry != nil && (cfg.Executor.IntelligentAgentSelection || plan.QualityControl.Agents.Mode == "intelligent") {
+		taskExec.TaskAgentSelector = executor.NewTaskAgentSelector(agentRegistry)
+		taskExec.IntelligentAgentSelection = true
+	}
+
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithPackageGuard(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed, cfg.Executor.EnforcePackageGuard)
 

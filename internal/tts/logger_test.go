@@ -248,14 +248,31 @@ func TestTTSLogger_LogQCCriteriaResults(t *testing.T) {
 	announcer := NewAnnouncer(mock)
 	logger := NewTTSLogger(announcer)
 
-	// Should not panic and should not speak
+	// Should speak when there are failures
 	logger.LogQCCriteriaResults("agent1", []models.CriterionResult{
 		{Criterion: "test1", Passed: true},
 		{Criterion: "test2", Passed: false},
 	})
 
+	// Expect 1 message (only announces when there are failures)
+	if len(mock.spokenText) != 1 {
+		t.Errorf("expected 1 spoken message for criteria with failures, got %d", len(mock.spokenText))
+	}
+}
+
+func TestTTSLogger_LogQCCriteriaResults_AllPassed(t *testing.T) {
+	mock := &mockSpeaker{}
+	announcer := NewAnnouncer(mock)
+	logger := NewTTSLogger(announcer)
+
+	// Should not speak when all pass (to reduce noise)
+	logger.LogQCCriteriaResults("agent1", []models.CriterionResult{
+		{Criterion: "test1", Passed: true},
+		{Criterion: "test2", Passed: true},
+	})
+
 	if len(mock.spokenText) != 0 {
-		t.Errorf("expected no spoken messages for no-op method, got %d", len(mock.spokenText))
+		t.Errorf("expected no spoken messages when all criteria pass, got %d", len(mock.spokenText))
 	}
 }
 
@@ -264,11 +281,15 @@ func TestTTSLogger_LogQCIntelligentSelectionMetadata(t *testing.T) {
 	announcer := NewAnnouncer(mock)
 	logger := NewTTSLogger(announcer)
 
-	// Should not panic and should not speak
-	logger.LogQCIntelligentSelectionMetadata("rationale", true, "reason")
+	// Should speak the rationale
+	logger.LogQCIntelligentSelectionMetadata("Selected agents based on Go expertise", false, "")
 
-	if len(mock.spokenText) != 0 {
-		t.Errorf("expected no spoken messages for no-op method, got %d", len(mock.spokenText))
+	// Expect 1 message (announces the rationale)
+	if len(mock.spokenText) != 1 {
+		t.Errorf("expected 1 spoken message for intelligent selection, got %d", len(mock.spokenText))
+	}
+	if len(mock.spokenText) > 0 && mock.spokenText[0] != "Selected agents based on Go expertise" {
+		t.Errorf("expected rationale in spoken message, got %q", mock.spokenText[0])
 	}
 }
 

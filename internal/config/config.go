@@ -257,6 +257,14 @@ type ExecutorConfig struct {
 	// This feature is opt-in and disabled by default for backward compatibility.
 	// Default: false
 	EnableClaudeClassification bool `yaml:"enable_claude_classification"`
+
+	// IntelligentAgentSelection enables Claude-based agent selection for task execution (v2.15+).
+	// When true and task.Agent is empty, uses Claude to analyze the task and select
+	// the most appropriate agent from the registry based on task context, file types,
+	// and success criteria. Falls back to general-purpose if selection fails.
+	// Also automatically enabled when quality_control.agents.mode is "intelligent".
+	// Default: false
+	IntelligentAgentSelection bool `yaml:"intelligent_agent_selection"`
 }
 
 // Config represents conductor configuration options
@@ -418,6 +426,7 @@ func DefaultConfig() *Config {
 			EnforceDocTargets:           true,
 			EnableErrorPatternDetection: true,
 			EnableClaudeClassification:  false,
+			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
 		TTS: DefaultTTSConfig(),
 	}
@@ -808,6 +817,9 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := executorMap["enable_claude_classification"]; exists {
 				cfg.Executor.EnableClaudeClassification = executor.EnableClaudeClassification
+			}
+			if _, exists := executorMap["intelligent_agent_selection"]; exists {
+				cfg.Executor.IntelligentAgentSelection = executor.IntelligentAgentSelection
 			}
 		}
 

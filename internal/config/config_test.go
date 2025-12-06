@@ -3053,6 +3053,73 @@ func TestLoadConfigExecutorDefaults(t *testing.T) {
 	}
 }
 
+// TestLoadConfigExecutorIntelligentAgentSelection tests loading intelligent_agent_selection from YAML
+func TestLoadConfigExecutorIntelligentAgentSelection(t *testing.T) {
+	t.Run("enabled via config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		configContent := `executor:
+  intelligent_agent_selection: true
+`
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			t.Fatalf("failed to write test config: %v", err)
+		}
+
+		cfg, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+
+		if !cfg.Executor.IntelligentAgentSelection {
+			t.Errorf("Executor.IntelligentAgentSelection = %v, want true", cfg.Executor.IntelligentAgentSelection)
+		}
+	})
+
+	t.Run("disabled by default", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		// Config without intelligent_agent_selection
+		configContent := `log_level: debug
+`
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			t.Fatalf("failed to write test config: %v", err)
+		}
+
+		cfg, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+
+		// Default should be false
+		if cfg.Executor.IntelligentAgentSelection {
+			t.Errorf("Executor.IntelligentAgentSelection = %v, want false (default)", cfg.Executor.IntelligentAgentSelection)
+		}
+	})
+
+	t.Run("explicitly disabled", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		configContent := `executor:
+  intelligent_agent_selection: false
+`
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			t.Fatalf("failed to write test config: %v", err)
+		}
+
+		cfg, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+
+		if cfg.Executor.IntelligentAgentSelection {
+			t.Errorf("Executor.IntelligentAgentSelection = %v, want false", cfg.Executor.IntelligentAgentSelection)
+		}
+	})
+}
+
 // TestDefaultTTSConfig tests default TTS configuration values
 func TestDefaultTTSConfig(t *testing.T) {
 	cfg := DefaultTTSConfig()
@@ -3070,8 +3137,8 @@ func TestDefaultTTSConfig(t *testing.T) {
 	if cfg.Voice != "tara" {
 		t.Errorf("Voice = %q, want %q", cfg.Voice, "tara")
 	}
-	if cfg.Timeout != 2*time.Second {
-		t.Errorf("Timeout = %v, want 2s", cfg.Timeout)
+	if cfg.Timeout != 30*time.Second {
+		t.Errorf("Timeout = %v, want 30s", cfg.Timeout)
 	}
 }
 
@@ -3092,8 +3159,8 @@ func TestDefaultConfigIncludesTTS(t *testing.T) {
 	if cfg.TTS.Voice != "tara" {
 		t.Errorf("TTS.Voice = %q, want %q (default)", cfg.TTS.Voice, "tara")
 	}
-	if cfg.TTS.Timeout != 2*time.Second {
-		t.Errorf("TTS.Timeout = %v, want 2s (default)", cfg.TTS.Timeout)
+	if cfg.TTS.Timeout != 30*time.Second {
+		t.Errorf("TTS.Timeout = %v, want 30s (default)", cfg.TTS.Timeout)
 	}
 }
 
@@ -3169,8 +3236,8 @@ func TestLoadTTSConfigPartialSettings(t *testing.T) {
 	if cfg.TTS.Model != "orpheus" {
 		t.Errorf("TTS.Model = %q, want %q (default)", cfg.TTS.Model, "orpheus")
 	}
-	if cfg.TTS.Timeout != 2*time.Second {
-		t.Errorf("TTS.Timeout = %v, want 2s (default)", cfg.TTS.Timeout)
+	if cfg.TTS.Timeout != 30*time.Second {
+		t.Errorf("TTS.Timeout = %v, want 30s (default)", cfg.TTS.Timeout)
 	}
 }
 
