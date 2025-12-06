@@ -341,14 +341,14 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 			if count > 0 {
 				var statusText string
 				if cl.colorOutput {
-					// Color-code each status
+					// Color-code each status with symbols
 					switch status {
 					case models.StatusGreen:
-						statusText = color.New(color.FgGreen).Sprintf("%d %s", count, status)
+						statusText = color.New(color.FgGreen).Sprintf("%d ✓ %s", count, status)
 					case models.StatusYellow:
-						statusText = color.New(color.FgYellow).Sprintf("%d %s", count, status)
+						statusText = color.New(color.FgYellow).Sprintf("%d ⚠ %s", count, status)
 					case models.StatusRed:
-						statusText = color.New(color.FgRed).Sprintf("%d %s", count, status)
+						statusText = color.New(color.FgRed).Sprintf("%d ✗ %s", count, status)
 					}
 				} else {
 					statusText = fmt.Sprintf("%d %s", count, status)
@@ -676,18 +676,18 @@ func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 			breakdownHeader := color.New(color.Bold).Sprint("Status Breakdown:")
 			output += fmt.Sprintf("[%s] %s\n", ts, breakdownHeader)
 
-			// Display in consistent order: GREEN, YELLOW, RED
+			// Display in consistent order: GREEN, YELLOW, RED with symbols
 			for _, status := range []string{models.StatusGreen, models.StatusYellow, models.StatusRed} {
 				count := result.StatusBreakdown[status]
 				if count > 0 || status == models.StatusGreen { // Always show GREEN (even if 0)
 					var statusColored string
 					switch status {
 					case models.StatusGreen:
-						statusColored = color.New(color.FgGreen).Sprint(status)
+						statusColored = color.New(color.FgGreen).Sprint("✓ " + status)
 					case models.StatusYellow:
-						statusColored = color.New(color.FgYellow).Sprint(status)
+						statusColored = color.New(color.FgYellow).Sprint("⚠ " + status)
 					case models.StatusRed:
-						statusColored = color.New(color.FgRed).Sprint(status)
+						statusColored = color.New(color.FgRed).Sprint("✗ " + status)
 					}
 					output += fmt.Sprintf("[%s]   %s: %d\n", ts, statusColored, count)
 				}
@@ -983,7 +983,7 @@ func (cl *ConsoleLogger) LogQCIndividualVerdicts(verdicts map[string]string) {
 }
 
 // colorizeVerdicts creates a color-coded verdict string where each verdict is colored
-// according to its status (GREEN=green, YELLOW=yellow, RED=red).
+// according to its status with symbols: ✓ GREEN, ⚠ YELLOW, ✗ RED.
 func (cl *ConsoleLogger) colorizeVerdicts(verdicts map[string]string, agentNames []string) string {
 	var parts []string
 	for _, agent := range agentNames {
@@ -992,11 +992,11 @@ func (cl *ConsoleLogger) colorizeVerdicts(verdicts map[string]string, agentNames
 
 		switch verdict {
 		case models.StatusGreen:
-			coloredVerdict = color.New(color.FgGreen).Sprint(verdict)
+			coloredVerdict = color.New(color.FgGreen).Sprint("✓ " + verdict)
 		case models.StatusYellow:
-			coloredVerdict = color.New(color.FgYellow).Sprint(verdict)
+			coloredVerdict = color.New(color.FgYellow).Sprint("⚠ " + verdict)
 		case models.StatusRed:
-			coloredVerdict = color.New(color.FgRed).Sprint(verdict)
+			coloredVerdict = color.New(color.FgRed).Sprint("✗ " + verdict)
 		default:
 			coloredVerdict = verdict
 		}
@@ -1029,43 +1029,24 @@ func (cl *ConsoleLogger) LogQCCriteriaResults(agentName string, results []models
 
 	ts := timestamp()
 
-	// Build criteria status display
-	var criteriaStr string
-	if len(results) == 1 {
-		// Single criterion: just show PASS or FAIL
-		if results[0].Passed {
+	// Build criteria status display: ✓ PASS / ✗ FAIL for color, plain text otherwise
+	var parts []string
+	for _, cr := range results {
+		if cr.Passed {
 			if cl.colorOutput {
-				criteriaStr = color.New(color.FgGreen).Sprint("PASS")
+				parts = append(parts, color.New(color.FgGreen).Sprint("✓ PASS"))
 			} else {
-				criteriaStr = "PASS"
+				parts = append(parts, "PASS")
 			}
 		} else {
 			if cl.colorOutput {
-				criteriaStr = color.New(color.FgRed).Sprint("FAIL")
+				parts = append(parts, color.New(color.FgRed).Sprint("✗ FAIL"))
 			} else {
-				criteriaStr = "FAIL"
+				parts = append(parts, "FAIL")
 			}
 		}
-	} else {
-		// Multiple criteria: show checkmarks [✓, ✓, ✗]
-		var parts []string
-		for _, cr := range results {
-			if cr.Passed {
-				if cl.colorOutput {
-					parts = append(parts, color.New(color.FgGreen).Sprint("✓"))
-				} else {
-					parts = append(parts, "PASS")
-				}
-			} else {
-				if cl.colorOutput {
-					parts = append(parts, color.New(color.FgRed).Sprint("✗"))
-				} else {
-					parts = append(parts, "FAIL")
-				}
-			}
-		}
-		criteriaStr = fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 	}
+	criteriaStr := strings.Join(parts, " ")
 
 	var message string
 	if cl.colorOutput {
