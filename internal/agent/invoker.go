@@ -105,8 +105,15 @@ CRITICAL: Respond with ONLY this exact JSON, nothing else - no prose, no explana
 func PrepareQCPrompt(prompt string) string {
 	const instructionSuffix = `
 
+## RESPONSE INSTRUCTIONS
+
+CRITICAL CONSISTENCY RULE: Your feedback text MUST be consistent with criteria_results:
+- If ANY criterion has "passed": false, feedback MUST mention which criterion failed and why
+- NEVER say "successfully completed" or similar if any criterion failed
+- If verdict is RED, feedback MUST describe what needs to be fixed
+
 CRITICAL: Respond with ONLY this exact JSON, nothing else - no prose, no explanation, no markdown, no tags:
-{"verdict":"GREEN","feedback":"...","criteria_results":[],"should_retry":false}`
+{"verdict":"GREEN","feedback":"...","criteria_results":[{"index":0,"criterion":"...","passed":true,"evidence":"..."}],"should_retry":false}`
 	return prompt + instructionSuffix
 }
 

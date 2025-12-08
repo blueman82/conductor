@@ -1136,7 +1136,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 
 		// Inject QC feedback into prompt for next retry (v2.9+)
 		// This ensures the agent sees what failed and can address specific issues
-		if review.Feedback != "" {
+		if review.Feedback != "" || len(review.CriteriaResults) > 0 {
 			// Build classification context from stored detected errors
 			classificationContext := ""
 			if task.Metadata != nil {
@@ -1145,8 +1145,11 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 				}
 			}
 
-			task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - QC FEEDBACK (MUST ADDRESS):\n%s\n%s\n---\n\nFix ALL issues listed above before completing the task.",
-				task.Prompt, review.Feedback, classificationContext)
+			// Format failed criteria for explicit feedback (v2.16+)
+			failedCriteriaFeedback := formatFailedCriteria(review.CriteriaResults)
+
+			task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - QC FEEDBACK (MUST ADDRESS):\n%s%s%s\n---\n\nFix ALL issues listed above before completing the task.",
+				task.Prompt, review.Feedback, failedCriteriaFeedback, classificationContext)
 		}
 	}
 
@@ -1221,6 +1224,41 @@ func (te *DefaultTaskExecutor) updatePlanStatus(task models.Task, status string,
 	}
 
 	return te.planUpdater.Update(fileToUpdate, task.Number, status, completedAt)
+}
+
+// formatFailedCriteria extracts failed criteria from QC review results and formats them
+// as actionable feedback for retry agents. Returns empty string if no criteria failed.
+func formatFailedCriteria(results []models.CriterionResult) string {
+	if len(results) == 0 {
+		return ""
+	}
+
+	var failed []models.CriterionResult
+	for _, r := range results {
+		if !r.Passed {
+			failed = append(failed, r)
+		}
+	}
+
+	if len(failed) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n### Failed Success Criteria (MUST FIX)\n\n")
+
+	for _, f := range failed {
+		criterion := f.Criterion
+		if criterion == "" {
+			criterion = fmt.Sprintf("Criterion %d", f.Index+1)
+		}
+		sb.WriteString(fmt.Sprintf("- **[%d]** %s\n", f.Index+1, criterion))
+		if f.FailReason != "" {
+			sb.WriteString(fmt.Sprintf("  - Reason: %s\n", f.FailReason))
+		}
+	}
+
+	return sb.String()
 }
 
 // formatClassificationForRetry formats classification suggestions for retry agent

@@ -2483,6 +2483,103 @@ func TestAdaptiveRetry_MixedErrors_AllowsRetry(t *testing.T) {
 	t.Logf("Completed: status %s, retry count %d", result.Status, result.RetryCount)
 }
 
+// Failed Criteria Formatting Tests (v2.16+)
+
+// TestFormatFailedCriteria tests the helper function that formats failed criteria for retry feedback
+func TestFormatFailedCriteria(t *testing.T) {
+	tests := []struct {
+		name     string
+		results  []models.CriterionResult
+		expected string
+		contains []string
+	}{
+		{
+			name:     "nil results",
+			results:  nil,
+			expected: "",
+		},
+		{
+			name:     "empty results",
+			results:  []models.CriterionResult{},
+			expected: "",
+		},
+		{
+			name: "all pass - no output",
+			results: []models.CriterionResult{
+				{Index: 0, Criterion: "Test A", Passed: true, Evidence: "found"},
+				{Index: 1, Criterion: "Test B", Passed: true, Evidence: "verified"},
+			},
+			expected: "",
+		},
+		{
+			name: "single failure with reason",
+			results: []models.CriterionResult{
+				{Index: 0, Criterion: "Test A", Passed: true, Evidence: "found"},
+				{Index: 1, Criterion: "Code should be under 50 lines", Passed: false, FailReason: "File has 75 lines"},
+			},
+			contains: []string{
+				"Failed Success Criteria (MUST FIX)",
+				"[2]",
+				"Code should be under 50 lines",
+				"Reason: File has 75 lines",
+			},
+		},
+		{
+			name: "multiple failures",
+			results: []models.CriterionResult{
+				{Index: 0, Criterion: "Criterion A", Passed: false, FailReason: "Not implemented"},
+				{Index: 1, Criterion: "Criterion B", Passed: true},
+				{Index: 2, Criterion: "Criterion C", Passed: false, FailReason: "Wrong output"},
+			},
+			contains: []string{
+				"[1]",
+				"Criterion A",
+				"Not implemented",
+				"[3]",
+				"Criterion C",
+				"Wrong output",
+			},
+		},
+		{
+			name: "failure without criterion text - uses index",
+			results: []models.CriterionResult{
+				{Index: 2, Passed: false, FailReason: "Something wrong"},
+			},
+			contains: []string{
+				"[3]",
+				"Criterion 3",
+				"Something wrong",
+			},
+		},
+		{
+			name: "failure without reason",
+			results: []models.CriterionResult{
+				{Index: 0, Criterion: "Test must pass", Passed: false},
+			},
+			contains: []string{
+				"[1]",
+				"Test must pass",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatFailedCriteria(tt.results)
+
+			if tt.expected != "" && result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+
+			for _, substr := range tt.contains {
+				if !strings.Contains(result, substr) {
+					t.Errorf("Expected result to contain %q, got:\n%s", substr, result)
+				}
+			}
+		})
+	}
+}
+
 // Classification Injection Tests (v2.12+)
 
 // TestFormatClassificationForRetry tests the helper function that formats classification for retry
