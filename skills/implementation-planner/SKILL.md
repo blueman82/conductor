@@ -313,9 +313,7 @@ documentation_targets:
 
 conductor:
   default_agent: general-purpose
-  quality_control:
-    enabled: true
-    retry_on_red: 2
+  # quality_control: Omit to inherit from .conductor/config.yaml
   worktree_groups:
     - group_id: "group-name"
       description: "Purpose"
