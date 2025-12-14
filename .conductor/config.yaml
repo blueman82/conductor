@@ -186,7 +186,7 @@ executor:
 tts:
   # Enable/disable TTS functionality (default: false)
   # When false, no TTS requests are made - zero behavior change from pre-TTS
-  enabled: true
+  enabled: false
 
   # TTS server endpoint URL - local Orpheus server
   base_url: "http://localhost:5005"

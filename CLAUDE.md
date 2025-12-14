@@ -137,6 +137,33 @@ type QCResponse struct {
 
 **Intelligent Selection (v2.4+)**: Claude-based QC agent recommendations analyzing task context + executing agent. Modes: auto, explicit, mixed, intelligent. Guardrails: code-reviewer baseline, max agents cap, registry validation, TTL caching.
 
+### RFC 2119 Requirement Levels
+
+Conductor's existing structure maps to [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119) requirement levels:
+
+| RFC 2119 Level | Plan Field | Behavior | QC Verdict on Failure |
+|----------------|------------|----------|----------------------|
+| **MUST** | `test_commands` | Hard gate - blocks task | RED (task fails) |
+| **MUST** | `dependency_checks` | Preflight gate - blocks start | Task blocked |
+| **SHOULD** | `success_criteria` | Soft signal - QC reviews | RED or YELLOW |
+| **SHOULD** | `integration_criteria` | Soft signal - QC reviews | RED or YELLOW |
+| **MAY** | `documentation_targets` | Soft signal - informational | YELLOW max |
+
+**Usage in Plans:**
+- Put absolute requirements in `test_commands` (must pass or task fails)
+- Put reviewable criteria in `success_criteria` (QC evaluates)
+- Put optional enhancements in `documentation_targets` (checked but non-blocking)
+
+**Embedding Levels in Criteria Text:**
+```yaml
+success_criteria:
+  - "MUST: Function validates all input before processing"
+  - "SHOULD: Error messages include file paths for debugging"
+  - "MAY: Supports custom exclusion patterns via config"
+```
+
+QC agents interpret RFC 2119 keywords in criterion text to determine severity.
+
 ### Adaptive Learning
 
 **Flow**: Pre-Task Hook (load history) → Task Execution → QC Review → Inter-Retry Swap → Dual Storage (plan file + DB) → Post-Task Hook (record outcome)
