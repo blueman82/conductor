@@ -355,7 +355,7 @@ func TestAnomalyMonitor_ErrorField(t *testing.T) {
 	// Test with Error field set (even if status is not explicitly failed)
 	result := models.TaskResult{
 		Task:  models.Task{Number: "1"},
-		Error: &testError{msg: "test error"},
+		Error: &anomalyTestError{msg: "test error"},
 	}
 
 	anomalies := monitor.RecordResult(result)
@@ -364,11 +364,11 @@ func TestAnomalyMonitor_ErrorField(t *testing.T) {
 	}
 }
 
-// testError is a simple error type for testing
-type testError struct {
+// anomalyTestError is a simple error type for testing anomaly monitor
+type anomalyTestError struct {
 	msg string
 }
 
-func (e *testError) Error() string {
+func (e *anomalyTestError) Error() string {
 	return e.msg
 }
