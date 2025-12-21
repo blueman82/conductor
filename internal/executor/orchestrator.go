@@ -44,7 +44,7 @@ type Logger interface {
 	LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string)
 	LogGuardPrediction(taskNumber string, result interface{})
 	LogAgentSwap(taskNumber string, fromAgent string, toAgent string)
-	LogAnomaly(anomaly WaveAnomaly)
+	LogAnomaly(anomaly interface{})
 }
 
 // WaveExecutorInterface defines the behavior required to execute waves.
