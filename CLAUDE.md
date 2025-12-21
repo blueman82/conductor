@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.14.0 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, optional TTS voice feedback (v2.14+), and auto-incrementing version management.
+**Current Status**: Production-ready v2.17.0 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, GUARD Protocol for pre-wave failure prediction (v2.17+), optional TTS voice feedback (v2.14+), and auto-incrementing version management.
 
 ## Codebase Search
 
@@ -57,7 +57,7 @@ make build-major         # Auto-increment major (1.1.0 → 2.0.0) and build
 ### Execution Pipeline
 
 ```
-Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor → Task Executor → QC → Learning System
+Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor → GUARD Gate → Task Executor → QC → Learning System
 ```
 
 **Multi-File Plans** (v2.6+): Parser handles multiple files → Plan Merger validates cross-file deps → Rest of pipeline
@@ -183,6 +183,34 @@ learning:
   min_failures_before_adapt: 2    # Threshold
 ```
 
+### GUARD Protocol (v2.17+)
+
+**Pre-wave failure prediction** using behavioral analytics to gate task execution.
+
+**Modes:**
+- `block`: Hard gate - fails tasks with high failure probability
+- `warn`: Soft signal - logs warning but allows execution
+- `adaptive`: Smart gate - blocks only when both probability AND confidence exceed thresholds
+
+**Config** (.conductor/config.yaml):
+```yaml
+guard:
+  enabled: true                    # Master switch
+  mode: warn                       # block | warn | adaptive
+  probability_threshold: 0.7       # Minimum failure probability to trigger
+  confidence_threshold: 0.7        # For adaptive mode
+  min_history_sessions: 5          # Minimum data points needed
+```
+
+**CLI Override:** `--no-guard` disables GUARD at runtime regardless of config.
+
+**Graceful Degradation:** GUARD errors never block execution - failures are logged and tasks proceed.
+
+**Key Files:**
+- `guard.go`: Core GuardProtocol, CheckWave(), evaluateBlockDecision()
+- `wave.go`: Gate insertion after task filtering, before semaphore
+- `guard_test.go`: 19 unit tests covering modes and thresholds
+
 ## Test-Driven Development
 
 **Strict TDD**: Red → Green → Refactor → Commit
@@ -249,7 +277,7 @@ tasks:
 
 ## Production Status
 
-**v2.14.0**: 86%+ test coverage (465+ tests). Complete pipeline with runtime enforcement and optional TTS.
+**v2.17.0**: 86%+ test coverage (484+ tests). Complete pipeline with runtime enforcement, GUARD Protocol, and optional TTS.
 
 **Major Features**:
 - Multi-agent orchestration with dependency resolution
@@ -262,6 +290,7 @@ tasks:
 - Dual feedback storage (plan files + database)
 - Integration tasks with dual criteria
 - Agent Watch behavioral analytics (v2.7+)
+- GUARD Protocol with behavioral prediction (v2.17+)
 - Optional TTS voice feedback (v2.14+)
 - Comprehensive logging and error handling
 
@@ -275,6 +304,7 @@ tasks:
 - v2.8: JSON schema enforcement via --json-schema flag
 - v2.9: Runtime enforcement with test commands, criterion verification, dynamic terminal width
 - v2.14: Optional Orpheus TTS voice feedback for hands-free monitoring
+- v2.17: GUARD Protocol for pre-wave failure prediction
 
 ## Module Path
 

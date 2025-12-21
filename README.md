@@ -22,6 +22,7 @@ Conductor orchestrates multiple Claude Code agents to execute implementation pla
 - **Intelligent Selection** — Claude picks best agents for tasks and QC
 - **Multi-File Plans** — Cross-file dependencies, split large plans
 - **Runtime Enforcement** — Test commands, criterion verification
+- **GUARD Protocol** — Pre-wave failure prediction blocks risky tasks
 - **Voice Feedback** — Optional TTS via local Orpheus server
 
 ## Quick Start
@@ -100,6 +101,10 @@ quality_control:
 learning:
   enabled: true
   swap_during_retries: true
+guard:
+  enabled: true
+  mode: warn  # block | warn | adaptive
+  probability_threshold: 0.7
 tts:
   enabled: false
   base_url: "http://localhost:5005"
