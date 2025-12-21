@@ -91,6 +91,10 @@ func (m *mockLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent s
 	// no-op for mock
 }
 
+func (m *mockLogger) LogAnomaly(anomaly interface{}) {
+	// no-op for mock
+}
+
 func TestOrchestratorExecutePlan(t *testing.T) {
 	tests := []struct {
 		name           string
