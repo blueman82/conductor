@@ -795,6 +795,13 @@ func (ml *multiLogger) LogQCIntelligentSelectionMetadata(rationale string, fallb
 	}
 }
 
+// LogGuardPrediction forwards to all loggers
+func (ml *multiLogger) LogGuardPrediction(taskNumber string, result *executor.GuardResult) {
+	for _, logger := range ml.loggers {
+		logger.LogGuardPrediction(taskNumber, result)
+	}
+}
+
 // getTask finds a task by number in a task list
 func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	for i := range tasks {
