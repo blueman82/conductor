@@ -75,6 +75,12 @@ func (w *WaveExecutor) SetGuardProtocol(guard *GuardProtocol) {
 	w.guardProtocol = guard
 }
 
+// SetAnomalyConfig sets the anomaly detection configuration.
+// This enables real-time anomaly detection during wave execution.
+func (w *WaveExecutor) SetAnomalyConfig(config *AnomalyMonitorConfig) {
+	w.anomalyConfig = config
+}
+
 // ExecutePlan runs the plan's waves sequentially while executing tasks within each wave in parallel.
 // It returns all collected task results and the first error encountered, if any.
 func (w *WaveExecutor) ExecutePlan(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
