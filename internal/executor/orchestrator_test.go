@@ -87,6 +87,14 @@ func (m *mockLogger) LogGuardPrediction(taskNumber string, result interface{}) {
 	// no-op for mock
 }
 
+func (m *mockLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
+	// no-op for mock
+}
+
+func (m *mockLogger) LogAnomaly(anomaly interface{}) {
+	// no-op for mock
+}
+
 func TestOrchestratorExecutePlan(t *testing.T) {
 	tests := []struct {
 		name           string

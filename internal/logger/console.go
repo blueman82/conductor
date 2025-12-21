@@ -1256,6 +1256,107 @@ func (cl *ConsoleLogger) LogGuardPrediction(taskNumber string, result interface{
 	}
 }
 
+// LogAgentSwap logs when GUARD predictive selection swaps to a better-performing agent.
+// Thread-safe with mutex protection. Uses 🔄 emoji for swap indication.
+func (cl *ConsoleLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
+	if cl.writer == nil {
+		return
+	}
+
+	// Agent swap is at INFO level
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	var message string
+	if cl.colorOutput {
+		guardPrefix := color.New(color.FgCyan).Sprint("[GUARD]")
+		fromColored := color.New(color.FgYellow).Sprint(fromAgent)
+		toColored := color.New(color.FgGreen).Sprint(toAgent)
+		message = fmt.Sprintf("[%s] %s 🔄 Task %s: Swapping agent %s → %s (predictive selection)\n",
+			ts, guardPrefix, taskNumber, fromColored, toColored)
+	} else {
+		message = fmt.Sprintf("[%s] [GUARD] 🔄 Task %s: Swapping agent %s → %s (predictive selection)\n",
+			ts, taskNumber, fromAgent, toAgent)
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
+// WaveAnomalyDisplay is an interface for objects that represent wave anomalies.
+// It's used to decouple the logger from executor.WaveAnomaly to avoid import cycles.
+type WaveAnomalyDisplay interface {
+	GetType() string
+	GetDescription() string
+	GetSeverity() string
+	GetTaskNumber() string
+	GetWaveName() string
+}
+
+// LogAnomaly logs real-time anomaly detection results during wave execution.
+// Format: "[HH:MM:SS] [ANOMALY] ⚠️ type: description (task N, severity)"
+// Thread-safe with mutex protection. Uses warning colors for visibility.
+func (cl *ConsoleLogger) LogAnomaly(anomaly interface{}) {
+	if cl.writer == nil || anomaly == nil {
+		return
+	}
+
+	// Anomaly logging is at WARN level
+	if !cl.shouldLog("warn") {
+		return
+	}
+
+	// Type assert to WaveAnomalyDisplay interface
+	a, ok := anomaly.(WaveAnomalyDisplay)
+	if !ok {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	// Map severity to emoji
+	severityEmoji := map[string]string{"low": "🟡", "medium": "🟠", "high": "🔴"}
+	emoji := severityEmoji[a.GetSeverity()]
+	if emoji == "" {
+		emoji = "⚠️"
+	}
+
+	var message string
+	taskInfo := ""
+	if a.GetTaskNumber() != "" {
+		taskInfo = fmt.Sprintf(" (Task %s)", a.GetTaskNumber())
+	}
+
+	if cl.colorOutput {
+		anomalyPrefix := color.New(color.FgYellow, color.Bold).Sprint("[ANOMALY]")
+		typeColored := color.New(color.FgYellow).Sprint(a.GetType())
+		var severityColored string
+		switch a.GetSeverity() {
+		case "high":
+			severityColored = color.New(color.FgRed).Sprint(a.GetSeverity())
+		case "medium":
+			severityColored = color.New(color.FgYellow).Sprint(a.GetSeverity())
+		default:
+			severityColored = color.New(color.FgWhite).Sprint(a.GetSeverity())
+		}
+		message = fmt.Sprintf("[%s] %s %s %s: %s%s [%s]\n",
+			ts, anomalyPrefix, emoji, typeColored, a.GetDescription(), taskInfo, severityColored)
+	} else {
+		message = fmt.Sprintf("[%s] [ANOMALY] %s %s: %s%s [%s]\n",
+			ts, emoji, a.GetType(), a.GetDescription(), taskInfo, a.GetSeverity())
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
 // Box drawing characters for rich output formatting
 const (
 	boxTopLeft     = "┌"
@@ -2130,6 +2231,14 @@ func (n *NoOpLogger) LogQCIntelligentSelectionMetadata(rationale string, fallbac
 
 // LogGuardPrediction is a no-op implementation.
 func (n *NoOpLogger) LogGuardPrediction(taskNumber string, result interface{}) {
+}
+
+// LogAgentSwap is a no-op implementation.
+func (n *NoOpLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
+}
+
+// LogAnomaly is a no-op implementation.
+func (n *NoOpLogger) LogAnomaly(anomaly interface{}) {
 }
 
 // LogTestCommands is a no-op implementation.

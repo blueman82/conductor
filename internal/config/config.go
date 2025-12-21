@@ -40,6 +40,28 @@ type GuardConfig struct {
 
 	// MinHistorySessions is the minimum number of historical sessions required before predictions are made
 	MinHistorySessions int `yaml:"min_history_sessions"`
+
+	// AutoSelectAgent enables automatic agent selection when failure probability is high (v2.18+)
+	// When true, GUARD will suggest a better-performing agent based on historical data
+	AutoSelectAgent bool `yaml:"auto_select_agent"`
+
+	// AnomalyDetection configuration for real-time anomaly monitoring (v2.18+)
+	AnomalyDetection AnomalyDetectionConfig `yaml:"anomaly_detection"`
+}
+
+// AnomalyDetectionConfig controls real-time anomaly detection during wave execution
+type AnomalyDetectionConfig struct {
+	// Enabled enables real-time anomaly detection during wave execution
+	Enabled bool `yaml:"enabled"`
+
+	// ConsecutiveFailureThreshold triggers alert after N consecutive task failures (default: 3)
+	ConsecutiveFailureThreshold int `yaml:"consecutive_failure_threshold"`
+
+	// ErrorRateThreshold triggers alert when wave error rate exceeds this percentage (0.0-1.0, default: 0.5)
+	ErrorRateThreshold float64 `yaml:"error_rate_threshold"`
+
+	// DurationDeviationThreshold triggers alert when task duration exceeds N times the estimate (default: 2.0)
+	DurationDeviationThreshold float64 `yaml:"duration_deviation_threshold"`
 }
 
 // ConsoleConfig controls terminal output formatting and features
@@ -359,6 +381,18 @@ func DefaultGuardConfig() GuardConfig {
 		ProbabilityThreshold: 0.7,
 		ConfidenceThreshold:  0.7,
 		MinHistorySessions:   5,
+		AutoSelectAgent:      true, // Enabled when GUARD is enabled
+		AnomalyDetection:     DefaultAnomalyDetectionConfig(),
+	}
+}
+
+// DefaultAnomalyDetectionConfig returns AnomalyDetectionConfig with sensible default values
+func DefaultAnomalyDetectionConfig() AnomalyDetectionConfig {
+	return AnomalyDetectionConfig{
+		Enabled:                     true, // Enabled by default when GUARD is enabled
+		ConsecutiveFailureThreshold: 3,
+		ErrorRateThreshold:          0.5,
+		DurationDeviationThreshold:  2.0,
 	}
 }
 
@@ -917,6 +951,9 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := guardMap["min_history_sessions"]; exists {
 				cfg.Guard.MinHistorySessions = guard.MinHistorySessions
+			}
+			if _, exists := guardMap["auto_select_agent"]; exists {
+				cfg.Guard.AutoSelectAgent = guard.AutoSelectAgent
 			}
 		}
 	}

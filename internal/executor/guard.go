@@ -31,6 +31,7 @@ type GuardConfig struct {
 	ProbabilityThreshold float64   // Minimum probability to trigger action (0.0-1.0)
 	ConfidenceThreshold  float64   // Minimum confidence for adaptive mode (0.0-1.0)
 	MinHistorySessions   int       // Minimum sessions required for predictions
+	AutoSelectAgent      bool      // Enable predictive agent selection (v2.18+)
 }
 
 // GuardResult contains prediction analysis for a single task
@@ -40,6 +41,7 @@ type GuardResult struct {
 	ShouldBlock     bool
 	BlockReason     string
 	Recommendations []string
+	SuggestedAgent  string // Agent to swap to when AutoSelectAgent is enabled (v2.18+)
 }
 
 // GuardProtocol implements the GUARD (Guided Adaptive Risk Detection) protocol.
@@ -48,6 +50,7 @@ type GuardProtocol struct {
 	config      GuardConfig
 	store       *learning.Store
 	predictor   *behavioral.FailurePredictor
+	scorer      *behavioral.PerformanceScorer // For predictive agent selection (v2.18+)
 	logger      Logger
 	initialized bool
 }
@@ -88,6 +91,10 @@ func (gp *GuardProtocol) Initialize(ctx context.Context) error {
 
 	// Create predictor with loaded data
 	gp.predictor = behavioral.NewFailurePredictor(sessions, metrics)
+
+	// Create scorer for predictive agent selection (reuses same behavioral data)
+	gp.scorer = behavioral.NewPerformanceScorer(sessions, metrics)
+
 	gp.initialized = true
 
 	return nil
@@ -152,13 +159,50 @@ func (gp *GuardProtocol) checkTask(ctx context.Context, task models.Task) *Guard
 	// Evaluate whether to block based on mode
 	shouldBlock, blockReason := gp.evaluateBlockDecision(prediction)
 
+	// Select better agent if auto-selection is enabled and prediction shows risk
+	suggestedAgent := ""
+	if gp.config.AutoSelectAgent && prediction.Probability >= gp.config.ProbabilityThreshold {
+		suggestedAgent = gp.selectBetterAgent(task)
+	}
+
 	return &GuardResult{
 		TaskNumber:      task.Number,
 		Prediction:      prediction,
 		ShouldBlock:     shouldBlock,
 		BlockReason:     blockReason,
 		Recommendations: prediction.Recommendations,
+		SuggestedAgent:  suggestedAgent,
 	}
+}
+
+// selectBetterAgent finds a higher-performing agent based on historical data.
+// Returns empty string if no better agent is available or scorer is nil.
+func (gp *GuardProtocol) selectBetterAgent(task models.Task) string {
+	if gp.scorer == nil {
+		return ""
+	}
+
+	ranked := gp.scorer.RankAgents()
+	if len(ranked) == 0 {
+		return ""
+	}
+
+	// Find current agent's rank
+	currentRank := -1
+	for _, agent := range ranked {
+		if agent.AgentName == task.Agent {
+			currentRank = agent.Rank
+			break
+		}
+	}
+
+	// Suggest top agent if it's different and ranked higher
+	topAgent := ranked[0]
+	if topAgent.AgentName != task.Agent && (currentRank == -1 || topAgent.Rank < currentRank) {
+		return topAgent.AgentName
+	}
+
+	return ""
 }
 
 // evaluateBlockDecision applies mode-specific logic to determine if task should be blocked.
@@ -303,16 +347,27 @@ func DefaultGuardConfig() GuardConfig {
 	return GuardConfig{
 		Enabled:              false, // Disabled by default
 		Mode:                 GuardModeWarn,
-		ProbabilityThreshold: 0.7, // 70% failure probability
-		ConfidenceThreshold:  0.8, // 80% confidence
-		MinHistorySessions:   5,   // Require at least 5 historical sessions
+		ProbabilityThreshold: 0.7,  // 70% failure probability
+		ConfidenceThreshold:  0.8,  // 80% confidence
+		MinHistorySessions:   5,    // Require at least 5 historical sessions
+		AutoSelectAgent:      true, // Enabled when GUARD is enabled
 	}
 }
 
 // LoadGuardConfig loads GUARD configuration from config file
 func LoadGuardConfig(cfg *config.Config) GuardConfig {
-	// For now, return defaults. In future, add GUARD section to config.yaml
-	return DefaultGuardConfig()
+	if cfg == nil {
+		return DefaultGuardConfig()
+	}
+
+	return GuardConfig{
+		Enabled:              cfg.Guard.Enabled,
+		Mode:                 GuardMode(cfg.Guard.Mode),
+		ProbabilityThreshold: cfg.Guard.ProbabilityThreshold,
+		ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
+		MinHistorySessions:   cfg.Guard.MinHistorySessions,
+		AutoSelectAgent:      cfg.Guard.AutoSelectAgent,
+	}
 }
 
 // FormatRiskLevel returns a human-readable risk level string

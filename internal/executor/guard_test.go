@@ -724,6 +724,180 @@ func TestLoadGuardConfig_ReturnsDefaults(t *testing.T) {
 }
 
 // =============================================================================
+// Predictive Agent Selection Tests (v2.18+)
+// =============================================================================
+
+func TestSelectBetterAgent_NilScorer_ReturnsEmpty(t *testing.T) {
+	gp := &GuardProtocol{
+		config: GuardConfig{
+			Enabled:         true,
+			AutoSelectAgent: true,
+		},
+		scorer: nil, // No scorer initialized
+	}
+
+	task := models.Task{Number: "1", Agent: "test-agent"}
+	result := gp.selectBetterAgent(task)
+
+	if result != "" {
+		t.Errorf("Expected empty string when scorer is nil, got '%s'", result)
+	}
+}
+
+func TestSelectBetterAgent_DisabledConfig_ReturnsEmpty(t *testing.T) {
+	gp := &GuardProtocol{
+		config: GuardConfig{
+			Enabled:         true,
+			AutoSelectAgent: false, // Feature disabled
+		},
+	}
+
+	task := models.Task{Number: "1", Agent: "test-agent"}
+	result := gp.selectBetterAgent(task)
+
+	if result != "" {
+		t.Errorf("Expected empty string when AutoSelectAgent is false, got '%s'", result)
+	}
+}
+
+func TestSelectBetterAgent_CurrentAgentIsTop_ReturnsEmpty(t *testing.T) {
+	// Create scorer with sessions where current agent is the best
+	sessions := []behavioral.Session{
+		{ID: "1", Success: true, AgentName: "best-agent"},
+		{ID: "2", Success: true, AgentName: "best-agent"},
+		{ID: "3", Success: false, AgentName: "worse-agent"},
+		{ID: "4", Success: false, AgentName: "worse-agent"},
+	}
+	scorer := behavioral.NewPerformanceScorer(sessions, nil)
+
+	gp := &GuardProtocol{
+		config: GuardConfig{
+			Enabled:         true,
+			AutoSelectAgent: true,
+		},
+		scorer: scorer,
+	}
+
+	// Task is already using the best agent
+	task := models.Task{Number: "1", Agent: "best-agent"}
+	result := gp.selectBetterAgent(task)
+
+	if result != "" {
+		t.Errorf("Expected empty string when current agent is already the best, got '%s'", result)
+	}
+}
+
+func TestSelectBetterAgent_BetterAgentAvailable_ReturnsBetterAgent(t *testing.T) {
+	// Create scorer with sessions where one agent is clearly better
+	sessions := []behavioral.Session{
+		{ID: "1", Success: true, AgentName: "good-agent"},
+		{ID: "2", Success: true, AgentName: "good-agent"},
+		{ID: "3", Success: true, AgentName: "good-agent"},
+		{ID: "4", Success: false, AgentName: "bad-agent"},
+		{ID: "5", Success: false, AgentName: "bad-agent"},
+		{ID: "6", Success: false, AgentName: "bad-agent"},
+	}
+	scorer := behavioral.NewPerformanceScorer(sessions, nil)
+
+	gp := &GuardProtocol{
+		config: GuardConfig{
+			Enabled:         true,
+			AutoSelectAgent: true,
+		},
+		scorer: scorer,
+	}
+
+	// Task is using the worse agent
+	task := models.Task{Number: "1", Agent: "bad-agent"}
+	result := gp.selectBetterAgent(task)
+
+	if result != "good-agent" {
+		t.Errorf("Expected 'good-agent' as better agent, got '%s'", result)
+	}
+}
+
+func TestSelectBetterAgent_UnknownAgent_ReturnsBestAgent(t *testing.T) {
+	// Create scorer with sessions
+	sessions := []behavioral.Session{
+		{ID: "1", Success: true, AgentName: "known-good-agent"},
+		{ID: "2", Success: true, AgentName: "known-good-agent"},
+	}
+	scorer := behavioral.NewPerformanceScorer(sessions, nil)
+
+	gp := &GuardProtocol{
+		config: GuardConfig{
+			Enabled:         true,
+			AutoSelectAgent: true,
+		},
+		scorer: scorer,
+	}
+
+	// Task is using an unknown agent (not in scoring history)
+	task := models.Task{Number: "1", Agent: "unknown-agent"}
+	result := gp.selectBetterAgent(task)
+
+	if result != "known-good-agent" {
+		t.Errorf("Expected 'known-good-agent' for unknown agent, got '%s'", result)
+	}
+}
+
+func TestSelectBetterAgent_NoRankedAgents_ReturnsEmpty(t *testing.T) {
+	// Create scorer with no sessions
+	scorer := behavioral.NewPerformanceScorer(nil, nil)
+
+	gp := &GuardProtocol{
+		config: GuardConfig{
+			Enabled:         true,
+			AutoSelectAgent: true,
+		},
+		scorer: scorer,
+	}
+
+	task := models.Task{Number: "1", Agent: "test-agent"}
+	result := gp.selectBetterAgent(task)
+
+	if result != "" {
+		t.Errorf("Expected empty string when no agents are ranked, got '%s'", result)
+	}
+}
+
+func TestGuardResult_SuggestedAgent_PopulatedOnHighRisk(t *testing.T) {
+	// Test that SuggestedAgent is populated when AutoSelectAgent is enabled
+	// and there's a high-risk prediction with a better agent available
+
+	// Create sessions with high failure for one agent, success for another
+	sessions := []behavioral.Session{
+		{ID: "1", Success: false, AgentName: "risky-agent"},
+		{ID: "2", Success: false, AgentName: "risky-agent"},
+		{ID: "3", Success: false, AgentName: "risky-agent"},
+		{ID: "4", Success: true, AgentName: "safe-agent"},
+		{ID: "5", Success: true, AgentName: "safe-agent"},
+		{ID: "6", Success: true, AgentName: "safe-agent"},
+	}
+	scorer := behavioral.NewPerformanceScorer(sessions, nil)
+
+	gp := &GuardProtocol{
+		config: GuardConfig{
+			Enabled:              true,
+			Mode:                 GuardModeWarn,
+			ProbabilityThreshold: 0.5,
+			AutoSelectAgent:      true,
+		},
+		scorer:      scorer,
+		initialized: true,
+	}
+
+	// This is testing the internal logic conceptually
+	// The actual wiring happens in evaluateTask which uses selectBetterAgent
+	task := models.Task{Number: "1", Agent: "risky-agent"}
+	result := gp.selectBetterAgent(task)
+
+	if result != "safe-agent" {
+		t.Errorf("Expected 'safe-agent' as suggested agent, got '%s'", result)
+	}
+}
+
+// =============================================================================
 // Mock Helpers
 // =============================================================================
 

@@ -20,11 +20,12 @@ type TaskExecutor interface {
 type WaveExecutor struct {
 	taskExecutor        TaskExecutor
 	logger              Logger
-	skipCompleted       bool           // Skip tasks that are already completed
-	retryFailed         bool           // Retry tasks that have failed status
-	packageGuard        *PackageGuard  // Runtime package conflict guard (v2.9+)
-	enforcePackageGuard bool           // Enable package guard enforcement
-	guardProtocol       *GuardProtocol // GUARD Protocol for failure prediction
+	skipCompleted       bool                  // Skip tasks that are already completed
+	retryFailed         bool                  // Retry tasks that have failed status
+	packageGuard        *PackageGuard         // Runtime package conflict guard (v2.9+)
+	enforcePackageGuard bool                  // Enable package guard enforcement
+	guardProtocol       *GuardProtocol        // GUARD Protocol for failure prediction
+	anomalyConfig       *AnomalyMonitorConfig // Real-time anomaly detection config (v2.18+)
 }
 
 // NewWaveExecutor constructs a WaveExecutor with the provided task executor implementation.
@@ -72,6 +73,12 @@ func (w *WaveExecutor) SetPackageGuard(enabled bool) {
 // This enables pre-wave risk analysis and adaptive blocking.
 func (w *WaveExecutor) SetGuardProtocol(guard *GuardProtocol) {
 	w.guardProtocol = guard
+}
+
+// SetAnomalyConfig sets the anomaly detection configuration.
+// This enables real-time anomaly detection during wave execution.
+func (w *WaveExecutor) SetAnomalyConfig(config *AnomalyMonitorConfig) {
+	w.anomalyConfig = config
 }
 
 // ExecutePlan runs the plan's waves sequentially while executing tasks within each wave in parallel.
@@ -200,6 +207,15 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 							guardResult.Recommendations)
 					}
 					skippedResults = append(skippedResults, blockedResult)
+				} else if guardResult.SuggestedAgent != "" {
+					// Predictive agent selection: swap to better agent before execution
+					task := taskMap[taskNum]
+					originalAgent := task.Agent
+					task.Agent = guardResult.SuggestedAgent
+					taskMap[taskNum] = task
+					if w.logger != nil {
+						w.logger.LogAgentSwap(taskNum, originalAgent, guardResult.SuggestedAgent)
+					}
 				}
 			}
 
@@ -216,6 +232,13 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 	if len(tasksToExecute) == 0 {
 		return skippedResults, nil
 	}
+
+	// ========== ANOMALY MONITOR SETUP ==========
+	var anomalyMonitor *AnomalyMonitor
+	if w.anomalyConfig != nil && w.anomalyConfig.ConsecutiveFailureThreshold > 0 {
+		anomalyMonitor = NewAnomalyMonitorWithConfig(wave.Name, *w.anomalyConfig)
+	}
+	// ========== END ANOMALY MONITOR SETUP ==========
 
 	// Track how many task goroutines actually started to prevent logging
 	// wave start/completion for pre-cancelled contexts where no tasks launched.
@@ -355,6 +378,17 @@ launchComplete:
 			}
 			w.logger.LogProgress(resultsForProgress)
 		}
+
+		// ========== REAL-TIME ANOMALY DETECTION ==========
+		if anomalyMonitor != nil {
+			anomalies := anomalyMonitor.RecordResult(executionResult.result)
+			for _, anomaly := range anomalies {
+				if w.logger != nil {
+					w.logger.LogAnomaly(anomaly)
+				}
+			}
+		}
+		// ========== END ANOMALY DETECTION ==========
 	}
 
 	waveResults := make([]models.TaskResult, 0, taskCount)
