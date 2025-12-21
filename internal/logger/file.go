@@ -495,6 +495,20 @@ func (fl *FileLogger) LogGuardPrediction(taskNumber string, result interface{}) 
 	}
 }
 
+// LogAgentSwap logs when GUARD predictive selection swaps to a better-performing agent.
+// Format: "[HH:MM:SS] [GUARD] Task N: Swapping agent X → Y (predictive selection)"
+func (fl *FileLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
+	// Agent swap is at INFO level
+	if !fl.shouldLog("info") {
+		return
+	}
+
+	ts := time.Now().Format("15:04:05")
+	message := fmt.Sprintf("[%s] [GUARD] Task %s: Swapping agent %s → %s (predictive selection)\n",
+		ts, taskNumber, fromAgent, toAgent)
+	fl.writeRunLog(message)
+}
+
 // Close flushes and closes the run log file.
 // It should be called when the logger is no longer needed.
 func (fl *FileLogger) Close() error {
