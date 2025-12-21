@@ -135,6 +135,9 @@ Examples:
 	cmd.Flags().Bool("no-enforce-package-guard", false, "Disable Go package conflict guard")
 	cmd.Flags().Bool("no-enforce-doc-targets", false, "Disable documentation target verification")
 
+	// GUARD Protocol flags
+	cmd.Flags().Bool("no-guard", false, "Disable GUARD Protocol pre-wave prediction")
+
 	return cmd
 }
 
@@ -281,6 +284,14 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	}
 	if cmd.Flags().Changed("no-enforce-doc-targets") {
 		cfg.Executor.EnforceDocTargets = false
+	}
+
+	// Process GUARD Protocol flag
+	if cmd.Flags().Changed("no-guard") {
+		noGuard, _ := cmd.Flags().GetBool("no-guard")
+		if noGuard {
+			cfg.Guard.Enabled = false
+		}
 	}
 
 	// Validate merged configuration
@@ -630,6 +641,23 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithPackageGuard(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed, cfg.Executor.EnforcePackageGuard)
+
+	// Wire GUARD Protocol if enabled
+	if cfg.Guard.Enabled {
+		if learningStore != nil {
+			guardConfig := executor.GuardConfig{
+				Enabled:              cfg.Guard.Enabled,
+				Mode:                 executor.GuardMode(cfg.Guard.Mode),
+				ProbabilityThreshold: cfg.Guard.ProbabilityThreshold,
+				ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
+				MinHistorySessions:   cfg.Guard.MinHistorySessions,
+			}
+			guardProtocol := executor.NewGuardProtocol(guardConfig, learningStore, multiLog)
+			if guardProtocol != nil {
+				waveExec.SetGuardProtocol(guardProtocol)
+			}
+		}
+	}
 
 	// Create orchestrator with learning integration
 	orch := executor.NewOrchestratorFromConfig(executor.OrchestratorConfig{
