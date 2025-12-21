@@ -40,6 +40,10 @@ type GuardConfig struct {
 
 	// MinHistorySessions is the minimum number of historical sessions required before predictions are made
 	MinHistorySessions int `yaml:"min_history_sessions"`
+
+	// AutoSelectAgent enables automatic agent selection when failure probability is high (v2.18+)
+	// When true, GUARD will suggest a better-performing agent based on historical data
+	AutoSelectAgent bool `yaml:"auto_select_agent"`
 }
 
 // ConsoleConfig controls terminal output formatting and features
