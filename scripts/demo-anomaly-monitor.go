@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 // Demo script to show GUARD v2.18 Anomaly Monitor in action
