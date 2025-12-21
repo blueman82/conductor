@@ -233,6 +233,13 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		return skippedResults, nil
 	}
 
+	// ========== ANOMALY MONITOR SETUP ==========
+	var anomalyMonitor *AnomalyMonitor
+	if w.anomalyConfig != nil && w.anomalyConfig.ConsecutiveFailureThreshold > 0 {
+		anomalyMonitor = NewAnomalyMonitorWithConfig(wave.Name, *w.anomalyConfig)
+	}
+	// ========== END ANOMALY MONITOR SETUP ==========
+
 	// Track how many task goroutines actually started to prevent logging
 	// wave start/completion for pre-cancelled contexts where no tasks launched.
 	var tasksLaunched int32
