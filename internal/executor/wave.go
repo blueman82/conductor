@@ -20,10 +20,11 @@ type TaskExecutor interface {
 type WaveExecutor struct {
 	taskExecutor        TaskExecutor
 	logger              Logger
-	skipCompleted       bool          // Skip tasks that are already completed
-	retryFailed         bool          // Retry tasks that have failed status
-	packageGuard        *PackageGuard // Runtime package conflict guard (v2.9+)
-	enforcePackageGuard bool          // Enable package guard enforcement
+	skipCompleted       bool           // Skip tasks that are already completed
+	retryFailed         bool           // Retry tasks that have failed status
+	packageGuard        *PackageGuard  // Runtime package conflict guard (v2.9+)
+	enforcePackageGuard bool           // Enable package guard enforcement
+	guardProtocol       *GuardProtocol // GUARD Protocol for failure prediction
 }
 
 // NewWaveExecutor constructs a WaveExecutor with the provided task executor implementation.
@@ -65,6 +66,12 @@ func (w *WaveExecutor) SetPackageGuard(enabled bool) {
 	if enabled && w.packageGuard == nil {
 		w.packageGuard = NewPackageGuard()
 	}
+}
+
+// SetGuardProtocol sets the GUARD Protocol for failure prediction.
+// This enables pre-wave risk analysis and adaptive blocking.
+func (w *WaveExecutor) SetGuardProtocol(guard *GuardProtocol) {
+	w.guardProtocol = guard
 }
 
 // ExecutePlan runs the plan's waves sequentially while executing tasks within each wave in parallel.
@@ -152,6 +159,60 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 	}
 
 	// If all tasks are skipped, return the skipped results
+	if len(tasksToExecute) == 0 {
+		return skippedResults, nil
+	}
+
+	// ========== GUARD PROTOCOL GATE ==========
+	if w.guardProtocol != nil {
+		// Build task slice for GUARD check
+		var tasksForGuard []models.Task
+		for _, taskNum := range tasksToExecute {
+			if task, ok := taskMap[taskNum]; ok {
+				tasksForGuard = append(tasksForGuard, task)
+			}
+		}
+
+		// Run pre-wave failure prediction
+		guardResults, err := w.guardProtocol.CheckWave(ctx, tasksForGuard)
+		if err == nil && guardResults != nil {
+			var blockedTasks []string
+
+			for taskNum, guardResult := range guardResults {
+				// Log prediction via logger if available
+				if w.logger != nil {
+					w.logger.LogGuardPrediction(taskNum, guardResult)
+				}
+
+				if guardResult.ShouldBlock {
+					task := taskMap[taskNum]
+					blockedTasks = append(blockedTasks, taskNum)
+
+					// Create failed result for blocked task
+					blockedResult := models.TaskResult{
+						Task:   task,
+						Status: models.StatusFailed,
+						Error:  fmt.Errorf("GUARD blocked: %s", guardResult.BlockReason),
+					}
+					if guardResult.Prediction != nil {
+						blockedResult.Output = fmt.Sprintf("Risk factors: %v\nRecommendations: %v",
+							guardResult.Prediction.RiskFactors,
+							guardResult.Recommendations)
+					}
+					skippedResults = append(skippedResults, blockedResult)
+				}
+			}
+
+			// Remove blocked tasks from execution queue
+			if len(blockedTasks) > 0 {
+				tasksToExecute = filterOutTasks(tasksToExecute, blockedTasks)
+			}
+		}
+		// Graceful degradation: if GUARD fails, continue with all tasks
+	}
+	// ========== END GUARD PROTOCOL GATE ==========
+
+	// If all tasks were blocked by GUARD, return the blocked results
 	if len(tasksToExecute) == 0 {
 		return skippedResults, nil
 	}
@@ -330,4 +391,19 @@ launchComplete:
 	}
 
 	return waveResults, execErr
+}
+
+// filterOutTasks removes excluded tasks from the task list.
+func filterOutTasks(tasks []string, exclude []string) []string {
+	excludeMap := make(map[string]bool)
+	for _, t := range exclude {
+		excludeMap[t] = true
+	}
+	result := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		if !excludeMap[t] {
+			result = append(result, t)
+		}
+	}
+	return result
 }

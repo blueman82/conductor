@@ -79,7 +79,12 @@ func (m *mockLogger) LogQCCriteriaResults(agentName string, results []models.Cri
 	// no-op for mock
 }
 
+
 func (m *mockLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+	// no-op for mock
+}
+
+func (m *mockLogger) LogGuardPrediction(taskNumber string, result interface{}) {
 	// no-op for mock
 }
 

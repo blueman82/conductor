@@ -210,6 +210,49 @@ integration_criteria:
   - "CLI --no-cache flag passes enabled=false to CacheManager"
 ```
 
+### 5.4 RFC 2119 Requirement Levels
+
+Conductor's plan structure maps to RFC 2119 requirement levels. Route criteria to the appropriate field:
+
+| Level | Route To | Behavior |
+|-------|----------|----------|
+| **MUST** | `test_commands` | Hard gate - task fails if not met |
+| **MUST** | `dependency_checks` | Preflight gate - blocks task start |
+| **SHOULD** | `success_criteria` | Soft signal - QC reviews and judges |
+| **MAY** | `documentation_targets` | Informational - YELLOW max |
+
+**Routing Rules:**
+- Absolute requirements with verifiable commands → `test_commands`
+- Subjective quality criteria → `success_criteria`
+- Nice-to-have enhancements → `documentation_targets` or omit
+
+**Embedding Levels in Criterion Text:**
+
+When criteria need explicit severity signaling to QC agents, prefix with RFC 2119 keywords:
+
+```yaml
+success_criteria:
+  # MUST-level in success_criteria (QC treats as hard fail)
+  - "MUST: Function validates all input before processing"
+  - "MUST NOT: Function must not expose internal errors to users"
+
+  # SHOULD-level (QC may issue YELLOW)
+  - "SHOULD: Error messages include file paths for debugging"
+  - "SHOULD NOT: Avoid blocking the main thread"
+
+  # MAY-level (informational)
+  - "MAY: Support custom exclusion patterns via environment variable"
+```
+
+**Classification Heuristics:**
+
+| Pattern in Criterion | Level | Route |
+|---------------------|-------|-------|
+| "validates", "rejects invalid", "prevents", "fails if" | MUST | `test_commands` if verifiable |
+| "returns error when", "must not expose" | MUST | `success_criteria` with prefix |
+| "handles gracefully", "includes", "logs" | SHOULD | `success_criteria` |
+| "supports optional", "can be configured" | MAY | `documentation_targets` |
+
 ---
 
 ## Phase 6: Validation (MANDATORY)
