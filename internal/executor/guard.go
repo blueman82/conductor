@@ -90,6 +90,10 @@ func (gp *GuardProtocol) Initialize(ctx context.Context) error {
 
 	// Create predictor with loaded data
 	gp.predictor = behavioral.NewFailurePredictor(sessions, metrics)
+
+	// Create scorer for predictive agent selection (reuses same behavioral data)
+	gp.scorer = behavioral.NewPerformanceScorer(sessions, metrics)
+
 	gp.initialized = true
 
 	return nil
