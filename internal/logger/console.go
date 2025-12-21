@@ -2072,47 +2072,6 @@ func formatBehavioralMetrics(metadata map[string]interface{}) string {
 	return strings.Join(parts, ", ")
 }
 
-// formatColorizedBehavioralMetrics formats behavioral metrics with color coding.
-// Returns empty string if no relevant behavioral data is available.
-func formatColorizedBehavioralMetrics(metadata map[string]interface{}) string {
-	if metadata == nil {
-		return ""
-	}
-
-	var parts []string
-
-	// Extract tool count
-	if toolCount, ok := metadata["tool_count"].(int); ok && toolCount > 0 {
-		parts = append(parts, fmt.Sprintf("tools: %s", color.New(color.FgCyan).Sprint(toolCount)))
-	} else if toolCountFloat, ok := metadata["tool_count"].(float64); ok && toolCountFloat > 0 {
-		parts = append(parts, fmt.Sprintf("tools: %s", color.New(color.FgCyan).Sprint(int(toolCountFloat))))
-	}
-
-	// Extract bash command count
-	if bashCount, ok := metadata["bash_count"].(int); ok && bashCount > 0 {
-		parts = append(parts, fmt.Sprintf("bash: %s", color.New(color.FgYellow).Sprint(bashCount)))
-	} else if bashCountFloat, ok := metadata["bash_count"].(float64); ok && bashCountFloat > 0 {
-		parts = append(parts, fmt.Sprintf("bash: %s", color.New(color.FgYellow).Sprint(int(bashCountFloat))))
-	}
-
-	// Extract file operation count
-	if fileOps, ok := metadata["file_operations"].(int); ok && fileOps > 0 {
-		parts = append(parts, fmt.Sprintf("files: %s", color.New(color.FgGreen).Sprint(fileOps)))
-	} else if fileOpsFloat, ok := metadata["file_operations"].(float64); ok && fileOpsFloat > 0 {
-		parts = append(parts, fmt.Sprintf("files: %s", color.New(color.FgGreen).Sprint(int(fileOpsFloat))))
-	}
-
-	// Extract cost (in dollars)
-	if cost, ok := metadata["cost"].(float64); ok && cost > 0 {
-		parts = append(parts, fmt.Sprintf("cost: %s", color.New(color.FgMagenta).Sprintf("$%.4f", cost)))
-	}
-
-	if len(parts) == 0 {
-		return ""
-	}
-
-	return strings.Join(parts, ", ")
-}
 
 // NoOpLogger is a Logger implementation that discards all log messages.
 // Useful for testing or when logging is disabled.

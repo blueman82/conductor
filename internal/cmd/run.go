@@ -796,7 +796,7 @@ func (ml *multiLogger) LogQCIntelligentSelectionMetadata(rationale string, fallb
 }
 
 // LogGuardPrediction forwards to all loggers
-func (ml *multiLogger) LogGuardPrediction(taskNumber string, result *executor.GuardResult) {
+func (ml *multiLogger) LogGuardPrediction(taskNumber string, result interface{}) {
 	for _, logger := range ml.loggers {
 		logger.LogGuardPrediction(taskNumber, result)
 	}

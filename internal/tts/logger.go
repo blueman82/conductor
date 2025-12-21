@@ -83,6 +83,6 @@ func (l *TTSLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback
 
 // LogGuardPrediction is a no-op implementation.
 // GUARD predictions are not announced via TTS to reduce noise.
-func (l *TTSLogger) LogGuardPrediction(taskNumber string, result *executor.GuardResult) {
+func (l *TTSLogger) LogGuardPrediction(taskNumber string, result interface{}) {
 	// No-op: GUARD predictions are informational and would create excessive noise
 }

@@ -181,9 +181,7 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 			for taskNum, guardResult := range guardResults {
 				// Log prediction via logger if available
 				if w.logger != nil {
-					if guardLogger, ok := w.logger.(interface{ LogGuardPrediction(string, *GuardResult) }); ok {
-						guardLogger.LogGuardPrediction(taskNum, guardResult)
-					}
+					w.logger.LogGuardPrediction(taskNum, guardResult)
 				}
 
 				if guardResult.ShouldBlock {

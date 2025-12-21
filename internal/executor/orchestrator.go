@@ -42,7 +42,7 @@ type Logger interface {
 	LogQCAggregatedResult(verdict string, strategy string)
 	LogQCCriteriaResults(agentName string, results []models.CriterionResult)
 	LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string)
-	LogGuardPrediction(taskNumber string, result *GuardResult)
+	LogGuardPrediction(taskNumber string, result interface{})
 }
 
 // WaveExecutorInterface defines the behavior required to execute waves.
