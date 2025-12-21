@@ -1256,6 +1256,38 @@ func (cl *ConsoleLogger) LogGuardPrediction(taskNumber string, result interface{
 	}
 }
 
+// LogAgentSwap logs when GUARD predictive selection swaps to a better-performing agent.
+// Thread-safe with mutex protection. Uses 🔄 emoji for swap indication.
+func (cl *ConsoleLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
+	if cl.writer == nil {
+		return
+	}
+
+	// Agent swap is at INFO level
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	var message string
+	if cl.colorOutput {
+		guardPrefix := color.New(color.FgCyan).Sprint("[GUARD]")
+		fromColored := color.New(color.FgYellow).Sprint(fromAgent)
+		toColored := color.New(color.FgGreen).Sprint(toAgent)
+		message = fmt.Sprintf("[%s] %s 🔄 Task %s: Swapping agent %s → %s (predictive selection)\n",
+			ts, guardPrefix, taskNumber, fromColored, toColored)
+	} else {
+		message = fmt.Sprintf("[%s] [GUARD] 🔄 Task %s: Swapping agent %s → %s (predictive selection)\n",
+			ts, taskNumber, fromAgent, toAgent)
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
 // Box drawing characters for rich output formatting
 const (
 	boxTopLeft     = "┌"
