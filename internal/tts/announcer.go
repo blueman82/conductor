@@ -160,6 +160,56 @@ func (a *Announcer) QCCriteriaResults(agentName string, results []models.Criteri
 	}
 }
 
+// GuardResultDisplay interface for type assertion from interface{} parameter.
+// Matches the interface implemented by executor.GuardResult.
+type GuardResultDisplay interface {
+	GetTaskNumber() string
+	GetProbability() float64
+	GetConfidence() float64
+	GetRiskLevel() string
+	GetShouldBlock() bool
+	GetBlockReason() string
+	GetRecommendations() []string
+}
+
+// GuardPrediction announces GUARD protocol predictions.
+// Only announces blocked tasks and high/medium risk to reduce noise.
+func (a *Announcer) GuardPrediction(taskNumber string, result interface{}) {
+	if result == nil {
+		return
+	}
+
+	// Type assert to GuardResultDisplay interface
+	guard, ok := result.(GuardResultDisplay)
+	if !ok {
+		return
+	}
+
+	riskLevel := guard.GetRiskLevel()
+	probability := guard.GetProbability() * 100
+
+	var msg string
+
+	if guard.GetShouldBlock() {
+		// Blocked task: announce with reason
+		msg = fmt.Sprintf("GUARD blocked Task %s. %s. %.0f percent failure probability",
+			taskNumber, guard.GetBlockReason(), probability)
+	} else if riskLevel == "high" {
+		// High risk warning
+		msg = fmt.Sprintf("GUARD warning: Task %s has high risk. %.0f percent failure probability",
+			taskNumber, probability)
+	} else if riskLevel == "medium" {
+		// Medium risk warning
+		msg = fmt.Sprintf("GUARD: Task %s has medium risk. %.0f percent failure probability",
+			taskNumber, probability)
+	}
+	// Skip low risk announcements to reduce noise
+
+	if msg != "" {
+		a.client.Speak(msg)
+	}
+}
+
 // joinAgents creates a human-readable list of agents ("a, b, and c").
 func joinAgents(agents []string) string {
 	if len(agents) == 0 {

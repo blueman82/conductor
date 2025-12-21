@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -336,11 +337,25 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// Create command with context (for timeout)
 	cmd := exec.CommandContext(ctx, inv.ClaudePath, args...)
 
-	// Capture output
-	output, err := cmd.CombinedOutput()
+	// Capture stdout and stderr separately
+	// This prevents Claude CLI stderr noise (e.g., file watcher errors) from
+	// polluting the agent output stored in execution history
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+
+	// Log stderr warnings to terminal (but don't store in output)
+	if stderr.Len() > 0 {
+		stderrStr := strings.TrimSpace(stderr.String())
+		if stderrStr != "" {
+			fmt.Fprintf(os.Stderr, "\n[Claude CLI stderr]\n%s\n", stderrStr)
+		}
+	}
 
 	result := &InvocationResult{
-		Output:   string(output),
+		Output:   stdout.String(),
 		Duration: time.Since(startTime),
 	}
 
@@ -352,8 +367,8 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 		}
 	}
 
-	// Parse agent response from output
-	parsedOutput, parseErr := ParseClaudeOutput(string(output))
+	// Parse agent response from stdout
+	parsedOutput, parseErr := ParseClaudeOutput(stdout.String())
 	if parseErr == nil && parsedOutput.Content != "" {
 		// Extract session_id from Claude CLI output
 		result.SessionID = parsedOutput.SessionID
@@ -376,7 +391,7 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 		}
 	} else {
 		// If we couldn't extract content from Claude output, try parsing raw as fallback
-		agentResp, parseErr := parseAgentJSON(string(output))
+		agentResp, parseErr := parseAgentJSON(stdout.String())
 		if parseErr != nil {
 			result.Error = fmt.Errorf("failed to parse agent response: %w", parseErr)
 		} else {
