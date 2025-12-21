@@ -1,0 +1,41 @@
+# Simple test plan to see GUARD Protocol in action
+# Run with: conductor run test-guard.yaml --verbose
+
+plan:
+  metadata:
+    feature_name: "GUARD Protocol Test"
+  tasks:
+    - task_number: 1
+      type: component
+      name: "Simple file read"
+      agent: "golang-pro"
+      files: ["README.md"]
+      depends_on: []
+      description: |
+        Read the README.md file and summarize what Conductor does in one sentence.
+      success_criteria:
+        - "Outputs a one-sentence summary"
+        - "Mentions multi-agent orchestration"
+      status: "failed"
+    - task_number: 2
+      type: component
+      name: "Code exploration"
+      agent: "golang-pro"
+      files: ["internal/executor/guard.go"]
+      depends_on: [1]
+      description: |
+        Read the guard.go file and list the three GUARD modes available.
+      success_criteria:
+        - "Lists block, warn, and adaptive modes"
+        - "Explains what each mode does"
+    - task_number: 3
+      type: component
+      name: "Configuration check"
+      agent: "golang-pro"
+      files: [".conductor/config.yaml"]
+      depends_on: [1]
+      description: |
+        Read the config file and confirm GUARD is enabled.
+      success_criteria:
+        - "Confirms guard.enabled is true"
+        - "Reports current mode setting"

@@ -328,3 +328,49 @@ func FormatRiskLevel(level string) string {
 		return "UNKNOWN RISK"
 	}
 }
+
+// ========== GuardResultDisplay interface implementation ==========
+
+// GetTaskNumber returns the task number for this prediction
+func (gr *GuardResult) GetTaskNumber() string {
+	return gr.TaskNumber
+}
+
+// GetProbability returns the failure probability (0.0-1.0)
+func (gr *GuardResult) GetProbability() float64 {
+	if gr.Prediction == nil {
+		return 0.0
+	}
+	return gr.Prediction.Probability
+}
+
+// GetConfidence returns the prediction confidence (0.0-1.0)
+func (gr *GuardResult) GetConfidence() float64 {
+	if gr.Prediction == nil {
+		return 0.0
+	}
+	return gr.Prediction.Confidence
+}
+
+// GetRiskLevel returns the risk level string (low, medium, high)
+func (gr *GuardResult) GetRiskLevel() string {
+	if gr.Prediction == nil {
+		return "low"
+	}
+	return gr.Prediction.RiskLevel
+}
+
+// GetShouldBlock returns whether this task should be blocked
+func (gr *GuardResult) GetShouldBlock() bool {
+	return gr.ShouldBlock
+}
+
+// GetBlockReason returns the reason for blocking (empty if not blocked)
+func (gr *GuardResult) GetBlockReason() string {
+	return gr.BlockReason
+}
+
+// GetRecommendations returns improvement suggestions
+func (gr *GuardResult) GetRecommendations() []string {
+	return gr.Recommendations
+}

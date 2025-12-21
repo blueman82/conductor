@@ -63,7 +63,7 @@ type GuardResultDisplay interface {
 	GetProbability() float64
 	GetConfidence() float64
 	GetRiskLevel() string
-	ShouldBlock() bool
+	GetShouldBlock() bool
 	GetBlockReason() string
 	GetRecommendations() []string
 }
@@ -1207,7 +1207,7 @@ func (cl *ConsoleLogger) LogGuardPrediction(taskNumber string, result interface{
 
 	var message string
 
-	if guard.ShouldBlock() {
+	if guard.GetShouldBlock() {
 		// Blocked task: show full details
 		if cl.colorOutput {
 			guardPrefix := color.New(color.FgCyan).Sprint("[GUARD]")
@@ -1230,24 +1230,26 @@ func (cl *ConsoleLogger) LogGuardPrediction(taskNumber string, result interface{
 				message += fmt.Sprintf("[%s]          → %s\n", ts, rec)
 			}
 		}
-	} else if guard.GetRiskLevel() == "high" || guard.GetRiskLevel() == "medium" {
-		// High/medium risk but not blocked: show summary
+	} else {
+		// All other risk levels (high, medium, low): show summary
 		if cl.colorOutput {
 			guardPrefix := color.New(color.FgCyan).Sprint("[GUARD]")
 			var riskColored string
-			if guard.GetRiskLevel() == "high" {
+			switch guard.GetRiskLevel() {
+			case "high":
 				riskColored = color.New(color.FgRed).Sprint(guard.GetRiskLevel())
-			} else {
+			case "medium":
 				riskColored = color.New(color.FgYellow).Sprint(guard.GetRiskLevel())
+			default:
+				riskColored = color.New(color.FgGreen).Sprint(guard.GetRiskLevel())
 			}
-			message = fmt.Sprintf("[%s] %s %s Task %s: %s risk (%.1f%% probability)\n",
+			message = fmt.Sprintf("[%s] %s %s Task %s: %s risk (%.1f%% failure probability)\n",
 				ts, guardPrefix, emoji, taskNumber, riskColored, guard.GetProbability()*100)
 		} else {
-			message = fmt.Sprintf("[%s] [GUARD] %s Task %s: %s risk (%.1f%% probability)\n",
+			message = fmt.Sprintf("[%s] [GUARD] %s Task %s: %s risk (%.1f%% failure probability)\n",
 				ts, emoji, taskNumber, guard.GetRiskLevel(), guard.GetProbability()*100)
 		}
 	}
-	// Low risk tasks are not logged to reduce noise
 
 	if message != "" {
 		cl.writer.Write([]byte(message))
