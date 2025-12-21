@@ -24,6 +24,7 @@ type WaveExecutor struct {
 	retryFailed         bool          // Retry tasks that have failed status
 	packageGuard        *PackageGuard // Runtime package conflict guard (v2.9+)
 	enforcePackageGuard bool          // Enable package guard enforcement
+	guardProtocol       *GuardProtocol // GUARD Protocol for failure prediction
 }
 
 // NewWaveExecutor constructs a WaveExecutor with the provided task executor implementation.
@@ -65,6 +66,12 @@ func (w *WaveExecutor) SetPackageGuard(enabled bool) {
 	if enabled && w.packageGuard == nil {
 		w.packageGuard = NewPackageGuard()
 	}
+}
+
+// SetGuardProtocol sets the GUARD Protocol for failure prediction.
+// This enables pre-wave risk analysis and adaptive blocking.
+func (w *WaveExecutor) SetGuardProtocol(guard *GuardProtocol) {
+	w.guardProtocol = guard
 }
 
 // ExecutePlan runs the plan's waves sequentially while executing tasks within each wave in parallel.
