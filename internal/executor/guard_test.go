@@ -185,7 +185,7 @@ func TestGuardModeAdaptive_HighProbHighConf_ShouldBlock(t *testing.T) {
 	cfg := GuardConfig{
 		Enabled:              true,
 		Mode:                 GuardModeAdaptive,
-		ProbabilityThreshold: 0.5, // Lower to match mock data probability
+		ProbabilityThreshold: 0.5,  // Lower to match mock data probability
 		ConfidenceThreshold:  0.05, // Lower to match mock data confidence
 		MinHistorySessions:   5,
 	}

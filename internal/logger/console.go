@@ -2074,7 +2074,6 @@ func formatBehavioralMetrics(metadata map[string]interface{}) string {
 	return strings.Join(parts, ", ")
 }
 
-
 // NoOpLogger is a Logger implementation that discards all log messages.
 // Useful for testing or when logging is disabled.
 type NoOpLogger struct{}

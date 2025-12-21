@@ -759,7 +759,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 					TaskName:     task.Name,
 					Agent:        task.Agent,
 					Prompt:       task.Prompt,
-					Success:      false, // Will be updated after QC
+					Success:      false,  // Will be updated after QC
 					Output:       output, // Store parsed agent content (not raw CLI wrapper)
 					ErrorMessage: "",
 					DurationSecs: int64(invocation.Duration.Seconds()),
@@ -1042,7 +1042,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 					Prompt:          task.Prompt,
 					Success:         attemptSuccess,
 					Output:          output, // Store parsed agent content (not raw CLI wrapper)
-					ErrorMessage:    "", // No error if we reached QC
+					ErrorMessage:    "",     // No error if we reached QC
 					DurationSecs:    int64(invocation.Duration.Seconds()),
 					QCVerdict:       review.Flag,
 					QCFeedback:      review.Feedback,
