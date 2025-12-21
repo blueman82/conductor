@@ -82,7 +82,6 @@ func (l *TTSLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback
 }
 
 // LogGuardPrediction delegates to announcer.GuardPrediction.
-// Only announces blocked tasks and high/medium risk to reduce noise.
 func (l *TTSLogger) LogGuardPrediction(taskNumber string, result interface{}) {
 	l.announcer.GuardPrediction(taskNumber, result)
 }
