@@ -40,6 +40,7 @@ type GuardResult struct {
 	ShouldBlock     bool
 	BlockReason     string
 	Recommendations []string
+	SuggestedAgent  string // Agent to swap to when AutoSelectAgent is enabled (v2.18+)
 }
 
 // GuardProtocol implements the GUARD (Guided Adaptive Risk Detection) protocol.
