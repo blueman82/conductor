@@ -378,6 +378,17 @@ launchComplete:
 			}
 			w.logger.LogProgress(resultsForProgress)
 		}
+
+		// ========== REAL-TIME ANOMALY DETECTION ==========
+		if anomalyMonitor != nil {
+			anomalies := anomalyMonitor.RecordResult(executionResult.result)
+			for _, anomaly := range anomalies {
+				if w.logger != nil {
+					w.logger.LogAnomaly(anomaly)
+				}
+			}
+		}
+		// ========== END ANOMALY DETECTION ==========
 	}
 
 	waveResults := make([]models.TaskResult, 0, taskCount)
