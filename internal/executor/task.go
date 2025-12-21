@@ -760,7 +760,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 					Agent:        task.Agent,
 					Prompt:       task.Prompt,
 					Success:      false, // Will be updated after QC
-					Output:       invocation.Output,
+					Output:       output, // Store parsed agent content (not raw CLI wrapper)
 					ErrorMessage: "",
 					DurationSecs: int64(invocation.Duration.Seconds()),
 					QCVerdict:    "", // Not yet determined
@@ -779,7 +779,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 		execAttempt := models.ExecutionAttempt{
 			Attempt:     attempt + 1, // 1-indexed
 			Agent:       task.Agent,
-			AgentOutput: invocation.Output, // Store raw JSON output
+			AgentOutput: output, // Store parsed agent content (not raw CLI wrapper)
 			Duration:    invocation.Duration,
 		}
 
@@ -1001,7 +1001,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 			// This is the ONLY call to updateFeedback - we skip the pre-QC call to avoid duplicates
 			verdict := review.Flag
 			qcFeedback := review.Feedback
-			if err := te.updateFeedback(task, attempt+1, invocation.Output, qcFeedback, verdict); err != nil {
+			if err := te.updateFeedback(task, attempt+1, output, qcFeedback, verdict); err != nil {
 				// Log warning but continue (non-fatal)
 			}
 
@@ -1041,7 +1041,7 @@ func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (m
 					Agent:           task.Agent,
 					Prompt:          task.Prompt,
 					Success:         attemptSuccess,
-					Output:          invocation.Output,
+					Output:          output, // Store parsed agent content (not raw CLI wrapper)
 					ErrorMessage:    "", // No error if we reached QC
 					DurationSecs:    int64(invocation.Duration.Seconds()),
 					QCVerdict:       review.Flag,
