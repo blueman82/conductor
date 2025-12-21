@@ -31,6 +31,7 @@ type GuardConfig struct {
 	ProbabilityThreshold float64   // Minimum probability to trigger action (0.0-1.0)
 	ConfidenceThreshold  float64   // Minimum confidence for adaptive mode (0.0-1.0)
 	MinHistorySessions   int       // Minimum sessions required for predictions
+	AutoSelectAgent      bool      // Enable predictive agent selection (v2.18+)
 }
 
 // GuardResult contains prediction analysis for a single task
