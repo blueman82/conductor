@@ -363,6 +363,7 @@ func DefaultGuardConfig() GuardConfig {
 		ProbabilityThreshold: 0.7,
 		ConfidenceThreshold:  0.7,
 		MinHistorySessions:   5,
+		AutoSelectAgent:      true, // Enabled when GUARD is enabled
 	}
 }
 
