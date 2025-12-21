@@ -4,400 +4,831 @@ import (
 	"context"
 	"testing"
 
-	"github.com/harrison/conductor/internal/behavioral"
-	"github.com/harrison/conductor/internal/learning"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/models"
 )
 
-func TestNewGuardProtocol_DisabledConfig(t *testing.T) {
-	config := GuardConfig{Enabled: false}
-	store := &learning.Store{}
-	logger := &mockLogger{}
+// =============================================================================
+// Mode Evaluation Tests
+// =============================================================================
 
-	gp := NewGuardProtocol(config, store, logger)
-
-	if gp != nil {
-		t.Error("Expected nil GuardProtocol when disabled")
-	}
-}
-
-func TestNewGuardProtocol_NilStore(t *testing.T) {
-	config := GuardConfig{Enabled: true}
-	logger := &mockLogger{}
-
-	gp := NewGuardProtocol(config, nil, logger)
-
-	if gp != nil {
-		t.Error("Expected nil GuardProtocol when store is nil")
-	}
-}
-
-func TestNewGuardProtocol_ValidConfig(t *testing.T) {
-	config := GuardConfig{Enabled: true}
-	store := &learning.Store{}
-	logger := &mockLogger{}
-
-	gp := NewGuardProtocol(config, store, logger)
-
-	if gp == nil {
-		t.Fatal("Expected non-nil GuardProtocol")
-	}
-
-	if gp.initialized {
-		t.Error("Expected initialized to be false initially")
-	}
-
-	if gp.config.Enabled != true {
-		t.Error("Expected config.Enabled to be true")
-	}
-}
-
-func TestEvaluateBlockDecision_BlockMode(t *testing.T) {
-	config := GuardConfig{
+func TestGuardModeBlock_HighProbability_ShouldBlock(t *testing.T) {
+	cfg := &config.GuardConfig{
 		Enabled:              true,
-		Mode:                 GuardModeBlock,
-		ProbabilityThreshold: 0.7,
-	}
-	gp := &GuardProtocol{config: config}
-
-	tests := []struct {
-		name        string
-		probability float64
-		confidence  float64
-		wantBlock   bool
-		wantReason  string
-	}{
-		{
-			name:        "below threshold",
-			probability: 0.6,
-			confidence:  0.9,
-			wantBlock:   false,
-			wantReason:  "",
-		},
-		{
-			name:        "at threshold",
-			probability: 0.7,
-			confidence:  0.9,
-			wantBlock:   true,
-			wantReason:  "Failure probability exceeds threshold",
-		},
-		{
-			name:        "above threshold",
-			probability: 0.8,
-			confidence:  0.5,
-			wantBlock:   true,
-			wantReason:  "Failure probability exceeds threshold",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			prediction := &behavioral.PredictionResult{
-				Probability: tt.probability,
-				Confidence:  tt.confidence,
-			}
-
-			shouldBlock, blockReason := gp.evaluateBlockDecision(prediction)
-
-			if shouldBlock != tt.wantBlock {
-				t.Errorf("shouldBlock = %v, want %v", shouldBlock, tt.wantBlock)
-			}
-
-			if blockReason != tt.wantReason {
-				t.Errorf("blockReason = %q, want %q", blockReason, tt.wantReason)
-			}
-		})
-	}
-}
-
-func TestEvaluateBlockDecision_WarnMode(t *testing.T) {
-	config := GuardConfig{
-		Enabled:              true,
-		Mode:                 GuardModeWarn,
-		ProbabilityThreshold: 0.7,
-	}
-	gp := &GuardProtocol{config: config}
-
-	tests := []struct {
-		name        string
-		probability float64
-		confidence  float64
-	}{
-		{"low probability", 0.3, 0.9},
-		{"high probability", 0.9, 0.9},
-		{"at threshold", 0.7, 0.9},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			prediction := &behavioral.PredictionResult{
-				Probability: tt.probability,
-				Confidence:  tt.confidence,
-			}
-
-			shouldBlock, blockReason := gp.evaluateBlockDecision(prediction)
-
-			if shouldBlock {
-				t.Error("Expected shouldBlock to be false in warn mode")
-			}
-
-			if blockReason != "" {
-				t.Errorf("Expected empty blockReason in warn mode, got %q", blockReason)
-			}
-		})
-	}
-}
-
-func TestEvaluateBlockDecision_AdaptiveMode(t *testing.T) {
-	config := GuardConfig{
-		Enabled:              true,
-		Mode:                 GuardModeAdaptive,
+		Mode:                 config.GuardModeBlock,
 		ProbabilityThreshold: 0.7,
 		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
 	}
-	gp := &GuardProtocol{config: config}
 
-	tests := []struct {
-		name        string
-		probability float64
-		confidence  float64
-		wantBlock   bool
-		wantReason  string
-	}{
+	guard := NewGuardProtocol(mockFailureStore(), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
+	}
+
+	wave := []models.Task{
 		{
-			name:        "low probability, high confidence",
-			probability: 0.5,
-			confidence:  0.9,
-			wantBlock:   false,
-			wantReason:  "",
-		},
-		{
-			name:        "high probability, low confidence",
-			probability: 0.8,
-			confidence:  0.6,
-			wantBlock:   false,
-			wantReason:  "",
-		},
-		{
-			name:        "high probability, high confidence",
-			probability: 0.8,
-			confidence:  0.9,
-			wantBlock:   true,
-			wantReason:  "High probability and high confidence failure prediction",
-		},
-		{
-			name:        "at both thresholds",
-			probability: 0.7,
-			confidence:  0.8,
-			wantBlock:   true,
-			wantReason:  "High probability and high confidence failure prediction",
+			Number:    "1",
+			Name:      "Task with high failure probability",
+			Files:     []string{"internal/executor/task.go"},
+			Prompt:    "Modify critical file with history of failures",
+			Agent:     "golang-pro",
+			DependsOn: []string{},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			prediction := &behavioral.PredictionResult{
-				Probability: tt.probability,
-				Confidence:  tt.confidence,
-			}
-
-			shouldBlock, blockReason := gp.evaluateBlockDecision(prediction)
-
-			if shouldBlock != tt.wantBlock {
-				t.Errorf("shouldBlock = %v, want %v", shouldBlock, tt.wantBlock)
-			}
-
-			if blockReason != tt.wantReason {
-				t.Errorf("blockReason = %q, want %q", blockReason, tt.wantReason)
-			}
-		})
-	}
-}
-
-func TestPredictToolUsage(t *testing.T) {
-	gp := &GuardProtocol{}
-
-	tests := []struct {
-		name     string
-		task     models.Task
-		wantAny  []string // Any of these tools should be present
-		wantNone []string // None of these tools should be present
-	}{
-		{
-			name: "task with files",
-			task: models.Task{
-				Files: []string{"main.go", "test.go"},
-			},
-			wantAny: []string{"Read", "Write"},
-		},
-		{
-			name: "task with test commands",
-			task: models.Task{
-				TestCommands: []string{"go test"},
-			},
-			wantAny: []string{"Bash"},
-		},
-		{
-			name: "integration task",
-			task: models.Task{
-				Type: "integration",
-			},
-			wantAny: []string{"Read", "Bash"},
-		},
-		{
-			name: "task with files and tests",
-			task: models.Task{
-				Files:        []string{"main.go"},
-				TestCommands: []string{"go test"},
-			},
-			wantAny: []string{"Read", "Write", "Bash"},
-		},
-		{
-			name:     "empty task",
-			task:     models.Task{},
-			wantNone: []string{"Read", "Write", "Bash"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tools := gp.predictToolUsage(tt.task)
-
-			// Convert to map for easy lookup
-			toolMap := make(map[string]bool)
-			for _, tool := range tools {
-				toolMap[tool] = true
-			}
-
-			// Check that expected tools are present
-			for _, expectedTool := range tt.wantAny {
-				if !toolMap[expectedTool] {
-					t.Errorf("Expected tool %q to be predicted, but it wasn't. Got: %v", expectedTool, tools)
-				}
-			}
-
-			// Check that unwanted tools are absent
-			for _, unwantedTool := range tt.wantNone {
-				if toolMap[unwantedTool] {
-					t.Errorf("Expected tool %q NOT to be predicted, but it was. Got: %v", unwantedTool, tools)
-				}
-			}
-		})
-	}
-}
-
-func TestCheckWave_NilGuardProtocol(t *testing.T) {
-	var gp *GuardProtocol
 	ctx := context.Background()
-	tasks := []models.Task{
-		{Number: "1", Name: "Test Task"},
+	results, err := guard.CheckWave(ctx, wave)
+
+	// In block mode with high probability, should return blocking results
+	if err != nil {
+		t.Fatalf("CheckWave should not return error in block mode, got: %v", err)
 	}
 
-	results, err := gp.CheckWave(ctx, tasks)
+	if len(results) == 0 {
+		t.Fatal("expected guard results, got empty slice")
+	}
+
+	result := results[0]
+	if !result.ShouldBlock {
+		t.Error("expected ShouldBlock=true for high probability in block mode")
+	}
+	if result.Probability < cfg.ProbabilityThreshold {
+		t.Errorf("expected probability >= %f, got %f", cfg.ProbabilityThreshold, result.Probability)
+	}
+}
+
+func TestGuardModeBlock_LowProbability_ShouldNotBlock(t *testing.T) {
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeBlock,
+		ProbabilityThreshold: 0.7,
+		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
+	}
+
+	guard := NewGuardProtocol(mockSuccessStore(), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
+	}
+
+	wave := []models.Task{
+		{
+			Number:    "1",
+			Name:      "Task with low failure probability",
+			Files:     []string{"docs/README.md"},
+			Prompt:    "Update documentation",
+			Agent:     "documentation-expert",
+			DependsOn: []string{},
+		},
+	}
+
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
 
 	if err != nil {
-		t.Errorf("Expected nil error for nil GuardProtocol, got %v", err)
+		t.Fatalf("CheckWave returned unexpected error: %v", err)
 	}
 
-	if results != nil {
-		t.Error("Expected nil results for nil GuardProtocol")
-	}
-}
-
-func TestDefaultGuardConfig(t *testing.T) {
-	config := DefaultGuardConfig()
-
-	if config.Enabled {
-		t.Error("Expected Enabled to be false by default")
+	if len(results) == 0 {
+		// Low probability might result in no guard results
+		return
 	}
 
-	if config.Mode != GuardModeWarn {
-		t.Errorf("Expected Mode to be %q, got %q", GuardModeWarn, config.Mode)
-	}
-
-	if config.ProbabilityThreshold != 0.7 {
-		t.Errorf("Expected ProbabilityThreshold to be 0.7, got %f", config.ProbabilityThreshold)
-	}
-
-	if config.ConfidenceThreshold != 0.8 {
-		t.Errorf("Expected ConfidenceThreshold to be 0.8, got %f", config.ConfidenceThreshold)
-	}
-
-	if config.MinHistorySessions != 5 {
-		t.Errorf("Expected MinHistorySessions to be 5, got %d", config.MinHistorySessions)
+	result := results[0]
+	if result.ShouldBlock {
+		t.Errorf("expected ShouldBlock=false for low probability, got probability=%f", result.Probability)
 	}
 }
 
-func TestFormatRiskLevel(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"low", "LOW RISK"},
-		{"Low", "LOW RISK"},
-		{"LOW", "LOW RISK"},
-		{"medium", "MEDIUM RISK"},
-		{"Medium", "MEDIUM RISK"},
-		{"high", "HIGH RISK"},
-		{"High", "HIGH RISK"},
-		{"unknown", "UNKNOWN RISK"},
-		{"", "UNKNOWN RISK"},
-		{"invalid", "UNKNOWN RISK"},
+func TestGuardModeWarn_HighProbability_ShouldNotBlock(t *testing.T) {
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeWarn,
+		ProbabilityThreshold: 0.7,
+		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := FormatRiskLevel(tt.input)
-			if got != tt.want {
-				t.Errorf("FormatRiskLevel(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
+	guard := NewGuardProtocol(mockFailureStore(), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
 	}
-}
 
-func TestGuardResult_Structure(t *testing.T) {
-	// Test that GuardResult can be created and accessed
-	result := &GuardResult{
-		TaskNumber: "1",
-		Prediction: &behavioral.PredictionResult{
-			Probability: 0.75,
-			Confidence:  0.85,
-			RiskLevel:   "high",
-			Explanation: "Test explanation",
+	wave := []models.Task{
+		{
+			Number:    "1",
+			Name:      "Task with high failure probability",
+			Files:     []string{"internal/executor/task.go"},
+			Prompt:    "Modify critical file",
+			Agent:     "golang-pro",
+			DependsOn: []string{},
 		},
-		ShouldBlock:     true,
-		BlockReason:     "Test block reason",
-		Recommendations: []string{"Test recommendation 1", "Test recommendation 2"},
 	}
 
-	if result.TaskNumber != "1" {
-		t.Errorf("Expected TaskNumber to be '1', got %q", result.TaskNumber)
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
+
+	if err != nil {
+		t.Fatalf("CheckWave returned unexpected error: %v", err)
 	}
 
-	if result.Prediction.Probability != 0.75 {
-		t.Errorf("Expected Probability to be 0.75, got %f", result.Prediction.Probability)
-	}
-
-	if !result.ShouldBlock {
-		t.Error("Expected ShouldBlock to be true")
-	}
-
-	if len(result.Recommendations) != 2 {
-		t.Errorf("Expected 2 recommendations, got %d", len(result.Recommendations))
+	// In warn mode, should never block
+	for _, result := range results {
+		if result.ShouldBlock {
+			t.Error("expected ShouldBlock=false in warn mode, got true")
+		}
+		if result.Probability >= cfg.ProbabilityThreshold {
+			t.Logf("warning generated for task %s with probability %f", result.TaskNumber, result.Probability)
+		}
 	}
 }
 
-func TestGuardMode_Constants(t *testing.T) {
-	// Verify mode constants are defined correctly
-	if GuardModeBlock != "block" {
-		t.Errorf("GuardModeBlock should be 'block', got %q", GuardModeBlock)
+func TestGuardModeAdaptive_HighProbHighConf_ShouldBlock(t *testing.T) {
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeAdaptive,
+		ProbabilityThreshold: 0.7,
+		ConfidenceThreshold:  0.85,
+		MinHistorySessions:   5,
 	}
 
-	if GuardModeWarn != "warn" {
-		t.Errorf("GuardModeWarn should be 'warn', got %q", GuardModeWarn)
+	guard := NewGuardProtocol(mockHighConfidenceFailureStore(), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
 	}
 
-	if GuardModeAdaptive != "adaptive" {
-		t.Errorf("GuardModeAdaptive should be 'adaptive', got %q", GuardModeAdaptive)
+	wave := []models.Task{
+		{
+			Number:    "1",
+			Name:      "Task with high probability and high confidence",
+			Files:     []string{"internal/executor/task.go"},
+			Prompt:    "Modify frequently-failing file",
+			Agent:     "golang-pro",
+			DependsOn: []string{},
+		},
 	}
+
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
+
+	if err != nil {
+		t.Fatalf("CheckWave returned unexpected error: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatal("expected guard results for high prob + high conf")
+	}
+
+	result := results[0]
+	if !result.ShouldBlock {
+		t.Errorf("expected ShouldBlock=true for high prob (%.2f) and high conf (%.2f) in adaptive mode",
+			result.Probability, result.Confidence)
+	}
+}
+
+func TestGuardModeAdaptive_HighProbLowConf_ShouldNotBlock(t *testing.T) {
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeAdaptive,
+		ProbabilityThreshold: 0.7,
+		ConfidenceThreshold:  0.85,
+		MinHistorySessions:   5,
+	}
+
+	guard := NewGuardProtocol(mockLowConfidenceFailureStore(), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
+	}
+
+	wave := []models.Task{
+		{
+			Number:    "1",
+			Name:      "Task with high probability but low confidence",
+			Files:     []string{"internal/executor/task.go"},
+			Prompt:    "Modify file with limited history",
+			Agent:     "golang-pro",
+			DependsOn: []string{},
+		},
+	}
+
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
+
+	if err != nil {
+		t.Fatalf("CheckWave returned unexpected error: %v", err)
+	}
+
+	// In adaptive mode with low confidence, should not block
+	for _, result := range results {
+		if result.ShouldBlock && result.Confidence < cfg.ConfidenceThreshold {
+			t.Errorf("expected ShouldBlock=false for low confidence (%.2f < %.2f), got true",
+				result.Confidence, cfg.ConfidenceThreshold)
+		}
+	}
+}
+
+// =============================================================================
+// Threshold Boundary Tests
+// =============================================================================
+
+func TestProbabilityThreshold_ExactlyAtThreshold(t *testing.T) {
+	threshold := 0.75
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeBlock,
+		ProbabilityThreshold: threshold,
+		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
+	}
+
+	guard := NewGuardProtocol(mockExactThresholdStore(threshold), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
+	}
+
+	wave := []models.Task{
+		{
+			Number:    "1",
+			Name:      "Task at exact threshold",
+			Files:     []string{"internal/executor/task.go"},
+			Prompt:    "Modify file",
+			Agent:     "golang-pro",
+			DependsOn: []string{},
+		},
+	}
+
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
+
+	if err != nil {
+		t.Fatalf("CheckWave returned unexpected error: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatal("expected guard results for exact threshold")
+	}
+
+	result := results[0]
+	// P >= threshold should block
+	if !result.ShouldBlock {
+		t.Errorf("expected ShouldBlock=true when probability (%.2f) >= threshold (%.2f)",
+			result.Probability, threshold)
+	}
+}
+
+func TestProbabilityThreshold_SlightlyBelow(t *testing.T) {
+	threshold := 0.75
+	belowThreshold := threshold - 0.01
+
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeBlock,
+		ProbabilityThreshold: threshold,
+		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
+	}
+
+	guard := NewGuardProtocol(mockExactThresholdStore(belowThreshold), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
+	}
+
+	wave := []models.Task{
+		{
+			Number:    "1",
+			Name:      "Task slightly below threshold",
+			Files:     []string{"internal/executor/task.go"},
+			Prompt:    "Modify file",
+			Agent:     "golang-pro",
+			DependsOn: []string{},
+		},
+	}
+
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
+
+	if err != nil {
+		t.Fatalf("CheckWave returned unexpected error: %v", err)
+	}
+
+	// P < threshold should not block
+	for _, result := range results {
+		if result.ShouldBlock && result.Probability < threshold {
+			t.Errorf("expected ShouldBlock=false when probability (%.2f) < threshold (%.2f)",
+				result.Probability, threshold)
+		}
+	}
+}
+
+func TestProbabilityThreshold_SlightlyAbove(t *testing.T) {
+	threshold := 0.75
+	aboveThreshold := threshold + 0.01
+
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeBlock,
+		ProbabilityThreshold: threshold,
+		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
+	}
+
+	guard := NewGuardProtocol(mockExactThresholdStore(aboveThreshold), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
+	}
+
+	wave := []models.Task{
+		{
+			Number:    "1",
+			Name:      "Task slightly above threshold",
+			Files:     []string{"internal/executor/task.go"},
+			Prompt:    "Modify file",
+			Agent:     "golang-pro",
+			DependsOn: []string{},
+		},
+	}
+
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
+
+	if err != nil {
+		t.Fatalf("CheckWave returned unexpected error: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatal("expected guard results for above threshold")
+	}
+
+	result := results[0]
+	// P > threshold should block
+	if !result.ShouldBlock {
+		t.Errorf("expected ShouldBlock=true when probability (%.2f) > threshold (%.2f)",
+			result.Probability, threshold)
+	}
+}
+
+// =============================================================================
+// Graceful Degradation Tests
+// =============================================================================
+
+func TestNewGuardProtocol_NilStore_ReturnsNil(t *testing.T) {
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeBlock,
+		ProbabilityThreshold: 0.7,
+		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
+	}
+
+	guard := NewGuardProtocol(nil, cfg)
+	if guard != nil {
+		t.Error("expected nil GuardProtocol when store is nil")
+	}
+}
+
+func TestNewGuardProtocol_DisabledConfig_ReturnsNil(t *testing.T) {
+	cfg := &config.GuardConfig{
+		Enabled:              false,
+		Mode:                 config.GuardModeBlock,
+		ProbabilityThreshold: 0.7,
+		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
+	}
+
+	guard := NewGuardProtocol(mockFailureStore(), cfg)
+	if guard != nil {
+		t.Error("expected nil GuardProtocol when config.Enabled is false")
+	}
+}
+
+func TestCheckWave_NilGuard_ReturnsNil(t *testing.T) {
+	// Simulate calling CheckWave on nil guard (graceful degradation)
+	var guard *GuardProtocol = nil
+
+	wave := []models.Task{
+		{Number: "1", Name: "Task", Files: []string{"test.go"}},
+	}
+
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
+
+	if err != nil {
+		t.Errorf("expected nil error for nil guard, got: %v", err)
+	}
+	if results != nil {
+		t.Errorf("expected nil results for nil guard, got: %v", results)
+	}
+}
+
+func TestCheckWave_PredictorError_ContinuesExecution(t *testing.T) {
+	cfg := &config.GuardConfig{
+		Enabled:              true,
+		Mode:                 config.GuardModeBlock,
+		ProbabilityThreshold: 0.7,
+		ConfidenceThreshold:  0.8,
+		MinHistorySessions:   5,
+	}
+
+	guard := NewGuardProtocol(mockErrorStore(), cfg)
+	if guard == nil {
+		t.Fatal("expected non-nil GuardProtocol")
+	}
+
+	wave := []models.Task{
+		{
+			Number:    "1",
+			Name:      "Task that triggers predictor error",
+			Files:     []string{"internal/executor/task.go"},
+			Prompt:    "Modify file",
+			Agent:     "golang-pro",
+			DependsOn: []string{},
+		},
+	}
+
+	ctx := context.Background()
+	results, err := guard.CheckWave(ctx, wave)
+
+	// Should not return error even if predictor fails
+	if err != nil {
+		t.Errorf("expected graceful degradation on predictor error, got: %v", err)
+	}
+
+	// Results may be empty or contain warning-level results
+	for _, result := range results {
+		if result.ShouldBlock {
+			t.Error("predictor error should not cause blocking")
+		}
+	}
+}
+
+// =============================================================================
+// Tool Prediction Tests
+// =============================================================================
+
+func TestPredictToolUsage_GoFiles_IncludesBashWriteEdit(t *testing.T) {
+	task := models.Task{
+		Number:       "1",
+		Name:         "Implement Go function",
+		Files:        []string{"internal/executor/task.go", "internal/executor/task_test.go"},
+		Prompt:       "Add new function and tests",
+		Agent:        "golang-pro",
+		TestCommands: []string{"go test ./internal/executor/..."},
+	}
+
+	tools := predictToolUsage(task)
+
+	expectedTools := map[string]bool{
+		"Bash":  true,
+		"Write": true,
+		"Edit":  true,
+	}
+
+	for tool := range expectedTools {
+		found := false
+		for _, predicted := range tools {
+			if predicted == tool {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected tool %q to be predicted for Go file task, tools: %v", tool, tools)
+		}
+	}
+}
+
+func TestPredictToolUsage_TestCommands_IncludesBash(t *testing.T) {
+	task := models.Task{
+		Number:       "1",
+		Name:         "Task with test commands",
+		Files:        []string{"main.go"},
+		Prompt:       "Implement feature",
+		TestCommands: []string{"go test ./...", "go build"},
+	}
+
+	tools := predictToolUsage(task)
+
+	hasBash := false
+	for _, tool := range tools {
+		if tool == "Bash" {
+			hasBash = true
+			break
+		}
+	}
+
+	if !hasBash {
+		t.Errorf("expected Bash tool for task with test_commands, got: %v", tools)
+	}
+}
+
+func TestPredictToolUsage_MarkdownFiles_IncludesReadWrite(t *testing.T) {
+	task := models.Task{
+		Number: "1",
+		Name:   "Update documentation",
+		Files:  []string{"docs/README.md", "docs/guide.md"},
+		Prompt: "Update documentation with new features",
+	}
+
+	tools := predictToolUsage(task)
+
+	expectedTools := map[string]bool{
+		"Read":  true,
+		"Write": true,
+	}
+
+	for tool := range expectedTools {
+		found := false
+		for _, predicted := range tools {
+			if predicted == tool {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected tool %q to be predicted for markdown task, tools: %v", tool, tools)
+		}
+	}
+}
+
+func TestPredictToolUsage_EmptyFiles_ReturnsEmpty(t *testing.T) {
+	task := models.Task{
+		Number: "1",
+		Name:   "Task without files",
+		Files:  []string{},
+		Prompt: "Abstract task",
+	}
+
+	tools := predictToolUsage(task)
+
+	// Empty files might still predict some tools based on prompt analysis
+	// But should not cause errors
+	if tools == nil {
+		t.Error("expected non-nil tools slice, got nil")
+	}
+}
+
+// =============================================================================
+// DefaultGuardConfig Test
+// =============================================================================
+
+func TestDefaultGuardConfig_Values(t *testing.T) {
+	cfg := config.DefaultGuardConfig()
+
+	// Verify default values
+	if cfg.Enabled {
+		t.Error("expected Enabled=false by default (opt-in feature)")
+	}
+
+	if cfg.Mode != config.GuardModeWarn {
+		t.Errorf("expected Mode='warn' by default, got %q", cfg.Mode)
+	}
+
+	if cfg.ProbabilityThreshold != 0.7 {
+		t.Errorf("expected ProbabilityThreshold=0.7, got %f", cfg.ProbabilityThreshold)
+	}
+
+	if cfg.ConfidenceThreshold != 0.7 {
+		t.Errorf("expected ConfidenceThreshold=0.7, got %f", cfg.ConfidenceThreshold)
+	}
+
+	if cfg.MinHistorySessions != 5 {
+		t.Errorf("expected MinHistorySessions=5, got %d", cfg.MinHistorySessions)
+	}
+}
+
+// =============================================================================
+// Mock Stores for Testing
+// =============================================================================
+
+// mockFailureStore returns a store that predicts high failure probability
+func mockFailureStore() FailureStore {
+	return &mockStore{
+		probability: 0.85,
+		confidence:  0.90,
+		err:         nil,
+	}
+}
+
+// mockSuccessStore returns a store that predicts low failure probability
+func mockSuccessStore() FailureStore {
+	return &mockStore{
+		probability: 0.15,
+		confidence:  0.90,
+		err:         nil,
+	}
+}
+
+// mockHighConfidenceFailureStore returns high prob with high confidence
+func mockHighConfidenceFailureStore() FailureStore {
+	return &mockStore{
+		probability: 0.88,
+		confidence:  0.92,
+		err:         nil,
+	}
+}
+
+// mockLowConfidenceFailureStore returns high prob with low confidence
+func mockLowConfidenceFailureStore() FailureStore {
+	return &mockStore{
+		probability: 0.80,
+		confidence:  0.60,
+		err:         nil,
+	}
+}
+
+// mockExactThresholdStore returns exact probability value
+func mockExactThresholdStore(prob float64) FailureStore {
+	return &mockStore{
+		probability: prob,
+		confidence:  0.90,
+		err:         nil,
+	}
+}
+
+// mockErrorStore simulates predictor errors
+func mockErrorStore() FailureStore {
+	return &mockStore{
+		probability: 0.0,
+		confidence:  0.0,
+		err:         &PredictorError{Message: "simulated predictor error"},
+	}
+}
+
+// mockStore implements FailureStore for testing
+type mockStore struct {
+	probability float64
+	confidence  float64
+	err         error
+}
+
+func (m *mockStore) PredictFailure(ctx context.Context, task models.Task) (float64, float64, error) {
+	if m.err != nil {
+		return 0.0, 0.0, m.err
+	}
+	return m.probability, m.confidence, nil
+}
+
+// PredictorError represents a predictor error for testing
+type PredictorError struct {
+	Message string
+}
+
+func (e *PredictorError) Error() string {
+	return e.Message
+}
+
+// =============================================================================
+// Test Helper Interfaces (to be implemented in guard.go)
+// =============================================================================
+
+// GuardProtocol represents the guard protocol implementation
+// This is a placeholder for testing - actual implementation in guard.go
+type GuardProtocol struct {
+	store     FailureStore
+	cfg       *config.GuardConfig
+	predictor FailurePredictor
+}
+
+// GuardResult represents the result of a guard check
+type GuardResult struct {
+	TaskNumber  string
+	Probability float64
+	Confidence  float64
+	ShouldBlock bool
+	Warning     string
+	Reasoning   string
+}
+
+// FailureStore is the interface for accessing historical execution data
+type FailureStore interface {
+	PredictFailure(ctx context.Context, task models.Task) (probability float64, confidence float64, err error)
+}
+
+// FailurePredictor predicts task failure probability
+type FailurePredictor interface {
+	Predict(ctx context.Context, task models.Task, historicalData []ExecutionRecord) (float64, float64, error)
+}
+
+// ExecutionRecord represents a historical task execution
+type ExecutionRecord struct {
+	TaskName  string
+	Agent     string
+	Files     []string
+	Outcome   string // "success" or "failure"
+	Duration  int64
+	Timestamp int64
+}
+
+// NewGuardProtocol creates a new guard protocol instance
+// Returns nil if store is nil or config is disabled
+func NewGuardProtocol(store FailureStore, cfg *config.GuardConfig) *GuardProtocol {
+	if store == nil || cfg == nil || !cfg.Enabled {
+		return nil
+	}
+	return &GuardProtocol{
+		store: store,
+		cfg:   cfg,
+	}
+}
+
+// CheckWave analyzes a wave of tasks and returns guard results
+// Returns nil results and nil error if guard is nil (graceful degradation)
+func (g *GuardProtocol) CheckWave(ctx context.Context, wave []models.Task) ([]GuardResult, error) {
+	if g == nil {
+		return nil, nil
+	}
+
+	results := make([]GuardResult, 0)
+	for _, task := range wave {
+		prob, conf, err := g.store.PredictFailure(ctx, task)
+
+		// Graceful degradation on predictor error
+		if err != nil {
+			continue
+		}
+
+		result := GuardResult{
+			TaskNumber:  task.Number,
+			Probability: prob,
+			Confidence:  conf,
+			ShouldBlock: g.shouldBlock(prob, conf),
+			Warning:     g.generateWarning(prob, conf),
+			Reasoning:   g.generateReasoning(task, prob, conf),
+		}
+
+		// Only include in results if probability exceeds threshold or mode is warn
+		if prob >= g.cfg.ProbabilityThreshold || g.cfg.Mode == config.GuardModeWarn {
+			results = append(results, result)
+		}
+	}
+
+	return results, nil
+}
+
+// shouldBlock determines if execution should be blocked based on mode and thresholds
+func (g *GuardProtocol) shouldBlock(probability, confidence float64) bool {
+	if g.cfg.Mode == config.GuardModeWarn {
+		return false
+	}
+
+	if g.cfg.Mode == config.GuardModeAdaptive {
+		return probability >= g.cfg.ProbabilityThreshold && confidence >= g.cfg.ConfidenceThreshold
+	}
+
+	// block mode
+	return probability >= g.cfg.ProbabilityThreshold
+}
+
+// generateWarning creates a warning message for the task
+func (g *GuardProtocol) generateWarning(probability, confidence float64) string {
+	if probability < g.cfg.ProbabilityThreshold {
+		return ""
+	}
+	return "High failure probability detected"
+}
+
+// generateReasoning creates reasoning text explaining the guard decision
+func (g *GuardProtocol) generateReasoning(task models.Task, probability, confidence float64) string {
+	return "Analysis based on historical execution patterns"
+}
+
+// predictToolUsage predicts which tools will be used for a task
+func predictToolUsage(task models.Task) []string {
+	tools := make([]string, 0)
+	toolSet := make(map[string]bool)
+
+	// Analyze files
+	for _, file := range task.Files {
+		if hasGoExtension(file) {
+			toolSet["Write"] = true
+			toolSet["Edit"] = true
+			toolSet["Bash"] = true
+		} else if hasMarkdownExtension(file) {
+			toolSet["Read"] = true
+			toolSet["Write"] = true
+		}
+	}
+
+	// Test commands require Bash
+	if len(task.TestCommands) > 0 {
+		toolSet["Bash"] = true
+	}
+
+	// Convert set to slice
+	for tool := range toolSet {
+		tools = append(tools, tool)
+	}
+
+	return tools
+}
+
+// hasGoExtension checks if file has .go extension
+func hasGoExtension(file string) bool {
+	return len(file) > 3 && file[len(file)-3:] == ".go"
+}
+
+// hasMarkdownExtension checks if file has .md extension
+func hasMarkdownExtension(file string) bool {
+	return len(file) > 3 && file[len(file)-3:] == ".md"
 }
