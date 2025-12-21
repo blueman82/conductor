@@ -802,6 +802,13 @@ func (ml *multiLogger) LogGuardPrediction(taskNumber string, result interface{})
 	}
 }
 
+// LogAgentSwap forwards to all loggers
+func (ml *multiLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
+	for _, logger := range ml.loggers {
+		logger.LogAgentSwap(taskNumber, fromAgent, toAgent)
+	}
+}
+
 // getTask finds a task by number in a task list
 func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	for i := range tasks {
