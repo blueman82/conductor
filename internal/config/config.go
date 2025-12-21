@@ -923,6 +923,9 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := guardMap["min_history_sessions"]; exists {
 				cfg.Guard.MinHistorySessions = guard.MinHistorySessions
 			}
+			if _, exists := guardMap["auto_select_agent"]; exists {
+				cfg.Guard.AutoSelectAgent = guard.AutoSelectAgent
+			}
 		}
 	}
 
