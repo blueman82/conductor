@@ -227,8 +227,8 @@ func (am *AnomalyMonitor) getDurationSeverity(deviation float64) string {
 	return "low"
 }
 
-// formatDuration formats a duration for human readability
-func formatDuration(d time.Duration) string {
+// formatAnomalyDuration formats a duration for human readability in anomaly messages
+func formatAnomalyDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%.0fs", d.Seconds())
 	} else if d < time.Hour {
