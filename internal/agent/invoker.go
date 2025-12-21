@@ -397,13 +397,27 @@ func (inv *Invoker) InvokeWithTimeout(task models.Task, timeout time.Duration) (
 
 // ParseClaudeOutput parses the JSON output from claude CLI
 // Handles "structured_output" (from --json-schema), "content", and "result" fields
-// If the output is not valid JSON, it returns the raw output as content
+// If the output is not valid JSON, it attempts to extract JSON from mixed output
+// (e.g., when Claude CLI prints errors to stderr before the JSON response)
 func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
-	// First try to parse as JSON
+	// First try to parse as JSON directly
 	var jsonMap map[string]interface{}
 	if err := json.Unmarshal([]byte(output), &jsonMap); err != nil {
-		// If not JSON, return raw output as content
-		return &ClaudeOutput{Content: output}, nil
+		// Direct parse failed - try to extract JSON from mixed output
+		// Claude CLI sometimes outputs errors/warnings before the JSON response
+		jsonStart := strings.Index(output, "{")
+		jsonEnd := strings.LastIndex(output, "}")
+		if jsonStart >= 0 && jsonEnd > jsonStart {
+			jsonStr := output[jsonStart : jsonEnd+1]
+			if err := json.Unmarshal([]byte(jsonStr), &jsonMap); err != nil {
+				// Still can't parse - return raw output as content
+				return &ClaudeOutput{Content: output}, nil
+			}
+			// Successfully extracted JSON from mixed output
+		} else {
+			// No JSON found - return raw output as content
+			return &ClaudeOutput{Content: output}, nil
+		}
 	}
 
 	// Build result with both content and error fields
@@ -418,12 +432,19 @@ func ParseClaudeOutput(output string) (*ClaudeOutput, error) {
 
 	// Check for "structured_output" field (used when --json-schema is specified)
 	// This takes highest precedence as it's the schema-validated output
-	if structuredOutput, ok := jsonMap["structured_output"]; ok {
-		// Re-serialize the structured output as JSON string for downstream parsing
-		if outputBytes, err := json.Marshal(structuredOutput); err == nil {
-			result.Content = string(outputBytes)
-			return result, nil
+	// NOTE: When using --agents flag, --json-schema may not be enforced by Claude CLI,
+	// resulting in structured_output being null or empty. We must check for valid content
+	// before using it, otherwise fall through to content/result fields.
+	if structuredOutput, ok := jsonMap["structured_output"]; ok && structuredOutput != nil {
+		// Check if it's a non-empty map (valid structured response)
+		if structMap, isMap := structuredOutput.(map[string]interface{}); isMap && len(structMap) > 0 {
+			// Re-serialize the structured output as JSON string for downstream parsing
+			if outputBytes, err := json.Marshal(structuredOutput); err == nil {
+				result.Content = string(outputBytes)
+				return result, nil
+			}
 		}
+		// If structured_output is null, empty, or not a map, fall through to other fields
 	}
 
 	// Check for "result" field (used by some agents like conductor-qc)

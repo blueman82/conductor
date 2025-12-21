@@ -402,6 +402,38 @@ func TestParseClaudeOutput(t *testing.T) {
 			wantSessionID: "test-123",
 			wantErr:       false,
 		},
+		{
+			name:          "structured_output null - falls through to content",
+			output:        `{"type":"result","content":"Task completed via content field","session_id":"test-456","structured_output":null}`,
+			wantContent:   "Task completed via content field",
+			wantError:     "",
+			wantSessionID: "test-456",
+			wantErr:       false,
+		},
+		{
+			name:          "structured_output empty object - falls through to content",
+			output:        `{"type":"result","content":"Task completed via content field","session_id":"test-789","structured_output":{}}`,
+			wantContent:   "Task completed via content field",
+			wantError:     "",
+			wantSessionID: "test-789",
+			wantErr:       false,
+		},
+		{
+			name:          "structured_output null without content - falls through to result",
+			output:        `{"type":"result","result":"Agent response text","session_id":"test-abc","structured_output":null}`,
+			wantContent:   "Agent response text",
+			wantError:     "",
+			wantSessionID: "test-abc",
+			wantErr:       false,
+		},
+		{
+			name:          "mixed output with error prefix before JSON",
+			output:        "Error: EOPNOTSUPP: unknown error\nSome other warning\n" + `{"type":"result","session_id":"mixed-123","structured_output":{"status":"success","summary":"Done","output":"Result","errors":[],"files_modified":[]}}`,
+			wantContent:   `{"errors":[],"files_modified":[],"output":"Result","status":"success","summary":"Done"}`,
+			wantError:     "",
+			wantSessionID: "mixed-123",
+			wantErr:       false,
+		},
 	}
 
 	for _, tt := range tests {
