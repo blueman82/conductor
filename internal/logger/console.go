@@ -1288,6 +1288,75 @@ func (cl *ConsoleLogger) LogAgentSwap(taskNumber string, fromAgent string, toAge
 	cl.writer.Write([]byte(message))
 }
 
+// WaveAnomalyDisplay is an interface for objects that represent wave anomalies.
+// It's used to decouple the logger from executor.WaveAnomaly to avoid import cycles.
+type WaveAnomalyDisplay interface {
+	GetType() string
+	GetDescription() string
+	GetSeverity() string
+	GetTaskNumber() string
+	GetWaveName() string
+}
+
+// LogAnomaly logs real-time anomaly detection results during wave execution.
+// Format: "[HH:MM:SS] [ANOMALY] ⚠️ type: description (task N, severity)"
+// Thread-safe with mutex protection. Uses warning colors for visibility.
+func (cl *ConsoleLogger) LogAnomaly(anomaly interface{}) {
+	if cl.writer == nil || anomaly == nil {
+		return
+	}
+
+	// Anomaly logging is at WARN level
+	if !cl.shouldLog("warn") {
+		return
+	}
+
+	// Type assert to WaveAnomalyDisplay interface
+	a, ok := anomaly.(WaveAnomalyDisplay)
+	if !ok {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	// Map severity to emoji
+	severityEmoji := map[string]string{"low": "🟡", "medium": "🟠", "high": "🔴"}
+	emoji := severityEmoji[a.GetSeverity()]
+	if emoji == "" {
+		emoji = "⚠️"
+	}
+
+	var message string
+	taskInfo := ""
+	if a.GetTaskNumber() != "" {
+		taskInfo = fmt.Sprintf(" (Task %s)", a.GetTaskNumber())
+	}
+
+	if cl.colorOutput {
+		anomalyPrefix := color.New(color.FgYellow, color.Bold).Sprint("[ANOMALY]")
+		typeColored := color.New(color.FgYellow).Sprint(a.GetType())
+		var severityColored string
+		switch a.GetSeverity() {
+		case "high":
+			severityColored = color.New(color.FgRed).Sprint(a.GetSeverity())
+		case "medium":
+			severityColored = color.New(color.FgYellow).Sprint(a.GetSeverity())
+		default:
+			severityColored = color.New(color.FgWhite).Sprint(a.GetSeverity())
+		}
+		message = fmt.Sprintf("[%s] %s %s %s: %s%s [%s]\n",
+			ts, anomalyPrefix, emoji, typeColored, a.GetDescription(), taskInfo, severityColored)
+	} else {
+		message = fmt.Sprintf("[%s] [ANOMALY] %s %s: %s%s [%s]\n",
+			ts, emoji, a.GetType(), a.GetDescription(), taskInfo, a.GetSeverity())
+	}
+
+	cl.writer.Write([]byte(message))
+}
+
 // Box drawing characters for rich output formatting
 const (
 	boxTopLeft     = "┌"
