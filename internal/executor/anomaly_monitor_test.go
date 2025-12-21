@@ -114,7 +114,7 @@ func TestAnomalyMonitor_ConsecutiveFailuresReset(t *testing.T) {
 
 func TestAnomalyMonitor_HighErrorRate(t *testing.T) {
 	monitor := NewAnomalyMonitorWithConfig("Wave 1", AnomalyMonitorConfig{
-		ConsecutiveFailureThreshold: 10, // High to avoid triggering
+		ConsecutiveFailureThreshold: 10,  // High to avoid triggering
 		ErrorRateThreshold:          0.5, // 50% error rate
 	})
 
@@ -138,7 +138,7 @@ func TestAnomalyMonitor_HighErrorRate(t *testing.T) {
 
 func TestAnomalyMonitor_DurationOutlier(t *testing.T) {
 	monitor := NewAnomalyMonitorWithConfig("Wave 1", AnomalyMonitorConfig{
-		ConsecutiveFailureThreshold: 10, // High to avoid triggering
+		ConsecutiveFailureThreshold: 10,  // High to avoid triggering
 		ErrorRateThreshold:          0.9, // High to avoid triggering
 		DurationDeviationThreshold:  2.0,
 	})
@@ -287,9 +287,9 @@ func TestWaveAnomaly_Getters(t *testing.T) {
 
 func TestAnomalyMonitor_SeverityLevels(t *testing.T) {
 	tests := []struct {
-		name               string
-		consecutiveCount   int
-		expectedSeverity   string
+		name             string
+		consecutiveCount int
+		expectedSeverity string
 	}{
 		{"3 consecutive", 3, "low"},
 		{"4 consecutive", 4, "medium"},

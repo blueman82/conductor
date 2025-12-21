@@ -20,11 +20,11 @@ type TaskExecutor interface {
 type WaveExecutor struct {
 	taskExecutor        TaskExecutor
 	logger              Logger
-	skipCompleted       bool           // Skip tasks that are already completed
-	retryFailed         bool           // Retry tasks that have failed status
-	packageGuard        *PackageGuard  // Runtime package conflict guard (v2.9+)
-	enforcePackageGuard bool           // Enable package guard enforcement
-	guardProtocol       *GuardProtocol // GUARD Protocol for failure prediction
+	skipCompleted       bool                  // Skip tasks that are already completed
+	retryFailed         bool                  // Retry tasks that have failed status
+	packageGuard        *PackageGuard         // Runtime package conflict guard (v2.9+)
+	enforcePackageGuard bool                  // Enable package guard enforcement
+	guardProtocol       *GuardProtocol        // GUARD Protocol for failure prediction
 	anomalyConfig       *AnomalyMonitorConfig // Real-time anomaly detection config (v2.18+)
 }
 
