@@ -509,6 +509,43 @@ func (fl *FileLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent 
 	fl.writeRunLog(message)
 }
 
+// LogAnomaly logs real-time anomaly detection results during wave execution.
+// Format: "[HH:MM:SS] [ANOMALY] type: description (task N, severity)"
+func (fl *FileLogger) LogAnomaly(anomaly interface{}) {
+	// Anomaly logging is at WARN level
+	if !fl.shouldLog("warn") {
+		return
+	}
+
+	if anomaly == nil {
+		return
+	}
+
+	// Type assert to interface with getter methods
+	type anomalyDisplay interface {
+		GetType() string
+		GetDescription() string
+		GetSeverity() string
+		GetTaskNumber() string
+		GetWaveName() string
+	}
+
+	a, ok := anomaly.(anomalyDisplay)
+	if !ok {
+		return
+	}
+
+	ts := time.Now().Format("15:04:05")
+	taskInfo := ""
+	if a.GetTaskNumber() != "" {
+		taskInfo = fmt.Sprintf(" (Task %s)", a.GetTaskNumber())
+	}
+
+	message := fmt.Sprintf("[%s] [ANOMALY] %s: %s%s [%s]\n",
+		ts, a.GetType(), a.GetDescription(), taskInfo, a.GetSeverity())
+	fl.writeRunLog(message)
+}
+
 // Close flushes and closes the run log file.
 // It should be called when the logger is no longer needed.
 func (fl *FileLogger) Close() error {
