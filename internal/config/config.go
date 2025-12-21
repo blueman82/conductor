@@ -44,6 +44,24 @@ type GuardConfig struct {
 	// AutoSelectAgent enables automatic agent selection when failure probability is high (v2.18+)
 	// When true, GUARD will suggest a better-performing agent based on historical data
 	AutoSelectAgent bool `yaml:"auto_select_agent"`
+
+	// AnomalyDetection configuration for real-time anomaly monitoring (v2.18+)
+	AnomalyDetection AnomalyDetectionConfig `yaml:"anomaly_detection"`
+}
+
+// AnomalyDetectionConfig controls real-time anomaly detection during wave execution
+type AnomalyDetectionConfig struct {
+	// Enabled enables real-time anomaly detection during wave execution
+	Enabled bool `yaml:"enabled"`
+
+	// ConsecutiveFailureThreshold triggers alert after N consecutive task failures (default: 3)
+	ConsecutiveFailureThreshold int `yaml:"consecutive_failure_threshold"`
+
+	// ErrorRateThreshold triggers alert when wave error rate exceeds this percentage (0.0-1.0, default: 0.5)
+	ErrorRateThreshold float64 `yaml:"error_rate_threshold"`
+
+	// DurationDeviationThreshold triggers alert when task duration exceeds N times the estimate (default: 2.0)
+	DurationDeviationThreshold float64 `yaml:"duration_deviation_threshold"`
 }
 
 // ConsoleConfig controls terminal output formatting and features
