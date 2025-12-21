@@ -25,6 +25,7 @@ type WaveExecutor struct {
 	packageGuard        *PackageGuard  // Runtime package conflict guard (v2.9+)
 	enforcePackageGuard bool           // Enable package guard enforcement
 	guardProtocol       *GuardProtocol // GUARD Protocol for failure prediction
+	anomalyConfig       *AnomalyMonitorConfig // Real-time anomaly detection config (v2.18+)
 }
 
 // NewWaveExecutor constructs a WaveExecutor with the provided task executor implementation.
