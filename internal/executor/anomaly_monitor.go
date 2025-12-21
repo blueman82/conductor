@@ -17,6 +17,23 @@ type WaveAnomaly struct {
 	WaveName    string // Wave where anomaly occurred
 }
 
+// Getter methods for interface compliance (logger decoupling)
+
+// GetType returns the anomaly type
+func (wa WaveAnomaly) GetType() string { return wa.Type }
+
+// GetDescription returns the human-readable description
+func (wa WaveAnomaly) GetDescription() string { return wa.Description }
+
+// GetSeverity returns the severity level
+func (wa WaveAnomaly) GetSeverity() string { return wa.Severity }
+
+// GetTaskNumber returns the task number where anomaly occurred
+func (wa WaveAnomaly) GetTaskNumber() string { return wa.TaskNumber }
+
+// GetWaveName returns the wave name where anomaly occurred
+func (wa WaveAnomaly) GetWaveName() string { return wa.WaveName }
+
 // AnomalyMonitorConfig holds configuration for anomaly detection
 type AnomalyMonitorConfig struct {
 	// ConsecutiveFailureThreshold triggers alert after N consecutive failures (default: 3)
