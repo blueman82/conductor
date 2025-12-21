@@ -49,6 +49,7 @@ type GuardProtocol struct {
 	config      GuardConfig
 	store       *learning.Store
 	predictor   *behavioral.FailurePredictor
+	scorer      *behavioral.PerformanceScorer // For predictive agent selection (v2.18+)
 	logger      Logger
 	initialized bool
 }
