@@ -214,6 +214,46 @@ func (a *Announcer) AgentSwap(taskNumber string, fromAgent string, toAgent strin
 	a.client.Speak(msg)
 }
 
+// WaveAnomalyDisplay interface for type assertion from interface{} parameter.
+type WaveAnomalyDisplay interface {
+	GetType() string
+	GetDescription() string
+	GetSeverity() string
+	GetTaskNumber() string
+	GetWaveName() string
+}
+
+// Anomaly announces when an anomaly is detected during wave execution.
+func (a *Announcer) Anomaly(anomaly interface{}) {
+	if anomaly == nil {
+		return
+	}
+
+	// Type assert to WaveAnomalyDisplay interface
+	wa, ok := anomaly.(WaveAnomalyDisplay)
+	if !ok {
+		return
+	}
+
+	var msg string
+	switch wa.GetType() {
+	case "consecutive_failures":
+		msg = fmt.Sprintf("Warning: %s", wa.GetDescription())
+	case "high_error_rate":
+		msg = fmt.Sprintf("Warning: High error rate detected. %s", wa.GetDescription())
+	case "duration_outlier":
+		if wa.GetTaskNumber() != "" {
+			msg = fmt.Sprintf("Warning: Task %s duration anomaly. %s", wa.GetTaskNumber(), wa.GetDescription())
+		} else {
+			msg = fmt.Sprintf("Warning: Duration anomaly. %s", wa.GetDescription())
+		}
+	default:
+		msg = fmt.Sprintf("Anomaly detected: %s", wa.GetDescription())
+	}
+
+	a.client.Speak(msg)
+}
+
 // joinAgents creates a human-readable list of agents ("a, b, and c").
 func joinAgents(agents []string) string {
 	if len(agents) == 0 {
