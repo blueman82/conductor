@@ -56,6 +56,18 @@ type DetectedErrorDisplay interface {
 	GetRequiresHumanIntervention() bool
 }
 
+// GuardResultDisplay is an interface for objects that represent GUARD prediction results.
+// It's used to decouple the logger from executor.GuardResult to avoid import cycles.
+type GuardResultDisplay interface {
+	GetTaskNumber() string
+	GetProbability() float64
+	GetConfidence() float64
+	GetRiskLevel() string
+	ShouldBlock() bool
+	GetBlockReason() string
+	GetRecommendations() []string
+}
+
 // ConsoleLogger logs execution progress to a writer with timestamps and thread safety.
 // All output is prefixed with [HH:MM:SS] timestamps for tracking execution flow.
 // It supports log level filtering to control message verbosity.
@@ -1161,6 +1173,87 @@ func (cl *ConsoleLogger) LogQCIntelligentSelectionMetadata(rationale string, fal
 	cl.writer.Write([]byte(message))
 }
 
+// LogGuardPrediction logs GUARD protocol prediction results at INFO level.
+// Format depends on result: blocked tasks show full details with recommendations,
+// high/medium risk tasks show summary, low risk tasks are not logged (reduce noise).
+// Thread-safe with mutex protection. Uses risk level emojis: 🟢 low, 🟡 medium, 🔴 high.
+func (cl *ConsoleLogger) LogGuardPrediction(taskNumber string, result interface{}) {
+	if cl.writer == nil || result == nil {
+		return
+	}
+
+	// GUARD logging is at INFO level
+	if !cl.shouldLog("info") {
+		return
+	}
+
+	// Type assert to GuardResultDisplay interface
+	guard, ok := result.(GuardResultDisplay)
+	if !ok {
+		return
+	}
+
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	ts := timestamp()
+
+	// Map risk levels to emojis
+	riskEmoji := map[string]string{"low": "🟢", "medium": "🟡", "high": "🔴"}
+	emoji := riskEmoji[guard.GetRiskLevel()]
+	if emoji == "" {
+		emoji = "⚪"
+	}
+
+	var message string
+
+	if guard.ShouldBlock() {
+		// Blocked task: show full details
+		if cl.colorOutput {
+			guardPrefix := color.New(color.FgCyan).Sprint("[GUARD]")
+			blockedText := color.New(color.FgRed, color.Bold).Sprint("BLOCKED")
+			message = fmt.Sprintf("[%s] %s %s Task %s %s: %s (probability: %.1f%%, confidence: %.1f%%)\n",
+				ts, guardPrefix, emoji, taskNumber, blockedText, guard.GetBlockReason(),
+				guard.GetProbability()*100, guard.GetConfidence()*100)
+		} else {
+			message = fmt.Sprintf("[%s] [GUARD] %s Task %s BLOCKED: %s (probability: %.1f%%, confidence: %.1f%%)\n",
+				ts, emoji, taskNumber, guard.GetBlockReason(),
+				guard.GetProbability()*100, guard.GetConfidence()*100)
+		}
+
+		// Add recommendations
+		for _, rec := range guard.GetRecommendations() {
+			if cl.colorOutput {
+				recColored := color.New(color.FgYellow).Sprint(rec)
+				message += fmt.Sprintf("[%s]          → %s\n", ts, recColored)
+			} else {
+				message += fmt.Sprintf("[%s]          → %s\n", ts, rec)
+			}
+		}
+	} else if guard.GetRiskLevel() == "high" || guard.GetRiskLevel() == "medium" {
+		// High/medium risk but not blocked: show summary
+		if cl.colorOutput {
+			guardPrefix := color.New(color.FgCyan).Sprint("[GUARD]")
+			var riskColored string
+			if guard.GetRiskLevel() == "high" {
+				riskColored = color.New(color.FgRed).Sprint(guard.GetRiskLevel())
+			} else {
+				riskColored = color.New(color.FgYellow).Sprint(guard.GetRiskLevel())
+			}
+			message = fmt.Sprintf("[%s] %s %s Task %s: %s risk (%.1f%% probability)\n",
+				ts, guardPrefix, emoji, taskNumber, riskColored, guard.GetProbability()*100)
+		} else {
+			message = fmt.Sprintf("[%s] [GUARD] %s Task %s: %s risk (%.1f%% probability)\n",
+				ts, emoji, taskNumber, guard.GetRiskLevel(), guard.GetProbability()*100)
+		}
+	}
+	// Low risk tasks are not logged to reduce noise
+
+	if message != "" {
+		cl.writer.Write([]byte(message))
+	}
+}
+
 // Box drawing characters for rich output formatting
 const (
 	boxTopLeft     = "┌"
@@ -1979,6 +2072,48 @@ func formatBehavioralMetrics(metadata map[string]interface{}) string {
 	return strings.Join(parts, ", ")
 }
 
+// formatColorizedBehavioralMetrics formats behavioral metrics with color coding.
+// Returns empty string if no relevant behavioral data is available.
+func formatColorizedBehavioralMetrics(metadata map[string]interface{}) string {
+	if metadata == nil {
+		return ""
+	}
+
+	var parts []string
+
+	// Extract tool count
+	if toolCount, ok := metadata["tool_count"].(int); ok && toolCount > 0 {
+		parts = append(parts, fmt.Sprintf("tools: %s", color.New(color.FgCyan).Sprint(toolCount)))
+	} else if toolCountFloat, ok := metadata["tool_count"].(float64); ok && toolCountFloat > 0 {
+		parts = append(parts, fmt.Sprintf("tools: %s", color.New(color.FgCyan).Sprint(int(toolCountFloat))))
+	}
+
+	// Extract bash command count
+	if bashCount, ok := metadata["bash_count"].(int); ok && bashCount > 0 {
+		parts = append(parts, fmt.Sprintf("bash: %s", color.New(color.FgYellow).Sprint(bashCount)))
+	} else if bashCountFloat, ok := metadata["bash_count"].(float64); ok && bashCountFloat > 0 {
+		parts = append(parts, fmt.Sprintf("bash: %s", color.New(color.FgYellow).Sprint(int(bashCountFloat))))
+	}
+
+	// Extract file operation count
+	if fileOps, ok := metadata["file_operations"].(int); ok && fileOps > 0 {
+		parts = append(parts, fmt.Sprintf("files: %s", color.New(color.FgGreen).Sprint(fileOps)))
+	} else if fileOpsFloat, ok := metadata["file_operations"].(float64); ok && fileOpsFloat > 0 {
+		parts = append(parts, fmt.Sprintf("files: %s", color.New(color.FgGreen).Sprint(int(fileOpsFloat))))
+	}
+
+	// Extract cost (in dollars)
+	if cost, ok := metadata["cost"].(float64); ok && cost > 0 {
+		parts = append(parts, fmt.Sprintf("cost: %s", color.New(color.FgMagenta).Sprintf("$%.4f", cost)))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return strings.Join(parts, ", ")
+}
+
 // NoOpLogger is a Logger implementation that discards all log messages.
 // Useful for testing or when logging is disabled.
 type NoOpLogger struct{}
@@ -2031,6 +2166,10 @@ func (n *NoOpLogger) LogQCCriteriaResults(agentName string, results []models.Cri
 
 // LogQCIntelligentSelectionMetadata is a no-op implementation.
 func (n *NoOpLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
+}
+
+// LogGuardPrediction is a no-op implementation.
+func (n *NoOpLogger) LogGuardPrediction(taskNumber string, result interface{}) {
 }
 
 // LogTestCommands is a no-op implementation.
