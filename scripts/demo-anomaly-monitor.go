@@ -90,7 +90,7 @@ func main() {
 	fmt.Println("-" + repeatStr("-", 60))
 
 	// 4 failures out of 5 = 80% error rate
-	statuses := []models.Status{
+	statuses := []string{
 		models.StatusRed,
 		models.StatusGreen,
 		models.StatusRed,
