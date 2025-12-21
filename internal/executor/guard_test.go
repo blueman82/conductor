@@ -24,7 +24,7 @@ func TestGuardModeBlock_HighProbability_ShouldBlock(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -85,7 +85,7 @@ func TestGuardModeBlock_LowProbability_ShouldNotBlock(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -138,7 +138,7 @@ func TestGuardModeWarn_HighProbability_ShouldNotBlock(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -191,7 +191,7 @@ func TestGuardModeAdaptive_HighProbHighConf_ShouldBlock(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -244,7 +244,7 @@ func TestGuardModeAdaptive_HighProbLowConf_ShouldNotBlock(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -300,7 +300,7 @@ func TestProbabilityThreshold_ExactlyAtThreshold(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -357,7 +357,7 @@ func TestProbabilityThreshold_SlightlyBelow(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -411,7 +411,7 @@ func TestProbabilityThreshold_SlightlyAbove(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -468,7 +468,7 @@ func TestNewGuardProtocol_NilStore_ReturnsNil(t *testing.T) {
 		MinHistorySessions:   5,
 	}
 
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, nil, logger)
 
 	if guard != nil {
@@ -486,7 +486,7 @@ func TestNewGuardProtocol_DisabledConfig_ReturnsNil(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard != nil {
@@ -523,7 +523,7 @@ func TestCheckWave_PredictorError_ContinuesExecution(t *testing.T) {
 	}
 
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	if guard == nil {
@@ -566,7 +566,7 @@ func TestCheckWave_PredictorError_ContinuesExecution(t *testing.T) {
 func TestPredictToolUsage_GoFiles_IncludesBashWriteEdit(t *testing.T) {
 	cfg := GuardConfig{Enabled: true, Mode: GuardModeWarn}
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	task := models.Task{
@@ -603,7 +603,7 @@ func TestPredictToolUsage_GoFiles_IncludesBashWriteEdit(t *testing.T) {
 func TestPredictToolUsage_TestCommands_IncludesBash(t *testing.T) {
 	cfg := GuardConfig{Enabled: true, Mode: GuardModeWarn}
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	task := models.Task{
@@ -632,7 +632,7 @@ func TestPredictToolUsage_TestCommands_IncludesBash(t *testing.T) {
 func TestPredictToolUsage_MarkdownFiles_IncludesReadWrite(t *testing.T) {
 	cfg := GuardConfig{Enabled: true, Mode: GuardModeWarn}
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	task := models.Task{
@@ -666,7 +666,7 @@ func TestPredictToolUsage_MarkdownFiles_IncludesReadWrite(t *testing.T) {
 func TestPredictToolUsage_EmptyFiles_ReturnsEmpty(t *testing.T) {
 	cfg := GuardConfig{Enabled: true, Mode: GuardModeWarn}
 	store := newMockStore()
-	logger := newMockLogger()
+	logger := newMockGuardLogger()
 	guard := NewGuardProtocol(cfg, store, logger)
 
 	task := models.Task{
@@ -728,20 +728,24 @@ func TestLoadGuardConfig_ReturnsDefaults(t *testing.T) {
 // =============================================================================
 
 func newMockStore() *learning.Store {
-	// Return nil - guard handles this gracefully
-	return nil
+	// Create in-memory SQLite store for testing
+	store, err := learning.NewStore(":memory:")
+	if err != nil {
+		return nil
+	}
+	return store
 }
 
-type mockLogger struct{}
+type mockGuardLogger struct{}
 
-func newMockLogger() Logger {
+func newMockGuardLogger() Logger {
 	return &mockLogger{}
 }
 
-func (m *mockLogger) Infof(format string, args ...interface{})  {}
-func (m *mockLogger) Debugf(format string, args ...interface{}) {}
-func (m *mockLogger) Warnf(format string, args ...interface{})  {}
-func (m *mockLogger) Errorf(format string, args ...interface{}) {}
+func (m *mockGuardLogger) Infof(format string, args ...interface{})  {}
+func (m *mockGuardLogger) Debugf(format string, args ...interface{}) {}
+func (m *mockGuardLogger) Warnf(format string, args ...interface{})  {}
+func (m *mockGuardLogger) Errorf(format string, args ...interface{}) {}
 
 // mockHighFailureSessions returns sessions with high failure rate
 func mockHighFailureSessions() []behavioral.Session {
@@ -828,4 +832,16 @@ func mockLowFailureMetrics() []behavioral.BehavioralMetrics {
 			},
 		},
 	}
+}
+
+// newTestGuardProtocol creates a GuardProtocol for testing, bypassing store/initialization
+func newTestGuardProtocol(cfg GuardConfig, sessions []behavioral.Session, metrics []behavioral.BehavioralMetrics) *GuardProtocol {
+	guard := &GuardProtocol{
+		config:      cfg,
+		store:       nil,
+		logger:      newMockGuardLogger(),
+		initialized: true,
+		predictor:   behavioral.NewFailurePredictor(sessions, metrics),
+	}
+	return guard
 }
