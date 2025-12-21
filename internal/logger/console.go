@@ -2168,6 +2168,10 @@ func (n *NoOpLogger) LogGuardPrediction(taskNumber string, result interface{}) {
 func (n *NoOpLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
 }
 
+// LogAnomaly is a no-op implementation.
+func (n *NoOpLogger) LogAnomaly(anomaly interface{}) {
+}
+
 // LogTestCommands is a no-op implementation.
 func (n *NoOpLogger) LogTestCommands(entries []models.TestCommandResult) {
 }
