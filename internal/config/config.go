@@ -382,6 +382,17 @@ func DefaultGuardConfig() GuardConfig {
 		ConfidenceThreshold:  0.7,
 		MinHistorySessions:   5,
 		AutoSelectAgent:      true, // Enabled when GUARD is enabled
+		AnomalyDetection:     DefaultAnomalyDetectionConfig(),
+	}
+}
+
+// DefaultAnomalyDetectionConfig returns AnomalyDetectionConfig with sensible default values
+func DefaultAnomalyDetectionConfig() AnomalyDetectionConfig {
+	return AnomalyDetectionConfig{
+		Enabled:                     true, // Enabled by default when GUARD is enabled
+		ConsecutiveFailureThreshold: 3,
+		ErrorRateThreshold:          0.5,
+		DurationDeviationThreshold:  2.0,
 	}
 }
 
