@@ -347,9 +347,11 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	err := cmd.Run()
 
 	// Log stderr warnings to terminal (but don't store in output)
+	// Filter out known Claude CLI noise (file watcher errors on socket files)
 	if stderr.Len() > 0 {
 		stderrStr := strings.TrimSpace(stderr.String())
-		if stderrStr != "" {
+		// Skip known noise: EOPNOTSUPP errors from watching socket files
+		if stderrStr != "" && !strings.Contains(stderrStr, "EOPNOTSUPP") {
 			fmt.Fprintf(os.Stderr, "\n[Claude CLI stderr]\n%s\n", stderrStr)
 		}
 	}
