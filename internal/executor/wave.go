@@ -200,6 +200,15 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 							guardResult.Recommendations)
 					}
 					skippedResults = append(skippedResults, blockedResult)
+				} else if guardResult.SuggestedAgent != "" {
+					// Predictive agent selection: swap to better agent before execution
+					task := taskMap[taskNum]
+					originalAgent := task.Agent
+					task.Agent = guardResult.SuggestedAgent
+					taskMap[taskNum] = task
+					if w.logger != nil {
+						w.logger.LogAgentSwap(taskNum, originalAgent, guardResult.SuggestedAgent)
+					}
 				}
 			}
 
