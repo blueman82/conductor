@@ -356,8 +356,18 @@ func DefaultGuardConfig() GuardConfig {
 
 // LoadGuardConfig loads GUARD configuration from config file
 func LoadGuardConfig(cfg *config.Config) GuardConfig {
-	// For now, return defaults. In future, add GUARD section to config.yaml
-	return DefaultGuardConfig()
+	if cfg == nil {
+		return DefaultGuardConfig()
+	}
+
+	return GuardConfig{
+		Enabled:              cfg.Guard.Enabled,
+		Mode:                 GuardMode(cfg.Guard.Mode),
+		ProbabilityThreshold: cfg.Guard.ProbabilityThreshold,
+		ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
+		MinHistorySessions:   cfg.Guard.MinHistorySessions,
+		AutoSelectAgent:      cfg.Guard.AutoSelectAgent,
+	}
 }
 
 // FormatRiskLevel returns a human-readable risk level string
