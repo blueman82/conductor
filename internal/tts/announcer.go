@@ -173,7 +173,6 @@ type GuardResultDisplay interface {
 }
 
 // GuardPrediction announces GUARD protocol predictions.
-// Only announces blocked tasks and high/medium risk to reduce noise.
 func (a *Announcer) GuardPrediction(taskNumber string, result interface{}) {
 	if result == nil {
 		return
@@ -195,15 +194,14 @@ func (a *Announcer) GuardPrediction(taskNumber string, result interface{}) {
 		msg = fmt.Sprintf("GUARD blocked Task %s. %s. %.0f percent failure probability",
 			taskNumber, guard.GetBlockReason(), probability)
 	} else if riskLevel == "high" {
-		// High risk warning
-		msg = fmt.Sprintf("GUARD warning: Task %s has high risk. %.0f percent failure probability",
+		msg = fmt.Sprintf("GUARD: Task %s high risk. %.0f percent failure probability",
 			taskNumber, probability)
 	} else if riskLevel == "medium" {
-		// Medium risk warning
-		msg = fmt.Sprintf("GUARD: Task %s has medium risk. %.0f percent failure probability",
+		msg = fmt.Sprintf("GUARD: Task %s medium risk. %.0f percent failure probability",
 			taskNumber, probability)
+	} else {
+		msg = fmt.Sprintf("GUARD: Task %s low risk", taskNumber)
 	}
-	// Skip low risk announcements to reduce noise
 
 	if msg != "" {
 		a.client.Speak(msg)
