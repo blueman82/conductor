@@ -809,6 +809,13 @@ func (ml *multiLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent
 	}
 }
 
+// LogAnomaly forwards to all loggers
+func (ml *multiLogger) LogAnomaly(anomaly interface{}) {
+	for _, logger := range ml.loggers {
+		logger.LogAnomaly(anomaly)
+	}
+}
+
 // getTask finds a task by number in a task list
 func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	for i := range tasks {
