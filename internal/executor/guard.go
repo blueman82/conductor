@@ -158,13 +158,50 @@ func (gp *GuardProtocol) checkTask(ctx context.Context, task models.Task) *Guard
 	// Evaluate whether to block based on mode
 	shouldBlock, blockReason := gp.evaluateBlockDecision(prediction)
 
+	// Select better agent if auto-selection is enabled and prediction shows risk
+	suggestedAgent := ""
+	if gp.config.AutoSelectAgent && prediction.Probability >= gp.config.ProbabilityThreshold {
+		suggestedAgent = gp.selectBetterAgent(task)
+	}
+
 	return &GuardResult{
 		TaskNumber:      task.Number,
 		Prediction:      prediction,
 		ShouldBlock:     shouldBlock,
 		BlockReason:     blockReason,
 		Recommendations: prediction.Recommendations,
+		SuggestedAgent:  suggestedAgent,
 	}
+}
+
+// selectBetterAgent finds a higher-performing agent based on historical data.
+// Returns empty string if no better agent is available or scorer is nil.
+func (gp *GuardProtocol) selectBetterAgent(task models.Task) string {
+	if gp.scorer == nil {
+		return ""
+	}
+
+	ranked := gp.scorer.RankAgents()
+	if len(ranked) == 0 {
+		return ""
+	}
+
+	// Find current agent's rank
+	currentRank := -1
+	for _, agent := range ranked {
+		if agent.AgentName == task.Agent {
+			currentRank = agent.Rank
+			break
+		}
+	}
+
+	// Suggest top agent if it's different and ranked higher
+	topAgent := ranked[0]
+	if topAgent.AgentName != task.Agent && (currentRank == -1 || topAgent.Rank < currentRank) {
+		return topAgent.AgentName
+	}
+
+	return ""
 }
 
 // evaluateBlockDecision applies mode-specific logic to determine if task should be blocked.
