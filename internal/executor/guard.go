@@ -347,9 +347,10 @@ func DefaultGuardConfig() GuardConfig {
 	return GuardConfig{
 		Enabled:              false, // Disabled by default
 		Mode:                 GuardModeWarn,
-		ProbabilityThreshold: 0.7, // 70% failure probability
-		ConfidenceThreshold:  0.8, // 80% confidence
-		MinHistorySessions:   5,   // Require at least 5 historical sessions
+		ProbabilityThreshold: 0.7,  // 70% failure probability
+		ConfidenceThreshold:  0.8,  // 80% confidence
+		MinHistorySessions:   5,    // Require at least 5 historical sessions
+		AutoSelectAgent:      true, // Enabled when GUARD is enabled
 	}
 }
 
