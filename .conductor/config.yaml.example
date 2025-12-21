@@ -257,6 +257,51 @@ learning:
 #   quality_control:
 #     retry_on_red: 3  # This overrides config.yaml setting
 
+# GUARD Protocol configuration (v2.17+)
+# Pre-wave failure prediction using behavioral analytics
+guard:
+  # Enable or disable GUARD protocol (default: false)
+  enabled: false
+
+  # Operational mode:
+  # - block: Hard gate - fails tasks with high failure probability
+  # - warn: Soft signal - logs warning but allows execution (default)
+  # - adaptive: Smart gate - blocks only when both probability AND confidence exceed thresholds
+  mode: warn
+
+  # Minimum failure probability to trigger action (0.0-1.0, default: 0.7)
+  probability_threshold: 0.7
+
+  # Minimum confidence for adaptive mode (0.0-1.0, default: 0.7)
+  confidence_threshold: 0.7
+
+  # Minimum historical sessions required for predictions (default: 5)
+  # GUARD will skip prediction if fewer sessions are available
+  min_history_sessions: 5
+
+# GUARD Protocol Examples
+
+# Example: Enable GUARD in warn mode (recommended starting point)
+# guard:
+#   enabled: true
+#   mode: warn
+
+# Example: Enable strict blocking mode
+# guard:
+#   enabled: true
+#   mode: block
+#   probability_threshold: 0.8
+
+# Example: Enable adaptive mode (blocks only high-confidence predictions)
+# guard:
+#   enabled: true
+#   mode: adaptive
+#   probability_threshold: 0.7
+#   confidence_threshold: 0.8
+
+# Example: Disable GUARD at runtime with --no-guard flag
+# conductor run --no-guard plan.yaml
+
 # Agent Watch behavioral analytics configuration (v2.7+)
 # Provides observability into Claude Code agent sessions via `conductor observe` commands
 agent_watch:
