@@ -10,6 +10,38 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// GuardMode specifies the GUARD Protocol operating mode
+type GuardMode string
+
+const (
+	// GuardModeBlock blocks task execution when failure probability exceeds threshold
+	GuardModeBlock GuardMode = "block"
+
+	// GuardModeWarn logs a warning but allows task execution to proceed
+	GuardModeWarn GuardMode = "warn"
+
+	// GuardModeAdaptive dynamically adjusts behavior based on historical accuracy
+	GuardModeAdaptive GuardMode = "adaptive"
+)
+
+// GuardConfig represents GUARD Protocol configuration
+type GuardConfig struct {
+	// Enabled enables the GUARD Protocol failure prediction system
+	Enabled bool `yaml:"enabled"`
+
+	// Mode specifies the operating mode: "block", "warn", or "adaptive"
+	Mode GuardMode `yaml:"mode"`
+
+	// ProbabilityThreshold is the minimum failure probability to trigger guard action (0.0-1.0)
+	ProbabilityThreshold float64 `yaml:"probability_threshold"`
+
+	// ConfidenceThreshold is the minimum confidence required for prediction (0.0-1.0)
+	ConfidenceThreshold float64 `yaml:"confidence_threshold"`
+
+	// MinHistorySessions is the minimum number of historical sessions required before predictions are made
+	MinHistorySessions int `yaml:"min_history_sessions"`
+}
+
 // ConsoleConfig controls terminal output formatting and features
 type ConsoleConfig struct {
 	// EnableColor enables colored output
@@ -313,6 +345,21 @@ type Config struct {
 
 	// TTS controls text-to-speech functionality
 	TTS TTSConfig `yaml:"tts"`
+
+	// Guard contains GUARD Protocol configuration
+	Guard GuardConfig `yaml:"guard"`
+}
+
+// DefaultGuardConfig returns GuardConfig with sensible default values
+// GUARD is DISABLED by default to ensure zero behavior change unless explicitly enabled
+func DefaultGuardConfig() GuardConfig {
+	return GuardConfig{
+		Enabled:              false,
+		Mode:                 GuardModeWarn,
+		ProbabilityThreshold: 0.7,
+		ConfidenceThreshold:  0.7,
+		MinHistorySessions:   5,
+	}
 }
 
 // DefaultConsoleConfig returns ConsoleConfig with sensible default values
@@ -428,7 +475,8 @@ func DefaultConfig() *Config {
 			EnableClaudeClassification:  false,
 			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
-		TTS: DefaultTTSConfig(),
+		TTS:   DefaultTTSConfig(),
+		Guard: DefaultGuardConfig(),
 	}
 }
 
@@ -528,6 +576,7 @@ func LoadConfig(path string) (*Config, error) {
 		Validation     ValidationConfig     `yaml:"validation"`
 		Executor       ExecutorConfig       `yaml:"executor"`
 		TTS            yamlTTSConfig        `yaml:"tts"`
+		Guard          GuardConfig          `yaml:"guard"`
 	}
 
 	var yamlCfg yamlConfig
@@ -848,6 +897,28 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.TTS.Timeout = timeout
 			}
 		}
+
+		// Merge Guard config
+		if guardSection, exists := rawMap["guard"]; exists && guardSection != nil {
+			guard := yamlCfg.Guard
+			guardMap, _ := guardSection.(map[string]interface{})
+
+			if _, exists := guardMap["enabled"]; exists {
+				cfg.Guard.Enabled = guard.Enabled
+			}
+			if _, exists := guardMap["mode"]; exists {
+				cfg.Guard.Mode = guard.Mode
+			}
+			if _, exists := guardMap["probability_threshold"]; exists {
+				cfg.Guard.ProbabilityThreshold = guard.ProbabilityThreshold
+			}
+			if _, exists := guardMap["confidence_threshold"]; exists {
+				cfg.Guard.ConfidenceThreshold = guard.ConfidenceThreshold
+			}
+			if _, exists := guardMap["min_history_sessions"]; exists {
+				cfg.Guard.MinHistorySessions = guard.MinHistorySessions
+			}
+		}
 	}
 
 	// Apply environment variable overrides (highest priority)
@@ -1071,6 +1142,34 @@ func (c *Config) Validate() error {
 		}
 		if costModel.OpusOutput < 0 {
 			return fmt.Errorf("agent_watch.cost_model.opus_output must be >= 0, got %f", costModel.OpusOutput)
+		}
+	}
+
+	// Validate Guard configuration
+	if c.Guard.Enabled {
+		// Validate mode
+		validGuardModes := map[GuardMode]bool{
+			GuardModeBlock:    true,
+			GuardModeWarn:     true,
+			GuardModeAdaptive: true,
+		}
+		if !validGuardModes[c.Guard.Mode] {
+			return fmt.Errorf("guard.mode must be one of: block, warn, adaptive; got %q", c.Guard.Mode)
+		}
+
+		// Validate probability_threshold is between 0 and 1
+		if c.Guard.ProbabilityThreshold < 0 || c.Guard.ProbabilityThreshold > 1 {
+			return fmt.Errorf("guard.probability_threshold must be between 0 and 1, got %f", c.Guard.ProbabilityThreshold)
+		}
+
+		// Validate confidence_threshold is between 0 and 1
+		if c.Guard.ConfidenceThreshold < 0 || c.Guard.ConfidenceThreshold > 1 {
+			return fmt.Errorf("guard.confidence_threshold must be between 0 and 1, got %f", c.Guard.ConfidenceThreshold)
+		}
+
+		// Validate min_history_sessions is non-negative
+		if c.Guard.MinHistorySessions < 0 {
+			return fmt.Errorf("guard.min_history_sessions must be >= 0, got %d", c.Guard.MinHistorySessions)
 		}
 	}
 
