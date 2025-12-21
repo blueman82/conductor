@@ -208,6 +208,12 @@ func (a *Announcer) GuardPrediction(taskNumber string, result interface{}) {
 	}
 }
 
+// AgentSwap announces when GUARD predictive selection swaps to a better agent.
+func (a *Announcer) AgentSwap(taskNumber string, fromAgent string, toAgent string) {
+	msg := fmt.Sprintf("GUARD: Swapping Task %s from %s to %s", taskNumber, fromAgent, toAgent)
+	a.client.Speak(msg)
+}
+
 // joinAgents creates a human-readable list of agents ("a, b, and c").
 func joinAgents(agents []string) string {
 	if len(agents) == 0 {
