@@ -137,7 +137,7 @@ func (am *AnomalyMonitor) RecordResult(result models.TaskResult) []WaveAnomaly {
 			anomalies = append(anomalies, WaveAnomaly{
 				Type: "duration_outlier",
 				Description: fmt.Sprintf("Task took %.1fx longer than estimated (%s vs %s estimated)",
-					deviation, formatDuration(actual), formatDuration(estimate)),
+					deviation, formatAnomalyDuration(actual), formatAnomalyDuration(estimate)),
 				Severity:   am.getDurationSeverity(deviation),
 				TaskNumber: result.Task.Number,
 				WaveName:   am.waveName,
