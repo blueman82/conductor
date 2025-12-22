@@ -311,14 +311,14 @@ func TestOrchestratorContextCancellation(t *testing.T) {
 		},
 	}
 
-	result := orchestrator.ExecutePlan(ctx, plan)
+	_, err := orchestrator.ExecutePlan(ctx, plan)
 
-	if result.Error == nil {
+	if err == nil {
 		t.Error("expected context cancellation error, got nil")
 	}
 
-	if !errors.Is(result.Error, context.Canceled) {
-		t.Errorf("expected context.Canceled error, got %v", result.Error)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled error, got %v", err)
 	}
 }
 
