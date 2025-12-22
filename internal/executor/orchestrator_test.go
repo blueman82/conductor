@@ -327,13 +327,12 @@ func TestOrchestratorNilPlan(t *testing.T) {
 	mockLog := &mockLogger{}
 	orchestrator := NewOrchestrator(mockWE, mockLog)
 
-	// ExecutePlan should handle nil plan gracefully
-	// The mockWaveExecutor will return nil, nil by default
-	result := orchestrator.ExecutePlan(context.Background(), nil)
+	// ExecutePlan should handle nil plan gracefully - it returns an error
+	_, err := orchestrator.ExecutePlan(context.Background(), nil)
 
-	// Should have empty results and no error (since mockWaveExecutor doesn't enforce validation)
-	if len(result.TaskResults) != 0 {
-		t.Errorf("expected 0 task results for nil plan, got %d", len(result.TaskResults))
+	// Should return an error for nil plan (at least one plan is required)
+	if err == nil {
+		t.Error("expected error for nil plan, got nil")
 	}
 }
 
