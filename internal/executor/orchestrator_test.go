@@ -393,7 +393,7 @@ func TestOrchestratorExecutionMetrics(t *testing.T) {
 		},
 	}
 
-	result := orchestrator.ExecutePlan(context.Background(), plan)
+	result, _ := orchestrator.ExecutePlan(context.Background(), plan)
 
 	duration := result.Duration
 
