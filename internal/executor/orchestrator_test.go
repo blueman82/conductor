@@ -197,7 +197,18 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 			mockLog := &mockLogger{}
 			orchestrator := NewOrchestrator(mockWE, mockLog)
 
-			result := orchestrator.ExecutePlan(context.Background(), tt.plan)
+			result, err := orchestrator.ExecutePlan(context.Background(), tt.plan)
+
+			// Check error
+			if tt.expectedErr != nil {
+				if err == nil {
+					t.Errorf("expected error %q, got nil", tt.expectedErr)
+				} else if err.Error() != tt.expectedErr.Error() {
+					t.Errorf("expected error %q, got %q", tt.expectedErr, err)
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, got %q", err)
+			}
 
 			// Check total tasks
 			if len(result.TaskResults) != tt.expectedTotal {
