@@ -357,10 +357,10 @@ func TestOrchestratorNilLogger(t *testing.T) {
 		},
 	}
 
-	result := orchestrator.ExecutePlan(context.Background(), plan)
+	result, err := orchestrator.ExecutePlan(context.Background(), plan)
 
-	if result.Error != nil {
-		t.Errorf("expected no error with nil logger, got %v", result.Error)
+	if err != nil {
+		t.Errorf("expected no error with nil logger, got %v", err)
 	}
 
 	if len(result.TaskResults) != 1 {
