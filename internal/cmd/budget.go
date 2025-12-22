@@ -182,8 +182,8 @@ func printStatusPretty(status *budget.BlockStatus) {
 	remaining := time.Duration(status.RemainingMinutes) * time.Minute
 	fmt.Printf("Started: %s  Elapsed: %s  Remaining: %s\n",
 		block.StartTime.Format("3:04 PM"),
-		formatDuration(elapsed),
-		formatDuration(remaining))
+		formatBudgetDuration(elapsed),
+		formatBudgetDuration(remaining))
 	fmt.Printf("Ends: %s\n", block.EndTime.Format("3:04 PM"))
 
 	fmt.Println(strings.Repeat("─", width))
@@ -223,8 +223,8 @@ func printStatusPretty(status *budget.BlockStatus) {
 // printReportJSON prints blocks in JSON format
 func printReportJSON(blocks []budget.UsageBlock) {
 	type reportData struct {
-		Count  int                   `json:"count"`
-		Blocks []budget.UsageBlock   `json:"blocks"`
+		Count  int                 `json:"count"`
+		Blocks []budget.UsageBlock `json:"blocks"`
 	}
 
 	data, err := json.MarshalIndent(reportData{
@@ -258,7 +258,7 @@ func printReportPretty(blocks []budget.UsageBlock) {
 
 		// Print block summary
 		fmt.Printf("Block %s\n", block.StartTime.Format("Jan 02, 3:04 PM"))
-		fmt.Printf("  Duration:  %s\n", formatDuration(duration))
+		fmt.Printf("  Duration:  %s\n", formatBudgetDuration(duration))
 		fmt.Printf("  Tokens:    %s (%s input, %s output)\n",
 			formatTokens(block.TotalTokens),
 			formatTokens(block.InputTokens),
@@ -312,7 +312,7 @@ func formatCost(cost float64) string {
 }
 
 // formatDuration formats duration in human-readable form
-func formatDuration(d time.Duration) string {
+func formatBudgetDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}

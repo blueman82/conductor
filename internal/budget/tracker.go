@@ -9,16 +9,16 @@ import (
 // Each block starts at an hour boundary and tracks all token usage within
 // that 5-hour period.
 type UsageBlock struct {
-	ID            string        // ISO timestamp of block start (e.g., "2025-12-22T16:00:00Z")
-	StartTime     time.Time     // When the block started
-	EndTime       time.Time     // StartTime + 5 hours
-	ActualEndTime time.Time     // Timestamp of last activity in this block
-	TotalTokens   int64         // Total tokens (input + output)
-	InputTokens   int64         // Input tokens only
-	OutputTokens  int64         // Output tokens only
-	CostUSD       float64       // Cumulative cost in USD
-	Entries       []UsageEntry  // Individual usage entries
-	Models        []string      // Unique models used in this block
+	ID            string       // ISO timestamp of block start (e.g., "2025-12-22T16:00:00Z")
+	StartTime     time.Time    // When the block started
+	EndTime       time.Time    // StartTime + 5 hours
+	ActualEndTime time.Time    // Timestamp of last activity in this block
+	TotalTokens   int64        // Total tokens (input + output)
+	InputTokens   int64        // Input tokens only
+	OutputTokens  int64        // Output tokens only
+	CostUSD       float64      // Cumulative cost in USD
+	Entries       []UsageEntry // Individual usage entries
+	Models        []string     // Unique models used in this block
 }
 
 // UsageEntry represents a single API call's token usage.
@@ -64,10 +64,10 @@ type BlockStatus struct {
 // Thread-safe tracking of 5-hour billing windows with burn rate analysis.
 type UsageTracker struct {
 	mu          sync.RWMutex
-	baseDir     string                     // ~/.claude/projects
-	costModel   map[string]ModelPricing    // Model pricing configuration
-	blocks      []UsageBlock               // Historical blocks
-	activeBlock *UsageBlock                // Currently active block
+	baseDir     string                  // ~/.claude/projects
+	costModel   map[string]ModelPricing // Model pricing configuration
+	blocks      []UsageBlock            // Historical blocks
+	activeBlock *UsageBlock             // Currently active block
 }
 
 // ModelPricing defines cost per million tokens for a specific model.

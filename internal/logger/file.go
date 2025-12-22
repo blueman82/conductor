@@ -576,3 +576,55 @@ func (fl *FileLogger) writeRunLog(message string) {
 		fl.runLog.Sync()
 	}
 }
+
+// LogBudgetStatus logs the current budget status (block info, usage, burn rate).
+// Format: "[HH:MM:SS] [BUDGET] Status update"
+func (fl *FileLogger) LogBudgetStatus(status interface{}) {
+	// Budget status logging is at INFO level
+	if !fl.shouldLog("info") {
+		return
+	}
+
+	ts := time.Now().Format("15:04:05")
+	message := fmt.Sprintf("[%s] [BUDGET] Status update\n", ts)
+	fl.writeRunLog(message)
+}
+
+// LogBudgetWarning logs a warning when approaching budget limit.
+// Format: "[HH:MM:SS] [BUDGET WARNING] X% of budget used"
+func (fl *FileLogger) LogBudgetWarning(percentUsed float64) {
+	// Budget warnings are at WARN level
+	if !fl.shouldLog("warn") {
+		return
+	}
+
+	ts := time.Now().Format("15:04:05")
+	message := fmt.Sprintf("[%s] [BUDGET WARNING] %.1f%% of budget used\n", ts, percentUsed)
+	fl.writeRunLog(message)
+}
+
+// LogRateLimitPause logs when pausing execution due to rate limit.
+// Format: "[HH:MM:SS] [RATE LIMIT] Pausing for Xs"
+func (fl *FileLogger) LogRateLimitPause(delay time.Duration) {
+	// Rate limit pauses are at WARN level
+	if !fl.shouldLog("warn") {
+		return
+	}
+
+	ts := time.Now().Format("15:04:05")
+	message := fmt.Sprintf("[%s] [RATE LIMIT] Pausing for %.1fs\n", ts, delay.Seconds())
+	fl.writeRunLog(message)
+}
+
+// LogRateLimitResume logs when resuming after rate limit pause.
+// Format: "[HH:MM:SS] [RATE LIMIT] Resuming execution"
+func (fl *FileLogger) LogRateLimitResume() {
+	// Rate limit resumes are at INFO level
+	if !fl.shouldLog("info") {
+		return
+	}
+
+	ts := time.Now().Format("15:04:05")
+	message := fmt.Sprintf("[%s] [RATE LIMIT] Resuming execution\n", ts)
+	fl.writeRunLog(message)
+}

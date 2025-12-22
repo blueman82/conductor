@@ -54,21 +54,21 @@ func (m *mockLogger) LogSummary(result models.ExecutionResult) {
 	m.summaryCalls = append(m.summaryCalls, result)
 }
 
-func (m *mockLogger) LogTaskAgentInvoke(task models.Task)                    {}
-func (m *mockLogger) LogQCAgentSelection(agents []string, mode string)       {}
-func (m *mockLogger) LogQCIndividualVerdicts(verdicts map[string]string)     {}
-func (m *mockLogger) LogQCAggregatedResult(verdict string, strategy string)  {}
+func (m *mockLogger) LogTaskAgentInvoke(task models.Task)                   {}
+func (m *mockLogger) LogQCAgentSelection(agents []string, mode string)      {}
+func (m *mockLogger) LogQCIndividualVerdicts(verdicts map[string]string)    {}
+func (m *mockLogger) LogQCAggregatedResult(verdict string, strategy string) {}
 func (m *mockLogger) LogQCCriteriaResults(agentName string, results []models.CriterionResult) {
 }
 func (m *mockLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
 }
-func (m *mockLogger) LogGuardPrediction(taskNumber string, result interface{})            {}
-func (m *mockLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string)   {}
-func (m *mockLogger) LogAnomaly(anomaly interface{})                                      {}
-func (m *mockLogger) LogBudgetStatus(status interface{})                                  {}
-func (m *mockLogger) LogBudgetWarning(percentUsed float64)                                {}
-func (m *mockLogger) LogRateLimitPause(delay time.Duration)                               {}
-func (m *mockLogger) LogRateLimitResume()                                                 {}
+func (m *mockLogger) LogGuardPrediction(taskNumber string, result interface{})         {}
+func (m *mockLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {}
+func (m *mockLogger) LogAnomaly(anomaly interface{})                                   {}
+func (m *mockLogger) LogBudgetStatus(status interface{})                               {}
+func (m *mockLogger) LogBudgetWarning(percentUsed float64)                             {}
+func (m *mockLogger) LogRateLimitPause(delay time.Duration)                            {}
+func (m *mockLogger) LogRateLimitResume()                                              {}
 
 func TestOrchestratorExecutePlan(t *testing.T) {
 	tests := []struct {

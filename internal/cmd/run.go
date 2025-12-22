@@ -816,6 +816,34 @@ func (ml *multiLogger) LogAnomaly(anomaly interface{}) {
 	}
 }
 
+// LogBudgetStatus forwards to all loggers
+func (ml *multiLogger) LogBudgetStatus(status interface{}) {
+	for _, logger := range ml.loggers {
+		logger.LogBudgetStatus(status)
+	}
+}
+
+// LogBudgetWarning forwards to all loggers
+func (ml *multiLogger) LogBudgetWarning(percentUsed float64) {
+	for _, logger := range ml.loggers {
+		logger.LogBudgetWarning(percentUsed)
+	}
+}
+
+// LogRateLimitPause forwards to all loggers
+func (ml *multiLogger) LogRateLimitPause(delay time.Duration) {
+	for _, logger := range ml.loggers {
+		logger.LogRateLimitPause(delay)
+	}
+}
+
+// LogRateLimitResume forwards to all loggers
+func (ml *multiLogger) LogRateLimitResume() {
+	for _, logger := range ml.loggers {
+		logger.LogRateLimitResume()
+	}
+}
+
 // getTask finds a task by number in a task list
 func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	for i := range tasks {

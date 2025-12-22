@@ -1357,6 +1357,65 @@ func (cl *ConsoleLogger) LogAnomaly(anomaly interface{}) {
 	cl.writer.Write([]byte(message))
 }
 
+// ==================== Budget Tracking Methods (v2.19+) ====================
+
+func (cl *ConsoleLogger) LogBudgetStatus(status interface{}) {
+	if cl.writer == nil || status == nil {
+		return
+	}
+	if !cl.shouldLog("info") {
+		return
+	}
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+	ts := timestamp()
+	message := fmt.Sprintf("[%s] [BUDGET] %v\n", ts, status)
+	cl.writer.Write([]byte(message))
+}
+
+func (cl *ConsoleLogger) LogBudgetWarning(percentUsed float64) {
+	if cl.writer == nil {
+		return
+	}
+	if !cl.shouldLog("warn") {
+		return
+	}
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+	ts := timestamp()
+	percentage := int(percentUsed * 100)
+	message := fmt.Sprintf("[%s] [BUDGET WARNING] ⚠️  %d%%\n", ts, percentage)
+	cl.writer.Write([]byte(message))
+}
+
+func (cl *ConsoleLogger) LogRateLimitPause(delay time.Duration) {
+	if cl.writer == nil {
+		return
+	}
+	if !cl.shouldLog("info") {
+		return
+	}
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+	ts := timestamp()
+	message := fmt.Sprintf("[%s] [RATE LIMIT] ⏸️  Pausing %s\n", ts, delay.Round(time.Second))
+	cl.writer.Write([]byte(message))
+}
+
+func (cl *ConsoleLogger) LogRateLimitResume() {
+	if cl.writer == nil {
+		return
+	}
+	if !cl.shouldLog("info") {
+		return
+	}
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+	ts := timestamp()
+	message := fmt.Sprintf("[%s] [RATE LIMIT] ▶️  Resuming\n", ts)
+	cl.writer.Write([]byte(message))
+}
+
 // Box drawing characters for rich output formatting
 const (
 	boxTopLeft     = "┌"
@@ -2252,3 +2311,9 @@ func (n *NoOpLogger) LogCriterionVerifications(entries []models.CriterionVerific
 // LogDocTargetVerifications is a no-op implementation.
 func (n *NoOpLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {
 }
+
+// Budget tracking methods (v2.19+)
+func (n *NoOpLogger) LogBudgetStatus(status interface{})    {}
+func (n *NoOpLogger) LogBudgetWarning(percentUsed float64)  {}
+func (n *NoOpLogger) LogRateLimitPause(delay time.Duration) {}
+func (n *NoOpLogger) LogRateLimitResume()                   {}

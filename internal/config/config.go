@@ -472,10 +472,10 @@ func DefaultTTSConfig() TTSConfig {
 func DefaultBudgetConfig() BudgetConfig {
 	return BudgetConfig{
 		Enabled:         false,
-		MaxCostPerRun:   0,     // No limit
-		MaxCostPerTask:  0,     // No limit
-		WarnThreshold:   0.8,   // Warn at 80%
-		PauseOnLimit:    true,  // Pause instead of fail
+		MaxCostPerRun:   0,    // No limit
+		MaxCostPerTask:  0,    // No limit
+		WarnThreshold:   0.8,  // Warn at 80%
+		PauseOnLimit:    true, // Pause instead of fail
 		AutoResumeDelay: 5 * time.Minute,
 		CheckInterval:   "per_wave",
 	}
