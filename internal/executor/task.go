@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/updater"
@@ -175,6 +176,7 @@ type DefaultTaskExecutor struct {
 	EventLogger                 Logger                   // Logger for execution events (task agent invoke, etc.)
 	TaskAgentSelector           *TaskAgentSelector       // Intelligent agent selector for task execution (v2.15+)
 	IntelligentAgentSelection   bool                     // Enable intelligent agent selection when task.Agent is empty
+	BudgetConfig                *config.BudgetConfig     // Budget tracking configuration (v2.19+)
 
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
@@ -566,8 +568,84 @@ func (te *DefaultTaskExecutor) updateFeedback(task models.Task, attempt int, age
 	return nil
 }
 
+// isRateLimitError checks if an error indicates a Claude API rate limit.
+// Matches common rate limit error patterns from Claude CLI.
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "rate limit") ||
+		strings.Contains(msg, "429") ||
+		strings.Contains(msg, "too many requests") ||
+		strings.Contains(msg, "quota exceeded") ||
+		strings.Contains(msg, "rate_limit_error")
+}
+
+// executeWithRateLimitRecovery wraps task execution with rate limit recovery.
+// If rate limited and PauseOnLimit is enabled, waits and retries.
+func (te *DefaultTaskExecutor) executeWithRateLimitRecovery(ctx context.Context, task models.Task) (models.TaskResult, error) {
+	maxAttempts := 3 // Maximum rate limit retries
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		result, err := te.executeTask(ctx, task)
+
+		// Check for rate limit error
+		if isRateLimitError(err) {
+			// Check if pause/resume is enabled
+			if te.BudgetConfig != nil && te.BudgetConfig.Enabled && te.BudgetConfig.PauseOnLimit {
+				delay := te.BudgetConfig.AutoResumeDelay
+				if delay <= 0 {
+					delay = 5 * time.Minute // Default 5 minutes
+				}
+
+				// Log the pause
+				if te.EventLogger != nil {
+					te.EventLogger.LogRateLimitPause(delay)
+				}
+
+				// Wait with context cancellation support
+				select {
+				case <-time.After(delay):
+					// Log resume and retry
+					if te.EventLogger != nil {
+						te.EventLogger.LogRateLimitResume()
+					}
+					continue // Retry the task
+				case <-ctx.Done():
+					// Context cancelled during wait
+					result.Status = models.StatusFailed
+					result.Error = ctx.Err()
+					return result, ctx.Err()
+				}
+			}
+		}
+
+		// Not a rate limit error, or pause not enabled - return result
+		return result, err
+	}
+
+	// Exhausted rate limit retries
+	return models.TaskResult{
+		Task:   task,
+		Status: models.StatusFailed,
+		Error:  fmt.Errorf("rate limit: exhausted %d retry attempts", maxAttempts),
+	}, fmt.Errorf("rate limit retry exhausted")
+}
+
 // Execute runs an individual task, handling agent invocation, quality control, and plan updates.
 func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
+	// If budget config with pause_on_limit is enabled, use recovery wrapper
+	if te.BudgetConfig != nil && te.BudgetConfig.Enabled && te.BudgetConfig.PauseOnLimit {
+		return te.executeWithRateLimitRecovery(ctx, task)
+	}
+
+	// Standard execution path
+	return te.executeTask(ctx, task)
+}
+
+// executeTask is the core task execution logic (refactored from original Execute).
+func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task) (models.TaskResult, error) {
 	result := models.TaskResult{Task: task}
 
 	// Determine which file to lock and update - priority order:
