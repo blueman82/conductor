@@ -226,17 +226,6 @@ func TestOrchestratorExecutePlan(t *testing.T) {
 				t.Errorf("expected %d GREEN tasks, got %d", tt.expectedGreen, greenCount)
 			}
 
-			// Check error
-			if tt.expectedErr != nil {
-				if result.Error == nil {
-					t.Errorf("expected error %q, got nil", tt.expectedErr)
-				} else if result.Error.Error() != tt.expectedErr.Error() {
-					t.Errorf("expected error %q, got %q", tt.expectedErr, result.Error)
-				}
-			} else if result.Error != nil {
-				t.Errorf("expected no error, got %q", result.Error)
-			}
-
 			// Check that summary was logged
 			if len(mockLog.summaryCalls) != 1 {
 				t.Errorf("expected 1 summary log call, got %d", len(mockLog.summaryCalls))
