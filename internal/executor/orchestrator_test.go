@@ -208,15 +208,16 @@ func TestOrchestratorContextCancellation(t *testing.T) {
 	}
 }
 
-func TestOrchestratorNilPlan(t *testing.T) {
+func TestOrchestratorNoPlan(t *testing.T) {
 	mockWE := &mockWaveExecutor{}
 	mockLog := &mockLogger{}
 	orchestrator := NewOrchestrator(mockWE, mockLog)
 
-	_, err := orchestrator.ExecutePlan(context.Background(), nil)
+	// Pass no plans (empty variadic)
+	_, err := orchestrator.ExecutePlan(context.Background())
 
 	if err == nil {
-		t.Error("expected error for nil plan, got nil")
+		t.Error("expected error for no plans, got nil")
 	}
 }
 
