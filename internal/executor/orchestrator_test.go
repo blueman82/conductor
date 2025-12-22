@@ -256,7 +256,7 @@ func TestOrchestratorSessionID(t *testing.T) {
 		Waves: []models.Wave{},
 	}
 
-	result := orchestrator.ExecutePlan(context.Background(), plan)
+	result, _ := orchestrator.ExecutePlan(context.Background(), plan)
 
 	if result.SessionID != "test-session-123" {
 		t.Errorf("expected session ID %q, got %q", "test-session-123", result.SessionID)
