@@ -270,7 +270,7 @@ func TestOrchestratorSessionID(t *testing.T) {
 	}
 	orchestrator2 := NewOrchestratorFromConfig(config2)
 
-	result2 := orchestrator2.ExecutePlan(context.Background(), plan)
+	result2, _ := orchestrator2.ExecutePlan(context.Background(), plan)
 
 	if result2.SessionID == "" {
 		t.Error("expected auto-generated session ID, got empty string")
