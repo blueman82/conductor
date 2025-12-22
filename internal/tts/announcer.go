@@ -254,6 +254,29 @@ func (a *Announcer) Anomaly(anomaly interface{}) {
 	a.client.Speak(msg)
 }
 
+// BudgetWarning announces when approaching budget limit.
+func (a *Announcer) BudgetWarning(percentUsed float64) {
+	msg := fmt.Sprintf("Warning: %.0f percent of budget used", percentUsed*100)
+	a.client.Speak(msg)
+}
+
+// RateLimitPause announces when pausing due to rate limit.
+func (a *Announcer) RateLimitPause(delay time.Duration) {
+	minutes := int(delay.Minutes())
+	if minutes > 0 {
+		msg := fmt.Sprintf("Rate limited. Pausing for %d minutes", minutes)
+		a.client.Speak(msg)
+	} else {
+		msg := fmt.Sprintf("Rate limited. Pausing for %d seconds", int(delay.Seconds()))
+		a.client.Speak(msg)
+	}
+}
+
+// RateLimitResume announces when resuming after rate limit pause.
+func (a *Announcer) RateLimitResume() {
+	a.client.Speak("Rate limit cleared. Resuming execution")
+}
+
 // joinAgents creates a human-readable list of agents ("a, b, and c").
 func joinAgents(agents []string) string {
 	if len(agents) == 0 {
