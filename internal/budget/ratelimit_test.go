@@ -397,7 +397,7 @@ func TestTryParseJSON_InvalidJSON(t *testing.T) {
 		"not json at all",
 		"{invalid json}",
 		"[]",
-		`{"error": "not a rate limit"}`,
+		`{"error": "some other error"}`,
 		`{"retry_after": 300}`, // Has retry_after but no error field
 	}
 
