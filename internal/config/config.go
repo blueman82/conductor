@@ -264,16 +264,21 @@ type BudgetConfig struct {
 	// Example: 0.8 means warn at 80% of max_cost_per_run
 	WarnThreshold float64 `yaml:"warn_threshold"`
 
-	// PauseOnLimit pauses execution instead of failing when rate limited
-	// When true, waits AutoResumeDelay then retries
-	PauseOnLimit bool `yaml:"pause_on_limit"`
-
-	// AutoResumeDelay is how long to wait before retrying after rate limit
-	// Example: "5m" for 5 minutes
-	AutoResumeDelay time.Duration `yaml:"auto_resume_delay"`
-
 	// CheckInterval specifies when to check budget: "per_wave", "per_task", or "disabled"
 	CheckInterval string `yaml:"check_interval"`
+
+	// Intelligent Rate Limit Auto-Resume (v2.20+)
+	// AutoResume enables intelligent wait/exit on rate limit detection
+	AutoResume bool `yaml:"auto_resume"`
+
+	// MaxWaitDuration is the maximum time to wait for rate limit reset (default: 6h)
+	MaxWaitDuration time.Duration `yaml:"max_wait_duration"`
+
+	// AnnounceInterval is the countdown announcement interval (default: 15m)
+	AnnounceInterval time.Duration `yaml:"announce_interval"`
+
+	// SafetyBuffer is extra wait time after reset (default: 60s)
+	SafetyBuffer time.Duration `yaml:"safety_buffer"`
 }
 
 // TTSConfig controls text-to-speech functionality
@@ -471,13 +476,15 @@ func DefaultTTSConfig() TTSConfig {
 // Budget is DISABLED by default to ensure zero behavior change unless explicitly enabled
 func DefaultBudgetConfig() BudgetConfig {
 	return BudgetConfig{
-		Enabled:         false,
-		MaxCostPerRun:   0,    // No limit
-		MaxCostPerTask:  0,    // No limit
-		WarnThreshold:   0.8,  // Warn at 80%
-		PauseOnLimit:    true, // Pause instead of fail
-		AutoResumeDelay: 5 * time.Minute,
-		CheckInterval:   "per_wave",
+		Enabled:          false,
+		MaxCostPerRun:    0,    // No limit
+		MaxCostPerTask:   0,    // No limit
+		WarnThreshold:    0.8,  // Warn at 80%
+		CheckInterval:    "per_wave",
+		AutoResume:       true,                // Enabled by default
+		MaxWaitDuration:  6 * time.Hour,       // 6 hours
+		AnnounceInterval: 15 * time.Minute,    // 15 minutes
+		SafetyBuffer:     60 * time.Second,    // 60 seconds
 	}
 }
 
@@ -642,13 +649,15 @@ func LoadConfig(path string) (*Config, error) {
 		Timeout string `yaml:"timeout"`
 	}
 	type yamlBudgetConfig struct {
-		Enabled         bool    `yaml:"enabled"`
-		MaxCostPerRun   float64 `yaml:"max_cost_per_run"`
-		MaxCostPerTask  float64 `yaml:"max_cost_per_task"`
-		WarnThreshold   float64 `yaml:"warn_threshold"`
-		PauseOnLimit    bool    `yaml:"pause_on_limit"`
-		AutoResumeDelay string  `yaml:"auto_resume_delay"`
-		CheckInterval   string  `yaml:"check_interval"`
+		Enabled          bool    `yaml:"enabled"`
+		MaxCostPerRun    float64 `yaml:"max_cost_per_run"`
+		MaxCostPerTask   float64 `yaml:"max_cost_per_task"`
+		WarnThreshold    float64 `yaml:"warn_threshold"`
+		CheckInterval    string  `yaml:"check_interval"`
+		AutoResume       bool    `yaml:"auto_resume"`
+		MaxWaitDuration  string  `yaml:"max_wait_duration"`
+		AnnounceInterval string  `yaml:"announce_interval"`
+		SafetyBuffer     string  `yaml:"safety_buffer"`
 	}
 	type yamlConfig struct {
 		MaxConcurrency int                  `yaml:"max_concurrency"`
@@ -1031,18 +1040,32 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := budgetMap["warn_threshold"]; exists {
 				cfg.Budget.WarnThreshold = budget.WarnThreshold
 			}
-			if _, exists := budgetMap["pause_on_limit"]; exists {
-				cfg.Budget.PauseOnLimit = budget.PauseOnLimit
-			}
-			if _, exists := budgetMap["auto_resume_delay"]; exists && budget.AutoResumeDelay != "" {
-				delay, err := time.ParseDuration(budget.AutoResumeDelay)
-				if err != nil {
-					return nil, fmt.Errorf("invalid budget.auto_resume_delay format %q: %w", budget.AutoResumeDelay, err)
-				}
-				cfg.Budget.AutoResumeDelay = delay
-			}
 			if _, exists := budgetMap["check_interval"]; exists {
 				cfg.Budget.CheckInterval = budget.CheckInterval
+			}
+			if _, exists := budgetMap["auto_resume"]; exists {
+				cfg.Budget.AutoResume = budget.AutoResume
+			}
+			if _, exists := budgetMap["max_wait_duration"]; exists && budget.MaxWaitDuration != "" {
+				d, err := time.ParseDuration(budget.MaxWaitDuration)
+				if err != nil {
+					return nil, fmt.Errorf("invalid budget.max_wait_duration format %q: %w", budget.MaxWaitDuration, err)
+				}
+				cfg.Budget.MaxWaitDuration = d
+			}
+			if _, exists := budgetMap["announce_interval"]; exists && budget.AnnounceInterval != "" {
+				d, err := time.ParseDuration(budget.AnnounceInterval)
+				if err != nil {
+					return nil, fmt.Errorf("invalid budget.announce_interval format %q: %w", budget.AnnounceInterval, err)
+				}
+				cfg.Budget.AnnounceInterval = d
+			}
+			if _, exists := budgetMap["safety_buffer"]; exists && budget.SafetyBuffer != "" {
+				d, err := time.ParseDuration(budget.SafetyBuffer)
+				if err != nil {
+					return nil, fmt.Errorf("invalid budget.safety_buffer format %q: %w", budget.SafetyBuffer, err)
+				}
+				cfg.Budget.SafetyBuffer = d
 			}
 		}
 	}
@@ -1312,8 +1335,14 @@ func (c *Config) Validate() error {
 		if !validIntervals[c.Budget.CheckInterval] {
 			return fmt.Errorf("budget.check_interval must be one of: per_wave, per_task, disabled; got %q", c.Budget.CheckInterval)
 		}
-		if c.Budget.AutoResumeDelay < 0 {
-			return fmt.Errorf("budget.auto_resume_delay must be >= 0, got %v", c.Budget.AutoResumeDelay)
+		if c.Budget.MaxWaitDuration < 0 {
+			return fmt.Errorf("budget.max_wait_duration must be >= 0, got %v", c.Budget.MaxWaitDuration)
+		}
+		if c.Budget.AnnounceInterval < 0 {
+			return fmt.Errorf("budget.announce_interval must be >= 0, got %v", c.Budget.AnnounceInterval)
+		}
+		if c.Budget.SafetyBuffer < 0 {
+			return fmt.Errorf("budget.safety_buffer must be >= 0, got %v", c.Budget.SafetyBuffer)
 		}
 	}
 
