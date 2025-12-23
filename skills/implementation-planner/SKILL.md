@@ -363,6 +363,18 @@ conductor:
       tasks: [1, 2, 3]
       rationale: "Why grouped"
 
+# Enables strict validation when strict_rubric: true in .conductor/config.yaml
+planner_compliance:
+  planner_version: "3.0.0"
+  strict_enforcement: true
+  required_features:
+    - dependency_checks
+    - test_commands
+    - documentation_targets
+    - success_criteria
+    - package_guard
+    - data_flow_registry
+
 plan:
   metadata:
     feature_name: "Feature Name"
