@@ -372,8 +372,9 @@ planner_compliance:
     - test_commands
     - documentation_targets
     - success_criteria
-    - package_guard
     - data_flow_registry
+    # Go projects only:
+    # - package_guard
 
 plan:
   metadata:
