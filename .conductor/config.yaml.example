@@ -499,61 +499,61 @@ executor:
 # executor:
 #   enable_claude_classification: true
 
-# Usage Budget configuration (v2.19+)
-# Tracks Claude Code usage within 5-hour billing windows
+# Budget & Rate Limit Auto-Resume (v2.20+)
+# Intelligent rate limit handling with state persistence for long-running plans
 budget:
-  # Enable or disable budget tracking (default: false)
-  enabled: false
+  # Enable or disable budget tracking (default: true)
+  enabled: true
 
-  # Maximum cost in USD before stopping execution
-  # Set to 0 to disable cost limit (default: 0)
-  max_cost_per_run: 0
+  # Enable intelligent wait/exit on rate limit detection (default: true)
+  # When rate limit is hit:
+  #   - If wait <= max_wait_duration: waits with countdown announcements
+  #   - If wait > max_wait_duration: saves state and exits cleanly for later resume
+  auto_resume: true
 
-  # Maximum cost in USD for a single task (warning only)
-  # Set to 0 to disable per-task warning (default: 0)
-  max_cost_per_task: 0
+  # Maximum time to wait for rate limit reset (default: 6h)
+  # If the detected wait time exceeds this, Conductor saves state and exits
+  # Typically session limits are ~5h, so 6h covers most cases
+  # Weekly limits (24h+) trigger save-and-exit
+  max_wait_duration: 6h
 
-  # Warning threshold as percentage of budget (0.0-1.0, default: 0.8)
-  # Example: 0.8 means warn when 80% of max_cost_per_run is used
-  warn_threshold: 0.8
+  # How often to announce countdown during wait (default: 15m)
+  # Announcements go to console and TTS (if enabled)
+  announce_interval: 15m
 
-  # Pause execution instead of failing when rate limited (default: true)
-  # When true, waits auto_resume_delay then retries
-  pause_on_limit: true
-
-  # How long to wait before retrying after rate limit (default: 5m)
-  auto_resume_delay: 5m
-
-  # When to check budget: "per_wave", "per_task", or "disabled" (default: per_wave)
-  check_interval: per_wave
+  # Extra buffer time to wait after reset before resuming (default: 60s)
+  # Helps avoid edge cases where the limit hasn't fully reset
+  safety_buffer: 60s
 
 # Budget Examples
 
-# Example: Enable budget tracking with $10 limit
+# Example: Disable intelligent rate limit handling (fail immediately on rate limit)
 # budget:
 #   enabled: true
-#   max_cost_per_run: 10.00
-#   warn_threshold: 0.8
+#   auto_resume: false
 
-# Example: Warn when tasks cost more than $2
+# Example: Shorter max wait (save-and-exit faster for long waits)
 # budget:
 #   enabled: true
-#   max_cost_per_task: 2.00
+#   auto_resume: true
+#   max_wait_duration: 2h
 
-# Example: Disable pause on rate limit (fail immediately)
+# Example: More frequent countdown announcements
 # budget:
 #   enabled: true
-#   pause_on_limit: false
+#   auto_resume: true
+#   announce_interval: 5m
 
-# Example: Check budget per-task instead of per-wave
+# Example: Longer safety buffer for conservative resume
 # budget:
 #   enabled: true
-#   check_interval: per_task
+#   auto_resume: true
+#   safety_buffer: 5m
 
-# Example: Longer wait on rate limit
-# budget:
-#   enabled: true
-#   auto_resume_delay: 10m
+# Resume paused executions with CLI commands:
+#   conductor budget list-paused    # Show paused executions
+#   conductor budget resume         # Resume all ready executions
+#   conductor budget resume <id>    # Resume specific session
 
 # Validation Examples
 
