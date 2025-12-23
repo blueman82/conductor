@@ -122,7 +122,7 @@ budget:
 
 ## Status
 
-**Production-ready** — 86%+ test coverage, 465+ tests.
+**Production-ready** — 86%+ test coverage, 500+ tests.
 
 ## License
 
