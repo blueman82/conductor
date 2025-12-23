@@ -364,9 +364,10 @@ conductor:
       rationale: "Why grouped"
 
 # Enables strict validation when strict_rubric: true in .conductor/config.yaml
+# NOTE: strict_enforcement: true requires runtime_metadata on EVERY task
 planner_compliance:
   planner_version: "3.0.0"
-  strict_enforcement: true
+  strict_enforcement: false  # Set true only if all tasks have runtime_metadata
   required_features:
     - dependency_checks
     - test_commands
@@ -406,6 +407,14 @@ plan:
 
       test_commands:
         - "go test ./path -run TestName"
+
+      # Required when strict_enforcement: true
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./..."
+            description: "Verify build succeeds"
+        documentation_targets: []  # Optional: doc sections to verify
+        prompt_blocks: []          # Optional: extra agent context
 
       description: |
         ## PHASE 0: DEPENDENCY VERIFICATION (EXECUTE FIRST)
