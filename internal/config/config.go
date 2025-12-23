@@ -477,14 +477,14 @@ func DefaultTTSConfig() TTSConfig {
 func DefaultBudgetConfig() BudgetConfig {
 	return BudgetConfig{
 		Enabled:          false,
-		MaxCostPerRun:    0,    // No limit
-		MaxCostPerTask:   0,    // No limit
-		WarnThreshold:    0.8,  // Warn at 80%
+		MaxCostPerRun:    0,   // No limit
+		MaxCostPerTask:   0,   // No limit
+		WarnThreshold:    0.8, // Warn at 80%
 		CheckInterval:    "per_wave",
-		AutoResume:       true,                // Enabled by default
-		MaxWaitDuration:  6 * time.Hour,       // 6 hours
-		AnnounceInterval: 15 * time.Minute,    // 15 minutes
-		SafetyBuffer:     60 * time.Second,    // 60 seconds
+		AutoResume:       true,             // Enabled by default
+		MaxWaitDuration:  6 * time.Hour,    // 6 hours
+		AnnounceInterval: 15 * time.Minute, // 15 minutes
+		SafetyBuffer:     60 * time.Second, // 60 seconds
 	}
 }
 
