@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/harrison/conductor/internal/budget"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -15,6 +17,9 @@ import (
 type TaskExecutor interface {
 	Execute(ctx context.Context, task models.Task) (models.TaskResult, error)
 }
+
+// ErrBudgetExceeded indicates the budget limit has been exceeded
+var ErrBudgetExceeded = errors.New("budget exceeded")
 
 // WaveExecutor coordinates sequential wave execution with bounded parallelism per wave.
 type WaveExecutor struct {
@@ -26,6 +31,9 @@ type WaveExecutor struct {
 	enforcePackageGuard bool                  // Enable package guard enforcement
 	guardProtocol       *GuardProtocol        // GUARD Protocol for failure prediction
 	anomalyConfig       *AnomalyMonitorConfig // Real-time anomaly detection config (v2.18+)
+	// Budget tracking (v2.19+)
+	budgetTracker *budget.UsageTracker
+	budgetConfig  *config.BudgetConfig
 }
 
 // NewWaveExecutor constructs a WaveExecutor with the provided task executor implementation.
@@ -79,6 +87,57 @@ func (w *WaveExecutor) SetGuardProtocol(guard *GuardProtocol) {
 // This enables real-time anomaly detection during wave execution.
 func (w *WaveExecutor) SetAnomalyConfig(config *AnomalyMonitorConfig) {
 	w.anomalyConfig = config
+}
+
+// SetBudgetTracking configures budget tracking for the wave executor.
+// When enabled, checks budget before each wave and warns/stops if limits exceeded.
+func (w *WaveExecutor) SetBudgetTracking(tracker *budget.UsageTracker, cfg *config.BudgetConfig) {
+	w.budgetTracker = tracker
+	w.budgetConfig = cfg
+}
+
+// checkBudget verifies budget limits before wave execution.
+// Returns an error if budget is exceeded and execution should stop.
+// Logs warnings if approaching budget threshold.
+func (w *WaveExecutor) checkBudget() error {
+	if w.budgetTracker == nil || w.budgetConfig == nil || !w.budgetConfig.Enabled {
+		return nil
+	}
+
+	// Skip if check interval is "disabled"
+	if w.budgetConfig.CheckInterval == "disabled" {
+		return nil
+	}
+
+	status := w.budgetTracker.GetStatus()
+	if status == nil || status.Block == nil {
+		return nil
+	}
+
+	currentCost := status.Block.CostUSD
+
+	// Check against MaxCostPerRun
+	if w.budgetConfig.MaxCostPerRun > 0 {
+		ratio := currentCost / w.budgetConfig.MaxCostPerRun
+
+		// Stop if budget exceeded
+		if ratio >= 1.0 {
+			if w.logger != nil {
+				w.logger.LogBudgetStatus(status)
+			}
+			return fmt.Errorf("budget exceeded: current cost $%.2f exceeds limit $%.2f",
+				currentCost, w.budgetConfig.MaxCostPerRun)
+		}
+
+		// Warn if approaching threshold
+		if ratio >= w.budgetConfig.WarnThreshold {
+			if w.logger != nil {
+				w.logger.LogBudgetWarning(ratio)
+			}
+		}
+	}
+
+	return nil
 }
 
 // ExecutePlan runs the plan's waves sequentially while executing tasks within each wave in parallel.
@@ -227,6 +286,14 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		// Graceful degradation: if GUARD fails, continue with all tasks
 	}
 	// ========== END GUARD PROTOCOL GATE ==========
+
+	// ========== BUDGET GATE ==========
+	if w.budgetConfig != nil && w.budgetConfig.CheckInterval == "per_wave" {
+		if err := w.checkBudget(); err != nil {
+			return skippedResults, fmt.Errorf("budget gate: %w", err)
+		}
+	}
+	// ========== END BUDGET GATE ==========
 
 	// If all tasks were blocked by GUARD, return the blocked results
 	if len(tasksToExecute) == 0 {

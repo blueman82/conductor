@@ -211,6 +211,39 @@ guard:
 - `wave.go`: Gate insertion after task filtering, before semaphore
 - `guard_test.go`: 19 unit tests covering modes and thresholds
 
+### Budget & Rate Limits (v2.20+)
+
+**Intelligent rate limit auto-resume** with state persistence for long-running plans.
+
+**Features:**
+- Parses actual reset time from Claude CLI output (not hardcoded delays)
+- Waits with countdown announcements when within max wait duration
+- Saves execution state and exits cleanly for long waits (>6h)
+- Resume paused executions via CLI commands
+
+**Config** (.conductor/config.yaml):
+```yaml
+budget:
+  enabled: true
+  auto_resume: true           # Enable intelligent wait/exit
+  max_wait_duration: 6h       # Save-and-exit if wait exceeds this
+  announce_interval: 15m      # Countdown announcement frequency
+  safety_buffer: 60s          # Extra wait after reset
+```
+
+**CLI Commands:**
+```bash
+conductor budget list-paused    # Show paused executions
+conductor budget resume         # Resume ready executions
+conductor budget resume <id>    # Resume specific session
+```
+
+**Key Files:**
+- `internal/budget/ratelimit.go`: Parse reset time from CLI patterns
+- `internal/budget/waiter.go`: Smart wait with countdown
+- `internal/budget/state.go`: Execution state persistence
+- `internal/executor/task.go`: Rate limit recovery wrapper
+
 ## Test-Driven Development
 
 **Strict TDD**: Red → Green → Refactor → Commit
@@ -277,7 +310,7 @@ tasks:
 
 ## Production Status
 
-**v2.17.0**: 86%+ test coverage (484+ tests). Complete pipeline with runtime enforcement, GUARD Protocol, and optional TTS.
+**v2.20.0**: 86%+ test coverage (500+ tests). Complete pipeline with runtime enforcement, GUARD Protocol, budget tracking, and optional TTS.
 
 **Major Features**:
 - Multi-agent orchestration with dependency resolution
@@ -305,6 +338,7 @@ tasks:
 - v2.9: Runtime enforcement with test commands, criterion verification, dynamic terminal width
 - v2.14: Optional Orpheus TTS voice feedback for hands-free monitoring
 - v2.17: GUARD Protocol for pre-wave failure prediction
+- v2.20: Intelligent rate limit auto-resume with state persistence
 
 ## Module Path
 

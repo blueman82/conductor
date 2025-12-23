@@ -45,6 +45,13 @@ type Logger interface {
 	LogGuardPrediction(taskNumber string, result interface{})
 	LogAgentSwap(taskNumber string, fromAgent string, toAgent string)
 	LogAnomaly(anomaly interface{})
+
+	// Budget tracking methods (v2.19+)
+	LogBudgetStatus(status interface{})                   // Log current budget status (block info, usage, burn rate)
+	LogBudgetWarning(percentUsed float64)                 // Log warning when approaching budget limit
+	LogRateLimitPause(delay time.Duration)                // Log when pausing due to rate limit
+	LogRateLimitResume()                                  // Log when resuming after rate limit pause
+	LogRateLimitCountdown(remaining, total time.Duration) // Log countdown progress during rate limit wait (v2.20+)
 }
 
 // WaveExecutorInterface defines the behavior required to execute waves.

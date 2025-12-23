@@ -23,6 +23,7 @@ Conductor orchestrates multiple Claude Code agents to execute implementation pla
 - **Multi-File Plans** — Cross-file dependencies, split large plans
 - **Runtime Enforcement** — Test commands, criterion verification
 - **GUARD Protocol** — Pre-wave failure prediction blocks risky tasks
+- **Budget & Rate Limits** — Intelligent auto-resume, state persistence
 - **Voice Feedback** — Optional TTS via local Orpheus server
 
 ## Quick Start
@@ -108,6 +109,10 @@ guard:
 tts:
   enabled: false
   base_url: "http://localhost:5005"
+budget:
+  enabled: true
+  auto_resume: true           # Wait for rate limit reset
+  max_wait_duration: 6h       # Save state if wait exceeds this
 ```
 
 ## Documentation
@@ -117,7 +122,7 @@ tts:
 
 ## Status
 
-**Production-ready** — 86%+ test coverage, 465+ tests.
+**Production-ready** — 86%+ test coverage, 500+ tests.
 
 ## License
 

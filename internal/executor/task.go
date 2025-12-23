@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/budget"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/updater"
@@ -24,6 +26,16 @@ const (
 
 // ErrQualityGateFailed indicates that a task failed quality control after exhausting retries.
 var ErrQualityGateFailed = errors.New("quality control failed after maximum retries")
+
+// ErrRateLimitExit indicates task stopped due to rate limit with save-and-exit
+type ErrRateLimitExit struct {
+	ResumeAt time.Time
+	StateID  string
+}
+
+func (e *ErrRateLimitExit) Error() string {
+	return fmt.Sprintf("rate limited: saved state for resume at %s (ID: %s)", e.ResumeAt.Format(time.RFC3339), e.StateID)
+}
 
 // Reviewer is implemented by quality control components capable of reviewing task output.
 type Reviewer interface {
@@ -175,6 +187,11 @@ type DefaultTaskExecutor struct {
 	EventLogger                 Logger                   // Logger for execution events (task agent invoke, etc.)
 	TaskAgentSelector           *TaskAgentSelector       // Intelligent agent selector for task execution (v2.15+)
 	IntelligentAgentSelection   bool                     // Enable intelligent agent selection when task.Agent is empty
+	BudgetConfig                *config.BudgetConfig     // Budget tracking configuration (v2.19+)
+
+	// Intelligent rate limit handling (v2.20+)
+	Waiter       *budget.RateLimitWaiter // Smart wait with countdown
+	StateManager *budget.StateManager    // Execution state persistence
 
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
@@ -566,8 +583,115 @@ func (te *DefaultTaskExecutor) updateFeedback(task models.Task, attempt int, age
 	return nil
 }
 
+// isRateLimitError checks if an error indicates a Claude API rate limit.
+// Matches common rate limit error patterns from Claude CLI.
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "rate limit") ||
+		strings.Contains(msg, "429") ||
+		strings.Contains(msg, "too many requests") ||
+		strings.Contains(msg, "quota exceeded") ||
+		strings.Contains(msg, "rate_limit_error")
+}
+
+// executeWithRateLimitRecovery wraps task execution with intelligent rate limit handling.
+// If rate limited:
+//   - Parses actual reset time from CLI output
+//   - If wait <= MaxWaitDuration: waits with countdown announcements
+//   - If wait > MaxWaitDuration: saves state and returns ErrRateLimitExit
+func (te *DefaultTaskExecutor) executeWithRateLimitRecovery(ctx context.Context, task models.Task) (models.TaskResult, error) {
+	for {
+		result, err := te.executeTask(ctx, task)
+
+		// Check for rate limit error
+		if !isRateLimitError(err) {
+			return result, err
+		}
+
+		// Parse actual reset time from error message
+		info := budget.ParseRateLimitFromOutput(err.Error())
+		if info == nil {
+			// Fallback: use inferred reset time (5-hour window)
+			info = &budget.RateLimitInfo{
+				DetectedAt: time.Now(),
+				ResetAt:    budget.InferResetTime(),
+				LimitType:  budget.LimitTypeSession,
+				RawMessage: err.Error(),
+				Source:     "error",
+			}
+		}
+
+		// Check if we have a waiter configured
+		if te.Waiter == nil {
+			// No waiter - fail immediately (backward compat)
+			return result, err
+		}
+
+		// Check if we should wait or save-and-exit
+		if !te.Waiter.ShouldWait(info) {
+			// Wait too long - save state and exit
+			if te.StateManager != nil {
+				state := &budget.ExecutionState{
+					SessionID:     budget.GenerateSessionID(),
+					PlanFile:      te.PlanFile,
+					RateLimitInfo: info,
+					CurrentWave:   0, // Will be set by wave executor
+					PausedAt:      time.Now(),
+					ResumeAt:      info.ResetAt,
+					Status:        budget.StatusPaused,
+				}
+				if saveErr := te.StateManager.Save(state); saveErr != nil {
+					// Log warning but still return the rate limit error
+					if te.Logger != nil {
+						te.Logger.Warnf("Failed to save execution state: %v", saveErr)
+					}
+				}
+				return result, &ErrRateLimitExit{
+					ResumeAt: info.ResetAt,
+					StateID:  state.SessionID,
+				}
+			}
+			return result, err
+		}
+
+		// Log the wait
+		if te.EventLogger != nil {
+			te.EventLogger.LogRateLimitPause(info.TimeUntilReset())
+		}
+
+		// Wait for reset with countdown announcements
+		if waitErr := te.Waiter.WaitForReset(ctx, info); waitErr != nil {
+			// Context cancelled during wait
+			result.Status = models.StatusFailed
+			result.Error = waitErr
+			return result, waitErr
+		}
+
+		// Log resume
+		if te.EventLogger != nil {
+			te.EventLogger.LogRateLimitResume()
+		}
+
+		// Retry the task
+	}
+}
+
 // Execute runs an individual task, handling agent invocation, quality control, and plan updates.
 func (te *DefaultTaskExecutor) Execute(ctx context.Context, task models.Task) (models.TaskResult, error) {
+	// If budget auto-resume is enabled, use intelligent recovery wrapper
+	if te.BudgetConfig != nil && te.BudgetConfig.Enabled && te.BudgetConfig.AutoResume {
+		return te.executeWithRateLimitRecovery(ctx, task)
+	}
+
+	// Standard execution path
+	return te.executeTask(ctx, task)
+}
+
+// executeTask is the core task execution logic (refactored from original Execute).
+func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task) (models.TaskResult, error) {
 	result := models.TaskResult{Task: task}
 
 	// Determine which file to lock and update - priority order:

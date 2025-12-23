@@ -42,6 +42,7 @@ and orchestrates parallel execution of tasks across multiple agents.`,
 	cmd.AddCommand(NewValidateCommand())
 	cmd.AddCommand(NewLearningCommand())
 	cmd.AddCommand(NewObserveCommand())
+	cmd.AddCommand(NewBudgetCommand())
 
 	return cmd
 }

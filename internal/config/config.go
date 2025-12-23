@@ -247,6 +247,40 @@ type ValidationConfig struct {
 	StrictRubric bool `yaml:"strict_rubric"`
 }
 
+// BudgetConfig controls usage budget tracking and enforcement
+type BudgetConfig struct {
+	// Enabled enables budget tracking (default: false for zero behavior change)
+	Enabled bool `yaml:"enabled"`
+
+	// MaxCostPerRun is the maximum cost in USD before stopping execution
+	// Set to 0 to disable cost limit
+	MaxCostPerRun float64 `yaml:"max_cost_per_run"`
+
+	// MaxCostPerTask is the maximum cost in USD for a single task (warning only)
+	// Set to 0 to disable per-task warning
+	MaxCostPerTask float64 `yaml:"max_cost_per_task"`
+
+	// WarnThreshold triggers a warning when this percentage of budget is used (0.0-1.0)
+	// Example: 0.8 means warn at 80% of max_cost_per_run
+	WarnThreshold float64 `yaml:"warn_threshold"`
+
+	// CheckInterval specifies when to check budget: "per_wave", "per_task", or "disabled"
+	CheckInterval string `yaml:"check_interval"`
+
+	// Intelligent Rate Limit Auto-Resume (v2.20+)
+	// AutoResume enables intelligent wait/exit on rate limit detection
+	AutoResume bool `yaml:"auto_resume"`
+
+	// MaxWaitDuration is the maximum time to wait for rate limit reset (default: 6h)
+	MaxWaitDuration time.Duration `yaml:"max_wait_duration"`
+
+	// AnnounceInterval is the countdown announcement interval (default: 15m)
+	AnnounceInterval time.Duration `yaml:"announce_interval"`
+
+	// SafetyBuffer is extra wait time after reset (default: 60s)
+	SafetyBuffer time.Duration `yaml:"safety_buffer"`
+}
+
 // TTSConfig controls text-to-speech functionality
 type TTSConfig struct {
 	// Enabled enables TTS functionality (default: false for zero behavior change)
@@ -370,6 +404,9 @@ type Config struct {
 
 	// Guard contains GUARD Protocol configuration
 	Guard GuardConfig `yaml:"guard"`
+
+	// Budget controls usage budget tracking and enforcement
+	Budget BudgetConfig `yaml:"budget"`
 }
 
 // DefaultGuardConfig returns GuardConfig with sensible default values
@@ -432,6 +469,22 @@ func DefaultTTSConfig() TTSConfig {
 		Model:   "orpheus",
 		Voice:   "tara",
 		Timeout: 30 * time.Second,
+	}
+}
+
+// DefaultBudgetConfig returns BudgetConfig with sensible default values
+// Budget is DISABLED by default to ensure zero behavior change unless explicitly enabled
+func DefaultBudgetConfig() BudgetConfig {
+	return BudgetConfig{
+		Enabled:          false,
+		MaxCostPerRun:    0,   // No limit
+		MaxCostPerTask:   0,   // No limit
+		WarnThreshold:    0.8, // Warn at 80%
+		CheckInterval:    "per_wave",
+		AutoResume:       true,             // Enabled by default
+		MaxWaitDuration:  6 * time.Hour,    // 6 hours
+		AnnounceInterval: 15 * time.Minute, // 15 minutes
+		SafetyBuffer:     60 * time.Second, // 60 seconds
 	}
 }
 
@@ -509,8 +562,9 @@ func DefaultConfig() *Config {
 			EnableClaudeClassification:  false,
 			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
-		TTS:   DefaultTTSConfig(),
-		Guard: DefaultGuardConfig(),
+		TTS:    DefaultTTSConfig(),
+		Guard:  DefaultGuardConfig(),
+		Budget: DefaultBudgetConfig(),
 	}
 }
 
@@ -594,6 +648,17 @@ func LoadConfig(path string) (*Config, error) {
 		Voice   string `yaml:"voice"`
 		Timeout string `yaml:"timeout"`
 	}
+	type yamlBudgetConfig struct {
+		Enabled          bool    `yaml:"enabled"`
+		MaxCostPerRun    float64 `yaml:"max_cost_per_run"`
+		MaxCostPerTask   float64 `yaml:"max_cost_per_task"`
+		WarnThreshold    float64 `yaml:"warn_threshold"`
+		CheckInterval    string  `yaml:"check_interval"`
+		AutoResume       bool    `yaml:"auto_resume"`
+		MaxWaitDuration  string  `yaml:"max_wait_duration"`
+		AnnounceInterval string  `yaml:"announce_interval"`
+		SafetyBuffer     string  `yaml:"safety_buffer"`
+	}
 	type yamlConfig struct {
 		MaxConcurrency int                  `yaml:"max_concurrency"`
 		Timeout        string               `yaml:"timeout"`
@@ -611,6 +676,7 @@ func LoadConfig(path string) (*Config, error) {
 		Executor       ExecutorConfig       `yaml:"executor"`
 		TTS            yamlTTSConfig        `yaml:"tts"`
 		Guard          GuardConfig          `yaml:"guard"`
+		Budget         yamlBudgetConfig     `yaml:"budget"`
 	}
 
 	var yamlCfg yamlConfig
@@ -956,6 +1022,52 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.Guard.AutoSelectAgent = guard.AutoSelectAgent
 			}
 		}
+
+		// Merge Budget config
+		if budgetSection, exists := rawMap["budget"]; exists && budgetSection != nil {
+			budget := yamlCfg.Budget
+			budgetMap, _ := budgetSection.(map[string]interface{})
+
+			if _, exists := budgetMap["enabled"]; exists {
+				cfg.Budget.Enabled = budget.Enabled
+			}
+			if _, exists := budgetMap["max_cost_per_run"]; exists {
+				cfg.Budget.MaxCostPerRun = budget.MaxCostPerRun
+			}
+			if _, exists := budgetMap["max_cost_per_task"]; exists {
+				cfg.Budget.MaxCostPerTask = budget.MaxCostPerTask
+			}
+			if _, exists := budgetMap["warn_threshold"]; exists {
+				cfg.Budget.WarnThreshold = budget.WarnThreshold
+			}
+			if _, exists := budgetMap["check_interval"]; exists {
+				cfg.Budget.CheckInterval = budget.CheckInterval
+			}
+			if _, exists := budgetMap["auto_resume"]; exists {
+				cfg.Budget.AutoResume = budget.AutoResume
+			}
+			if _, exists := budgetMap["max_wait_duration"]; exists && budget.MaxWaitDuration != "" {
+				d, err := time.ParseDuration(budget.MaxWaitDuration)
+				if err != nil {
+					return nil, fmt.Errorf("invalid budget.max_wait_duration format %q: %w", budget.MaxWaitDuration, err)
+				}
+				cfg.Budget.MaxWaitDuration = d
+			}
+			if _, exists := budgetMap["announce_interval"]; exists && budget.AnnounceInterval != "" {
+				d, err := time.ParseDuration(budget.AnnounceInterval)
+				if err != nil {
+					return nil, fmt.Errorf("invalid budget.announce_interval format %q: %w", budget.AnnounceInterval, err)
+				}
+				cfg.Budget.AnnounceInterval = d
+			}
+			if _, exists := budgetMap["safety_buffer"]; exists && budget.SafetyBuffer != "" {
+				d, err := time.ParseDuration(budget.SafetyBuffer)
+				if err != nil {
+					return nil, fmt.Errorf("invalid budget.safety_buffer format %q: %w", budget.SafetyBuffer, err)
+				}
+				cfg.Budget.SafetyBuffer = d
+			}
+		}
 	}
 
 	// Apply environment variable overrides (highest priority)
@@ -1207,6 +1319,30 @@ func (c *Config) Validate() error {
 		// Validate min_history_sessions is non-negative
 		if c.Guard.MinHistorySessions < 0 {
 			return fmt.Errorf("guard.min_history_sessions must be >= 0, got %d", c.Guard.MinHistorySessions)
+		}
+	}
+
+	// Validate Budget configuration
+	if c.Budget.Enabled {
+		if c.Budget.WarnThreshold < 0 || c.Budget.WarnThreshold > 1 {
+			return fmt.Errorf("budget.warn_threshold must be between 0 and 1, got %f", c.Budget.WarnThreshold)
+		}
+		validIntervals := map[string]bool{
+			"per_wave": true,
+			"per_task": true,
+			"disabled": true,
+		}
+		if !validIntervals[c.Budget.CheckInterval] {
+			return fmt.Errorf("budget.check_interval must be one of: per_wave, per_task, disabled; got %q", c.Budget.CheckInterval)
+		}
+		if c.Budget.MaxWaitDuration < 0 {
+			return fmt.Errorf("budget.max_wait_duration must be >= 0, got %v", c.Budget.MaxWaitDuration)
+		}
+		if c.Budget.AnnounceInterval < 0 {
+			return fmt.Errorf("budget.announce_interval must be >= 0, got %v", c.Budget.AnnounceInterval)
+		}
+		if c.Budget.SafetyBuffer < 0 {
+			return fmt.Errorf("budget.safety_buffer must be >= 0, got %v", c.Budget.SafetyBuffer)
 		}
 	}
 

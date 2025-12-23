@@ -95,3 +95,33 @@ func (l *TTSLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent st
 func (l *TTSLogger) LogAnomaly(anomaly interface{}) {
 	l.announcer.Anomaly(anomaly)
 }
+
+// LogBudgetStatus is a no-op implementation.
+// Budget status announcements are not implemented for TTS to reduce noise.
+func (l *TTSLogger) LogBudgetStatus(status interface{}) {
+	// No-op: budget status is too frequent for voice announcements
+}
+
+// LogBudgetWarning is a no-op implementation.
+// Budget warnings could be announced in the future if needed.
+func (l *TTSLogger) LogBudgetWarning(percentUsed float64) {
+	// No-op: could announce "Budget at N percent" if desired
+}
+
+// LogRateLimitPause is a no-op implementation.
+// Rate limit pauses could be announced in the future if needed.
+func (l *TTSLogger) LogRateLimitPause(delay time.Duration) {
+	// No-op: could announce "Pausing for rate limit" if desired
+}
+
+// LogRateLimitResume is a no-op implementation.
+// Rate limit resumes could be announced in the future if needed.
+func (l *TTSLogger) LogRateLimitResume() {
+	// No-op: could announce "Resuming after rate limit" if desired
+}
+
+// LogRateLimitCountdown is a no-op implementation.
+// Rate limit countdown could be announced in the future if needed.
+func (l *TTSLogger) LogRateLimitCountdown(remaining, total time.Duration) {
+	// No-op: could announce countdown progress if desired
+}

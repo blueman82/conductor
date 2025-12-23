@@ -3,6 +3,7 @@ package tts
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/harrison/conductor/internal/models"
 )
@@ -251,6 +252,58 @@ func (a *Announcer) Anomaly(anomaly interface{}) {
 		msg = fmt.Sprintf("Anomaly detected: %s", wa.GetDescription())
 	}
 
+	a.client.Speak(msg)
+}
+
+// BudgetWarning announces when approaching budget limit.
+func (a *Announcer) BudgetWarning(percentUsed float64) {
+	msg := fmt.Sprintf("Warning: %.0f percent of budget used", percentUsed*100)
+	a.client.Speak(msg)
+}
+
+// RateLimitPause announces when pausing due to rate limit.
+func (a *Announcer) RateLimitPause(delay time.Duration) {
+	minutes := int(delay.Minutes())
+	if minutes > 0 {
+		msg := fmt.Sprintf("Rate limited. Pausing for %d minutes", minutes)
+		a.client.Speak(msg)
+	} else {
+		msg := fmt.Sprintf("Rate limited. Pausing for %d seconds", int(delay.Seconds()))
+		a.client.Speak(msg)
+	}
+}
+
+// RateLimitResume announces when resuming after rate limit pause.
+func (a *Announcer) RateLimitResume() {
+	a.client.Speak("Rate limit cleared. Resuming execution")
+}
+
+// RateLimitCountdown announces countdown progress during rate limit wait.
+// Called periodically (e.g., every 15 minutes) to keep user informed.
+func (a *Announcer) RateLimitCountdown(remaining, total time.Duration) {
+	if remaining <= 0 {
+		a.client.Speak("Rate limit cleared. Resuming shortly")
+		return
+	}
+
+	// Format remaining time in human-readable form
+	var timeStr string
+	hours := int(remaining.Hours())
+	minutes := int(remaining.Minutes()) % 60
+
+	if hours > 0 {
+		if minutes > 0 {
+			timeStr = fmt.Sprintf("%d hours and %d minutes", hours, minutes)
+		} else {
+			timeStr = fmt.Sprintf("%d hours", hours)
+		}
+	} else if minutes > 0 {
+		timeStr = fmt.Sprintf("%d minutes", minutes)
+	} else {
+		timeStr = "less than a minute"
+	}
+
+	msg := fmt.Sprintf("Rate limit wait: %s remaining", timeStr)
 	a.client.Speak(msg)
 }
 

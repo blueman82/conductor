@@ -499,6 +499,62 @@ executor:
 # executor:
 #   enable_claude_classification: true
 
+# Usage Budget configuration (v2.19+)
+# Tracks Claude Code usage within 5-hour billing windows
+budget:
+  # Enable or disable budget tracking (default: false)
+  enabled: false
+
+  # Maximum cost in USD before stopping execution
+  # Set to 0 to disable cost limit (default: 0)
+  max_cost_per_run: 0
+
+  # Maximum cost in USD for a single task (warning only)
+  # Set to 0 to disable per-task warning (default: 0)
+  max_cost_per_task: 0
+
+  # Warning threshold as percentage of budget (0.0-1.0, default: 0.8)
+  # Example: 0.8 means warn when 80% of max_cost_per_run is used
+  warn_threshold: 0.8
+
+  # Pause execution instead of failing when rate limited (default: true)
+  # When true, waits auto_resume_delay then retries
+  pause_on_limit: true
+
+  # How long to wait before retrying after rate limit (default: 5m)
+  auto_resume_delay: 5m
+
+  # When to check budget: "per_wave", "per_task", or "disabled" (default: per_wave)
+  check_interval: per_wave
+
+# Budget Examples
+
+# Example: Enable budget tracking with $10 limit
+# budget:
+#   enabled: true
+#   max_cost_per_run: 10.00
+#   warn_threshold: 0.8
+
+# Example: Warn when tasks cost more than $2
+# budget:
+#   enabled: true
+#   max_cost_per_task: 2.00
+
+# Example: Disable pause on rate limit (fail immediately)
+# budget:
+#   enabled: true
+#   pause_on_limit: false
+
+# Example: Check budget per-task instead of per-wave
+# budget:
+#   enabled: true
+#   check_interval: per_task
+
+# Example: Longer wait on rate limit
+# budget:
+#   enabled: true
+#   auto_resume_delay: 10m
+
 # Validation Examples
 
 # Example: Strict mode - fail validation if key_points exceed success_criteria
