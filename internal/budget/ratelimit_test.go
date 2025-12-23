@@ -30,34 +30,29 @@ func TestParseRateLimitFromOutput_UnixTimestamp(t *testing.T) {
 
 func TestParseRateLimitFromOutput_HumanTime(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		expectedHr  int
-		shouldWrap  bool
+		name       string
+		input      string
+		expectedHr int
 	}{
 		{
 			"afternoon time",
-			"Your limit will reset at 2pm (America/New_York)",
+			"rate limit - Your limit will reset at 2pm (America/New_York)",
 			14,
-			false,
 		},
 		{
 			"morning time",
-			"Your limit will reset at 9am (America/New_York)",
+			"usage limit - Your limit will reset at 9am (America/New_York)",
 			9,
-			false,
 		},
 		{
 			"midnight",
-			"Your limit will reset at 12am (America/New_York)",
+			"429 error - Your limit will reset at 12am (America/New_York)",
 			0,
-			false,
 		},
 		{
 			"noon",
-			"Your limit will reset at 12pm (America/New_York)",
+			"too many requests - Your limit will reset at 12pm (America/New_York)",
 			12,
-			false,
 		},
 	}
 
@@ -556,7 +551,7 @@ func TestParseRateLimitFromOutput_MultiplePatterns(t *testing.T) {
 
 func TestHumanTimePattern_TimezoneFailure(t *testing.T) {
 	// Test with invalid timezone - should fallback to UTC
-	input := "Your limit will reset at 2pm (Invalid/Timezone)"
+	input := "rate limit - Your limit will reset at 2pm (Invalid/Timezone)"
 	info := ParseRateLimitFromOutput(input)
 
 	if info == nil {
@@ -583,21 +578,21 @@ func TestParseRateLimitFromOutput_EdgeCases(t *testing.T) {
 		{
 			"multiple spaces in retry pattern",
 			"rate limit hit, retry in  300  seconds",
-			false, // Regex requires single space
+			true, // \s+ allows multiple spaces
 		},
 		{
 			"tab instead of space",
-			"retry in\t300 seconds",
-			false, // Regex requires space, not tab
+			"rate limit hit, retry in\t300 seconds",
+			true, // \s+ includes tabs
 		},
 		{
 			"no space before number",
-			"retryafter300s",
+			"rate limit retryafter300s",
 			false, // Regex requires space after "in/after"
 		},
 		{
 			"valid single space",
-			"retry in 300 seconds",
+			"rate limit, retry in 300 seconds",
 			true,
 		},
 	}
@@ -662,12 +657,12 @@ func TestRetrySecondsPattern_Variations(t *testing.T) {
 		input    string
 		expected int64
 	}{
-		{"retry in seconds", "retry in 300 seconds", 300},
-		{"retry after seconds", "retry after 600 seconds", 600},
-		{"retry in second (singular)", "retry in 1 second", 1},
-		{"retry after second", "retry after 1 second", 1},
-		{"retry in s", "retry in 120s", 120},
-		{"retry after s", "retry after 60s", 60},
+		{"retry in seconds", "rate limit, retry in 300 seconds", 300},
+		{"retry after seconds", "rate limit, retry after 600 seconds", 600},
+		{"retry in second (singular)", "rate limit, retry in 1 second", 1},
+		{"retry after second", "rate limit, retry after 1 second", 1},
+		{"retry in s", "rate limit, retry in 120s", 120},
+		{"retry after s", "rate limit, retry after 60s", 60},
 	}
 
 	for _, tt := range tests {
