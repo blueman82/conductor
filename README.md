@@ -23,6 +23,7 @@ Conductor orchestrates multiple Claude Code agents to execute implementation pla
 - **Multi-File Plans** — Cross-file dependencies, split large plans
 - **Runtime Enforcement** — Test commands, criterion verification
 - **GUARD Protocol** — Pre-wave failure prediction blocks risky tasks
+- **Budget & Rate Limits** — Intelligent auto-resume, state persistence
 - **Voice Feedback** — Optional TTS via local Orpheus server
 
 ## Quick Start
