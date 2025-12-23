@@ -628,3 +628,18 @@ func (fl *FileLogger) LogRateLimitResume() {
 	message := fmt.Sprintf("[%s] [RATE LIMIT] Resuming execution\n", ts)
 	fl.writeRunLog(message)
 }
+
+// LogRateLimitCountdown logs countdown progress during rate limit wait.
+// Format: "[HH:MM:SS] [RATE LIMIT] Countdown: Xs remaining (Y% complete)"
+func (fl *FileLogger) LogRateLimitCountdown(remaining, total time.Duration) {
+	// Rate limit countdown is at INFO level
+	if !fl.shouldLog("info") {
+		return
+	}
+
+	ts := time.Now().Format("15:04:05")
+	pct := 100.0 * (1.0 - remaining.Seconds()/total.Seconds())
+	message := fmt.Sprintf("[%s] [RATE LIMIT] Countdown: %.1fs remaining (%.0f%% complete)\n",
+		ts, remaining.Seconds(), pct)
+	fl.writeRunLog(message)
+}

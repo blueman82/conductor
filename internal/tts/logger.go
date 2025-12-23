@@ -119,3 +119,9 @@ func (l *TTSLogger) LogRateLimitPause(delay time.Duration) {
 func (l *TTSLogger) LogRateLimitResume() {
 	// No-op: could announce "Resuming after rate limit" if desired
 }
+
+// LogRateLimitCountdown is a no-op implementation.
+// Rate limit countdown could be announced in the future if needed.
+func (l *TTSLogger) LogRateLimitCountdown(remaining, total time.Duration) {
+	// No-op: could announce countdown progress if desired
+}

@@ -1416,6 +1416,33 @@ func (cl *ConsoleLogger) LogRateLimitResume() {
 	cl.writer.Write([]byte(message))
 }
 
+func (cl *ConsoleLogger) LogRateLimitCountdown(remaining, total time.Duration) {
+	if cl.writer == nil {
+		return
+	}
+	if !cl.shouldLog("info") {
+		return
+	}
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+	ts := timestamp()
+
+	// Calculate percentage complete
+	pct := 100.0 * (1.0 - remaining.Seconds()/total.Seconds())
+
+	var message string
+	if cl.colorOutput {
+		// Yellow for countdown to indicate waiting
+		prefix := color.New(color.FgYellow).Sprint("[RATE LIMIT]")
+		message = fmt.Sprintf("[%s] %s ⏳ %s remaining (%.0f%% complete)\n",
+			ts, prefix, remaining.Round(time.Second), pct)
+	} else {
+		message = fmt.Sprintf("[%s] [RATE LIMIT] ⏳ %s remaining (%.0f%% complete)\n",
+			ts, remaining.Round(time.Second), pct)
+	}
+	cl.writer.Write([]byte(message))
+}
+
 // Box drawing characters for rich output formatting
 const (
 	boxTopLeft     = "┌"
@@ -2313,7 +2340,8 @@ func (n *NoOpLogger) LogDocTargetVerifications(entries []models.DocTargetResult)
 }
 
 // Budget tracking methods (v2.19+)
-func (n *NoOpLogger) LogBudgetStatus(status interface{})    {}
-func (n *NoOpLogger) LogBudgetWarning(percentUsed float64)  {}
-func (n *NoOpLogger) LogRateLimitPause(delay time.Duration) {}
-func (n *NoOpLogger) LogRateLimitResume()                   {}
+func (n *NoOpLogger) LogBudgetStatus(status interface{})                   {}
+func (n *NoOpLogger) LogBudgetWarning(percentUsed float64)                 {}
+func (n *NoOpLogger) LogRateLimitPause(delay time.Duration)                {}
+func (n *NoOpLogger) LogRateLimitResume()                                  {}
+func (n *NoOpLogger) LogRateLimitCountdown(remaining, total time.Duration) {}

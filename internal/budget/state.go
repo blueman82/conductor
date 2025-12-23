@@ -15,10 +15,10 @@ import (
 type ExecutionStatus string
 
 const (
-	StatusPaused   ExecutionStatus = "paused"
-	StatusReady    ExecutionStatus = "ready"   // Reset time has passed
-	StatusResumed  ExecutionStatus = "resumed" // Already resumed
-	StatusExpired  ExecutionStatus = "expired" // Too old to resume
+	StatusPaused  ExecutionStatus = "paused"
+	StatusReady   ExecutionStatus = "ready"   // Reset time has passed
+	StatusResumed ExecutionStatus = "resumed" // Already resumed
+	StatusExpired ExecutionStatus = "expired" // Too old to resume
 )
 
 // ExecutionState represents a paused execution that can be resumed
