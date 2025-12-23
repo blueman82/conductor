@@ -278,6 +278,35 @@ func (a *Announcer) RateLimitResume() {
 	a.client.Speak("Rate limit cleared. Resuming execution")
 }
 
+// RateLimitCountdown announces countdown progress during rate limit wait.
+// Called periodically (e.g., every 15 minutes) to keep user informed.
+func (a *Announcer) RateLimitCountdown(remaining, total time.Duration) {
+	if remaining <= 0 {
+		a.client.Speak("Rate limit cleared. Resuming shortly")
+		return
+	}
+
+	// Format remaining time in human-readable form
+	var timeStr string
+	hours := int(remaining.Hours())
+	minutes := int(remaining.Minutes()) % 60
+
+	if hours > 0 {
+		if minutes > 0 {
+			timeStr = fmt.Sprintf("%d hours and %d minutes", hours, minutes)
+		} else {
+			timeStr = fmt.Sprintf("%d hours", hours)
+		}
+	} else if minutes > 0 {
+		timeStr = fmt.Sprintf("%d minutes", minutes)
+	} else {
+		timeStr = "less than a minute"
+	}
+
+	msg := fmt.Sprintf("Rate limit wait: %s remaining", timeStr)
+	a.client.Speak(msg)
+}
+
 // joinAgents creates a human-readable list of agents ("a, b, and c").
 func joinAgents(agents []string) string {
 	if len(agents) == 0 {
