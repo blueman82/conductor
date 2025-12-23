@@ -16,12 +16,14 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [conductor run](#conductor-run)
   - [Learning Commands](#learning-commands)
   - [Observe Commands](#observe-commands-agent-watch)
+  - [Budget Commands](#budget-commands)
 - [Configuration](#configuration)
   - [Quality Control Settings](#quality-control)
   - [Feedback Storage Settings](#dual-feedback-storage-v210)
   - [Learning Settings](#configuration-learning)
   - [Integration Tasks](#integration-tasks-v250)
   - [GUARD Protocol](#guard-protocol-v217)
+  - [Budget & Rate Limits](#budget--rate-limits-v220)
 - [Multi-File Plans & Objective Splitting](#multi-file-plans--objective-splitting)
   - [Core Concepts](#core-concepts)
   - [Usage Examples](#multi-file-usage-examples)
@@ -73,23 +75,23 @@ Download a pre-built binary from [GitHub Releases](https://github.com/blueman82/
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.17.0/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.20.0/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v2.17.0/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.20.0/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux
-curl -L https://github.com/blueman82/conductor/releases/download/v2.17.0/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v2.20.0/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Verify installation
 conductor --version
-# v2.17.0
+# v2.20.0
 ```
 
 **Benefits of using pre-built binaries:**
@@ -1125,6 +1127,50 @@ conductor observe ingest --watch              # Run as daemon
 conductor observe ingest --watch --verbose    # Verbose daemon mode
 ```
 
+### Budget Commands
+
+Commands for managing rate limit state and resuming paused executions.
+
+#### `conductor budget list-paused`
+
+Lists all paused execution states waiting for rate limit reset.
+
+**Usage:**
+```bash
+conductor budget list-paused
+```
+
+**Example Output:**
+```
+Paused Executions:
+  Session: abc123def456
+  Plan: implementation-plan.md
+  Status: paused
+  Paused At: 2025-01-15 14:30:00
+  Resume At: 2025-01-15 19:30:00 (in 5h 0m)
+  Completed: 8/15 tasks
+  Current Wave: 3
+```
+
+#### `conductor budget resume`
+
+Resumes paused executions that are ready (rate limit window expired).
+
+**Usage:**
+```bash
+# Resume all ready executions
+conductor budget resume
+
+# Resume specific session by ID
+conductor budget resume abc123def456
+```
+
+**Behavior:**
+- Checks if `ResumeAt` time has passed
+- Loads saved execution state
+- Continues from saved wave with completed tasks skipped
+- Cleans up state file after successful completion
+
 ### Other Commands
 
 #### `conductor --version`
@@ -2076,6 +2122,118 @@ GUARD is designed to never block execution due to its own errors:
 🟡 Task 2 "Complex refactor" - GUARD: 0.45 failure probability (moderate risk)
 🔴 Task 3 "Known problematic" - GUARD: 0.85 failure probability (HIGH RISK - blocking)
 ```
+
+### Budget & Rate Limits (v2.20+)
+
+Intelligent rate limit auto-resume with state persistence for long-running plans.
+
+**Key Features:**
+- Parses actual reset time from Claude CLI output (not hardcoded delays)
+- Waits with countdown announcements when within max wait duration
+- Saves execution state and exits cleanly for long waits (>6h by default)
+- Resume paused executions via CLI commands
+
+**Configuration:**
+
+```yaml
+budget:
+  # Enable budget tracking (default: true)
+  enabled: true
+
+  # Enable intelligent wait/exit on rate limits (default: true)
+  auto_resume: true
+
+  # Maximum time to wait for rate limit reset (default: 6h)
+  # If wait exceeds this, saves state and exits cleanly
+  max_wait_duration: 6h
+
+  # How often to announce countdown during wait (default: 15m)
+  announce_interval: 15m
+
+  # Extra buffer after reset before resuming (default: 60s)
+  safety_buffer: 60s
+```
+
+**How It Works:**
+
+1. **Rate Limit Detection**: When Claude CLI returns a rate limit error, Conductor parses the actual reset time from the output (unix timestamp, human-readable time, or retry headers)
+
+2. **Wait Decision**:
+   - If wait ≤ `max_wait_duration`: Wait with periodic countdown announcements
+   - If wait > `max_wait_duration`: Save state and exit (typically weekly limits)
+
+3. **State Persistence**: Saves to `.conductor/state/<session-id>.json`:
+   - Current wave and completed tasks
+   - Rate limit info with reset time
+   - Plan file path for resume
+
+4. **Resume**: Use `conductor budget resume` to continue paused executions
+
+**Rate Limit Patterns Detected:**
+
+| Pattern | Example | Type |
+|---------|---------|------|
+| Unix timestamp | `Claude AI usage limit reached\|1705420800` | Session |
+| Human-readable | `Your limit will reset at 2pm (America/New_York)` | Session |
+| Retry header | `retry in 300 seconds` | Session |
+| JSON error | `{"error":"429 rate_limit_error", "retry_after": 300}` | API |
+| Weekly limit | Wait > 24 hours | Weekly |
+
+**Limit Types:**
+
+| Type | Typical Wait | Behavior |
+|------|--------------|----------|
+| `session` | ~5 hours | Wait with countdown if within max_wait_duration |
+| `weekly` | Days | Save state, exit, resume later |
+| `unknown` | Varies | Falls back to 5-hour default |
+
+**CLI Commands:**
+
+```bash
+# List paused executions
+conductor budget list-paused
+
+# Resume all ready executions
+conductor budget resume
+
+# Resume specific session
+conductor budget resume <session-id>
+```
+
+**Example Workflow:**
+
+```bash
+# Start a long plan
+conductor run large-plan.md --verbose
+
+# ... 3 hours in, rate limit hit ...
+# Conductor detects: reset in 5 hours
+# Since 5h < 6h (max_wait_duration), it waits with countdown:
+#   "Rate limit hit. Waiting 5h 0m until reset..."
+#   "Rate limit countdown: 4h 45m remaining..."
+#   "Rate limit countdown: 4h 30m remaining..."
+
+# ... or if reset would be in 24+ hours (weekly limit) ...
+# Conductor saves state and exits:
+#   "Wait time (24h) exceeds max (6h). Saving state..."
+#   "Execution paused. Resume with: conductor budget resume abc123"
+
+# Later, resume when ready
+conductor budget resume
+```
+
+**TTS Announcements (if enabled):**
+
+When TTS is enabled, Conductor announces rate limit countdowns:
+- "Rate limit hit. Waiting 5 hours until reset."
+- "Rate limit countdown: 4 hours 30 minutes remaining."
+- "Rate limit expired. Resuming execution."
+
+**Graceful Degradation:**
+
+- If parsing fails → Falls back to 5-hour default wait
+- If state save fails → Logs error, continues waiting
+- If resume fails → Reports error with troubleshooting info
 
 ### Output & Logs
 
