@@ -586,9 +586,9 @@ func TestParseRateLimitFromOutput_EdgeCases(t *testing.T) {
 			true, // \s+ includes tabs
 		},
 		{
-			"no space before number",
+			"no space before number - still matches generic",
 			"rate limit retryafter300s",
-			false, // Regex requires space after "in/after"
+			true, // Contains "rate limit" so triggers generic fallback even though retry pattern doesn't match
 		},
 		{
 			"valid single space",
