@@ -20,9 +20,19 @@ planner_compliance:
     - test_commands
     - documentation_targets
     - success_criteria
-    - package_guard
     - data_flow_registry
+    # Go projects only:
+    # - package_guard
 ```
+
+**Language-Specific Features:**
+| Feature | Languages |
+|---------|-----------|
+| `package_guard` | Go only (prevents concurrent package modifications) |
+| `dependency_checks` | All |
+| `test_commands` | All |
+| `success_criteria` | All |
+| `data_flow_registry` | All |
 
 **Fields:**
 | Field | Purpose |
