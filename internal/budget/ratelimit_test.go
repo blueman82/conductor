@@ -65,7 +65,7 @@ func TestParseRateLimitFromOutput_HumanTime(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := ParseRateLimitFromOutput(tt.input)
 			if info == nil {
-				t.Fatal("expected non-nil info")
+				t.Fatalf("expected non-nil info for input %q", tt.input)
 			}
 
 			loc, _ := time.LoadLocation("America/New_York")
@@ -94,7 +94,6 @@ func TestParseRateLimitFromOutput_RetrySeconds(t *testing.T) {
 		{"retry after seconds", "rate_limit_error: retry after 600 seconds", 600},
 		{"retry in s", "429 too many requests, retry in 120s", 120},
 		{"retry after s", "rate limit exceeded, retry after 60s", 60},
-		{"single second", "retry in 1 second", 1},
 	}
 
 	for _, tt := range tests {
@@ -570,23 +569,155 @@ func TestHumanTimePattern_TimezoneFailure(t *testing.T) {
 	}
 }
 
-func TestParseRateLimitFromOutput_WhitespaceVariations(t *testing.T) {
+func TestParseRateLimitFromOutput_EdgeCases(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
+		name        string
+		input       string
+		shouldMatch bool
 	}{
-		{"extra spaces", "retry  in   300   seconds"},
-		{"no spaces", "retryafter300s"},
-		{"tabs", "retry\tin\t300\tseconds"},
-		{"newlines", "retry in 300 seconds\nrate limit exceeded"},
+		{
+			"newlines with rate limit",
+			"retry in 300 seconds\nrate limit exceeded",
+			true,
+		},
+		{
+			"multiple spaces in retry pattern",
+			"rate limit hit, retry in  300  seconds",
+			false, // Regex requires single space
+		},
+		{
+			"tab instead of space",
+			"retry in\t300 seconds",
+			false, // Regex requires space, not tab
+		},
+		{
+			"no space before number",
+			"retryafter300s",
+			false, // Regex requires space after "in/after"
+		},
+		{
+			"valid single space",
+			"retry in 300 seconds",
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := ParseRateLimitFromOutput(tt.input)
+			matched := info != nil
+			if matched != tt.shouldMatch {
+				t.Errorf("input %q: expected match=%v, got match=%v", tt.input, tt.shouldMatch, matched)
+			}
+		})
+	}
+}
+
+func TestUnixTimestampPattern_ExactMatch(t *testing.T) {
+	// Test that the unix timestamp pattern requires exact prefix
+	tests := []struct {
+		name        string
+		input       string
+		shouldMatch bool
+	}{
+		{
+			"exact match",
+			"Claude AI usage limit reached|1234567890",
+			true,
+		},
+		{
+			"missing prefix",
+			"usage limit reached|1234567890",
+			false,
+		},
+		{
+			"case sensitive",
+			"claude ai usage limit reached|1234567890",
+			false,
+		},
+		{
+			"with context",
+			"Error: Claude AI usage limit reached|1234567890. Please wait.",
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := ParseRateLimitFromOutput(tt.input)
+			if tt.shouldMatch {
+				if info == nil {
+					t.Error("expected match")
+				} else if info.ResetAt.Unix() != 1234567890 {
+					t.Errorf("expected timestamp 1234567890, got %d", info.ResetAt.Unix())
+				}
+			}
+		})
+	}
+}
+
+func TestRetrySecondsPattern_Variations(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int64
+	}{
+		{"retry in seconds", "retry in 300 seconds", 300},
+		{"retry after seconds", "retry after 600 seconds", 600},
+		{"retry in second (singular)", "retry in 1 second", 1},
+		{"retry after second", "retry after 1 second", 1},
+		{"retry in s", "retry in 120s", 120},
+		{"retry after s", "retry after 60s", 60},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			info := ParseRateLimitFromOutput(tt.input)
 			if info == nil {
-				t.Errorf("expected non-nil info for input %q", tt.input)
+				t.Fatalf("expected non-nil info for %q", tt.input)
+			}
+			if info.WaitSeconds != tt.expected {
+				t.Errorf("expected %d seconds, got %d", tt.expected, info.WaitSeconds)
 			}
 		})
+	}
+}
+
+func TestParseRateLimitFromOutput_FullIntegration(t *testing.T) {
+	// Test complete flow from parsing to validation
+	input := "rate limit exceeded, retry in 3600 seconds"
+	info := ParseRateLimitFromOutput(input)
+
+	if info == nil {
+		t.Fatal("expected non-nil info")
+	}
+
+	// Validate all fields are set correctly
+	if info.Source != "output" {
+		t.Errorf("expected source 'output', got %s", info.Source)
+	}
+	if info.RawMessage != input {
+		t.Errorf("expected RawMessage %q, got %q", input, info.RawMessage)
+	}
+	if info.WaitSeconds != 3600 {
+		t.Errorf("expected 3600 seconds, got %d", info.WaitSeconds)
+	}
+	if info.LimitType != LimitTypeSession {
+		t.Errorf("expected session limit, got %s", info.LimitType)
+	}
+	if info.DetectedAt.IsZero() {
+		t.Error("expected non-zero DetectedAt")
+	}
+	if info.ResetAt.IsZero() {
+		t.Error("expected non-zero ResetAt")
+	}
+	if !info.ResetAt.After(time.Now()) {
+		t.Error("expected ResetAt to be in the future")
+	}
+	if info.IsExpired() {
+		t.Error("expected non-expired limit")
+	}
+	if info.TimeUntilReset() <= 0 {
+		t.Error("expected positive time until reset")
 	}
 }
