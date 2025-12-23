@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/budget"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
@@ -2714,3 +2716,130 @@ func TestFormatClassificationForRetry(t *testing.T) {
 }
 
 // TestRetry_ClassificationInjection_QCFailure tests classification injection in QC failure retries
+// TestDefaultTaskExecutor_RateLimitRecovery tests the rate limit recovery flow
+func TestDefaultTaskExecutor_RateLimitRecovery(t *testing.T) {
+	// Test that executeWithRateLimitRecovery correctly:
+	// 1. Parses rate limit errors
+	// 2. Waits when within max wait duration
+	// 3. Returns ErrRateLimitExit when wait is too long
+
+	t.Run("waits and retries when within max wait", func(t *testing.T) {
+		// Create a mock invoker that fails with rate limit once, then succeeds
+		callCount := 0
+		mockInvoker := &stubInvoker{
+			invokeFunc: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+				callCount++
+				if callCount == 1 {
+					return nil, fmt.Errorf("rate limit exceeded, retry in 50 seconds")
+				}
+				return &agent.InvocationResult{
+					Output:   "success",
+					ExitCode: 0,
+					Duration: 100 * time.Millisecond,
+				}, nil
+			},
+		}
+
+		// Create waiter with short wait times for testing
+		waiter := budget.NewRateLimitWaiter(
+			1*time.Hour,         // maxWait
+			10*time.Millisecond, // announceInterval
+			10*time.Millisecond, // safetyBuffer
+			nil,                 // no logger
+		)
+
+		te, _ := NewTaskExecutor(mockInvoker, nil, nil, TaskExecutorConfig{})
+		te.Waiter = waiter
+		te.BudgetConfig = &config.BudgetConfig{
+			Enabled:    true,
+			AutoResume: true,
+		}
+
+		task := models.Task{Number: "1", Name: "Test"}
+
+		result, err := te.Execute(context.Background(), task)
+
+		if err != nil {
+			t.Errorf("expected no error after retry, got %v", err)
+		}
+		if result.Status != models.StatusGreen {
+			t.Errorf("expected GREEN status, got %s", result.Status)
+		}
+		if callCount != 2 {
+			t.Errorf("expected 2 invocations (1 fail + 1 success), got %d", callCount)
+		}
+	})
+
+	t.Run("returns ErrRateLimitExit when wait exceeds max", func(t *testing.T) {
+		mockInvoker := &stubInvoker{
+			invokeFunc: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+				// Return a rate limit that would require 10 hour wait
+				return nil, fmt.Errorf("rate limit exceeded, retry in 36000 seconds")
+			},
+		}
+
+		// Create waiter with 1 hour max wait
+		waiter := budget.NewRateLimitWaiter(
+			1*time.Hour, // maxWait - shorter than the 10h required
+			15*time.Minute,
+			60*time.Second,
+			nil,
+		)
+
+		// Create state manager with temp directory
+		tmpDir := t.TempDir()
+		stateManager := budget.NewStateManager(tmpDir)
+
+		te, _ := NewTaskExecutor(mockInvoker, nil, nil, TaskExecutorConfig{})
+		te.Waiter = waiter
+		te.StateManager = stateManager
+		te.PlanFile = "test-plan.yaml"
+		te.BudgetConfig = &config.BudgetConfig{
+			Enabled:    true,
+			AutoResume: true,
+		}
+
+		task := models.Task{Number: "1", Name: "Test"}
+
+		_, err := te.Execute(context.Background(), task)
+
+		// Should return ErrRateLimitExit
+		var exitErr *ErrRateLimitExit
+		if !errors.As(err, &exitErr) {
+			t.Errorf("expected ErrRateLimitExit, got %T: %v", err, err)
+		}
+
+		// State should have been saved
+		states, _ := stateManager.GetPausedStates()
+		if len(states) != 1 {
+			t.Errorf("expected 1 saved state, got %d", len(states))
+		}
+	})
+
+	t.Run("no waiter configured falls back to immediate failure", func(t *testing.T) {
+		mockInvoker := &stubInvoker{
+			invokeFunc: func(ctx context.Context, task models.Task) (*agent.InvocationResult, error) {
+				return nil, fmt.Errorf("rate limit exceeded")
+			},
+		}
+
+		te, _ := NewTaskExecutor(mockInvoker, nil, nil, TaskExecutorConfig{})
+		// No waiter configured
+		te.BudgetConfig = &config.BudgetConfig{
+			Enabled:    true,
+			AutoResume: true,
+		}
+
+		task := models.Task{Number: "1", Name: "Test"}
+
+		_, err := te.Execute(context.Background(), task)
+
+		// Should fail immediately with rate limit error
+		if err == nil {
+			t.Error("expected error when no waiter configured")
+		}
+		if !strings.Contains(err.Error(), "rate limit") {
+			t.Errorf("expected rate limit error, got %v", err)
+		}
+	})
+}
