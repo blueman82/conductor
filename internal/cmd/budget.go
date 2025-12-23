@@ -36,6 +36,8 @@ Examples:
 	// Add subcommands
 	cmd.AddCommand(newBudgetStatusCmd())
 	cmd.AddCommand(newBudgetReportCmd())
+	cmd.AddCommand(newBudgetListPausedCmd())
+	cmd.AddCommand(newBudgetResumeCmd())
 
 	// Persistent flags
 	cmd.PersistentFlags().BoolVar(&budgetJSON, "json", false, "Output in JSON format")
@@ -57,6 +59,24 @@ func newBudgetReportCmd() *cobra.Command {
 		Use:   "report",
 		Short: "Show recent usage blocks (last 3 days)",
 		Run:   runBudgetReport,
+	}
+}
+
+func newBudgetListPausedCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list-paused",
+		Short: "List paused executions waiting for rate limit reset",
+		Long:  "Shows all executions that were paused due to rate limits and their resume status",
+		RunE:  runBudgetListPaused,
+	}
+}
+
+func newBudgetResumeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "resume [session-id]",
+		Short: "Resume paused execution(s)",
+		Long:  "Resumes executions that were paused due to rate limits. If no session ID is provided, resumes all executions that are ready.",
+		RunE:  runBudgetResume,
 	}
 }
 
@@ -101,6 +121,101 @@ func runBudgetReport(cmd *cobra.Command, args []string) {
 	} else {
 		printReportPretty(recentBlocks)
 	}
+}
+
+// runBudgetListPaused lists all paused executions
+func runBudgetListPaused(cmd *cobra.Command, args []string) error {
+	// Create state manager
+	stateDir := filepath.Join(".conductor", "state")
+	sm := budget.NewStateManager(stateDir)
+
+	// Get all paused states
+	states, err := sm.GetPausedStates()
+	if err != nil {
+		return fmt.Errorf("failed to get paused states: %w", err)
+	}
+
+	if len(states) == 0 {
+		fmt.Println("No paused executions found.")
+		return nil
+	}
+
+	fmt.Printf("Found %d paused execution(s):\n\n", len(states))
+
+	for _, state := range states {
+		status := string(state.Status)
+		if state.Status == budget.StatusReady {
+			status = "READY TO RESUME"
+		}
+
+		fmt.Printf("  ID: %s\n", state.SessionID)
+		fmt.Printf("  Plan: %s\n", state.PlanFile)
+		fmt.Printf("  Status: %s\n", status)
+		fmt.Printf("  Paused: %s\n", state.PausedAt.Format(time.RFC3339))
+		fmt.Printf("  Resume At: %s\n", state.ResumeAt.Format(time.RFC3339))
+		if state.RateLimitInfo != nil {
+			fmt.Printf("  Limit Type: %s\n", state.RateLimitInfo.LimitType)
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
+
+// runBudgetResume resumes paused execution(s)
+func runBudgetResume(cmd *cobra.Command, args []string) error {
+	stateDir := filepath.Join(".conductor", "state")
+	sm := budget.NewStateManager(stateDir)
+
+	if len(args) > 0 {
+		// Resume specific session
+		sessionID := args[0]
+		state, err := sm.Load(sessionID)
+		if err != nil {
+			return fmt.Errorf("failed to load session %s: %w", sessionID, err)
+		}
+
+		if state.Status != budget.StatusReady {
+			remaining := time.Until(state.ResumeAt)
+			if remaining > 0 {
+				return fmt.Errorf("session %s not ready yet - %s remaining", sessionID, remaining.Round(time.Second))
+			}
+		}
+
+		fmt.Printf("Resuming session %s (plan: %s)...\n", sessionID, state.PlanFile)
+		fmt.Printf("Run: conductor run %s --skip-completed\n", state.PlanFile)
+
+		// Delete state file after showing resume command
+		if err := sm.Delete(sessionID); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to delete state file: %v\n", err)
+		}
+
+		return nil
+	}
+
+	// Resume all ready sessions
+	states, err := sm.GetReadyStates()
+	if err != nil {
+		return fmt.Errorf("failed to get ready states: %w", err)
+	}
+
+	if len(states) == 0 {
+		fmt.Println("No executions ready to resume.")
+		return nil
+	}
+
+	fmt.Printf("Found %d execution(s) ready to resume:\n\n", len(states))
+
+	for _, state := range states {
+		fmt.Printf("  conductor run %s --skip-completed  # Session: %s\n", state.PlanFile, state.SessionID)
+
+		// Delete state file
+		if err := sm.Delete(state.SessionID); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to delete state file for %s: %v\n", state.SessionID, err)
+		}
+	}
+
+	return nil
 }
 
 // createUsageTracker creates a UsageTracker with the appropriate base directory
