@@ -53,8 +53,11 @@ var (
 	// Pattern 3: retry in 300 seconds / retry after 300s
 	retrySecondsPattern = regexp.MustCompile(`retry (?:in|after)\s+(\d+)\s*(?:seconds?|s)`)
 
-	// Pattern 4: Generic rate limit indicators
-	rateLimitIndicator = regexp.MustCompile(`(?i)(rate.?limit|usage.?limit|429|too.?many.?requests)`)
+	// Pattern 4: Generic rate limit indicators (v2.20.1: added "out of.*usage")
+	rateLimitIndicator = regexp.MustCompile(`(?i)(out of.*usage|rate.?limit|usage.?limit|429|too.?many.?requests)`)
+
+	// Pattern 5: "resets 1am (Europe/Dublin)" format from Claude CLI (v2.20.1+)
+	resetsTimePattern = regexp.MustCompile(`resets\s+(\d+)(am|pm)\s*\(([^)]+)\)`)
 )
 
 // ParseRateLimitFromOutput parses rate limit info from CLI stdout/stderr
