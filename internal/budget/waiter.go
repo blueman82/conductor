@@ -66,13 +66,18 @@ func (w *RateLimitWaiter) WaitForReset(ctx context.Context, info *RateLimitInfo)
 	startTime := time.Now()
 	endTime := startTime.Add(totalWait)
 
-	// Create ticker for periodic announcements
-	ticker := time.NewTicker(w.announceInt)
-	defer ticker.Stop()
+	// Create ticker for live visual updates (every 1s)
+	visualTicker := time.NewTicker(visualUpdateInterval)
+	defer visualTicker.Stop()
 
-	// Initial announcement
+	// Create ticker for TTS announcements (at announce_interval)
+	announceTicker := time.NewTicker(w.announceInt)
+	defer announceTicker.Stop()
+
+	// Initial announcements
 	if w.logger != nil {
 		w.logger.LogRateLimitCountdown(totalWait, totalWait)
+		w.logger.LogRateLimitAnnounce(totalWait, totalWait)
 	}
 
 	for {
@@ -80,16 +85,26 @@ func (w *RateLimitWaiter) WaitForReset(ctx context.Context, info *RateLimitInfo)
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case now := <-ticker.C:
+		case now := <-visualTicker.C:
 			remaining := endTime.Sub(now)
 			if remaining <= 0 {
 				// Wait complete
 				return nil
 			}
-
-			// Announce countdown
+			// Update live visual counter
 			if w.logger != nil {
 				w.logger.LogRateLimitCountdown(remaining, totalWait)
+			}
+
+		case now := <-announceTicker.C:
+			remaining := endTime.Sub(now)
+			if remaining <= 0 {
+				// Wait complete
+				return nil
+			}
+			// TTS announcement
+			if w.logger != nil {
+				w.logger.LogRateLimitAnnounce(remaining, totalWait)
 			}
 
 		case <-time.After(time.Until(endTime)):
