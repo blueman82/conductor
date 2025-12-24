@@ -32,6 +32,7 @@ type GuardConfig struct {
 	ConfidenceThreshold  float64   // Minimum confidence for adaptive mode (0.0-1.0)
 	MinHistorySessions   int       // Minimum sessions required for predictions
 	AutoSelectAgent      bool      // Enable predictive agent selection (v2.18+)
+	Verbose              bool      // Enable verbose logging
 }
 
 // GuardResult contains prediction analysis for a single task
@@ -219,6 +220,13 @@ func (gp *GuardProtocol) enhanceWithLLM(ctx context.Context, task models.Task, p
 	statsWeight := 1.0 - llmWeight
 
 	blendedProb := (prediction.Probability * statsWeight) + (llmPred.Probability * llmWeight)
+
+	// Log LLM consultation when verbose is enabled
+	if gp.config.Verbose && gp.logger != nil {
+		gp.logger.Info("[GUARD] 🧠 LLM analysis: %.1f%% (stats) + %.1f%% (LLM) → %.1f%% blended",
+			prediction.Probability*100, llmPred.Probability*100, blendedProb*100)
+	}
+
 	prediction.Probability = blendedProb
 
 	// Add LLM risk factors to recommendations
@@ -427,6 +435,7 @@ func LoadGuardConfig(cfg *config.Config) GuardConfig {
 		ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
 		MinHistorySessions:   cfg.Guard.MinHistorySessions,
 		AutoSelectAgent:      cfg.Guard.AutoSelectAgent,
+		Verbose:              cfg.Guard.Verbose,
 	}
 }
 
