@@ -91,6 +91,7 @@ type LLMGuardConfig struct {
 
 	// MaxProbabilityForLLM upper bound for uncertainty range
 	MaxProbabilityForLLM float64 `yaml:"max_probability_for_llm"`
+}
 
 // AnomalyDetectionConfig controls real-time anomaly detection during wave execution
 type AnomalyDetectionConfig struct {
