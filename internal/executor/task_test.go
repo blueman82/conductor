@@ -2716,6 +2716,81 @@ func TestFormatClassificationForRetry(t *testing.T) {
 }
 
 // TestRetry_ClassificationInjection_QCFailure tests classification injection in QC failure retries
+
+// TestIsRateLimitError tests detection of rate limit errors (v2.20.1+)
+func TestIsRateLimitError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "rate limit prefix from ErrRateLimit",
+			err:  fmt.Errorf("rate limit: You're out of extra usage"),
+			want: true,
+		},
+		{
+			name: "out of extra usage",
+			err:  fmt.Errorf("out of extra usage · resets 1am"),
+			want: true,
+		},
+		{
+			name: "out of usage",
+			err:  fmt.Errorf("You're out of usage for this period"),
+			want: true,
+		},
+		{
+			name: "rate limit exceeded",
+			err:  fmt.Errorf("rate limit exceeded"),
+			want: true,
+		},
+		{
+			name: "rate_limit_error",
+			err:  fmt.Errorf("rate_limit_error: try again later"),
+			want: true,
+		},
+		{
+			name: "429 error",
+			err:  fmt.Errorf("HTTP 429: Too Many Requests"),
+			want: true,
+		},
+		{
+			name: "too many requests",
+			err:  fmt.Errorf("too many requests"),
+			want: true,
+		},
+		{
+			name: "quota exceeded",
+			err:  fmt.Errorf("quota exceeded for API"),
+			want: true,
+		},
+		{
+			name: "normal error",
+			err:  fmt.Errorf("file not found"),
+			want: false,
+		},
+		{
+			name: "JSON parse error",
+			err:  fmt.Errorf("failed to parse agent response: no complete JSON object found"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRateLimitError(tt.err)
+			if got != tt.want {
+				t.Errorf("isRateLimitError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestDefaultTaskExecutor_RateLimitRecovery tests the rate limit recovery flow
 func TestDefaultTaskExecutor_RateLimitRecovery(t *testing.T) {
 	// Test that executeWithRateLimitRecovery correctly:
