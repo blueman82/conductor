@@ -2123,12 +2123,14 @@ GUARD is designed to never block execution due to its own errors:
 🔴 Task 3 "Known problematic" - GUARD: 0.85 failure probability (HIGH RISK - blocking)
 ```
 
-### Budget & Rate Limits (v2.20+)
+### Budget & Rate Limits (v2.20+, enhanced v2.21+)
 
-Intelligent rate limit auto-resume with state persistence for long-running plans.
+Intelligent rate limit auto-resume with state persistence and mid-task recovery.
 
 **Key Features:**
 - Parses actual reset time from Claude CLI output (not hardcoded delays)
+- **Session resume (v2.21+)**: Uses `--resume <session_id>` to preserve agent context on retry
+- **Git diff fallback (v2.21+)**: Injects partial progress into prompt when no session ID available
 - Waits with countdown announcements when within max wait duration
 - Saves execution state and exits cleanly for long waits (>6h by default)
 - Resume paused executions via CLI commands
