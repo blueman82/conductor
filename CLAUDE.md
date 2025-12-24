@@ -211,12 +211,14 @@ guard:
 - `wave.go`: Gate insertion after task filtering, before semaphore
 - `guard_test.go`: 19 unit tests covering modes and thresholds
 
-### Budget & Rate Limits (v2.20+)
+### Budget & Rate Limits (v2.20+, enhanced v2.21+)
 
-**Intelligent rate limit auto-resume** with state persistence for long-running plans.
+**Intelligent rate limit auto-resume** with state persistence and mid-task recovery.
 
 **Features:**
 - Parses actual reset time from Claude CLI output (not hardcoded delays)
+- **Session resume (v2.21+)**: Uses `--resume <session_id>` on retry to preserve agent context
+- **Git diff fallback**: Injects partial progress into prompt when no session ID available
 - Waits with countdown announcements when within max wait duration
 - Saves execution state and exits cleanly for long waits (>6h)
 - Resume paused executions via CLI commands
