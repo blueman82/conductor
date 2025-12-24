@@ -469,7 +469,7 @@ func TestNewGuardProtocol_NilStore_ReturnsNil(t *testing.T) {
 	}
 
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, nil, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, nil, logger)
 
 	if guard != nil {
 		t.Error("expected nil GuardProtocol when store is nil")
