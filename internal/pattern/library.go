@@ -26,8 +26,8 @@ type StoredPattern struct {
 	// Description is the task description
 	Description string `json:"description"`
 
-	// Agent is the agent that successfully completed this task
-	Agent string `json:"agent"`
+	// LastAgent is the agent that most recently completed this task successfully
+	LastAgent string `json:"last_agent"`
 
 	// SuccessCount is the number of times this pattern has succeeded
 	SuccessCount int `json:"success_count"`
@@ -194,7 +194,7 @@ func (l *PatternLibrary) Retrieve(ctx context.Context, description string, files
 			results = append(results, StoredPattern{
 				TaskHash:     p.TaskHash,
 				Description:  p.PatternDescription,
-				Agent:        p.LastAgent,
+				LastAgent:    p.LastAgent,
 				SuccessCount: p.SuccessCount,
 				LastUsed:     p.LastUsed,
 				CreatedAt:    p.CreatedAt,
@@ -287,7 +287,7 @@ func (l *PatternLibrary) GetTopPatterns(ctx context.Context, limit int) ([]Store
 		results = append(results, StoredPattern{
 			TaskHash:     p.TaskHash,
 			Description:  p.PatternDescription,
-			Agent:        p.LastAgent,
+			LastAgent:    p.LastAgent,
 			SuccessCount: p.SuccessCount,
 			LastUsed:     p.LastUsed,
 			CreatedAt:    p.CreatedAt,
@@ -318,18 +318,18 @@ func (l *PatternLibrary) RecommendAgent(ctx context.Context, description string,
 	// Aggregate by agent
 	agentStats := make(map[string]*AgentRecommendation)
 	for _, p := range patterns {
-		if p.Agent == "" {
+		if p.LastAgent == "" {
 			continue
 		}
 
-		if _, exists := agentStats[p.Agent]; !exists {
-			agentStats[p.Agent] = &AgentRecommendation{
-				Agent:            p.Agent,
+		if _, exists := agentStats[p.LastAgent]; !exists {
+			agentStats[p.LastAgent] = &AgentRecommendation{
+				Agent:            p.LastAgent,
 				MatchingPatterns: []StoredPattern{},
 			}
 		}
 
-		stats := agentStats[p.Agent]
+		stats := agentStats[p.LastAgent]
 		stats.SuccessCount += p.SuccessCount
 		stats.MatchingPatterns = append(stats.MatchingPatterns, p)
 	}
@@ -400,7 +400,7 @@ func (l *PatternLibrary) GetExactMatch(ctx context.Context, description string, 
 	return &StoredPattern{
 		TaskHash:     dbPattern.TaskHash,
 		Description:  dbPattern.PatternDescription,
-		Agent:        dbPattern.LastAgent,
+		LastAgent:    dbPattern.LastAgent,
 		SuccessCount: dbPattern.SuccessCount,
 		LastUsed:     dbPattern.LastUsed,
 		CreatedAt:    dbPattern.CreatedAt,

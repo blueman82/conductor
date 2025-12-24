@@ -414,8 +414,8 @@ func TestPatternLibrary_GetExactMatch(t *testing.T) {
 		if match.Description != desc {
 			t.Errorf("description mismatch: got %s, want %s", match.Description, desc)
 		}
-		if match.Agent != agent {
-			t.Errorf("agent mismatch: got %s, want %s", match.Agent, agent)
+		if match.LastAgent != agent {
+			t.Errorf("agent mismatch: got %s, want %s", match.LastAgent, agent)
 		}
 		if match.Similarity != 1.0 {
 			t.Errorf("exact match should have similarity 1.0, got: %v", match.Similarity)
@@ -459,7 +459,7 @@ func TestStoredPattern_Fields(t *testing.T) {
 	pattern := StoredPattern{
 		TaskHash:     "abc123",
 		Description:  "Test pattern",
-		Agent:        "test-agent",
+		LastAgent:    "test-agent",
 		SuccessCount: 5,
 		LastUsed:     now,
 		CreatedAt:    now.Add(-time.Hour),
@@ -473,8 +473,8 @@ func TestStoredPattern_Fields(t *testing.T) {
 	if pattern.Description != "Test pattern" {
 		t.Errorf("Description = %s, want 'Test pattern'", pattern.Description)
 	}
-	if pattern.Agent != "test-agent" {
-		t.Errorf("Agent = %s, want test-agent", pattern.Agent)
+	if pattern.LastAgent != "test-agent" {
+		t.Errorf("LastAgent = %s, want test-agent", pattern.LastAgent)
 	}
 	if pattern.SuccessCount != 5 {
 		t.Errorf("SuccessCount = %d, want 5", pattern.SuccessCount)
