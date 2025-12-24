@@ -1154,3 +1154,59 @@ func TestBuildCommandArgsSystemPrompt(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildCommandArgsWithResumeSessionID(t *testing.T) {
+	tests := []struct {
+		name            string
+		resumeSessionID string
+		wantResume      bool
+	}{
+		{
+			name:            "task with resume session ID includes --resume flag",
+			resumeSessionID: "session-abc-123",
+			wantResume:      true,
+		},
+		{
+			name:            "task without resume session ID has no --resume flag",
+			resumeSessionID: "",
+			wantResume:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inv := NewInvoker()
+			task := models.Task{
+				Number:          "1",
+				Name:            "Test Task",
+				Prompt:          "Do work",
+				EstimatedTime:   30 * time.Minute,
+				ResumeSessionID: tt.resumeSessionID,
+			}
+
+			args := inv.BuildCommandArgs(task)
+
+			// Check if --resume is present with correct value
+			hasResume := false
+			for i, arg := range args {
+				if arg == "--resume" {
+					hasResume = true
+					if i+1 < len(args) && args[i+1] == tt.resumeSessionID {
+						// Correct session ID
+					} else if tt.wantResume {
+						t.Errorf("--resume flag has wrong value, got %v, want %s", args[i+1:], tt.resumeSessionID)
+					}
+				}
+			}
+
+			if hasResume != tt.wantResume {
+				t.Errorf("--resume flag present = %v, want %v", hasResume, tt.wantResume)
+			}
+
+			// Verify --resume comes first (before other flags)
+			if tt.wantResume && len(args) > 0 && args[0] != "--resume" {
+				t.Errorf("--resume should be first flag, got %s", args[0])
+			}
+		})
+	}
+}
