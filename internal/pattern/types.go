@@ -172,6 +172,14 @@ type DuplicateResult struct {
 	// SimilarityScore indicates how similar to existing work (0.0-1.0)
 	SimilarityScore float64 `json:"similarity_score"`
 
+	// MatchedTaskID is the ID of the task this is a duplicate of (primary match)
+	// Format: "task_number" or "source_file#task_number" for cross-file references
+	MatchedTaskID string `json:"matched_task_id"`
+
+	// Recommendation is the suggested action for handling this duplicate
+	// Values: "skip" (skip this task), "merge" (merge with existing), "proceed" (execute anyway), "review" (manual review needed)
+	Recommendation string `json:"recommendation"`
+
 	// DuplicateOf lists tasks this may be a duplicate of
 	DuplicateOf []DuplicateRef `json:"duplicate_of"`
 

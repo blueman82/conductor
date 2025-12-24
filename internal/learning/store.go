@@ -2025,3 +2025,474 @@ func (s *Store) GetRecentSessions(ctx context.Context, project string, limit, of
 
 	return sessions, nil
 }
+
+// SuccessfulPattern represents a stored successful task pattern
+type SuccessfulPattern struct {
+	TaskHash           string
+	PatternDescription string
+	SuccessCount       int
+	LastAgent          string
+	LastUsed           time.Time
+	CreatedAt          time.Time
+	Metadata           string // JSON blob
+}
+
+// AddPattern inserts or updates a successful pattern with success count increment
+func (s *Store) AddPattern(ctx context.Context, pattern *SuccessfulPattern) error {
+	// Use INSERT OR REPLACE to upsert, incrementing success_count if exists
+	query := `INSERT INTO successful_patterns
+		(task_hash, pattern_description, success_count, last_agent, last_used, metadata)
+		VALUES (?, ?,
+			COALESCE((SELECT success_count FROM successful_patterns WHERE task_hash = ?), 0) + 1,
+			?, CURRENT_TIMESTAMP, ?)
+		ON CONFLICT(task_hash) DO UPDATE SET
+			pattern_description = excluded.pattern_description,
+			success_count = successful_patterns.success_count + 1,
+			last_agent = excluded.last_agent,
+			last_used = CURRENT_TIMESTAMP,
+			metadata = excluded.metadata`
+
+	metadataJSON := pattern.Metadata
+	if metadataJSON == "" {
+		metadataJSON = "{}"
+	}
+
+	_, err := s.db.ExecContext(ctx, query,
+		pattern.TaskHash,
+		pattern.PatternDescription,
+		pattern.TaskHash, // For the subquery
+		pattern.LastAgent,
+		metadataJSON,
+	)
+	if err != nil {
+		return fmt.Errorf("add pattern: %w", err)
+	}
+
+	return nil
+}
+
+// GetPattern retrieves a specific pattern by hash
+func (s *Store) GetPattern(ctx context.Context, taskHash string) (*SuccessfulPattern, error) {
+	query := `SELECT task_hash, pattern_description, success_count, last_agent, last_used, created_at, metadata
+		FROM successful_patterns WHERE task_hash = ?`
+
+	row := s.db.QueryRowContext(ctx, query, taskHash)
+
+	pattern := &SuccessfulPattern{}
+	var lastAgent, metadata sql.NullString
+
+	err := row.Scan(
+		&pattern.TaskHash,
+		&pattern.PatternDescription,
+		&pattern.SuccessCount,
+		&lastAgent,
+		&pattern.LastUsed,
+		&pattern.CreatedAt,
+		&metadata,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get pattern: %w", err)
+	}
+
+	if lastAgent.Valid {
+		pattern.LastAgent = lastAgent.String
+	}
+	if metadata.Valid {
+		pattern.Metadata = metadata.String
+	}
+
+	return pattern, nil
+}
+
+// GetSimilarPatterns returns patterns with similar hash prefix (fuzzy matching)
+func (s *Store) GetSimilarPatterns(ctx context.Context, hashPrefix string, limit int) ([]*SuccessfulPattern, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	query := `SELECT task_hash, pattern_description, success_count, last_agent, last_used, created_at, metadata
+		FROM successful_patterns
+		WHERE task_hash LIKE ?
+		ORDER BY success_count DESC, last_used DESC
+		LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, query, hashPrefix+"%", limit)
+	if err != nil {
+		return nil, fmt.Errorf("get similar patterns: %w", err)
+	}
+	defer rows.Close()
+
+	var patterns []*SuccessfulPattern
+	for rows.Next() {
+		pattern := &SuccessfulPattern{}
+		var lastAgent, metadata sql.NullString
+
+		err := rows.Scan(
+			&pattern.TaskHash,
+			&pattern.PatternDescription,
+			&pattern.SuccessCount,
+			&lastAgent,
+			&pattern.LastUsed,
+			&pattern.CreatedAt,
+			&metadata,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan pattern row: %w", err)
+		}
+
+		if lastAgent.Valid {
+			pattern.LastAgent = lastAgent.String
+		}
+		if metadata.Valid {
+			pattern.Metadata = metadata.String
+		}
+
+		patterns = append(patterns, pattern)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pattern rows: %w", err)
+	}
+
+	return patterns, nil
+}
+
+// GetTopPatterns returns the most successful patterns ordered by success count
+func (s *Store) GetTopPatterns(ctx context.Context, limit int) ([]*SuccessfulPattern, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	query := `SELECT task_hash, pattern_description, success_count, last_agent, last_used, created_at, metadata
+		FROM successful_patterns
+		ORDER BY success_count DESC, last_used DESC
+		LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get top patterns: %w", err)
+	}
+	defer rows.Close()
+
+	var patterns []*SuccessfulPattern
+	for rows.Next() {
+		pattern := &SuccessfulPattern{}
+		var lastAgent, metadata sql.NullString
+
+		err := rows.Scan(
+			&pattern.TaskHash,
+			&pattern.PatternDescription,
+			&pattern.SuccessCount,
+			&lastAgent,
+			&pattern.LastUsed,
+			&pattern.CreatedAt,
+			&metadata,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan pattern row: %w", err)
+		}
+
+		if lastAgent.Valid {
+			pattern.LastAgent = lastAgent.String
+		}
+		if metadata.Valid {
+			pattern.Metadata = metadata.String
+		}
+
+		patterns = append(patterns, pattern)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pattern rows: %w", err)
+	}
+
+	return patterns, nil
+}
+
+// DuplicateDetection represents a recorded duplicate detection event
+type DuplicateDetection struct {
+	ID          int64
+	SourceHash  string
+	MatchedHash string
+	Similarity  float64
+	Action      string // 'blocked', 'warned', 'suggested'
+	TaskName    string
+	DetectedAt  time.Time
+	Metadata    string // JSON blob
+}
+
+// RecordDuplicateDetection records when a duplicate was detected
+func (s *Store) RecordDuplicateDetection(ctx context.Context, detection *DuplicateDetection) error {
+	query := `INSERT INTO duplicate_detections
+		(source_hash, matched_hash, similarity, action, task_name, metadata)
+		VALUES (?, ?, ?, ?, ?, ?)`
+
+	metadataJSON := detection.Metadata
+	if metadataJSON == "" {
+		metadataJSON = "{}"
+	}
+
+	result, err := s.db.ExecContext(ctx, query,
+		detection.SourceHash,
+		detection.MatchedHash,
+		detection.Similarity,
+		detection.Action,
+		detection.TaskName,
+		metadataJSON,
+	)
+	if err != nil {
+		return fmt.Errorf("record duplicate detection: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("get last insert id: %w", err)
+	}
+	detection.ID = id
+
+	return nil
+}
+
+// GetDuplicateDetections retrieves duplicate detections for a source hash
+func (s *Store) GetDuplicateDetections(ctx context.Context, sourceHash string, limit int) ([]*DuplicateDetection, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	query := `SELECT id, source_hash, matched_hash, similarity, action, task_name, detected_at, metadata
+		FROM duplicate_detections
+		WHERE source_hash = ?
+		ORDER BY detected_at DESC
+		LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, query, sourceHash, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get duplicate detections: %w", err)
+	}
+	defer rows.Close()
+
+	var detections []*DuplicateDetection
+	for rows.Next() {
+		detection := &DuplicateDetection{}
+		var taskName, metadata sql.NullString
+
+		err := rows.Scan(
+			&detection.ID,
+			&detection.SourceHash,
+			&detection.MatchedHash,
+			&detection.Similarity,
+			&detection.Action,
+			&taskName,
+			&detection.DetectedAt,
+			&metadata,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan duplicate detection row: %w", err)
+		}
+
+		if taskName.Valid {
+			detection.TaskName = taskName.String
+		}
+		if metadata.Valid {
+			detection.Metadata = metadata.String
+		}
+
+		detections = append(detections, detection)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate duplicate detection rows: %w", err)
+	}
+
+	return detections, nil
+}
+
+// STOPAnalysis represents a stored STOP protocol analysis result
+type STOPAnalysis struct {
+	ID                 int64
+	TaskHash           string
+	TaskName           string
+	SearchResults      string // JSON blob
+	ThinkAnalysis      string // JSON blob
+	OutlinePlan        string // JSON blob
+	ProveJustification string // JSON blob
+	FinalDecision      string // 'proceed', 'skip', 'modify'
+	Confidence         float64
+	AnalyzedAt         time.Time
+	Metadata           string // JSON blob
+}
+
+// RecordSTOPAnalysis stores a STOP protocol analysis result
+func (s *Store) RecordSTOPAnalysis(ctx context.Context, analysis *STOPAnalysis) error {
+	query := `INSERT INTO stop_analyses
+		(task_hash, task_name, search_results, think_analysis, outline_plan, prove_justification, final_decision, confidence, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	metadataJSON := analysis.Metadata
+	if metadataJSON == "" {
+		metadataJSON = "{}"
+	}
+
+	result, err := s.db.ExecContext(ctx, query,
+		analysis.TaskHash,
+		analysis.TaskName,
+		analysis.SearchResults,
+		analysis.ThinkAnalysis,
+		analysis.OutlinePlan,
+		analysis.ProveJustification,
+		analysis.FinalDecision,
+		analysis.Confidence,
+		metadataJSON,
+	)
+	if err != nil {
+		return fmt.Errorf("record STOP analysis: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("get last insert id: %w", err)
+	}
+	analysis.ID = id
+
+	return nil
+}
+
+// GetSTOPAnalysis retrieves the most recent STOP analysis for a task hash
+func (s *Store) GetSTOPAnalysis(ctx context.Context, taskHash string) (*STOPAnalysis, error) {
+	query := `SELECT id, task_hash, task_name, search_results, think_analysis, outline_plan, prove_justification, final_decision, confidence, analyzed_at, metadata
+		FROM stop_analyses
+		WHERE task_hash = ?
+		ORDER BY analyzed_at DESC
+		LIMIT 1`
+
+	row := s.db.QueryRowContext(ctx, query, taskHash)
+
+	analysis := &STOPAnalysis{}
+	var taskName, searchResults, thinkAnalysis, outlinePlan, proveJustification, finalDecision, metadata sql.NullString
+	var confidence sql.NullFloat64
+
+	err := row.Scan(
+		&analysis.ID,
+		&analysis.TaskHash,
+		&taskName,
+		&searchResults,
+		&thinkAnalysis,
+		&outlinePlan,
+		&proveJustification,
+		&finalDecision,
+		&confidence,
+		&analysis.AnalyzedAt,
+		&metadata,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get STOP analysis: %w", err)
+	}
+
+	if taskName.Valid {
+		analysis.TaskName = taskName.String
+	}
+	if searchResults.Valid {
+		analysis.SearchResults = searchResults.String
+	}
+	if thinkAnalysis.Valid {
+		analysis.ThinkAnalysis = thinkAnalysis.String
+	}
+	if outlinePlan.Valid {
+		analysis.OutlinePlan = outlinePlan.String
+	}
+	if proveJustification.Valid {
+		analysis.ProveJustification = proveJustification.String
+	}
+	if finalDecision.Valid {
+		analysis.FinalDecision = finalDecision.String
+	}
+	if confidence.Valid {
+		analysis.Confidence = confidence.Float64
+	}
+	if metadata.Valid {
+		analysis.Metadata = metadata.String
+	}
+
+	return analysis, nil
+}
+
+// GetRecentSTOPAnalyses retrieves recent STOP analyses
+func (s *Store) GetRecentSTOPAnalyses(ctx context.Context, limit int) ([]*STOPAnalysis, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	query := `SELECT id, task_hash, task_name, search_results, think_analysis, outline_plan, prove_justification, final_decision, confidence, analyzed_at, metadata
+		FROM stop_analyses
+		ORDER BY analyzed_at DESC
+		LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get recent STOP analyses: %w", err)
+	}
+	defer rows.Close()
+
+	var analyses []*STOPAnalysis
+	for rows.Next() {
+		analysis := &STOPAnalysis{}
+		var taskName, searchResults, thinkAnalysis, outlinePlan, proveJustification, finalDecision, metadata sql.NullString
+		var confidence sql.NullFloat64
+
+		err := rows.Scan(
+			&analysis.ID,
+			&analysis.TaskHash,
+			&taskName,
+			&searchResults,
+			&thinkAnalysis,
+			&outlinePlan,
+			&proveJustification,
+			&finalDecision,
+			&confidence,
+			&analysis.AnalyzedAt,
+			&metadata,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan STOP analysis row: %w", err)
+		}
+
+		if taskName.Valid {
+			analysis.TaskName = taskName.String
+		}
+		if searchResults.Valid {
+			analysis.SearchResults = searchResults.String
+		}
+		if thinkAnalysis.Valid {
+			analysis.ThinkAnalysis = thinkAnalysis.String
+		}
+		if outlinePlan.Valid {
+			analysis.OutlinePlan = outlinePlan.String
+		}
+		if proveJustification.Valid {
+			analysis.ProveJustification = proveJustification.String
+		}
+		if finalDecision.Valid {
+			analysis.FinalDecision = finalDecision.String
+		}
+		if confidence.Valid {
+			analysis.Confidence = confidence.Float64
+		}
+		if metadata.Valid {
+			analysis.Metadata = metadata.String
+		}
+
+		analyses = append(analyses, analysis)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate STOP analysis rows: %w", err)
+	}
+
+	return analyses, nil
+}
