@@ -929,6 +929,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 
 		result.Output = output
 		result.Duration = totalDuration
+		result.SessionID = invocation.SessionID // Capture for rate limit recovery
 
 		// Collect behavioral metrics post-invocation (before QC)
 		// This captures the session_id from the invocation and loads JSONL metrics
