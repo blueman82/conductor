@@ -159,12 +159,15 @@ func (gp *GuardProtocol) checkTask(ctx context.Context, task models.Task) *Guard
 		Success:   false, // Predict failure
 	}
 
-	// Run prediction
+	// Run statistical prediction first
 	prediction, err := gp.predictor.PredictFailure(session, toolUsage)
 	if err != nil {
 		// Graceful degradation: return nil on prediction error
 		return nil
 	}
+
+	// Enhance with LLM if available and stats are uncertain (v2.22+)
+	gp.enhanceWithLLM(ctx, task, prediction)
 
 	// Evaluate whether to block based on mode
 	shouldBlock, blockReason := gp.evaluateBlockDecision(prediction)
@@ -183,6 +186,65 @@ func (gp *GuardProtocol) checkTask(ctx context.Context, task models.Task) *Guard
 		Recommendations: prediction.Recommendations,
 		SuggestedAgent:  suggestedAgent,
 	}
+}
+
+// enhanceWithLLM uses the LLM predictor to refine statistical predictions.
+// Only called when stats probability is uncertain (within configured range).
+// Gracefully degrades on any error - never blocks execution.
+func (gp *GuardProtocol) enhanceWithLLM(ctx context.Context, task models.Task, prediction *behavioral.PredictionResult) {
+	if gp.llmPredictor == nil {
+		return
+	}
+
+	// Only use LLM when stats are uncertain
+	if !gp.llmPredictor.ShouldUseLLM(prediction.Probability) {
+		return
+	}
+
+	// Check if LLM is available (lazy check)
+	if !gp.llmPredictor.IsAvailable(ctx) {
+		return
+	}
+
+	// Get LLM prediction
+	llmPred, err := gp.llmPredictor.PredictFailure(ctx, task)
+	if err != nil {
+		// Graceful degradation: log and continue with stats
+		if gp.logger != nil {
+			gp.logger.Log("GUARD", "LLM prediction failed: %v", err)
+		}
+		return
+	}
+
+	// Log LLM reasoning for transparency
+	if gp.logger != nil {
+		gp.logger.Log("GUARD", "🤖 LLM prediction for task %s: %.1f%% (confidence: %.1f%%)",
+			task.Number, llmPred.Probability*100, llmPred.Confidence*100)
+		if llmPred.Reasoning != "" {
+			gp.logger.Log("GUARD", "   Reasoning: %s", truncateString(llmPred.Reasoning, 100))
+		}
+	}
+
+	// Blend predictions: weighted average based on LLM confidence
+	// High LLM confidence = more weight to LLM, low = more weight to stats
+	llmWeight := llmPred.Confidence * 0.5 // Max 50% weight to LLM
+	statsWeight := 1.0 - llmWeight
+
+	blendedProb := (prediction.Probability * statsWeight) + (llmPred.Probability * llmWeight)
+	prediction.Probability = blendedProb
+
+	// Add LLM risk factors to recommendations
+	for _, risk := range llmPred.RiskFactors {
+		prediction.Recommendations = append(prediction.Recommendations, "LLM: "+risk)
+	}
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // selectBetterAgent finds a higher-performing agent based on historical data.
