@@ -47,12 +47,14 @@ type GuardResult struct {
 // GuardProtocol implements the GUARD (Guided Adaptive Risk Detection) protocol.
 // It integrates the FailurePredictor from behavioral analytics into wave execution.
 type GuardProtocol struct {
-	config      GuardConfig
-	store       *learning.Store
-	predictor   *behavioral.FailurePredictor
-	scorer      *behavioral.PerformanceScorer // For predictive agent selection (v2.18+)
-	logger      Logger
-	initialized bool
+	config       GuardConfig
+	llmConfig    config.LLMGuardConfig // LLM configuration (v2.22+)
+	store        *learning.Store
+	predictor    *behavioral.FailurePredictor
+	scorer       *behavioral.PerformanceScorer // For predictive agent selection (v2.18+)
+	llmPredictor *OllamaPredictor              // LLM-based predictor (v2.22+)
+	logger       Logger
+	initialized  bool
 }
 
 // NewGuardProtocol creates a new GuardProtocol instance.
