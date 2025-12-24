@@ -23,20 +23,20 @@ type LLMPrediction struct {
 
 // OllamaPredictor uses Ollama with gpt-oss for LLM-based failure prediction
 type OllamaPredictor struct {
-	config LLMGuardConfig
+	config config.LLMGuardConfig
 	client *http.Client
 	logger Logger
 }
 
 // NewOllamaPredictor creates a new Ollama-based predictor
-func NewOllamaPredictor(config LLMGuardConfig, logger Logger) *OllamaPredictor {
-	if !config.Enabled {
+func NewOllamaPredictor(cfg config.LLMGuardConfig, logger Logger) *OllamaPredictor {
+	if !cfg.Enabled {
 		return nil
 	}
 
 	return &OllamaPredictor{
-		config: config,
-		client: &http.Client{Timeout: config.Timeout},
+		config: cfg,
+		client: &http.Client{Timeout: cfg.Timeout},
 		logger: logger,
 	}
 }
