@@ -162,7 +162,7 @@ func TestSTOPAnalysisMethods(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("RecordSTOPAnalysis and GetSTOPAnalysis", func(t *testing.T) {
+	t.Run("SaveSTOPAnalysis and GetSTOPAnalysis", func(t *testing.T) {
 		analysis := &STOPAnalysis{
 			TaskHash:           "stop_task_123",
 			TaskName:           "Test STOP Task",
@@ -173,8 +173,8 @@ func TestSTOPAnalysisMethods(t *testing.T) {
 			FinalDecision:      "proceed",
 			Confidence:         0.85,
 		}
-		if err := store.RecordSTOPAnalysis(ctx, analysis); err != nil {
-			t.Fatalf("Failed to record STOP analysis: %v", err)
+		if err := store.SaveSTOPAnalysis(ctx, analysis); err != nil {
+			t.Fatalf("Failed to save STOP analysis: %v", err)
 		}
 		if analysis.ID == 0 {
 			t.Error("Expected ID to be set")
@@ -198,23 +198,31 @@ func TestSTOPAnalysisMethods(t *testing.T) {
 		}
 	})
 
-	t.Run("GetSTOPAnalysis returns most recent", func(t *testing.T) {
+	t.Run("GetSTOPAnalysis returns most recent by ID", func(t *testing.T) {
 		// Add multiple analyses for same task
-		store.RecordSTOPAnalysis(ctx, &STOPAnalysis{
+		analysis1 := &STOPAnalysis{
 			TaskHash:      "multi_stop",
 			FinalDecision: "skip",
 			Confidence:    0.5,
-		})
-		store.RecordSTOPAnalysis(ctx, &STOPAnalysis{
+		}
+		store.SaveSTOPAnalysis(ctx, analysis1)
+
+		analysis2 := &STOPAnalysis{
 			TaskHash:      "multi_stop",
 			FinalDecision: "proceed",
 			Confidence:    0.9,
-		})
+		}
+		store.SaveSTOPAnalysis(ctx, analysis2)
+
+		// Second one should have higher ID
+		if analysis2.ID <= analysis1.ID {
+			t.Fatalf("Expected second analysis to have higher ID: %d vs %d", analysis2.ID, analysis1.ID)
+		}
 
 		retrieved, _ := store.GetSTOPAnalysis(ctx, "multi_stop")
-		// Most recent should be "proceed" with 0.9 confidence
-		if retrieved.FinalDecision != "proceed" {
-			t.Errorf("Expected most recent decision 'proceed', got '%s'", retrieved.FinalDecision)
+		// Most recent by ID should be the second one
+		if retrieved.ID != analysis2.ID {
+			t.Errorf("Expected most recent by ID %d, got ID %d", analysis2.ID, retrieved.ID)
 		}
 	})
 
@@ -226,10 +234,10 @@ func TestSTOPAnalysisMethods(t *testing.T) {
 		if len(analyses) == 0 {
 			t.Error("Expected some analyses")
 		}
-		// Should be ordered by analyzed_at DESC
+		// Should be ordered by id DESC (most recent first)
 		for i := 1; i < len(analyses); i++ {
-			if analyses[i].AnalyzedAt.After(analyses[i-1].AnalyzedAt) {
-				t.Error("Analyses not ordered by analyzed_at desc")
+			if analyses[i].ID > analyses[i-1].ID {
+				t.Error("Analyses not ordered by id desc")
 			}
 		}
 	})
@@ -270,6 +278,21 @@ func TestMigration8_PatternTables(t *testing.T) {
 		}
 		if !exists {
 			t.Errorf("Table %s should exist", table)
+		}
+	}
+
+	// Verify required indexes exist with exact names as specified
+	requiredIndexes := []string{
+		"idx_patterns_hash",      // For patterns hash lookup
+		"idx_duplicates_source",  // For duplicate source hash lookup
+	}
+	for _, idx := range requiredIndexes {
+		exists, err := store.indexExists(idx)
+		if err != nil {
+			t.Fatalf("Failed to check index %s: %v", idx, err)
+		}
+		if !exists {
+			t.Errorf("Index %s should exist", idx)
 		}
 	}
 }

@@ -2325,8 +2325,8 @@ type STOPAnalysis struct {
 	Metadata           string // JSON blob
 }
 
-// RecordSTOPAnalysis stores a STOP protocol analysis result
-func (s *Store) RecordSTOPAnalysis(ctx context.Context, analysis *STOPAnalysis) error {
+// SaveSTOPAnalysis stores a STOP protocol analysis result
+func (s *Store) SaveSTOPAnalysis(ctx context.Context, analysis *STOPAnalysis) error {
 	query := `INSERT INTO stop_analyses
 		(task_hash, task_name, search_results, think_analysis, outline_plan, prove_justification, final_decision, confidence, metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -2365,7 +2365,7 @@ func (s *Store) GetSTOPAnalysis(ctx context.Context, taskHash string) (*STOPAnal
 	query := `SELECT id, task_hash, task_name, search_results, think_analysis, outline_plan, prove_justification, final_decision, confidence, analyzed_at, metadata
 		FROM stop_analyses
 		WHERE task_hash = ?
-		ORDER BY analyzed_at DESC
+		ORDER BY id DESC
 		LIMIT 1`
 
 	row := s.db.QueryRowContext(ctx, query, taskHash)
@@ -2430,7 +2430,7 @@ func (s *Store) GetRecentSTOPAnalyses(ctx context.Context, limit int) ([]*STOPAn
 
 	query := `SELECT id, task_hash, task_name, search_results, think_analysis, outline_plan, prove_justification, final_decision, confidence, analyzed_at, metadata
 		FROM stop_analyses
-		ORDER BY analyzed_at DESC
+		ORDER BY id DESC
 		LIMIT ?`
 
 	rows, err := s.db.QueryContext(ctx, query, limit)

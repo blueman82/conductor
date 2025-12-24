@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS successful_patterns (
 );
 
 -- Indexes for pattern lookups
+CREATE INDEX IF NOT EXISTS idx_patterns_hash ON successful_patterns(task_hash);
 CREATE INDEX IF NOT EXISTS idx_successful_patterns_success ON successful_patterns(success_count DESC);
 CREATE INDEX IF NOT EXISTS idx_successful_patterns_last_used ON successful_patterns(last_used DESC);
 CREATE INDEX IF NOT EXISTS idx_successful_patterns_agent ON successful_patterns(last_agent);
@@ -181,7 +182,7 @@ CREATE TABLE IF NOT EXISTS duplicate_detections (
 );
 
 -- Indexes for duplicate detection queries
-CREATE INDEX IF NOT EXISTS idx_duplicate_detections_source ON duplicate_detections(source_hash);
+CREATE INDEX IF NOT EXISTS idx_duplicates_source ON duplicate_detections(source_hash);
 CREATE INDEX IF NOT EXISTS idx_duplicate_detections_matched ON duplicate_detections(matched_hash);
 CREATE INDEX IF NOT EXISTS idx_duplicate_detections_action ON duplicate_detections(action);
 CREATE INDEX IF NOT EXISTS idx_duplicate_detections_time ON duplicate_detections(detected_at DESC);
