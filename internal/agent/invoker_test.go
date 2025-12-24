@@ -1082,7 +1082,7 @@ func TestIsRateLimitOutput(t *testing.T) {
 
 func TestErrRateLimit(t *testing.T) {
 	err := &ErrRateLimit{RawMessage: "You're out of extra usage · resets 1am (Europe/Dublin)"}
-	
+
 	expected := "rate limit: You're out of extra usage · resets 1am (Europe/Dublin)"
 	if err.Error() != expected {
 		t.Errorf("ErrRateLimit.Error() = %q, want %q", err.Error(), expected)
