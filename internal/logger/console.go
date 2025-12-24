@@ -1412,7 +1412,8 @@ func (cl *ConsoleLogger) LogRateLimitResume() {
 	cl.mutex.Lock()
 	defer cl.mutex.Unlock()
 	ts := timestamp()
-	message := fmt.Sprintf("[%s] [RATE LIMIT] ▶️  Resuming\n", ts)
+	// Print newline first to preserve the countdown line, then the resume message
+	message := fmt.Sprintf("\n[%s] [RATE LIMIT] ▶️  Resuming\n", ts)
 	cl.writer.Write([]byte(message))
 }
 
