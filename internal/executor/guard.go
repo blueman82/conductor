@@ -209,20 +209,8 @@ func (gp *GuardProtocol) enhanceWithLLM(ctx context.Context, task models.Task, p
 	// Get LLM prediction
 	llmPred, err := gp.llmPredictor.PredictFailure(ctx, task)
 	if err != nil {
-		// Graceful degradation: log and continue with stats
-		if gp.logger != nil {
-			gp.logger.Log("GUARD", "LLM prediction failed: %v", err)
-		}
+		// Graceful degradation: continue with stats only
 		return
-	}
-
-	// Log LLM reasoning for transparency
-	if gp.logger != nil {
-		gp.logger.Log("GUARD", "🤖 LLM prediction for task %s: %.1f%% (confidence: %.1f%%)",
-			task.Number, llmPred.Probability*100, llmPred.Confidence*100)
-		if llmPred.Reasoning != "" {
-			gp.logger.Log("GUARD", "   Reasoning: %s", truncateString(llmPred.Reasoning, 100))
-		}
 	}
 
 	// Blend predictions: weighted average based on LLM confidence
