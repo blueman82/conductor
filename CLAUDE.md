@@ -341,6 +341,7 @@ tasks:
 - v2.14: Optional Orpheus TTS voice feedback for hands-free monitoring
 - v2.17: GUARD Protocol for pre-wave failure prediction
 - v2.20: Intelligent rate limit auto-resume with state persistence
+- v2.21: Mid-task rate limit recovery with session resume and git diff fallback
 
 ## Module Path
 
