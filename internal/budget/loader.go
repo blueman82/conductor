@@ -139,8 +139,8 @@ func parseSessionFile(path string, costModel map[string]ModelPricing) ([]UsageEn
 	var entries []UsageEntry
 	scanner := bufio.NewScanner(file)
 
-	// Increase buffer size for large JSONL lines
-	const maxScanTokenSize = 1024 * 1024 // 1MB
+	// Increase buffer size for large JSONL lines (some can be >1MB)
+	const maxScanTokenSize = 10 * 1024 * 1024 // 10MB
 	buf := make([]byte, maxScanTokenSize)
 	scanner.Buffer(buf, maxScanTokenSize)
 
