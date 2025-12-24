@@ -51,7 +51,8 @@ type Logger interface {
 	LogBudgetWarning(percentUsed float64)                 // Log warning when approaching budget limit
 	LogRateLimitPause(delay time.Duration)                // Log when pausing due to rate limit
 	LogRateLimitResume()                                  // Log when resuming after rate limit pause
-	LogRateLimitCountdown(remaining, total time.Duration) // Log countdown progress during rate limit wait (v2.20+)
+	LogRateLimitCountdown(remaining, total time.Duration) // Log live countdown (every 1s, console only)
+	LogRateLimitAnnounce(remaining, total time.Duration)  // Log TTS announcement (at announce_interval)
 }
 
 // WaveExecutorInterface defines the behavior required to execute waves.
