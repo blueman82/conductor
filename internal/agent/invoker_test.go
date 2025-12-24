@@ -1012,6 +1012,83 @@ Go development content
 
 // TestBuildCommandArgsSystemPrompt verifies that all tasks get the --system-prompt flag
 // (Changed from --append-system-prompt to --system-prompt to fully override default prompt for strict JSON enforcement)
+func TestIsRateLimitOutput(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{
+			name:   "out of extra usage message",
+			output: "You're out of extra usage · resets 1am (Europe/Dublin)",
+			want:   true,
+		},
+		{
+			name:   "out of usage without extra",
+			output: "You're out of usage for this period",
+			want:   true,
+		},
+		{
+			name:   "rate limit message",
+			output: "rate limit exceeded",
+			want:   true,
+		},
+		{
+			name:   "rate_limit with underscore",
+			output: "Error: rate_limit_error",
+			want:   true,
+		},
+		{
+			name:   "429 error",
+			output: "HTTP 429: Too Many Requests",
+			want:   true,
+		},
+		{
+			name:   "usage limit",
+			output: "usage limit reached",
+			want:   true,
+		},
+		{
+			name:   "too many requests",
+			output: "too many requests, please try again",
+			want:   true,
+		},
+		{
+			name:   "normal JSON response",
+			output: `{"status":"success","summary":"Done"}`,
+			want:   false,
+		},
+		{
+			name:   "normal error message",
+			output: "Error: file not found",
+			want:   false,
+		},
+		{
+			name:   "empty output",
+			output: "",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRateLimitOutput(tt.output)
+			if got != tt.want {
+				t.Errorf("isRateLimitOutput(%q) = %v, want %v", tt.output, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestErrRateLimit(t *testing.T) {
+	err := &ErrRateLimit{RawMessage: "You're out of extra usage · resets 1am (Europe/Dublin)"}
+	
+	expected := "rate limit: You're out of extra usage · resets 1am (Europe/Dublin)"
+	if err.Error() != expected {
+		t.Errorf("ErrRateLimit.Error() = %q, want %q", err.Error(), expected)
+	}
+}
+
 func TestBuildCommandArgsSystemPrompt(t *testing.T) {
 	tests := []struct {
 		name     string
