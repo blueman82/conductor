@@ -62,12 +62,12 @@ func newBudgetReportCmd() *cobra.Command {
 	}
 }
 
-func newBudgetListPausedCmd() *cobra.Command {
+func newBudgetListSavedCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list-paused",
-		Short: "List paused executions waiting for rate limit reset",
-		Long:  "Shows all executions that were paused due to rate limits and their resume status",
-		RunE:  runBudgetListPaused,
+		Use:   "list-saved",
+		Short: "List saved executions (exited due to long rate limit wait)",
+		Long:  "Shows executions that were saved and exited because rate limit wait exceeded max_wait_duration. These can be resumed with 'conductor budget resume'.",
+		RunE:  runBudgetListSaved,
 	}
 }
 
