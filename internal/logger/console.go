@@ -1398,7 +1398,7 @@ func (cl *ConsoleLogger) LogRateLimitPause(delay time.Duration) {
 	cl.mutex.Lock()
 	defer cl.mutex.Unlock()
 	ts := timestamp()
-	message := fmt.Sprintf("[%s] [RATE LIMIT] ⏸️  Pausing %s\n", ts, delay.Round(time.Second))
+	message := fmt.Sprintf("[%s] [RATE LIMIT] ⏸️  Rate limited, waiting for reset...\n", ts)
 	cl.writer.Write([]byte(message))
 }
 
