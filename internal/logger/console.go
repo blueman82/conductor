@@ -1435,10 +1435,10 @@ func (cl *ConsoleLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 	if cl.colorOutput {
 		// Yellow for countdown to indicate waiting
 		prefix := color.New(color.FgYellow).Sprint("[RATE LIMIT]")
-		message = fmt.Sprintf("\r[%s] %s ⏳ %s remaining (%.0f%% complete)    ",
+		message = fmt.Sprintf("\r[%s] %s ⏳ %s until auto-resume (%.0f%%)    ",
 			ts, prefix, remaining.Round(time.Second), pct)
 	} else {
-		message = fmt.Sprintf("\r[%s] [RATE LIMIT] ⏳ %s remaining (%.0f%% complete)    ",
+		message = fmt.Sprintf("\r[%s] [RATE LIMIT] ⏳ %s until auto-resume (%.0f%%)    ",
 			ts, remaining.Round(time.Second), pct)
 	}
 	cl.writer.Write([]byte(message))
