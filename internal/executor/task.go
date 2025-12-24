@@ -589,8 +589,15 @@ func isRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
+	
+	// Check for ErrRateLimit type from agent package (v2.20.1+)
+	if strings.HasPrefix(err.Error(), "rate limit:") {
+		return true
+	}
+	
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "rate limit") ||
+		strings.Contains(msg, "out of") && strings.Contains(msg, "usage") ||
 		strings.Contains(msg, "429") ||
 		strings.Contains(msg, "too many requests") ||
 		strings.Contains(msg, "quota exceeded") ||
