@@ -36,7 +36,7 @@ Examples:
 	// Add subcommands
 	cmd.AddCommand(newBudgetStatusCmd())
 	cmd.AddCommand(newBudgetReportCmd())
-	cmd.AddCommand(newBudgetListPausedCmd())
+	cmd.AddCommand(newBudgetListSavedCmd())
 	cmd.AddCommand(newBudgetResumeCmd())
 
 	// Persistent flags
