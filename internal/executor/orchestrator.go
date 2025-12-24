@@ -53,6 +53,9 @@ type Logger interface {
 	LogRateLimitResume()                                  // Log when resuming after rate limit pause
 	LogRateLimitCountdown(remaining, total time.Duration) // Log live countdown (every 1s, console only)
 	LogRateLimitAnnounce(remaining, total time.Duration)  // Log TTS announcement (at announce_interval)
+
+	// SetGuardVerbose enables verbose GUARD output including recommendations
+	SetGuardVerbose(verbose bool)
 }
 
 // WaveExecutorInterface defines the behavior required to execute waves.
