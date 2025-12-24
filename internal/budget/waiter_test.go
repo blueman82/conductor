@@ -12,10 +12,21 @@ type mockWaiterLogger struct {
 		remaining time.Duration
 		total     time.Duration
 	}
+	announceCalls []struct {
+		remaining time.Duration
+		total     time.Duration
+	}
 }
 
 func (m *mockWaiterLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 	m.calls = append(m.calls, struct {
+		remaining time.Duration
+		total     time.Duration
+	}{remaining, total})
+}
+
+func (m *mockWaiterLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
+	m.announceCalls = append(m.announceCalls, struct {
 		remaining time.Duration
 		total     time.Duration
 	}{remaining, total})
