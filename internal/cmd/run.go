@@ -866,6 +866,13 @@ func (ml *multiLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 	}
 }
 
+// LogRateLimitAnnounce forwards to all loggers
+func (ml *multiLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
+	for _, logger := range ml.loggers {
+		logger.LogRateLimitAnnounce(remaining, total)
+	}
+}
+
 // getTask finds a task by number in a task list
 func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	for i := range tasks {
