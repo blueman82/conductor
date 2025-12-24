@@ -121,7 +121,14 @@ func (l *TTSLogger) LogRateLimitResume() {
 }
 
 // LogRateLimitCountdown is a no-op implementation.
-// Rate limit countdown could be announced in the future if needed.
+// Live visual countdown is handled by console logger.
 func (l *TTSLogger) LogRateLimitCountdown(remaining, total time.Duration) {
-	// No-op: could announce countdown progress if desired
+	// No-op: live visual countdown is console-only
+}
+
+// LogRateLimitAnnounce speaks TTS announcements at the configured interval.
+func (l *TTSLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
+	if l.announcer != nil {
+		l.announcer.RateLimitCountdown(remaining, total)
+	}
 }
