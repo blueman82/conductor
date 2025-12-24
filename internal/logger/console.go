@@ -1444,6 +1444,11 @@ func (cl *ConsoleLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 	cl.writer.Write([]byte(message))
 }
 
+// LogRateLimitAnnounce is a no-op for console (TTS only)
+func (cl *ConsoleLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
+	// No-op: TTS announcements are handled by TTS logger
+}
+
 // Box drawing characters for rich output formatting
 const (
 	boxTopLeft     = "┌"
