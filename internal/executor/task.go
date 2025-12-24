@@ -609,9 +609,36 @@ func isRateLimitError(err error) bool {
 //   - Parses actual reset time from CLI output
 //   - If wait <= MaxWaitDuration: waits with countdown announcements
 //   - If wait > MaxWaitDuration: saves state and returns ErrRateLimitExit
+//   - On retry: uses --resume with session ID if available, or injects git diff context
 func (te *DefaultTaskExecutor) executeWithRateLimitRecovery(ctx context.Context, task models.Task) (models.TaskResult, error) {
+	var lastSessionID string // Track session ID from previous attempt for --resume
+
 	for {
-		result, err := te.executeTask(ctx, task)
+		// Prepare task for execution (potentially with resume context)
+		taskToExecute := task
+		if lastSessionID != "" {
+			// Primary: Resume previous session via Claude CLI --resume flag
+			taskToExecute.ResumeSessionID = lastSessionID
+			if te.Logger != nil {
+				te.Logger.Infof("Resuming session %s after rate limit", lastSessionID)
+			}
+		} else if te.hasGitChanges() {
+			// Fallback: Inject git diff context if no session ID but partial work exists
+			diffContext := te.getGitDiffContext()
+			if diffContext != "" {
+				taskToExecute.Prompt = task.Prompt + diffContext
+				if te.Logger != nil {
+					te.Logger.Info("Injecting git diff context for rate limit retry (no session ID)")
+				}
+			}
+		}
+
+		result, err := te.executeTask(ctx, taskToExecute)
+
+		// Capture session ID for potential retry (from InvocationResult via TaskResult)
+		if result.SessionID != "" {
+			lastSessionID = result.SessionID
+		}
 
 		// Check for rate limit error
 		if !isRateLimitError(err) {
@@ -682,8 +709,42 @@ func (te *DefaultTaskExecutor) executeWithRateLimitRecovery(ctx context.Context,
 			te.EventLogger.LogRateLimitResume()
 		}
 
-		// Retry the task
+		// Retry the task (loop continues with lastSessionID set)
 	}
+}
+
+// hasGitChanges checks if there are uncommitted changes in the working directory
+func (te *DefaultTaskExecutor) hasGitChanges() bool {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = te.WorkDir
+	output, err := cmd.Output()
+	return err == nil && len(output) > 0
+}
+
+// getGitDiffContext returns a formatted git diff summary for injection into retry prompts
+func (te *DefaultTaskExecutor) getGitDiffContext() string {
+	cmd := exec.Command("git", "diff", "--stat", "HEAD")
+	cmd.Dir = te.WorkDir
+	output, err := cmd.Output()
+	if err != nil || len(output) == 0 {
+		return ""
+	}
+
+	// Truncate if too large (keep under 2KB to avoid bloating prompt)
+	diffStr := string(output)
+	if len(diffStr) > 2048 {
+		diffStr = diffStr[:2048] + "\n... (truncated)"
+	}
+
+	return fmt.Sprintf(`
+
+---
+## RATE LIMIT RECOVERY - PARTIAL PROGRESS DETECTED
+The following files were modified before the rate limit. DO NOT re-apply changes that already exist.
+Review the current state and continue from where you left off.
+
+%s
+---`, diffStr)
 }
 
 // Execute runs an individual task, handling agent invocation, quality control, and plan updates.
