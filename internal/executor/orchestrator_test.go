@@ -70,6 +70,7 @@ func (m *mockLogger) LogBudgetWarning(percentUsed float64)                      
 func (m *mockLogger) LogRateLimitPause(delay time.Duration)                            {}
 func (m *mockLogger) LogRateLimitResume()                                              {}
 func (m *mockLogger) LogRateLimitCountdown(remaining, total time.Duration)             {}
+func (m *mockLogger) LogRateLimitAnnounce(remaining, total time.Duration)              {}
 
 func TestOrchestratorExecutePlan(t *testing.T) {
 	tests := []struct {
