@@ -123,8 +123,8 @@ func runBudgetReport(cmd *cobra.Command, args []string) {
 	}
 }
 
-// runBudgetListPaused lists all paused executions
-func runBudgetListPaused(cmd *cobra.Command, args []string) error {
+// runBudgetListSaved lists all saved executions
+func runBudgetListSaved(cmd *cobra.Command, args []string) error {
 	// Create state manager
 	stateDir := filepath.Join(".conductor", "state")
 	sm := budget.NewStateManager(stateDir)
