@@ -87,11 +87,11 @@ func TestSTOPSearcher_Search_WithValidDescription(t *testing.T) {
 	}
 
 	// Results should have initialized slices (not nil)
-	if results.GitCommits == nil {
-		t.Error("GitCommits should not be nil")
+	if results.GitMatches == nil {
+		t.Error("GitMatches should not be nil")
 	}
-	if results.Issues == nil {
-		t.Error("Issues should not be nil")
+	if results.IssueMatches == nil {
+		t.Error("IssueMatches should not be nil")
 	}
 	if results.DocMatches == nil {
 		t.Error("DocMatches should not be nil")
@@ -368,16 +368,16 @@ func TestSearchResults_HasRelevantResults(t *testing.T) {
 			want:    false,
 		},
 		{
-			name: "with git commits",
+			name: "with git matches",
 			results: SearchResults{
-				GitCommits: []GitCommit{{Hash: "abc123"}},
+				GitMatches: []GitCommit{{Hash: "abc123"}},
 			},
 			want: true,
 		},
 		{
-			name: "with issues",
+			name: "with issue matches",
 			results: SearchResults{
-				Issues: []GitHubIssue{{Number: 1}},
+				IssueMatches: []GitHubIssue{{Number: 1}},
 			},
 			want: true,
 		},
@@ -416,7 +416,7 @@ func TestSearchResults_HasRelevantResults(t *testing.T) {
 
 func TestSearchResults_ToSearchResult(t *testing.T) {
 	results := SearchResults{
-		GitCommits: []GitCommit{
+		GitMatches: []GitCommit{
 			{Hash: "abc123", Subject: "Add auth", Author: "dev"},
 		},
 		DocMatches: []DocMatch{
@@ -657,7 +657,7 @@ func BenchmarkParseGHIssuesOutput(b *testing.B) {
 
 func BenchmarkSearchResults_ToSearchResult(b *testing.B) {
 	results := SearchResults{
-		GitCommits: []GitCommit{
+		GitMatches: []GitCommit{
 			{Hash: "abc123", Subject: "Add auth", Author: "dev"},
 		},
 		DocMatches: []DocMatch{

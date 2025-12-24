@@ -74,11 +74,11 @@ type HistoryMatch struct {
 
 // SearchResults aggregates results from all search sources.
 type SearchResults struct {
-	// GitCommits contains matching commits from git history
-	GitCommits []GitCommit `json:"git_commits"`
+	// GitMatches contains matching commits from git history
+	GitMatches []GitCommit `json:"git_matches"`
 
-	// Issues contains matching GitHub issues (if gh CLI available)
-	Issues []GitHubIssue `json:"issues"`
+	// IssueMatches contains matching GitHub issues (if gh CLI available)
+	IssueMatches []GitHubIssue `json:"issue_matches"`
 
 	// DocMatches contains documentation search results
 	DocMatches []DocMatch `json:"doc_matches"`
@@ -99,8 +99,8 @@ type SearchResults struct {
 func (s *STOPSearcher) Search(ctx context.Context, taskDescription string, files []string) SearchResults {
 	startTime := time.Now()
 	results := SearchResults{
-		GitCommits:     []GitCommit{},
-		Issues:         []GitHubIssue{},
+		GitMatches:     []GitCommit{},
+		IssueMatches:   []GitHubIssue{},
 		DocMatches:     []DocMatch{},
 		HistoryMatches: []HistoryMatch{},
 		Errors:         []string{},
@@ -135,7 +135,7 @@ func (s *STOPSearcher) Search(ctx context.Context, taskDescription string, files
 		if err != nil {
 			results.Errors = append(results.Errors, fmt.Sprintf("git search: %v", err))
 		} else {
-			results.GitCommits = commits
+			results.GitMatches = commits
 		}
 		mu.Unlock()
 	}()
@@ -155,7 +155,7 @@ func (s *STOPSearcher) Search(ctx context.Context, taskDescription string, files
 				results.Errors = append(results.Errors, fmt.Sprintf("issue search: %v", err))
 			}
 		} else {
-			results.Issues = issues
+			results.IssueMatches = issues
 		}
 		mu.Unlock()
 	}()
@@ -201,6 +201,8 @@ func (s *STOPSearcher) Search(ctx context.Context, taskDescription string, files
 }
 
 // searchGit searches git commit history for matching keywords.
+// Uses 'git log --grep' with '--all --name-only' to find matching commits
+// across all branches and include file information for commit context.
 func (s *STOPSearcher) searchGit(ctx context.Context, keywords []string) ([]GitCommit, error) {
 	if len(keywords) == 0 {
 		return []GitCommit{}, nil
@@ -210,7 +212,11 @@ func (s *STOPSearcher) searchGit(ctx context.Context, keywords []string) ([]GitC
 	grepPattern := strings.Join(keywords[:min(3, len(keywords))], "\\|")
 
 	// Use git log with --grep to search commit messages
+	// --all: search across all branches (not just current)
+	// --name-only: include file names for context about what changed
 	cmd := exec.CommandContext(ctx, "git", "log",
+		"--all",
+		"--name-only",
 		"--grep="+grepPattern,
 		"--format=%H|%s|%an|%ai",
 		"-n", "10", // Limit to 10 results
@@ -234,6 +240,7 @@ func (s *STOPSearcher) searchGit(ctx context.Context, keywords []string) ([]GitC
 		if line == "" {
 			continue
 		}
+		// Check if line is a commit line (contains |) or a file name
 		parts := strings.SplitN(line, "|", 4)
 		if len(parts) >= 4 {
 			commits = append(commits, GitCommit{
@@ -243,6 +250,8 @@ func (s *STOPSearcher) searchGit(ctx context.Context, keywords []string) ([]GitC
 				Date:    parts[3],
 			})
 		}
+		// File names from --name-only are on separate lines without |
+		// We skip them here as we primarily care about commit metadata
 	}
 
 	return commits, nil
@@ -345,10 +354,10 @@ func (s *STOPSearcher) searchDocs(ctx context.Context, keywords []string) ([]Doc
 
 	// Use grep to search docs/
 	cmd := exec.CommandContext(ctx, "grep",
-		"-r",          // Recursive
-		"-n",          // Show line numbers
-		"-i",          // Case insensitive
-		"-l",          // List files only first to check if docs/ exists
+		"-r", // Recursive
+		"-n", // Show line numbers
+		"-i", // Case insensitive
+		"-l", // List files only first to check if docs/ exists
 		pattern,
 		"docs/",
 	)
@@ -457,8 +466,8 @@ func (s *STOPSearcher) searchHistory(ctx context.Context, hashResult HashResult)
 
 // HasRelevantResults returns true if any meaningful results were found.
 func (r *SearchResults) HasRelevantResults() bool {
-	return len(r.GitCommits) > 0 ||
-		len(r.Issues) > 0 ||
+	return len(r.GitMatches) > 0 ||
+		len(r.IssueMatches) > 0 ||
 		len(r.DocMatches) > 0 ||
 		len(r.HistoryMatches) > 0
 }
@@ -473,7 +482,7 @@ func (r *SearchResults) ToSearchResult() SearchResult {
 	}
 
 	// Convert git commits to pattern matches
-	for _, commit := range r.GitCommits {
+	for _, commit := range r.GitMatches {
 		result.SimilarPatterns = append(result.SimilarPatterns, PatternMatch{
 			Name:        commit.Subject,
 			Description: fmt.Sprintf("Git commit %s by %s", commit.Hash, commit.Author),
@@ -502,7 +511,7 @@ func (r *SearchResults) ToSearchResult() SearchResult {
 	// Calculate overall search confidence
 	if r.HasRelevantResults() {
 		// Higher confidence with more results
-		result.SearchConfidence = float64(len(r.GitCommits)+len(r.DocMatches)+len(r.HistoryMatches)) / 15.0
+		result.SearchConfidence = float64(len(r.GitMatches)+len(r.DocMatches)+len(r.HistoryMatches)) / 15.0
 		if result.SearchConfidence > 1.0 {
 			result.SearchConfidence = 1.0
 		}
