@@ -56,6 +56,9 @@ type Task struct {
 	RuntimeMetadata    *TaskMetadataRuntime `yaml:"runtime_metadata,omitempty" json:"runtime_metadata,omitempty"`
 	StructuredCriteria []SuccessCriterion   `yaml:"structured_criteria,omitempty" json:"structured_criteria,omitempty"` // Criteria with optional verification blocks
 
+	// Rate limit recovery (v2.21+)
+	ResumeSessionID string `json:"-" yaml:"-"` // Session ID for --resume flag (runtime only, not persisted)
+
 	// Execution metadata for enhanced console output
 	ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`
 	ExecutionEndTime   time.Time     `json:"execution_end_time,omitempty" yaml:"execution_end_time,omitempty"`
