@@ -234,8 +234,11 @@ func createUsageTracker() (*budget.UsageTracker, error) {
 	// Expand home directory
 	baseDir = expandPath(baseDir)
 
-	// Create tracker
+	// Create tracker and load usage data
 	tracker := budget.NewUsageTracker(baseDir, budget.DefaultCostModel())
+	if err := budget.LoadUsage(tracker); err != nil {
+		return nil, fmt.Errorf("failed to load usage data: %w", err)
+	}
 	return tracker, nil
 }
 
