@@ -61,7 +61,36 @@ type GuardConfig struct {
 
 	// AnomalyDetection configuration for real-time anomaly monitoring (v2.18+)
 	AnomalyDetection AnomalyDetectionConfig `yaml:"anomaly_detection"`
+
+	// LLM configuration for LLM-enhanced failure prediction (v2.22+)
+	LLM LLMGuardConfig `yaml:"llm"`
 }
+
+// LLMGuardConfig defines LLM-enhanced GUARD configuration
+type LLMGuardConfig struct {
+	// Enabled enables LLM-based failure prediction
+	Enabled bool `yaml:"enabled"`
+
+	// Model specifies the Ollama model to use (e.g., "gpt-oss:latest")
+	Model string `yaml:"model"`
+
+	// ThinkLevel specifies reasoning depth: "low", "medium", "high"
+	ThinkLevel string `yaml:"think_level"`
+
+	// BaseURL is the Ollama API endpoint (default: http://localhost:11434)
+	BaseURL string `yaml:"base_url"`
+
+	// Timeout for LLM requests
+	Timeout time.Duration `yaml:"timeout"`
+
+	// FallbackToStats uses statistical prediction if LLM fails
+	FallbackToStats bool `yaml:"fallback_to_stats"`
+
+	// MinProbabilityForLLM only uses LLM when stats probability is uncertain
+	MinProbabilityForLLM float64 `yaml:"min_probability_for_llm"`
+
+	// MaxProbabilityForLLM upper bound for uncertainty range
+	MaxProbabilityForLLM float64 `yaml:"max_probability_for_llm"`
 
 // AnomalyDetectionConfig controls real-time anomaly detection during wave execution
 type AnomalyDetectionConfig struct {
