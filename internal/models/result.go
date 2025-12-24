@@ -30,6 +30,7 @@ type TaskResult struct {
 	RetryCount       int                // Number of retries attempted
 	ReviewFeedback   string             // Feedback from QC review
 	ExecutionHistory []ExecutionAttempt // Detailed history of all attempts
+	SessionID        string             // Claude CLI session ID (for rate limit recovery)
 }
 
 // ExecutionResult represents the aggregate result of executing a plan
