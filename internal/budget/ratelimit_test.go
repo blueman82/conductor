@@ -79,6 +79,67 @@ func TestParseRateLimitFromOutput_HumanTime(t *testing.T) {
 	}
 }
 
+// TestParseRateLimitFromOutput_ResetsTime tests the "resets Xam (Timezone)" pattern (v2.20.1+)
+func TestParseRateLimitFromOutput_ResetsTime(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		expectedHr int
+		timezone   string
+	}{
+		{
+			"out of extra usage - morning",
+			"You're out of extra usage · resets 1am (Europe/Dublin)",
+			1,
+			"Europe/Dublin",
+		},
+		{
+			"out of extra usage - afternoon",
+			"You're out of extra usage · resets 3pm (America/Los_Angeles)",
+			15,
+			"America/Los_Angeles",
+		},
+		{
+			"out of usage - noon",
+			"out of usage · resets 12pm (UTC)",
+			12,
+			"UTC",
+		},
+		{
+			"out of usage - midnight",
+			"out of usage · resets 12am (America/New_York)",
+			0,
+			"America/New_York",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := ParseRateLimitFromOutput(tt.input)
+			if info == nil {
+				t.Fatalf("expected non-nil info for input %q", tt.input)
+			}
+
+			loc, err := time.LoadLocation(tt.timezone)
+			if err != nil {
+				loc = time.UTC
+			}
+			now := time.Now().In(loc)
+			expected := time.Date(now.Year(), now.Month(), now.Day(), tt.expectedHr, 0, 0, 0, loc)
+
+			// If expected time is in the past, it should wrap to next day
+			if expected.Before(now) {
+				expected = expected.Add(24 * time.Hour)
+			}
+
+			// Allow 1 hour tolerance for edge cases around midnight
+			if info.ResetAt.Hour() != expected.Hour() {
+				t.Errorf("expected hour %d, got %d", expected.Hour(), info.ResetAt.Hour())
+			}
+		})
+	}
+}
+
 func TestParseRateLimitFromOutput_RetrySeconds(t *testing.T) {
 	tests := []struct {
 		name     string
