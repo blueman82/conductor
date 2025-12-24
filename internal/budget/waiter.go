@@ -5,15 +5,19 @@ import (
 	"time"
 )
 
+// visualUpdateInterval is the fixed interval for live counter updates (1 second)
+const visualUpdateInterval = 1 * time.Second
+
 // WaiterLogger interface for countdown announcements
 type WaiterLogger interface {
-	LogRateLimitCountdown(remaining, total time.Duration)
+	LogRateLimitCountdown(remaining, total time.Duration) // Called every 1s for live visual update
+	LogRateLimitAnnounce(remaining, total time.Duration)  // Called at announce_interval for TTS
 }
 
 // RateLimitWaiter handles intelligent waiting for rate limit resets
 type RateLimitWaiter struct {
 	maxWait      time.Duration // Max wait before save-and-exit (default: 6h)
-	announceInt  time.Duration // Countdown interval (default: 15m)
+	announceInt  time.Duration // TTS announcement interval (default: 15m)
 	safetyBuffer time.Duration // Extra wait after reset (default: 60s)
 	logger       WaiterLogger  // For countdown announcements (can be nil)
 }
