@@ -393,8 +393,9 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// are properly detected even when they fail JSON parsing
 	rawOutput := stdout.String()
 	if isRateLimitOutput(rawOutput) {
-		result.Error = &ErrRateLimit{RawMessage: rawOutput}
-		return result, nil
+		rateLimitErr := &ErrRateLimit{RawMessage: rawOutput}
+		result.Error = rateLimitErr
+		return result, rateLimitErr // Return error so executeWithRateLimitRecovery can catch it
 	}
 
 	// Parse agent response from stdout
