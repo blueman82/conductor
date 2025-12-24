@@ -2351,3 +2351,4 @@ func (n *NoOpLogger) LogBudgetWarning(percentUsed float64)                 {}
 func (n *NoOpLogger) LogRateLimitPause(delay time.Duration)                {}
 func (n *NoOpLogger) LogRateLimitResume()                                  {}
 func (n *NoOpLogger) LogRateLimitCountdown(remaining, total time.Duration) {}
+func (n *NoOpLogger) LogRateLimitAnnounce(remaining, total time.Duration)  {}
