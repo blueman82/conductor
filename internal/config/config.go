@@ -481,9 +481,9 @@ func DefaultBudgetConfig() BudgetConfig {
 		MaxCostPerTask:   0,   // No limit
 		WarnThreshold:    0.8, // Warn at 80%
 		CheckInterval:    "per_wave",
-		AutoResume:       true,            // Enabled by default
-		MaxWaitDuration:  6 * time.Hour,   // 6 hours
-		AnnounceInterval: 1 * time.Second, // 1 second for live counter
+		AutoResume:       true,             // Enabled by default
+		MaxWaitDuration:  6 * time.Hour,    // 6 hours
+		AnnounceInterval: 15 * time.Minute, // 15 minutes for TTS announcements
 		SafetyBuffer:     60 * time.Second, // 60 seconds
 	}
 }
