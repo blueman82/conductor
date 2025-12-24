@@ -7,49 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
+	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/models"
 )
-
-// LLMGuardConfig defines LLM-enhanced GUARD configuration
-type LLMGuardConfig struct {
-	// Enabled enables LLM-based failure prediction
-	Enabled bool `yaml:"enabled"`
-
-	// Model specifies the Ollama model to use (e.g., "gpt-oss:latest")
-	Model string `yaml:"model"`
-
-	// ThinkLevel specifies reasoning depth: "low", "medium", "high"
-	ThinkLevel string `yaml:"think_level"`
-
-	// BaseURL is the Ollama API endpoint (default: http://localhost:11434)
-	BaseURL string `yaml:"base_url"`
-
-	// Timeout for LLM requests (default: 60s)
-	Timeout time.Duration `yaml:"timeout"`
-
-	// FallbackToStats uses statistical prediction if LLM fails
-	FallbackToStats bool `yaml:"fallback_to_stats"`
-
-	// MinProbabilityForLLM only uses LLM when stats probability is uncertain (0.3-0.7)
-	MinProbabilityForLLM float64 `yaml:"min_probability_for_llm"`
-	MaxProbabilityForLLM float64 `yaml:"max_probability_for_llm"`
-}
-
-// DefaultLLMGuardConfig returns default LLM GUARD configuration
-func DefaultLLMGuardConfig() LLMGuardConfig {
-	return LLMGuardConfig{
-		Enabled:              false,
-		Model:                "gpt-oss:latest",
-		ThinkLevel:           "medium",
-		BaseURL:              "http://localhost:11434",
-		Timeout:              60 * time.Second,
-		FallbackToStats:      true,
-		MinProbabilityForLLM: 0.3,
-		MaxProbabilityForLLM: 0.7,
-	}
-}
 
 // LLMPrediction contains the LLM's failure prediction
 type LLMPrediction struct {
