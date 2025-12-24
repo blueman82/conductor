@@ -242,7 +242,8 @@ func TestRateLimitWaiter_WaitForReset_NilLogger(t *testing.T) {
 
 func TestRateLimitWaiter_WaitForReset_MultipleCountdowns(t *testing.T) {
 	logger := &mockWaiterLogger{}
-	// Use very short intervals to ensure multiple countdown announcements
+	// Use very short intervals to ensure multiple TTS announcements
+	// Visual counter uses hardcoded 1s interval, so we check announceCalls instead
 	waiter := NewRateLimitWaiter(1*time.Hour, 30*time.Millisecond, 10*time.Millisecond, logger)
 
 	info := &RateLimitInfo{
@@ -255,21 +256,22 @@ func TestRateLimitWaiter_WaitForReset_MultipleCountdowns(t *testing.T) {
 		t.Errorf("expected nil error, got %v", err)
 	}
 
-	// Should have logged multiple countdowns (initial + at least 2 ticker events)
-	if len(logger.calls) < 2 {
-		t.Errorf("expected at least 2 countdown logs, got %d", len(logger.calls))
+	// Should have logged multiple TTS announcements (initial + at least 2 ticker events)
+	// Visual calls use 1s interval so won't have multiple in 100ms
+	if len(logger.announceCalls) < 2 {
+		t.Errorf("expected at least 2 TTS announcement logs, got %d", len(logger.announceCalls))
 	}
 
 	// Verify countdown is decreasing
-	if len(logger.calls) >= 2 {
-		if logger.calls[1].remaining >= logger.calls[0].remaining {
-			t.Error("expected remaining time to decrease between countdown announcements")
+	if len(logger.announceCalls) >= 2 {
+		if logger.announceCalls[1].remaining >= logger.announceCalls[0].remaining {
+			t.Error("expected remaining time to decrease between TTS announcements")
 		}
 	}
 
 	// Verify total wait time is consistent across all calls
-	if len(logger.calls) >= 2 {
-		if logger.calls[0].total != logger.calls[1].total {
+	if len(logger.announceCalls) >= 2 {
+		if logger.announceCalls[0].total != logger.announceCalls[1].total {
 			t.Error("expected total wait time to remain constant")
 		}
 	}
