@@ -25,7 +25,7 @@ func TestGuardModeBlock_HighProbability_ShouldBlock(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -86,7 +86,7 @@ func TestGuardModeBlock_LowProbability_ShouldNotBlock(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -139,7 +139,7 @@ func TestGuardModeWarn_HighProbability_ShouldNotBlock(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -192,7 +192,7 @@ func TestGuardModeAdaptive_HighProbHighConf_ShouldBlock(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -245,7 +245,7 @@ func TestGuardModeAdaptive_HighProbLowConf_ShouldNotBlock(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -301,7 +301,7 @@ func TestProbabilityThreshold_ExactlyAtThreshold(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -358,7 +358,7 @@ func TestProbabilityThreshold_SlightlyBelow(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -412,7 +412,7 @@ func TestProbabilityThreshold_SlightlyAbove(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -487,7 +487,7 @@ func TestNewGuardProtocol_DisabledConfig_ReturnsNil(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard != nil {
 		t.Error("expected nil GuardProtocol when config.Enabled is false")
@@ -524,7 +524,7 @@ func TestCheckWave_PredictorError_ContinuesExecution(t *testing.T) {
 
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	if guard == nil {
 		t.Fatal("expected non-nil GuardProtocol")
@@ -567,7 +567,7 @@ func TestPredictToolUsage_GoFiles_IncludesBashWriteEdit(t *testing.T) {
 	cfg := GuardConfig{Enabled: true, Mode: GuardModeWarn}
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	task := models.Task{
 		Number:       "1",
@@ -604,7 +604,7 @@ func TestPredictToolUsage_TestCommands_IncludesBash(t *testing.T) {
 	cfg := GuardConfig{Enabled: true, Mode: GuardModeWarn}
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	task := models.Task{
 		Number:       "1",
@@ -633,7 +633,7 @@ func TestPredictToolUsage_MarkdownFiles_IncludesReadWrite(t *testing.T) {
 	cfg := GuardConfig{Enabled: true, Mode: GuardModeWarn}
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	task := models.Task{
 		Number: "1",
@@ -667,7 +667,7 @@ func TestPredictToolUsage_EmptyFiles_ReturnsEmpty(t *testing.T) {
 	cfg := GuardConfig{Enabled: true, Mode: GuardModeWarn}
 	store := newMockStore()
 	logger := newMockGuardLogger()
-	guard := NewGuardProtocol(cfg, store, logger)
+	guard := NewGuardProtocol(cfg, config.LLMGuardConfig{}, store, logger)
 
 	task := models.Task{
 		Number: "1",
