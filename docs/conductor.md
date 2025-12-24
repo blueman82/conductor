@@ -2231,6 +2231,25 @@ When TTS is enabled, Conductor announces rate limit countdowns:
 - "Rate limit countdown: 4 hours 30 minutes remaining."
 - "Rate limit expired. Resuming execution."
 
+**Mid-Task Recovery (v2.21+):**
+
+When a rate limit occurs mid-task (agent has made partial progress), Conductor uses two strategies:
+
+1. **Session Resume (Primary)**: Captures the Claude CLI session ID and uses `--resume <session_id>` on retry. This preserves the agent's full conversation context, allowing it to continue exactly where it left off.
+
+2. **Git Diff Fallback**: If no session ID is available (e.g., rate limit occurred before JSON parsing completed), Conductor injects a git diff summary into the retry prompt:
+   ```
+   ## RATE LIMIT RECOVERY - PARTIAL PROGRESS DETECTED
+   The following files were modified before the rate limit.
+   DO NOT re-apply changes that already exist.
+   
+    internal/executor/task.go | 45 +++++++++++++++++
+    internal/models/task.go   |  3 ++
+    2 files changed, 48 insertions(+)
+   ```
+
+This prevents duplicate work and helps the agent understand what was already accomplished.
+
 **Graceful Degradation:**
 
 - If parsing fails → Falls back to 5-hour default wait
