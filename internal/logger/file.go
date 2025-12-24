@@ -643,3 +643,8 @@ func (fl *FileLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 		ts, remaining.Seconds(), pct)
 	fl.writeRunLog(message)
 }
+
+// LogRateLimitAnnounce is a no-op for file logger (TTS only)
+func (fl *FileLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
+	// No-op: TTS announcements are not logged to file
+}
