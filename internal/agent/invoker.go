@@ -251,6 +251,7 @@ func getBoxWidth() int {
 }
 
 // logInvocation prints a pretty summary of the agent invocation with colors
+// Uses a buffer to write atomically and prevent interleaving with parallel agents
 func (inv *Invoker) logInvocation(task models.Task, args []string) {
 	// ANSI color codes
 	cyan := "\033[36m"
@@ -265,9 +266,12 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 	boxWidth := getBoxWidth()
 	innerWidth := boxWidth - 4 // Account for "│ " and " │"
 
+	// Buffer output to write atomically (prevents interleaving with parallel agents)
+	var buf strings.Builder
+
 	// Box drawing - all borders in cyan
 	hLine := strings.Repeat("─", boxWidth-2)
-	fmt.Fprintf(os.Stderr, "\n%s┌%s┐%s\n", cyan, hLine, reset)
+	fmt.Fprintf(&buf, "\n%s┌%s┐%s\n", cyan, hLine, reset)
 
 	// Header line - use runewidth for proper emoji width calculation
 	headerText := "🤖 Agent Invocation"
@@ -276,9 +280,9 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 	if headerPad < 0 {
 		headerPad = 0
 	}
-	fmt.Fprintf(os.Stderr, "%s│%s %s%s%s%s %s│%s\n",
+	fmt.Fprintf(&buf, "%s│%s %s%s%s%s %s│%s\n",
 		cyan, reset, bold, headerText, reset, strings.Repeat(" ", headerPad), cyan, reset)
-	fmt.Fprintf(os.Stderr, "%s├%s┤%s\n", cyan, hLine, reset)
+	fmt.Fprintf(&buf, "%s├%s┤%s\n", cyan, hLine, reset)
 
 	// Helper to print a labeled line with proper alignment
 	printLine := func(label, value, valueColor string) {
@@ -301,7 +305,7 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 		}
 
 		// Print: cyan│ yellow_label: value_color_value padding cyan│
-		fmt.Fprintf(os.Stderr, "%s│%s %s%s:%s %s%s%s%s %s│%s\n",
+		fmt.Fprintf(&buf, "%s│%s %s%s:%s %s%s%s%s %s│%s\n",
 			cyan, reset,
 			yellow, label, reset,
 			valueColor, value, reset,
@@ -340,7 +344,10 @@ func (inv *Invoker) logInvocation(task models.Task, args []string) {
 		printLine("Files", filesStr, green)
 	}
 
-	fmt.Fprintf(os.Stderr, "%s└%s┘%s\n\n", cyan, hLine, reset)
+	fmt.Fprintf(&buf, "%s└%s┘%s\n\n", cyan, hLine, reset)
+
+	// Write entire box atomically to prevent interleaving
+	os.Stderr.WriteString(buf.String())
 }
 
 // Invoke executes the claude CLI command with the given context
