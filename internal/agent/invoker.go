@@ -20,6 +20,20 @@ import (
 // Matches: "out of extra usage", "rate limit", "usage limit", etc.
 var rateLimitPattern = regexp.MustCompile(`(?i)(out of.*usage|rate.?limit|usage.?limit|429|too.?many.?requests)`)
 
+// ErrRateLimit is returned when Claude CLI output indicates a rate limit
+type ErrRateLimit struct {
+	RawMessage string
+}
+
+func (e *ErrRateLimit) Error() string {
+	return fmt.Sprintf("rate limit: %s", e.RawMessage)
+}
+
+// isRateLimitOutput checks if CLI output indicates a rate limit
+func isRateLimitOutput(output string) bool {
+	return rateLimitPattern.MatchString(output)
+}
+
 // Invoker manages execution of claude CLI commands
 type Invoker struct {
 	ClaudePath string
