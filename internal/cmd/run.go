@@ -667,7 +667,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 				ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
 				MinHistorySessions:   cfg.Guard.MinHistorySessions,
 			}
-			guardProtocol := executor.NewGuardProtocol(guardConfig, learningStore, multiLog)
+			guardProtocol := executor.NewGuardProtocol(guardConfig, cfg.Guard.LLM, learningStore, multiLog)
 			if guardProtocol != nil {
 				waveExec.SetGuardProtocol(guardProtocol)
 			}
