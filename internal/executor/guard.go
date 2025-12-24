@@ -59,8 +59,8 @@ type GuardProtocol struct {
 
 // NewGuardProtocol creates a new GuardProtocol instance.
 // Returns nil if GUARD is disabled or store is nil (graceful degradation).
-func NewGuardProtocol(config GuardConfig, store *learning.Store, logger Logger) *GuardProtocol {
-	if !config.Enabled {
+func NewGuardProtocol(cfg GuardConfig, llmCfg config.LLMGuardConfig, store *learning.Store, logger Logger) *GuardProtocol {
+	if !cfg.Enabled {
 		return nil
 	}
 
@@ -68,12 +68,20 @@ func NewGuardProtocol(config GuardConfig, store *learning.Store, logger Logger) 
 		return nil
 	}
 
-	return &GuardProtocol{
-		config:      config,
+	gp := &GuardProtocol{
+		config:      cfg,
+		llmConfig:   llmCfg,
 		store:       store,
 		logger:      logger,
 		initialized: false,
 	}
+
+	// Initialize LLM predictor if enabled (v2.22+)
+	if llmCfg.Enabled {
+		gp.llmPredictor = NewOllamaPredictor(llmCfg, logger)
+	}
+
+	return gp
 }
 
 // Initialize performs lazy initialization of the GUARD protocol.
