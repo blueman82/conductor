@@ -189,6 +189,11 @@ func parseAgentJSON(output string) (*models.AgentResponse, error) {
 func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	args := []string{}
 
+	// Resume from previous session if available (rate limit recovery)
+	if task.ResumeSessionID != "" {
+		args = append(args, "--resume", task.ResumeSessionID)
+	}
+
 	// If agent is specified and exists in registry, add --agents flag with JSON definition
 	if task.Agent != "" && inv.Registry != nil {
 		if agent, exists := inv.Registry.Get(task.Agent); exists {
