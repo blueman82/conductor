@@ -630,6 +630,20 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.EnableErrorPatternDetection = cfg.Executor.EnableErrorPatternDetection
 	taskExec.EnableClaudeClassification = cfg.Executor.EnableClaudeClassification
 
+	// Wire budget/rate limit handling (v2.20+)
+	if cfg.Budget.Enabled {
+		taskExec.BudgetConfig = &cfg.Budget
+		if cfg.Budget.AutoResume {
+			taskExec.Waiter = budget.NewRateLimitWaiter(
+				cfg.Budget.MaxWaitDuration,
+				cfg.Budget.AnnounceInterval,
+				cfg.Budget.SafetyBuffer,
+				multiLog,
+			)
+			taskExec.StateManager = budget.NewStateManager(".conductor/state")
+		}
+	}
+
 	// Wire intelligent task agent selection (v2.15+)
 	// Enable when either:
 	// 1. executor.intelligent_agent_selection is true in config, OR
