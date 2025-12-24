@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
+
+// rateLimitPattern detects rate limit messages from Claude CLI
+// Matches: "out of extra usage", "rate limit", "usage limit", etc.
+var rateLimitPattern = regexp.MustCompile(`(?i)(out of.*usage|rate.?limit|usage.?limit|429|too.?many.?requests)`)
 
 // Invoker manages execution of claude CLI commands
 type Invoker struct {
