@@ -90,8 +90,43 @@ func ParseRateLimitFromOutput(output string) *RateLimitInfo {
 		}
 	}
 
-	// Pattern 2: Human-readable time with timezone
+	// Pattern 2: Human-readable time with timezone ("limit will reset at 2pm")
 	if matches := humanTimePattern.FindStringSubmatch(output); len(matches) > 3 {
+		hour, _ := strconv.Atoi(matches[1])
+		meridiem := matches[2]
+		tzName := matches[3]
+
+		// Convert 12-hour to 24-hour
+		if meridiem == "pm" && hour != 12 {
+			hour += 12
+		} else if meridiem == "am" && hour == 12 {
+			hour = 0
+		}
+
+		// Load timezone
+		loc, err := time.LoadLocation(tzName)
+		if err != nil {
+			// Fallback to UTC if timezone parsing fails
+			loc = time.UTC
+		}
+
+		// Construct reset time
+		now := time.Now().In(loc)
+		resetAt := time.Date(now.Year(), now.Month(), now.Day(), hour, 0, 0, 0, loc)
+
+		// If reset time is in the past, assume next day
+		if resetAt.Before(now) {
+			resetAt = resetAt.Add(24 * time.Hour)
+		}
+
+		info.ResetAt = resetAt
+		info.WaitSeconds = int64(time.Until(resetAt).Seconds())
+		info.LimitType = inferLimitType(info.WaitSeconds)
+		return info
+	}
+
+	// Pattern 2b: "resets 1am (Europe/Dublin)" format (v2.20.1+)
+	if matches := resetsTimePattern.FindStringSubmatch(output); len(matches) > 3 {
 		hour, _ := strconv.Atoi(matches[1])
 		meridiem := matches[2]
 		tzName := matches[3]
