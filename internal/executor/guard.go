@@ -111,6 +111,15 @@ func (gp *GuardProtocol) Initialize(ctx context.Context) error {
 	return nil
 }
 
+// IsVerbose returns whether verbose logging is enabled for GUARD.
+// This allows external consumers to check if detailed recommendations should be logged.
+func (gp *GuardProtocol) IsVerbose() bool {
+	if gp == nil {
+		return false
+	}
+	return gp.config.Verbose
+}
+
 // CheckWave analyzes all tasks in a wave and returns prediction results.
 // Returns empty map on error (graceful degradation).
 func (gp *GuardProtocol) CheckWave(ctx context.Context, tasks []models.Task) (map[string]*GuardResult, error) {
@@ -220,13 +229,6 @@ func (gp *GuardProtocol) enhanceWithLLM(ctx context.Context, task models.Task, p
 	statsWeight := 1.0 - llmWeight
 
 	blendedProb := (prediction.Probability * statsWeight) + (llmPred.Probability * llmWeight)
-
-	// Log LLM consultation when verbose is enabled
-	if gp.config.Verbose && gp.logger != nil {
-		gp.logger.Info("[GUARD] 🧠 LLM analysis: %.1f%% (stats) + %.1f%% (LLM) → %.1f%% blended",
-			prediction.Probability*100, llmPred.Probability*100, blendedProb*100)
-	}
-
 	prediction.Probability = blendedProb
 
 	// Add LLM risk factors to recommendations
