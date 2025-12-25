@@ -1098,6 +1098,4 @@ func TestErrorClassificationIntegration_FullFlow(t *testing.T) {
 	}
 }
 
-func (m *mockLogger) SetGuardVerbose(verbose bool) {}
-
 func (m *mockErrorClassificationLogger) SetGuardVerbose(verbose bool) {}
