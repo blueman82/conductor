@@ -2352,3 +2352,13 @@ func (n *NoOpLogger) LogRateLimitPause(delay time.Duration)                {}
 func (n *NoOpLogger) LogRateLimitResume()                                  {}
 func (n *NoOpLogger) LogRateLimitCountdown(remaining, total time.Duration) {}
 func (n *NoOpLogger) LogRateLimitAnnounce(remaining, total time.Duration)  {}
+
+// SetGuardVerbose is a no-op implementation.
+func (n *NoOpLogger) SetGuardVerbose(verbose bool) {}
+
+// SetGuardVerbose sets the verbose mode for GUARD logging output.
+// When enabled, GUARD will output detailed prediction information.
+func (cl *ConsoleLogger) SetGuardVerbose(verbose bool) {
+	// This is a no-op for now - verbose GUARD logging can be added in the future
+	// by storing the verbose flag and using it in LogGuardPrediction
+}

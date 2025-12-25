@@ -284,6 +284,11 @@ guard:
   # swaps to a better-performing agent based on historical performance data
   auto_select_agent: true
 
+  # Enable verbose GUARD output (v2.22+)
+  # When true, shows LLM analysis details and all recommendations
+  # Useful for debugging and understanding GUARD decisions
+  verbose: false
+
   # Real-time anomaly detection (v2.18+)
   # Monitors wave execution for anomalies and alerts in real-time
   anomaly_detection:
@@ -298,6 +303,32 @@ guard:
 
     # Alert when task duration exceeds N times the estimate (default: 2.0)
     duration_deviation_threshold: 2.0
+
+  # LLM-Enhanced Prediction (v2.22+)
+  # Uses gpt-oss via Ollama for intelligent failure prediction
+  # Hybrid mode: stats-first, LLM only for uncertain predictions (0.3-0.7 probability)
+  llm:
+    # Enable LLM predictions (default: false, requires Ollama + gpt-oss)
+    enabled: false
+
+    # Ollama model (default: gpt-oss:latest)
+    model: "gpt-oss:latest"
+
+    # Reasoning depth: low, medium, high (default: medium)
+    think_level: "medium"
+
+    # Ollama API endpoint
+    base_url: "http://localhost:11434"
+
+    # Request timeout
+    timeout: 60s
+
+    # Fall back to stats if LLM fails
+    fallback_to_stats: true
+
+    # Only use LLM when stats are uncertain (between thresholds)
+    min_probability_for_llm: 0.3
+    max_probability_for_llm: 0.7
 
 # GUARD Protocol Examples
 

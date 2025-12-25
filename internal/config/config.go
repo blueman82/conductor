@@ -59,6 +59,9 @@ type GuardConfig struct {
 	// When true, GUARD will suggest a better-performing agent based on historical data
 	AutoSelectAgent bool `yaml:"auto_select_agent"`
 
+	// Verbose enables detailed GUARD logging output
+	Verbose bool `yaml:"verbose"`
+
 	// AnomalyDetection configuration for real-time anomaly monitoring (v2.18+)
 	AnomalyDetection AnomalyDetectionConfig `yaml:"anomaly_detection"`
 
