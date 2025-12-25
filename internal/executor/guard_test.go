@@ -1020,6 +1020,4 @@ func newTestGuardProtocol(cfg GuardConfig, sessions []behavioral.Session, metric
 	return guard
 }
 
-func (m *mockLogger) SetGuardVerbose(verbose bool) {}
-
 func (m *mockGuardLogger) SetGuardVerbose(verbose bool) {}
