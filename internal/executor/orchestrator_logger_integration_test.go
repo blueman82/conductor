@@ -849,3 +849,5 @@ func TestOrchestratorConcurrentExecution(t *testing.T) {
 		t.Errorf("expected 3 executions, got %d", len(executionOrder))
 	}
 }
+
+func (m *mockLogger) SetGuardVerbose(verbose bool) {}
