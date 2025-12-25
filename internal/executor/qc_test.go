@@ -3399,3 +3399,5 @@ func TestBuildStructuredReviewPrompt_WithErrorClassification(t *testing.T) {
 		}
 	})
 }
+
+func (m *mockLogger) SetGuardVerbose(verbose bool) {}
