@@ -22,9 +22,8 @@ type EnhancementResult struct {
 // ClaudeEnhancer enhances pattern confidence using Claude CLI
 type ClaudeEnhancer struct {
 	Timeout    time.Duration
-	MaxWait    time.Duration       // Max time to wait for rate limit reset
 	ClaudePath string
-	Logger     budget.WaiterLogger // For TTS + visual during rate limit wait (can be nil for silent)
+	Logger     budget.WaiterLogger // For TTS + visual during rate limit wait
 }
 
 // NewClaudeEnhancer creates an enhancer with defaults
