@@ -24,64 +24,6 @@ const (
 	PatternModeSuggest PatternMode = "suggest"
 )
 
-// GuardConfig represents GUARD Protocol configuration
-type GuardConfig struct {
-	// Enabled enables the GUARD Protocol failure prediction system
-	Enabled bool `yaml:"enabled"`
-
-	// Mode specifies the operating mode: "block", "warn", or "adaptive"
-	Mode GuardMode `yaml:"mode"`
-
-	// ProbabilityThreshold is the minimum failure probability to trigger guard action (0.0-1.0)
-	ProbabilityThreshold float64 `yaml:"probability_threshold"`
-
-	// ConfidenceThreshold is the minimum confidence required for prediction (0.0-1.0)
-	ConfidenceThreshold float64 `yaml:"confidence_threshold"`
-
-	// MinHistorySessions is the minimum number of historical sessions required before predictions are made
-	MinHistorySessions int `yaml:"min_history_sessions"`
-
-	// AutoSelectAgent enables automatic agent selection when failure probability is high (v2.18+)
-	// When true, GUARD will suggest a better-performing agent based on historical data
-	AutoSelectAgent bool `yaml:"auto_select_agent"`
-
-	// Verbose enables detailed GUARD logging output
-	Verbose bool `yaml:"verbose"`
-
-	// AnomalyDetection configuration for real-time anomaly monitoring (v2.18+)
-	AnomalyDetection AnomalyDetectionConfig `yaml:"anomaly_detection"`
-
-	// LLM configuration for LLM-enhanced failure prediction (v2.22+)
-	LLM LLMGuardConfig `yaml:"llm"`
-}
-
-// LLMGuardConfig defines LLM-enhanced GUARD configuration
-type LLMGuardConfig struct {
-	// Enabled enables LLM-based failure prediction
-	Enabled bool `yaml:"enabled"`
-
-	// Model specifies the Ollama model to use (e.g., "gpt-oss:latest")
-	Model string `yaml:"model"`
-
-	// ThinkLevel specifies reasoning depth: "low", "medium", "high"
-	ThinkLevel string `yaml:"think_level"`
-
-	// BaseURL is the Ollama API endpoint (default: http://localhost:11434)
-	BaseURL string `yaml:"base_url"`
-
-	// Timeout for LLM requests
-	Timeout time.Duration `yaml:"timeout"`
-
-	// FallbackToStats uses statistical prediction if LLM fails
-	FallbackToStats bool `yaml:"fallback_to_stats"`
-
-	// MinProbabilityForLLM only uses LLM when stats probability is uncertain
-	MinProbabilityForLLM float64 `yaml:"min_probability_for_llm"`
-
-	// MaxProbabilityForLLM upper bound for uncertainty range
-	MaxProbabilityForLLM float64 `yaml:"max_probability_for_llm"`
-}
-
 // AnomalyDetectionConfig controls real-time anomaly detection during wave execution
 type AnomalyDetectionConfig struct {
 	// Enabled enables real-time anomaly detection during wave execution
