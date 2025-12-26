@@ -368,6 +368,7 @@ tasks:
 - v2.21: Mid-task rate limit recovery with session resume and git diff fallback
 - v2.24: Pattern Intelligence with STOP protocol, prior art justification
 - v2.25: GUARD Protocol removed (superseded by Pattern Intelligence)
+- v2.26: LLM enhancement for Pattern Intelligence confidence refinement
 
 ## Module Path
 
