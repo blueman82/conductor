@@ -107,6 +107,11 @@ guard:
   enabled: true
   mode: warn  # block | warn | adaptive
   probability_threshold: 0.7
+pattern:
+  enabled: true
+  mode: warn  # block | warn | suggest
+  enable_stop: true
+  require_justification: true
 tts:
   enabled: false
   base_url: "http://localhost:5005"
