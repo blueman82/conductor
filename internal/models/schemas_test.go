@@ -385,3 +385,71 @@ func TestQCResponseSchemasConsistency(t *testing.T) {
 		t.Error("verdict should be in both schemas")
 	}
 }
+
+func TestQCResponseSchemaWithSTOPJustification(t *testing.T) {
+	t.Run("schema without STOP justification", func(t *testing.T) {
+		schema := QCResponseSchemaWithOptions(false, false)
+
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(schema), &parsed); err != nil {
+			t.Fatalf("Schema is invalid JSON: %v", err)
+		}
+
+		props := parsed["properties"].(map[string]interface{})
+		if _, ok := props["stop_justification"]; ok {
+			t.Error("stop_justification should NOT be present when requireSTOPJustification=false")
+		}
+	})
+
+	t.Run("schema with STOP justification", func(t *testing.T) {
+		schema := QCResponseSchemaWithOptions(false, true)
+
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(schema), &parsed); err != nil {
+			t.Fatalf("Schema is invalid JSON: %v", err)
+		}
+
+		props := parsed["properties"].(map[string]interface{})
+		if _, ok := props["stop_justification"]; !ok {
+			t.Error("stop_justification should be present when requireSTOPJustification=true")
+		}
+
+		// Verify the field structure
+		stopJust := props["stop_justification"].(map[string]interface{})
+		if stopJust["type"] != "string" {
+			t.Error("stop_justification should be of type string")
+		}
+		if stopJust["description"] == nil || stopJust["description"] == "" {
+			t.Error("stop_justification should have a description")
+		}
+	})
+
+	t.Run("schema with both criteria and STOP justification", func(t *testing.T) {
+		schema := QCResponseSchemaWithOptions(true, true)
+
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(schema), &parsed); err != nil {
+			t.Fatalf("Schema is invalid JSON: %v", err)
+		}
+
+		props := parsed["properties"].(map[string]interface{})
+
+		// Both should be present
+		if _, ok := props["criteria_results"]; !ok {
+			t.Error("criteria_results should be present")
+		}
+		if _, ok := props["stop_justification"]; !ok {
+			t.Error("stop_justification should be present")
+		}
+	})
+
+	t.Run("backward compatible with QCResponseSchema", func(t *testing.T) {
+		// QCResponseSchema(x) should equal QCResponseSchemaWithOptions(x, false)
+		schemaOld := QCResponseSchema(true)
+		schemaNew := QCResponseSchemaWithOptions(true, false)
+
+		if schemaOld != schemaNew {
+			t.Error("QCResponseSchema should be backward compatible with QCResponseSchemaWithOptions")
+		}
+	})
+}

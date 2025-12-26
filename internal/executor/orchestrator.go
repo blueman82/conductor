@@ -79,6 +79,8 @@ type OrchestratorConfig struct {
 	SkipCompleted     bool
 	RetryFailed       bool
 	FileToTaskMapping map[string]string
+	// Pattern Intelligence hook (v2.23+)
+	PatternHook *PatternIntelligenceHook
 }
 
 // Orchestrator coordinates plan execution, handles graceful shutdown, and aggregates results.
@@ -92,6 +94,8 @@ type Orchestrator struct {
 	FileToTaskMapping map[string]string // task number -> file path mapping
 	skipCompleted     bool              // Skip tasks that are already completed
 	retryFailed       bool              // Retry tasks that have failed status
+	// Pattern Intelligence hook (v2.23+)
+	patternHook *PatternIntelligenceHook
 }
 
 // NewOrchestrator creates a new Orchestrator instance.
@@ -160,7 +164,7 @@ func NewOrchestratorFromConfig(config OrchestratorConfig) *Orchestrator {
 		runNumber = count + 1
 	}
 
-	return &Orchestrator{
+	o := &Orchestrator{
 		waveExecutor:      config.WaveExecutor,
 		logger:            config.Logger,
 		learningStore:     config.LearningStore,
@@ -170,7 +174,17 @@ func NewOrchestratorFromConfig(config OrchestratorConfig) *Orchestrator {
 		skipCompleted:     config.SkipCompleted,
 		retryFailed:       config.RetryFailed,
 		FileToTaskMapping: config.FileToTaskMapping,
+		patternHook:       config.PatternHook,
 	}
+
+	// Wire Pattern Intelligence hook to WaveExecutor if provided (v2.23+)
+	if config.PatternHook != nil {
+		if waveExec, ok := config.WaveExecutor.(*WaveExecutor); ok {
+			waveExec.SetPatternHook(config.PatternHook)
+		}
+	}
+
+	return o
 }
 
 // ExecutePlan orchestrates the execution of one or more plans with graceful shutdown support.

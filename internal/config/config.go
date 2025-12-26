@@ -365,6 +365,12 @@ type PatternConfig struct {
 
 	// CacheTTLSeconds is how long to cache pattern analysis results (default: 3600)
 	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
+
+	// RequireJustification requires implementing agent to justify custom implementations
+	// when STOP protocol finds prior art (existing solutions, similar commits, related issues).
+	// When true: QC agents will ask for justification; weak/missing justification → YELLOW.
+	// Default: false (disabled for backward compatibility)
+	RequireJustification bool `yaml:"require_justification"`
 }
 
 // TTSConfig controls text-to-speech functionality
