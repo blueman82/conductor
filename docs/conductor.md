@@ -2124,6 +2124,83 @@ GUARD is designed to never block execution due to its own errors:
 🔴 Task 3 "Known problematic" - GUARD: 0.85 failure probability (HIGH RISK - blocking)
 ```
 
+### Pattern Intelligence (v2.24+)
+
+Prior art detection and duplicate prevention using the STOP protocol (Search/Think/Outline/Prove).
+
+**What It Does:**
+
+1. **Search**: Searches git history, GitHub issues, docs, and learning database for similar work
+2. **Think**: Analyzes task complexity and identifies potential risks
+3. **Outline**: Generates recommended approach based on prior art
+4. **Prove**: Suggests verification steps based on similar successful tasks
+
+**Configuration:**
+
+```yaml
+pattern:
+  # Enable/disable Pattern Intelligence (default: false)
+  enabled: true
+
+  # Operating mode:
+  # - block: Fail tasks with high similarity to existing work
+  # - warn: Log warning but allow execution (default)
+  # - suggest: Include analysis in prompt without blocking
+  mode: warn
+
+  # Similarity threshold to trigger action (0.0-1.0, default: 0.8)
+  similarity_threshold: 0.8
+
+  # Duplicate threshold (0.0-1.0, default: 0.9)
+  duplicate_threshold: 0.9
+
+  # Minimum confidence before taking action (0.0-1.0, default: 0.7)
+  min_confidence: 0.7
+
+  # Enable STOP protocol analysis (default: true when enabled)
+  enable_stop: true
+
+  # Enable duplicate task detection (default: true when enabled)
+  enable_duplicate_detection: true
+
+  # Include pattern analysis in agent prompts (default: true)
+  inject_into_prompt: true
+
+  # Maximum patterns to include in prompt injection (default: 5)
+  max_patterns_per_task: 5
+
+  # Maximum related files to include in analysis (default: 10)
+  max_related_files: 10
+
+  # Cache TTL in seconds (default: 3600)
+  cache_ttl_seconds: 3600
+
+  # Require implementing agent to justify custom implementations (v2.24+)
+  # When STOP finds prior art, QC will request justification
+  require_justification: true
+```
+
+**Prior Art Justification:**
+
+When `require_justification: true` and STOP finds existing solutions:
+
+1. QC agents receive prior art context in their review prompt
+2. QC requests justification for why custom implementation was needed
+3. Weak/missing justification (< 50 chars, "n/a", "not applicable") → YELLOW verdict
+4. Strong technical justification → proceeds normally
+
+**Example justification evaluation:**
+- ❌ "n/a" → YELLOW (too weak)
+- ❌ "Different use case" → YELLOW (too short)
+- ✅ "The existing implementation uses regex which is too slow for our use case. We need O(1) lookup via hash table." → Passes
+
+**Graceful Degradation:**
+
+Pattern Intelligence never blocks execution due to its own errors:
+- If search fails → logs warning, continues without pattern context
+- If store unavailable → continues with in-memory only
+- If disabled → zero behavior change from previous versions
+
 ### Budget & Rate Limits (v2.20+, enhanced v2.21+)
 
 Intelligent rate limit auto-resume with state persistence and mid-task recovery.
