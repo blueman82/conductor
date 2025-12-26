@@ -75,25 +75,15 @@ func (h *ArchitectureCheckpointHook) CheckTask(ctx context.Context, task models.
 			}
 		}
 
-	case config.ArchitectureModeWarn:
-		if assessment.RequiresReview {
-			result.ShouldWarn = true
-			if h.logger != nil {
-				h.logger.Warnf("Architecture checkpoint WARNING for task %s: %s (flagged: %s)",
-					task.Number, assessment.Summary, strings.Join(assessment.FlaggedQuestions(), ", "))
-			}
-		}
-		// Always build prompt injection in warn mode
-		result.PromptInjection = h.buildPromptInjection(assessment)
-
 	case config.ArchitectureModeEscalate:
 		if assessment.RequiresReview {
 			result.ShouldEscalate = true
 			if h.logger != nil {
-				h.logger.Warnf("Architecture checkpoint ESCALATION for task %s: %s",
-					task.Number, assessment.Summary)
+				h.logger.Warnf("Architecture checkpoint ESCALATE for task %s: %s (flagged: %s)",
+					task.Number, assessment.Summary, strings.Join(assessment.FlaggedQuestions(), ", "))
 			}
 		}
+		// Always build prompt injection in escalate mode
 		result.PromptInjection = h.buildPromptInjection(assessment)
 	}
 
