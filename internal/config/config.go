@@ -294,6 +294,19 @@ type PatternConfig struct {
 	// CacheTTLSeconds is how long to cache pattern analysis results (default: 3600)
 	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
 
+	// LLM Enhancement (optional, requires Claude CLI)
+	// LLMEnhancementEnabled enables Claude-based confidence refinement for uncertain cases
+	LLMEnhancementEnabled bool `yaml:"llm_enhancement_enabled"`
+
+	// LLMMinConfidence is the minimum confidence to trigger LLM enhancement (default: 0.3)
+	LLMMinConfidence float64 `yaml:"llm_min_confidence"`
+
+	// LLMMaxConfidence is the maximum confidence to trigger LLM enhancement (default: 0.7)
+	LLMMaxConfidence float64 `yaml:"llm_max_confidence"`
+
+	// LLMTimeoutSeconds is the timeout for Claude CLI response (default: 30)
+	LLMTimeoutSeconds int `yaml:"llm_timeout_seconds"`
+
 	// RequireJustification requires implementing agent to justify custom implementations
 	// when STOP protocol finds prior art (existing solutions, similar commits, related issues).
 	// When true: QC agents will ask for justification; weak/missing justification → YELLOW.
