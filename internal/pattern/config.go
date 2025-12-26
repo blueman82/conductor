@@ -150,6 +150,45 @@ func (c *PatternConfig) Validate() error {
 		}
 	}
 
+	// LLM enhancement validation
+	if c.LLMEnhancementEnabled {
+		if c.LLMMinConfidence < 0 || c.LLMMinConfidence > 1 {
+			return &ConfigError{
+				Field:   "llm_min_confidence",
+				Message: "must be between 0 and 1",
+				Value:   c.LLMMinConfidence,
+			}
+		}
+		if c.LLMMaxConfidence < 0 || c.LLMMaxConfidence > 1 {
+			return &ConfigError{
+				Field:   "llm_max_confidence",
+				Message: "must be between 0 and 1",
+				Value:   c.LLMMaxConfidence,
+			}
+		}
+		if c.LLMMinConfidence > c.LLMMaxConfidence {
+			return &ConfigError{
+				Field:   "llm_min_confidence",
+				Message: "must be <= llm_max_confidence",
+				Value:   c.LLMMinConfidence,
+			}
+		}
+		if c.LLMTimeoutSeconds <= 0 {
+			return &ConfigError{
+				Field:   "llm_timeout_seconds",
+				Message: "must be > 0",
+				Value:   c.LLMTimeoutSeconds,
+			}
+		}
+		if c.LLMMaxWaitSeconds <= 0 {
+			return &ConfigError{
+				Field:   "llm_max_wait_seconds",
+				Message: "must be > 0",
+				Value:   c.LLMMaxWaitSeconds,
+			}
+		}
+	}
+
 	return nil
 }
 
