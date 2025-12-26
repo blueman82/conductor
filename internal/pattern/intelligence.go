@@ -473,7 +473,7 @@ func formatPatternsForLLM(searchResults SearchResults) string {
 			if i >= 3 {
 				break // Limit to top 3
 			}
-			parts = append(parts, fmt.Sprintf("  - %s: %s", match.CommitHash[:8], truncate(match.Message, 60)))
+			parts = append(parts, fmt.Sprintf("  - %s: %s", match.Hash[:8], truncate(match.Subject, 60)))
 		}
 	}
 
