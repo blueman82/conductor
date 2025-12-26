@@ -136,9 +136,6 @@ Examples:
 	cmd.Flags().Bool("no-enforce-package-guard", false, "Disable Go package conflict guard")
 	cmd.Flags().Bool("no-enforce-doc-targets", false, "Disable documentation target verification")
 
-	// GUARD Protocol flags
-	cmd.Flags().Bool("no-guard", false, "Disable GUARD Protocol pre-wave prediction")
-
 	return cmd
 }
 
