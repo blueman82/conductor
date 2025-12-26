@@ -422,9 +422,6 @@ type Config struct {
 	// TTS controls text-to-speech functionality
 	TTS TTSConfig `yaml:"tts"`
 
-	// Guard contains GUARD Protocol configuration
-	Guard GuardConfig `yaml:"guard"`
-
 	// Budget controls usage budget tracking and enforcement
 	Budget BudgetConfig `yaml:"budget"`
 
