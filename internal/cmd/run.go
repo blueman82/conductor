@@ -657,25 +657,6 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithPackageGuard(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed, cfg.Executor.EnforcePackageGuard)
 
-	// Wire GUARD Protocol if enabled
-	if cfg.Guard.Enabled {
-		if learningStore != nil {
-			guardConfig := executor.GuardConfig{
-				Enabled:              cfg.Guard.Enabled,
-				Mode:                 executor.GuardMode(cfg.Guard.Mode),
-				ProbabilityThreshold: cfg.Guard.ProbabilityThreshold,
-				ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
-				MinHistorySessions:   cfg.Guard.MinHistorySessions,
-			}
-			guardProtocol := executor.NewGuardProtocol(guardConfig, cfg.Guard.LLM, learningStore, multiLog)
-			if guardProtocol != nil {
-				// Set GUARD verbosity based on config
-				multiLog.SetGuardVerbose(cfg.Guard.Verbose)
-				waveExec.SetGuardProtocol(guardProtocol)
-			}
-		}
-	}
-
 	// Create orchestrator with learning integration
 	orch := executor.NewOrchestratorFromConfig(executor.OrchestratorConfig{
 		WaveExecutor:  waveExec,
