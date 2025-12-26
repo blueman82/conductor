@@ -338,7 +338,6 @@ tasks:
 - Dual feedback storage (plan files + database)
 - Integration tasks with dual criteria
 - Agent Watch behavioral analytics (v2.7+)
-- GUARD Protocol with behavioral prediction (v2.17+)
 - Pattern Intelligence with STOP protocol (v2.24+)
 - Optional TTS voice feedback (v2.14+)
 - Comprehensive logging and error handling
