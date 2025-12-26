@@ -654,9 +654,10 @@ func DefaultConfig() *Config {
 			EnableClaudeClassification:  false,
 			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
-		TTS:     DefaultTTSConfig(),
-		Budget:  DefaultBudgetConfig(),
-		Pattern: DefaultPatternConfig(),
+		TTS:          DefaultTTSConfig(),
+		Budget:       DefaultBudgetConfig(),
+		Pattern:      DefaultPatternConfig(),
+		Architecture: DefaultArchitectureConfig(),
 	}
 }
 
