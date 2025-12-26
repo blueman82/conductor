@@ -355,6 +355,7 @@ tasks:
 - v2.20: Intelligent rate limit auto-resume with state persistence
 - v2.21: Mid-task rate limit recovery with session resume and git diff fallback
 - v2.24: Pattern Intelligence with STOP protocol, prior art justification
+- v2.25: GUARD Protocol removed (superseded by Pattern Intelligence)
 
 ## Module Path
 
