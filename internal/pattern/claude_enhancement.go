@@ -30,17 +30,15 @@ type ClaudeEnhancer struct {
 func NewClaudeEnhancer(logger budget.WaiterLogger) *ClaudeEnhancer {
 	return &ClaudeEnhancer{
 		Timeout:    30 * time.Second,
-		MaxWait:    60 * time.Second,
 		ClaudePath: "claude",
 		Logger:     logger,
 	}
 }
 
 // NewClaudeEnhancerWithConfig creates an enhancer from config values
-func NewClaudeEnhancerWithConfig(timeout, maxWait time.Duration, logger budget.WaiterLogger) *ClaudeEnhancer {
+func NewClaudeEnhancerWithConfig(timeout time.Duration, logger budget.WaiterLogger) *ClaudeEnhancer {
 	return &ClaudeEnhancer{
 		Timeout:    timeout,
-		MaxWait:    maxWait,
 		ClaudePath: "claude",
 		Logger:     logger,
 	}
