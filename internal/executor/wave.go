@@ -239,7 +239,7 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 	}
 	// ========== END BUDGET GATE ==========
 
-	// If all tasks were blocked by GUARD, return the blocked results
+	// If all tasks were skipped/blocked, return the results
 	if len(tasksToExecute) == 0 {
 		return skippedResults, nil
 	}
