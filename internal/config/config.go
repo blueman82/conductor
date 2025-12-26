@@ -1022,31 +1022,6 @@ func LoadConfig(path string) (*Config, error) {
 			}
 		}
 
-		// Merge Guard config
-		if guardSection, exists := rawMap["guard"]; exists && guardSection != nil {
-			guard := yamlCfg.Guard
-			guardMap, _ := guardSection.(map[string]interface{})
-
-			if _, exists := guardMap["enabled"]; exists {
-				cfg.Guard.Enabled = guard.Enabled
-			}
-			if _, exists := guardMap["mode"]; exists {
-				cfg.Guard.Mode = guard.Mode
-			}
-			if _, exists := guardMap["probability_threshold"]; exists {
-				cfg.Guard.ProbabilityThreshold = guard.ProbabilityThreshold
-			}
-			if _, exists := guardMap["confidence_threshold"]; exists {
-				cfg.Guard.ConfidenceThreshold = guard.ConfidenceThreshold
-			}
-			if _, exists := guardMap["min_history_sessions"]; exists {
-				cfg.Guard.MinHistorySessions = guard.MinHistorySessions
-			}
-			if _, exists := guardMap["auto_select_agent"]; exists {
-				cfg.Guard.AutoSelectAgent = guard.AutoSelectAgent
-			}
-		}
-
 		// Merge Budget config
 		if budgetSection, exists := rawMap["budget"]; exists && budgetSection != nil {
 			budget := yamlCfg.Budget
