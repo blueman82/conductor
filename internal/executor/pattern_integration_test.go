@@ -37,12 +37,12 @@ type mockPatternLogger struct {
 	infoMessages []string
 }
 
-func (m *mockPatternLogger) LogTestCommands(entries []models.TestCommandResult)               {}
+func (m *mockPatternLogger) LogTestCommands(entries []models.TestCommandResult) {}
 func (m *mockPatternLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
 }
 func (m *mockPatternLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}
-func (m *mockPatternLogger) LogErrorPattern(pattern interface{})                         {}
-func (m *mockPatternLogger) LogDetectedError(detected interface{})                       {}
+func (m *mockPatternLogger) LogErrorPattern(pattern interface{})                        {}
+func (m *mockPatternLogger) LogDetectedError(detected interface{})                      {}
 
 func (m *mockPatternLogger) Warnf(format string, args ...interface{}) {
 	m.warnMessages = append(m.warnMessages, format)

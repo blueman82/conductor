@@ -26,10 +26,10 @@ func TestIntelligence_New(t *testing.T) {
 
 func TestNewPatternIntelligence(t *testing.T) {
 	tests := []struct {
-		name     string
-		cfg      *config.PatternConfig
-		store    *learning.Store
-		wantNil  bool
+		name    string
+		cfg     *config.PatternConfig
+		store   *learning.Store
+		wantNil bool
 	}{
 		{
 			name:    "nil config returns nil",
@@ -455,7 +455,6 @@ func TestTruncate(t *testing.T) {
 		}
 	}
 }
-
 
 func TestPatternIntelligence_RecordSuccess(t *testing.T) {
 	t.Run("nil receiver gracefully handles", func(t *testing.T) {
@@ -1095,10 +1094,10 @@ func TestGenerateThinkResultComplexityLevels(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		searchResults  SearchResults
-		wantEffortMin  string
-		wantEffortMax  string
+		name          string
+		searchResults SearchResults
+		wantEffortMin string
+		wantEffortMax string
 	}{
 		{
 			name:          "low complexity",

@@ -31,11 +31,11 @@ const (
 // PatternIntelligenceImpl implements the PatternIntelligence interface.
 // It orchestrates the hasher, searcher, and library to provide full STOP protocol analysis.
 type PatternIntelligenceImpl struct {
-	config  *config.PatternConfig
-	hasher  *TaskHasher
+	config   *config.PatternConfig
+	hasher   *TaskHasher
 	searcher *STOPSearcher
-	library *PatternLibrary
-	store   *learning.Store
+	library  *PatternLibrary
+	store    *learning.Store
 
 	mu          sync.RWMutex
 	initialized bool

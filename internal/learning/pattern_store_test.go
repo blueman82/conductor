@@ -283,8 +283,8 @@ func TestMigration8_PatternTables(t *testing.T) {
 
 	// Verify required indexes exist with exact names as specified
 	requiredIndexes := []string{
-		"idx_patterns_hash",      // For patterns hash lookup
-		"idx_duplicates_source",  // For duplicate source hash lookup
+		"idx_patterns_hash",     // For patterns hash lookup
+		"idx_duplicates_source", // For duplicate source hash lookup
 	}
 	for _, idx := range requiredIndexes {
 		exists, err := store.indexExists(idx)

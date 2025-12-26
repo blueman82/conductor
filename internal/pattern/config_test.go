@@ -232,10 +232,10 @@ func TestPatternConfig_ShouldWarn(t *testing.T) {
 
 func TestPatternConfig_ShouldInject(t *testing.T) {
 	tests := []struct {
-		name           string
-		enabled        bool
+		name             string
+		enabled          bool
 		injectIntoPrompt bool
-		expected       bool
+		expected         bool
 	}{
 		{"disabled no inject", false, false, false},
 		{"disabled with inject", false, true, false},

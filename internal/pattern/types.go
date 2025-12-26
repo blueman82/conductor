@@ -243,7 +243,7 @@ func NewEmptySTOPResult() *STOPResult {
 		Think: ThinkResult{
 			RiskFactors:         []RiskFactor{},
 			ApproachSuggestions: []string{},
-			Dependencies:         []string{},
+			Dependencies:        []string{},
 		},
 		Outline: OutlineResult{
 			Steps:             []OutlineStep{},

@@ -375,9 +375,9 @@ func TestCompareTasks(t *testing.T) {
 		desc2     string
 		files1    []string
 		files2    []string
-		wantExact bool   // true if similarity should be 1.0
-		wantHigh  bool   // true if similarity should be > 0.5
-		wantLow   bool   // true if similarity should be < 0.3
+		wantExact bool // true if similarity should be 1.0
+		wantHigh  bool // true if similarity should be > 0.5
+		wantLow   bool // true if similarity should be < 0.3
 	}{
 		{
 			name:      "identical tasks",
@@ -406,10 +406,10 @@ func TestCompareTasks(t *testing.T) {
 			wantHigh: true,
 		},
 		{
-			name:     "completely different tasks",
-			desc1:    "Create user authentication",
-			desc2:    "Delete database records",
-			wantLow:  true,
+			name:    "completely different tasks",
+			desc1:   "Create user authentication",
+			desc2:   "Delete database records",
+			wantLow: true,
 		},
 		{
 			name:      "same description different files",
