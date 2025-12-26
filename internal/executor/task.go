@@ -197,11 +197,15 @@ type DefaultTaskExecutor struct {
 	// Pattern Intelligence integration (v2.23+)
 	PatternHook *PatternIntelligenceHook // Pattern Intelligence hook for STOP protocol and duplicate detection
 
+	// Architecture Checkpoint integration (v2.27+)
+	ArchitectureHook *ArchitectureCheckpointHook // Architecture checkpoint hook for 6-question assessment
+
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
 	lastCriterionResults []CriterionVerificationResult // Populated after RunCriterionVerifications
 	lastDocTargetResults []DocTargetResult             // Populated after VerifyDocumentationTargets
 	lastPatternResult    *PreTaskCheckResult           // Populated after Pattern Intelligence check (v2.24+)
+	lastArchResult       *architecture.CheckpointResult // Populated after Architecture checkpoint (v2.27+)
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
