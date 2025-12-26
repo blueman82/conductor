@@ -635,6 +635,24 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Wire Pattern Intelligence (v2.24+)
+	if cfg.Pattern.Enabled {
+		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore)
+		if pi != nil {
+			// Set up LLM enhancement if enabled
+			if cfg.Pattern.LLMEnhancementEnabled {
+				enhancer := pattern.NewClaudeEnhancerWithConfig(
+					time.Duration(cfg.Pattern.LLMTimeoutSeconds)*time.Second,
+					multiLog,
+				)
+				if impl, ok := pi.(*pattern.PatternIntelligenceImpl); ok {
+					impl.SetEnhancer(enhancer)
+				}
+			}
+			taskExec.PatternHook = executor.NewPatternIntelligenceHook(pi, &cfg.Pattern, consoleLog)
+		}
+	}
+
 	// Wire intelligent task agent selection (v2.15+)
 	// Enable when either:
 	// 1. executor.intelligent_agent_selection is true in config, OR
