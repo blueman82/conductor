@@ -1333,34 +1333,6 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Validate Guard configuration
-	if c.Guard.Enabled {
-		// Validate mode
-		validGuardModes := map[GuardMode]bool{
-			GuardModeBlock:    true,
-			GuardModeWarn:     true,
-			GuardModeAdaptive: true,
-		}
-		if !validGuardModes[c.Guard.Mode] {
-			return fmt.Errorf("guard.mode must be one of: block, warn, adaptive; got %q", c.Guard.Mode)
-		}
-
-		// Validate probability_threshold is between 0 and 1
-		if c.Guard.ProbabilityThreshold < 0 || c.Guard.ProbabilityThreshold > 1 {
-			return fmt.Errorf("guard.probability_threshold must be between 0 and 1, got %f", c.Guard.ProbabilityThreshold)
-		}
-
-		// Validate confidence_threshold is between 0 and 1
-		if c.Guard.ConfidenceThreshold < 0 || c.Guard.ConfidenceThreshold > 1 {
-			return fmt.Errorf("guard.confidence_threshold must be between 0 and 1, got %f", c.Guard.ConfidenceThreshold)
-		}
-
-		// Validate min_history_sessions is non-negative
-		if c.Guard.MinHistorySessions < 0 {
-			return fmt.Errorf("guard.min_history_sessions must be >= 0, got %d", c.Guard.MinHistorySessions)
-		}
-	}
-
 	// Validate Budget configuration
 	if c.Budget.Enabled {
 		if c.Budget.WarnThreshold < 0 || c.Budget.WarnThreshold > 1 {
