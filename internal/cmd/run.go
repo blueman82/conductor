@@ -842,13 +842,6 @@ func (ml *multiLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
 	}
 }
 
-// SetGuardVerbose forwards to all loggers
-func (ml *multiLogger) SetGuardVerbose(verbose bool) {
-	for _, logger := range ml.loggers {
-		logger.SetGuardVerbose(verbose)
-	}
-}
-
 // getTask finds a task by number in a task list
 func getTask(tasks []models.Task, number string) (*models.Task, bool) {
 	for i := range tasks {
