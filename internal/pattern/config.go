@@ -84,8 +84,7 @@ func DefaultPatternConfig() PatternConfig {
 		LLMEnhancementEnabled:    false, // Disabled by default
 		LLMMinConfidence:         0.3,   // Enhance when >= 0.3
 		LLMMaxConfidence:         0.7,   // Enhance when <= 0.7
-		LLMTimeoutSeconds:        30,    // 30 second timeout
-		LLMMaxWaitSeconds:        60,    // 60 second max wait for rate limit
+		LLMTimeoutSeconds:        30,    // 30 second timeout for Claude response
 	}
 }
 
