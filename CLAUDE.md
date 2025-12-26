@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.24.0 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, GUARD Protocol for pre-wave failure prediction (v2.17+), Pattern Intelligence with STOP protocol for prior art detection and duplicate prevention (v2.24+), optional TTS voice feedback (v2.14+), and auto-incrementing version management.
+**Current Status**: Production-ready v2.25.0 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, Pattern Intelligence with STOP protocol for prior art detection and duplicate prevention (v2.24+), optional TTS voice feedback (v2.14+), and auto-incrementing version management.
 
 ## Codebase Search
 
