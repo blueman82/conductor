@@ -429,35 +429,6 @@ type Config struct {
 	Pattern PatternConfig `yaml:"pattern"`
 }
 
-// DefaultGuardConfig returns GuardConfig with sensible default values
-// GUARD is DISABLED by default to ensure zero behavior change unless explicitly enabled
-func DefaultGuardConfig() GuardConfig {
-	return GuardConfig{
-		Enabled:              false,
-		Mode:                 GuardModeWarn,
-		ProbabilityThreshold: 0.7,
-		ConfidenceThreshold:  0.7,
-		MinHistorySessions:   5,
-		AutoSelectAgent:      true, // Enabled when GUARD is enabled
-		AnomalyDetection:     DefaultAnomalyDetectionConfig(),
-		LLM:                  DefaultLLMGuardConfig(),
-	}
-}
-
-// DefaultLLMGuardConfig returns LLMGuardConfig with sensible default values
-func DefaultLLMGuardConfig() LLMGuardConfig {
-	return LLMGuardConfig{
-		Enabled:              false,
-		Model:                "gpt-oss:latest",
-		ThinkLevel:           "medium",
-		BaseURL:              "http://localhost:11434",
-		Timeout:              60 * time.Second,
-		FallbackToStats:      true,
-		MinProbabilityForLLM: 0.3,
-		MaxProbabilityForLLM: 0.7,
-	}
-}
-
 // DefaultAnomalyDetectionConfig returns AnomalyDetectionConfig with sensible default values
 func DefaultAnomalyDetectionConfig() AnomalyDetectionConfig {
 	return AnomalyDetectionConfig{
