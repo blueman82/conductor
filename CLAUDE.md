@@ -400,6 +400,7 @@ tasks:
 - v2.17: GUARD Protocol for pre-wave failure prediction
 - v2.20: Intelligent rate limit auto-resume with state persistence
 - v2.21: Mid-task rate limit recovery with session resume and git diff fallback
+- v2.24: Pattern Intelligence with STOP protocol, prior art justification
 
 ## Module Path
 
