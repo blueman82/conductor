@@ -194,6 +194,9 @@ type DefaultTaskExecutor struct {
 	Waiter       *budget.RateLimitWaiter // Smart wait with countdown
 	StateManager *budget.StateManager    // Execution state persistence
 
+	// Pattern Intelligence integration (v2.23+)
+	PatternHook *PatternIntelligenceHook // Pattern Intelligence hook for STOP protocol and duplicate detection
+
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
 	lastCriterionResults []CriterionVerificationResult // Populated after RunCriterionVerifications
@@ -790,6 +793,30 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 	if err := te.preTaskHook(ctx, &task); err != nil {
 		// Hook errors are non-fatal but should be logged
 		// For now, continue without learning adaptation
+	}
+
+	// Pattern Intelligence pre-task hook: STOP protocol analysis and duplicate detection (v2.23+)
+	if te.PatternHook != nil {
+		patternResult, patternErr := te.PatternHook.CheckTask(ctx, task)
+		if patternErr != nil {
+			// Graceful degradation: log but don't block
+			if te.Logger != nil {
+				te.Logger.Warnf("Pattern Intelligence check failed for task %s: %v", task.Number, patternErr)
+			}
+		} else if patternResult != nil {
+			// Handle block mode - task should not proceed
+			if patternResult.ShouldBlock {
+				result.Status = models.StatusFailed
+				result.Error = fmt.Errorf("pattern intelligence blocked: %s", patternResult.BlockReason)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				return result, result.Error
+			}
+
+			// Apply prompt injection (warn/suggest modes)
+			if patternResult.PromptInjection != "" {
+				task = ApplyPromptInjection(task, patternResult)
+			}
+		}
 	}
 
 	// Run dependency checks before agent invocation (v2.9+)
