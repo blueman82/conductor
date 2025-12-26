@@ -793,20 +793,6 @@ func (ml *multiLogger) LogQCIntelligentSelectionMetadata(rationale string, fallb
 	}
 }
 
-// LogGuardPrediction forwards to all loggers
-func (ml *multiLogger) LogGuardPrediction(taskNumber string, result interface{}) {
-	for _, logger := range ml.loggers {
-		logger.LogGuardPrediction(taskNumber, result)
-	}
-}
-
-// LogAgentSwap forwards to all loggers
-func (ml *multiLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
-	for _, logger := range ml.loggers {
-		logger.LogAgentSwap(taskNumber, fromAgent, toAgent)
-	}
-}
-
 // LogAnomaly forwards to all loggers
 func (ml *multiLogger) LogAnomaly(anomaly interface{}) {
 	for _, logger := range ml.loggers {
