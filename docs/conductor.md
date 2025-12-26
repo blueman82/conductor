@@ -22,7 +22,7 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [Feedback Storage Settings](#dual-feedback-storage-v210)
   - [Learning Settings](#configuration-learning)
   - [Integration Tasks](#integration-tasks-v250)
-  - [GUARD Protocol](#guard-protocol-v217)
+
   - [Pattern Intelligence](#pattern-intelligence-v224)
   - [Budget & Rate Limits](#budget--rate-limits-v220)
 - [Multi-File Plans & Objective Splitting](#multi-file-plans--objective-splitting)
@@ -2056,72 +2056,6 @@ $ conductor validate plan.md
 $ grep "depends_on" plan.yaml
 
 # Context only injected if task has dependencies or type=integration
-```
-
-### GUARD Protocol (v2.17+)
-
-Pre-wave failure prediction using behavioral analytics to gate task execution before spawning agents.
-
-**Configuration:**
-
-```yaml
-guard:
-  # Enable/disable GUARD Protocol (default: false)
-  enabled: true
-
-  # Prediction mode:
-  # - block: Hard gate - fail tasks with high failure probability
-  # - warn: Soft signal - log warning but allow execution
-  # - adaptive: Smart gate - block only when BOTH probability AND confidence exceed thresholds
-  mode: warn
-
-  # Minimum failure probability to trigger action (default: 0.7)
-  probability_threshold: 0.7
-
-  # Minimum confidence for adaptive mode (default: 0.7)
-  confidence_threshold: 0.7
-
-  # Minimum historical sessions required for predictions (default: 5)
-  min_history_sessions: 5
-```
-
-**CLI Override:**
-
-```bash
-conductor run plan.md --no-guard  # Disable GUARD regardless of config
-```
-
-**Modes Explained:**
-
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| `block` | Fails task immediately if P > threshold | Production runs where you want to prevent known-bad patterns |
-| `warn` | Logs warning, allows execution | Development/testing to gather data before enforcing |
-| `adaptive` | Blocks only if P > threshold AND confidence > threshold | Balanced approach requiring sufficient historical data |
-
-**How It Works:**
-
-1. Before each wave, GUARD checks all pending tasks
-2. Uses FailurePredictor from behavioral analytics (same as `observe` commands)
-3. Predicts failure probability based on:
-   - Tool usage patterns
-   - Historical agent success rates
-   - Similar task outcomes
-4. Based on mode and thresholds, either blocks, warns, or allows
-
-**Graceful Degradation:**
-
-GUARD is designed to never block execution due to its own errors:
-- If predictor fails → logs error, allows all tasks
-- If store is unavailable → logs warning, allows all tasks
-- If insufficient history → skips prediction (below min_history_sessions)
-
-**Example Output:**
-
-```
-🟢 Task 1 "Setup config" - GUARD: 0.12 failure probability (low risk)
-🟡 Task 2 "Complex refactor" - GUARD: 0.45 failure probability (moderate risk)
-🔴 Task 3 "Known problematic" - GUARD: 0.85 failure probability (HIGH RISK - blocking)
 ```
 
 ### Pattern Intelligence (v2.24+)

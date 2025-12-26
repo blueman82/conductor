@@ -442,73 +442,6 @@ func (fl *FileLogger) LogQCIntelligentSelectionMetadata(rationale string, fallba
 	fl.writeRunLog(message)
 }
 
-// LogGuardPrediction logs GUARD protocol prediction results at INFO level.
-// Format: "[HH:MM:SS] [GUARD] Task N: risk_level (probability: X%, confidence: Y%)"
-// Only logs blocked tasks and high/medium risk tasks to reduce noise.
-func (fl *FileLogger) LogGuardPrediction(taskNumber string, result interface{}) {
-	// GUARD logging is at INFO level
-	if !fl.shouldLog("info") {
-		return
-	}
-
-	if result == nil {
-		return
-	}
-
-	// Type assert to GuardResultDisplay interface (defined in console.go)
-	type guardResultDisplay interface {
-		GetTaskNumber() string
-		GetProbability() float64
-		GetConfidence() float64
-		GetRiskLevel() string
-		ShouldBlock() bool
-		GetBlockReason() string
-		GetRecommendations() []string
-	}
-
-	guard, ok := result.(guardResultDisplay)
-	if !ok {
-		return
-	}
-
-	ts := time.Now().Format("15:04:05")
-	var message string
-
-	if guard.ShouldBlock() {
-		// Blocked task: show full details
-		message = fmt.Sprintf("[%s] [GUARD] Task %s BLOCKED: %s (probability: %.1f%%, confidence: %.1f%%)\n",
-			ts, taskNumber, guard.GetBlockReason(), guard.GetProbability()*100, guard.GetConfidence()*100)
-
-		// Add recommendations
-		for _, rec := range guard.GetRecommendations() {
-			message += fmt.Sprintf("[%s]          → %s\n", ts, rec)
-		}
-	} else if guard.GetRiskLevel() == "high" || guard.GetRiskLevel() == "medium" {
-		// High/medium risk but not blocked: show summary
-		message = fmt.Sprintf("[%s] [GUARD] Task %s: %s risk (%.1f%% probability)\n",
-			ts, taskNumber, guard.GetRiskLevel(), guard.GetProbability()*100)
-	}
-	// Low risk tasks are not logged to reduce noise
-
-	if message != "" {
-		fl.writeRunLog(message)
-	}
-}
-
-// LogAgentSwap logs when GUARD predictive selection swaps to a better-performing agent.
-// Format: "[HH:MM:SS] [GUARD] Task N: Swapping agent X → Y (predictive selection)"
-func (fl *FileLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
-	// Agent swap is at INFO level
-	if !fl.shouldLog("info") {
-		return
-	}
-
-	ts := time.Now().Format("15:04:05")
-	message := fmt.Sprintf("[%s] [GUARD] Task %s: Swapping agent %s → %s (predictive selection)\n",
-		ts, taskNumber, fromAgent, toAgent)
-	fl.writeRunLog(message)
-}
-
 // LogAnomaly logs real-time anomaly detection results during wave execution.
 // Format: "[HH:MM:SS] [ANOMALY] type: description (task N, severity)"
 func (fl *FileLogger) LogAnomaly(anomaly interface{}) {
@@ -647,9 +580,4 @@ func (fl *FileLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 // LogRateLimitAnnounce is a no-op for file logger (TTS only)
 func (fl *FileLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
 	// No-op: TTS announcements are not logged to file
-}
-
-// SetGuardVerbose is a no-op for file logger (verbose only affects console)
-func (fl *FileLogger) SetGuardVerbose(verbose bool) {
-	// No-op: verbose mode is console-only for GUARD output
 }

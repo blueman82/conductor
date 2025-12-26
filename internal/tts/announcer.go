@@ -161,60 +161,6 @@ func (a *Announcer) QCCriteriaResults(agentName string, results []models.Criteri
 	}
 }
 
-// GuardResultDisplay interface for type assertion from interface{} parameter.
-// Matches the interface implemented by executor.GuardResult.
-type GuardResultDisplay interface {
-	GetTaskNumber() string
-	GetProbability() float64
-	GetConfidence() float64
-	GetRiskLevel() string
-	GetShouldBlock() bool
-	GetBlockReason() string
-	GetRecommendations() []string
-}
-
-// GuardPrediction announces GUARD protocol predictions.
-func (a *Announcer) GuardPrediction(taskNumber string, result interface{}) {
-	if result == nil {
-		return
-	}
-
-	// Type assert to GuardResultDisplay interface
-	guard, ok := result.(GuardResultDisplay)
-	if !ok {
-		return
-	}
-
-	riskLevel := guard.GetRiskLevel()
-	probability := guard.GetProbability() * 100
-
-	var msg string
-
-	if guard.GetShouldBlock() {
-		// Blocked task: announce with reason
-		msg = fmt.Sprintf("GUARD blocked Task %s. %s. %.0f percent failure probability",
-			taskNumber, guard.GetBlockReason(), probability)
-	} else if riskLevel == "high" {
-		msg = fmt.Sprintf("GUARD: Task %s high risk. %.0f percent failure probability",
-			taskNumber, probability)
-	} else if riskLevel == "medium" {
-		msg = fmt.Sprintf("GUARD: Task %s medium risk. %.0f percent failure probability",
-			taskNumber, probability)
-	} else {
-		msg = fmt.Sprintf("GUARD: Task %s low risk", taskNumber)
-	}
-
-	if msg != "" {
-		a.client.Speak(msg)
-	}
-}
-
-// AgentSwap announces when GUARD predictive selection swaps to a better agent.
-func (a *Announcer) AgentSwap(taskNumber string, fromAgent string, toAgent string) {
-	msg := fmt.Sprintf("GUARD: Swapping Task %s from %s to %s", taskNumber, fromAgent, toAgent)
-	a.client.Speak(msg)
-}
-
 // WaveAnomalyDisplay interface for type assertion from interface{} parameter.
 type WaveAnomalyDisplay interface {
 	GetType() string

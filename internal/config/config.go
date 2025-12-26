@@ -10,20 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// GuardMode specifies the GUARD Protocol operating mode
-type GuardMode string
-
-const (
-	// GuardModeBlock blocks task execution when failure probability exceeds threshold
-	GuardModeBlock GuardMode = "block"
-
-	// GuardModeWarn logs a warning but allows task execution to proceed
-	GuardModeWarn GuardMode = "warn"
-
-	// GuardModeAdaptive dynamically adjusts behavior based on historical accuracy
-	GuardModeAdaptive GuardMode = "adaptive"
-)
-
 // PatternMode specifies the Pattern Intelligence operating mode
 type PatternMode string
 
@@ -37,64 +23,6 @@ const (
 	// PatternModeSuggest includes pattern analysis in agent prompt without blocking
 	PatternModeSuggest PatternMode = "suggest"
 )
-
-// GuardConfig represents GUARD Protocol configuration
-type GuardConfig struct {
-	// Enabled enables the GUARD Protocol failure prediction system
-	Enabled bool `yaml:"enabled"`
-
-	// Mode specifies the operating mode: "block", "warn", or "adaptive"
-	Mode GuardMode `yaml:"mode"`
-
-	// ProbabilityThreshold is the minimum failure probability to trigger guard action (0.0-1.0)
-	ProbabilityThreshold float64 `yaml:"probability_threshold"`
-
-	// ConfidenceThreshold is the minimum confidence required for prediction (0.0-1.0)
-	ConfidenceThreshold float64 `yaml:"confidence_threshold"`
-
-	// MinHistorySessions is the minimum number of historical sessions required before predictions are made
-	MinHistorySessions int `yaml:"min_history_sessions"`
-
-	// AutoSelectAgent enables automatic agent selection when failure probability is high (v2.18+)
-	// When true, GUARD will suggest a better-performing agent based on historical data
-	AutoSelectAgent bool `yaml:"auto_select_agent"`
-
-	// Verbose enables detailed GUARD logging output
-	Verbose bool `yaml:"verbose"`
-
-	// AnomalyDetection configuration for real-time anomaly monitoring (v2.18+)
-	AnomalyDetection AnomalyDetectionConfig `yaml:"anomaly_detection"`
-
-	// LLM configuration for LLM-enhanced failure prediction (v2.22+)
-	LLM LLMGuardConfig `yaml:"llm"`
-}
-
-// LLMGuardConfig defines LLM-enhanced GUARD configuration
-type LLMGuardConfig struct {
-	// Enabled enables LLM-based failure prediction
-	Enabled bool `yaml:"enabled"`
-
-	// Model specifies the Ollama model to use (e.g., "gpt-oss:latest")
-	Model string `yaml:"model"`
-
-	// ThinkLevel specifies reasoning depth: "low", "medium", "high"
-	ThinkLevel string `yaml:"think_level"`
-
-	// BaseURL is the Ollama API endpoint (default: http://localhost:11434)
-	BaseURL string `yaml:"base_url"`
-
-	// Timeout for LLM requests
-	Timeout time.Duration `yaml:"timeout"`
-
-	// FallbackToStats uses statistical prediction if LLM fails
-	FallbackToStats bool `yaml:"fallback_to_stats"`
-
-	// MinProbabilityForLLM only uses LLM when stats probability is uncertain
-	MinProbabilityForLLM float64 `yaml:"min_probability_for_llm"`
-
-	// MaxProbabilityForLLM upper bound for uncertainty range
-	MaxProbabilityForLLM float64 `yaml:"max_probability_for_llm"`
-}
 
 // AnomalyDetectionConfig controls real-time anomaly detection during wave execution
 type AnomalyDetectionConfig struct {
@@ -494,43 +422,11 @@ type Config struct {
 	// TTS controls text-to-speech functionality
 	TTS TTSConfig `yaml:"tts"`
 
-	// Guard contains GUARD Protocol configuration
-	Guard GuardConfig `yaml:"guard"`
-
 	// Budget controls usage budget tracking and enforcement
 	Budget BudgetConfig `yaml:"budget"`
 
 	// Pattern contains Pattern Intelligence configuration
 	Pattern PatternConfig `yaml:"pattern"`
-}
-
-// DefaultGuardConfig returns GuardConfig with sensible default values
-// GUARD is DISABLED by default to ensure zero behavior change unless explicitly enabled
-func DefaultGuardConfig() GuardConfig {
-	return GuardConfig{
-		Enabled:              false,
-		Mode:                 GuardModeWarn,
-		ProbabilityThreshold: 0.7,
-		ConfidenceThreshold:  0.7,
-		MinHistorySessions:   5,
-		AutoSelectAgent:      true, // Enabled when GUARD is enabled
-		AnomalyDetection:     DefaultAnomalyDetectionConfig(),
-		LLM:                  DefaultLLMGuardConfig(),
-	}
-}
-
-// DefaultLLMGuardConfig returns LLMGuardConfig with sensible default values
-func DefaultLLMGuardConfig() LLMGuardConfig {
-	return LLMGuardConfig{
-		Enabled:              false,
-		Model:                "gpt-oss:latest",
-		ThinkLevel:           "medium",
-		BaseURL:              "http://localhost:11434",
-		Timeout:              60 * time.Second,
-		FallbackToStats:      true,
-		MinProbabilityForLLM: 0.3,
-		MaxProbabilityForLLM: 0.7,
-	}
 }
 
 // DefaultAnomalyDetectionConfig returns AnomalyDetectionConfig with sensible default values
@@ -691,7 +587,6 @@ func DefaultConfig() *Config {
 			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
 		TTS:     DefaultTTSConfig(),
-		Guard:   DefaultGuardConfig(),
 		Budget:  DefaultBudgetConfig(),
 		Pattern: DefaultPatternConfig(),
 	}
@@ -804,7 +699,6 @@ func LoadConfig(path string) (*Config, error) {
 		Validation     ValidationConfig     `yaml:"validation"`
 		Executor       ExecutorConfig       `yaml:"executor"`
 		TTS            yamlTTSConfig        `yaml:"tts"`
-		Guard          GuardConfig          `yaml:"guard"`
 		Budget         yamlBudgetConfig     `yaml:"budget"`
 		Pattern        PatternConfig        `yaml:"pattern"`
 	}
@@ -1128,31 +1022,6 @@ func LoadConfig(path string) (*Config, error) {
 			}
 		}
 
-		// Merge Guard config
-		if guardSection, exists := rawMap["guard"]; exists && guardSection != nil {
-			guard := yamlCfg.Guard
-			guardMap, _ := guardSection.(map[string]interface{})
-
-			if _, exists := guardMap["enabled"]; exists {
-				cfg.Guard.Enabled = guard.Enabled
-			}
-			if _, exists := guardMap["mode"]; exists {
-				cfg.Guard.Mode = guard.Mode
-			}
-			if _, exists := guardMap["probability_threshold"]; exists {
-				cfg.Guard.ProbabilityThreshold = guard.ProbabilityThreshold
-			}
-			if _, exists := guardMap["confidence_threshold"]; exists {
-				cfg.Guard.ConfidenceThreshold = guard.ConfidenceThreshold
-			}
-			if _, exists := guardMap["min_history_sessions"]; exists {
-				cfg.Guard.MinHistorySessions = guard.MinHistorySessions
-			}
-			if _, exists := guardMap["auto_select_agent"]; exists {
-				cfg.Guard.AutoSelectAgent = guard.AutoSelectAgent
-			}
-		}
-
 		// Merge Budget config
 		if budgetSection, exists := rawMap["budget"]; exists && budgetSection != nil {
 			budget := yamlCfg.Budget
@@ -1461,34 +1330,6 @@ func (c *Config) Validate() error {
 		}
 		if costModel.OpusOutput < 0 {
 			return fmt.Errorf("agent_watch.cost_model.opus_output must be >= 0, got %f", costModel.OpusOutput)
-		}
-	}
-
-	// Validate Guard configuration
-	if c.Guard.Enabled {
-		// Validate mode
-		validGuardModes := map[GuardMode]bool{
-			GuardModeBlock:    true,
-			GuardModeWarn:     true,
-			GuardModeAdaptive: true,
-		}
-		if !validGuardModes[c.Guard.Mode] {
-			return fmt.Errorf("guard.mode must be one of: block, warn, adaptive; got %q", c.Guard.Mode)
-		}
-
-		// Validate probability_threshold is between 0 and 1
-		if c.Guard.ProbabilityThreshold < 0 || c.Guard.ProbabilityThreshold > 1 {
-			return fmt.Errorf("guard.probability_threshold must be between 0 and 1, got %f", c.Guard.ProbabilityThreshold)
-		}
-
-		// Validate confidence_threshold is between 0 and 1
-		if c.Guard.ConfidenceThreshold < 0 || c.Guard.ConfidenceThreshold > 1 {
-			return fmt.Errorf("guard.confidence_threshold must be between 0 and 1, got %f", c.Guard.ConfidenceThreshold)
-		}
-
-		// Validate min_history_sessions is non-negative
-		if c.Guard.MinHistorySessions < 0 {
-			return fmt.Errorf("guard.min_history_sessions must be >= 0, got %d", c.Guard.MinHistorySessions)
 		}
 	}
 

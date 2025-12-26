@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Conductor is an autonomous multi-agent orchestration CLI built in Go that executes implementation plans by spawning and managing multiple Claude Code CLI agents in coordinated waves. It parses plan files (Markdown or YAML), calculates task dependencies using graph algorithms, and orchestrates parallel execution with quality control reviews and adaptive learning.
 
-**Current Status**: Production-ready v2.24.0 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, GUARD Protocol for pre-wave failure prediction (v2.17+), Pattern Intelligence with STOP protocol for prior art detection and duplicate prevention (v2.24+), optional TTS voice feedback (v2.14+), and auto-incrementing version management.
+**Current Status**: Production-ready v2.25.0 with comprehensive multi-agent orchestration, multi-file plan support with cross-file dependencies (v2.6+), quality control reviews, adaptive learning system, inter-retry agent swapping, structured success criteria with per-criterion verification, intelligent QC agent selection, domain-specific review criteria, integration tasks with dual criteria validation, Pattern Intelligence with STOP protocol for prior art detection and duplicate prevention (v2.24+), optional TTS voice feedback (v2.14+), and auto-incrementing version management.
 
 ## Codebase Search
 
@@ -57,7 +57,7 @@ make build-major         # Auto-increment major (1.1.0 → 2.0.0) and build
 ### Execution Pipeline
 
 ```
-Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor → GUARD Gate → Task Executor → QC → Learning System
+Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor → Task Executor → QC → Learning System
 ```
 
 **Multi-File Plans** (v2.6+): Parser handles multiple files → Plan Merger validates cross-file deps → Rest of pipeline
@@ -182,50 +182,6 @@ learning:
   max_context_entries: 10         # Limit context
   min_failures_before_adapt: 2    # Threshold
 ```
-
-### GUARD Protocol (v2.17+, LLM-enhanced v2.22+)
-
-**Pre-wave failure prediction** using behavioral analytics to gate task execution.
-
-**Modes:**
-- `block`: Hard gate - fails tasks with high failure probability
-- `warn`: Soft signal - logs warning but allows execution
-- `adaptive`: Smart gate - blocks only when both probability AND confidence exceed thresholds
-
-**LLM-Enhanced Prediction (v2.22+):**
-- Uses gpt-oss via Ollama for intelligent failure prediction
-- Hybrid mode: statistical prediction first, LLM for uncertain cases (0.3-0.7 probability)
-- Weighted blending: LLM confidence determines weight (max 50% to LLM)
-- Graceful degradation: falls back to stats if Ollama unavailable
-
-**Config** (.conductor/config.yaml):
-```yaml
-guard:
-  enabled: true                    # Master switch
-  mode: warn                       # block | warn | adaptive
-  probability_threshold: 0.7       # Minimum failure probability to trigger
-  confidence_threshold: 0.7        # For adaptive mode
-  min_history_sessions: 5          # Minimum data points needed
-  llm:                             # LLM-enhanced prediction (v2.22+)
-    enabled: false                 # Requires Ollama + gpt-oss
-    model: "gpt-oss:latest"        # Ollama model
-    think_level: "medium"          # Reasoning depth: low/medium/high
-    base_url: "http://localhost:11434"
-    timeout: 60s
-    fallback_to_stats: true
-    min_probability_for_llm: 0.3   # Use LLM when stats uncertain
-    max_probability_for_llm: 0.7
-```
-
-**CLI Override:** `--no-guard` disables GUARD at runtime regardless of config.
-
-**Graceful Degradation:** GUARD errors never block execution - failures are logged and tasks proceed.
-
-**Key Files:**
-- `guard.go`: Core GuardProtocol, CheckWave(), evaluateBlockDecision(), enhanceWithLLM()
-- `guard_llm.go`: OllamaPredictor for LLM-based failure prediction
-- `wave.go`: Gate insertion after task filtering, before semaphore
-- `guard_test.go`: Unit tests covering modes and thresholds
 
 ### Pattern Intelligence (v2.24+)
 
@@ -369,7 +325,7 @@ tasks:
 
 ## Production Status
 
-**v2.24.0**: 86%+ test coverage (500+ tests). Complete pipeline with runtime enforcement, GUARD Protocol, Pattern Intelligence, budget tracking, mid-task recovery, and optional TTS.
+**v2.25.0**: 86%+ test coverage (500+ tests). Complete pipeline with runtime enforcement, Pattern Intelligence, budget tracking, mid-task recovery, and optional TTS.
 
 **Major Features**:
 - Multi-agent orchestration with dependency resolution
@@ -382,7 +338,6 @@ tasks:
 - Dual feedback storage (plan files + database)
 - Integration tasks with dual criteria
 - Agent Watch behavioral analytics (v2.7+)
-- GUARD Protocol with behavioral prediction (v2.17+)
 - Pattern Intelligence with STOP protocol (v2.24+)
 - Optional TTS voice feedback (v2.14+)
 - Comprehensive logging and error handling
@@ -397,10 +352,10 @@ tasks:
 - v2.8: JSON schema enforcement via --json-schema flag
 - v2.9: Runtime enforcement with test commands, criterion verification, dynamic terminal width
 - v2.14: Optional Orpheus TTS voice feedback for hands-free monitoring
-- v2.17: GUARD Protocol for pre-wave failure prediction
 - v2.20: Intelligent rate limit auto-resume with state persistence
 - v2.21: Mid-task rate limit recovery with session resume and git diff fallback
 - v2.24: Pattern Intelligence with STOP protocol, prior art justification
+- v2.25: GUARD Protocol removed (superseded by Pattern Intelligence)
 
 ## Module Path
 

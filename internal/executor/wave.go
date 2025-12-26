@@ -29,7 +29,6 @@ type WaveExecutor struct {
 	retryFailed         bool                  // Retry tasks that have failed status
 	packageGuard        *PackageGuard         // Runtime package conflict guard (v2.9+)
 	enforcePackageGuard bool                  // Enable package guard enforcement
-	guardProtocol       *GuardProtocol        // GUARD Protocol for failure prediction
 	anomalyConfig       *AnomalyMonitorConfig // Real-time anomaly detection config (v2.18+)
 	// Budget tracking (v2.19+)
 	budgetTracker *budget.UsageTracker
@@ -75,12 +74,6 @@ func (w *WaveExecutor) SetPackageGuard(enabled bool) {
 	if enabled && w.packageGuard == nil {
 		w.packageGuard = NewPackageGuard()
 	}
-}
-
-// SetGuardProtocol sets the GUARD Protocol for failure prediction.
-// This enables pre-wave risk analysis and adaptive blocking.
-func (w *WaveExecutor) SetGuardProtocol(guard *GuardProtocol) {
-	w.guardProtocol = guard
 }
 
 // SetAnomalyConfig sets the anomaly detection configuration.
@@ -238,64 +231,6 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 		return skippedResults, nil
 	}
 
-	// ========== GUARD PROTOCOL GATE ==========
-	if w.guardProtocol != nil {
-		// Build task slice for GUARD check
-		var tasksForGuard []models.Task
-		for _, taskNum := range tasksToExecute {
-			if task, ok := taskMap[taskNum]; ok {
-				tasksForGuard = append(tasksForGuard, task)
-			}
-		}
-
-		// Run pre-wave failure prediction
-		guardResults, err := w.guardProtocol.CheckWave(ctx, tasksForGuard)
-		if err == nil && guardResults != nil {
-			var blockedTasks []string
-
-			for taskNum, guardResult := range guardResults {
-				// Log prediction via logger if available
-				if w.logger != nil {
-					w.logger.LogGuardPrediction(taskNum, guardResult)
-				}
-
-				if guardResult.ShouldBlock {
-					task := taskMap[taskNum]
-					blockedTasks = append(blockedTasks, taskNum)
-
-					// Create failed result for blocked task
-					blockedResult := models.TaskResult{
-						Task:   task,
-						Status: models.StatusFailed,
-						Error:  fmt.Errorf("GUARD blocked: %s", guardResult.BlockReason),
-					}
-					if guardResult.Prediction != nil {
-						blockedResult.Output = fmt.Sprintf("Risk factors: %v\nRecommendations: %v",
-							guardResult.Prediction.RiskFactors,
-							guardResult.Recommendations)
-					}
-					skippedResults = append(skippedResults, blockedResult)
-				} else if guardResult.SuggestedAgent != "" {
-					// Predictive agent selection: swap to better agent before execution
-					task := taskMap[taskNum]
-					originalAgent := task.Agent
-					task.Agent = guardResult.SuggestedAgent
-					taskMap[taskNum] = task
-					if w.logger != nil {
-						w.logger.LogAgentSwap(taskNum, originalAgent, guardResult.SuggestedAgent)
-					}
-				}
-			}
-
-			// Remove blocked tasks from execution queue
-			if len(blockedTasks) > 0 {
-				tasksToExecute = filterOutTasks(tasksToExecute, blockedTasks)
-			}
-		}
-		// Graceful degradation: if GUARD fails, continue with all tasks
-	}
-	// ========== END GUARD PROTOCOL GATE ==========
-
 	// ========== BUDGET GATE ==========
 	if w.budgetConfig != nil && w.budgetConfig.CheckInterval == "per_wave" {
 		if err := w.checkBudget(); err != nil {
@@ -304,7 +239,7 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 	}
 	// ========== END BUDGET GATE ==========
 
-	// If all tasks were blocked by GUARD, return the blocked results
+	// If all tasks were skipped/blocked, return the results
 	if len(tasksToExecute) == 0 {
 		return skippedResults, nil
 	}

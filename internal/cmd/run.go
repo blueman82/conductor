@@ -136,9 +136,6 @@ Examples:
 	cmd.Flags().Bool("no-enforce-package-guard", false, "Disable Go package conflict guard")
 	cmd.Flags().Bool("no-enforce-doc-targets", false, "Disable documentation target verification")
 
-	// GUARD Protocol flags
-	cmd.Flags().Bool("no-guard", false, "Disable GUARD Protocol pre-wave prediction")
-
 	return cmd
 }
 
@@ -285,14 +282,6 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	}
 	if cmd.Flags().Changed("no-enforce-doc-targets") {
 		cfg.Executor.EnforceDocTargets = false
-	}
-
-	// Process GUARD Protocol flag
-	if cmd.Flags().Changed("no-guard") {
-		noGuard, _ := cmd.Flags().GetBool("no-guard")
-		if noGuard {
-			cfg.Guard.Enabled = false
-		}
 	}
 
 	// Validate merged configuration
@@ -657,25 +646,6 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithPackageGuard(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed, cfg.Executor.EnforcePackageGuard)
 
-	// Wire GUARD Protocol if enabled
-	if cfg.Guard.Enabled {
-		if learningStore != nil {
-			guardConfig := executor.GuardConfig{
-				Enabled:              cfg.Guard.Enabled,
-				Mode:                 executor.GuardMode(cfg.Guard.Mode),
-				ProbabilityThreshold: cfg.Guard.ProbabilityThreshold,
-				ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
-				MinHistorySessions:   cfg.Guard.MinHistorySessions,
-			}
-			guardProtocol := executor.NewGuardProtocol(guardConfig, cfg.Guard.LLM, learningStore, multiLog)
-			if guardProtocol != nil {
-				// Set GUARD verbosity based on config
-				multiLog.SetGuardVerbose(cfg.Guard.Verbose)
-				waveExec.SetGuardProtocol(guardProtocol)
-			}
-		}
-	}
-
 	// Create orchestrator with learning integration
 	orch := executor.NewOrchestratorFromConfig(executor.OrchestratorConfig{
 		WaveExecutor:  waveExec,
@@ -812,20 +782,6 @@ func (ml *multiLogger) LogQCIntelligentSelectionMetadata(rationale string, fallb
 	}
 }
 
-// LogGuardPrediction forwards to all loggers
-func (ml *multiLogger) LogGuardPrediction(taskNumber string, result interface{}) {
-	for _, logger := range ml.loggers {
-		logger.LogGuardPrediction(taskNumber, result)
-	}
-}
-
-// LogAgentSwap forwards to all loggers
-func (ml *multiLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
-	for _, logger := range ml.loggers {
-		logger.LogAgentSwap(taskNumber, fromAgent, toAgent)
-	}
-}
-
 // LogAnomaly forwards to all loggers
 func (ml *multiLogger) LogAnomaly(anomaly interface{}) {
 	for _, logger := range ml.loggers {
@@ -872,13 +828,6 @@ func (ml *multiLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 func (ml *multiLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
 	for _, logger := range ml.loggers {
 		logger.LogRateLimitAnnounce(remaining, total)
-	}
-}
-
-// SetGuardVerbose forwards to all loggers
-func (ml *multiLogger) SetGuardVerbose(verbose bool) {
-	for _, logger := range ml.loggers {
-		logger.SetGuardVerbose(verbose)
 	}
 }
 
