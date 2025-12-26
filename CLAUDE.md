@@ -369,7 +369,7 @@ tasks:
 
 ## Production Status
 
-**v2.21.0**: 86%+ test coverage (500+ tests). Complete pipeline with runtime enforcement, GUARD Protocol, budget tracking, mid-task recovery, and optional TTS.
+**v2.24.0**: 86%+ test coverage (500+ tests). Complete pipeline with runtime enforcement, GUARD Protocol, Pattern Intelligence, budget tracking, mid-task recovery, and optional TTS.
 
 **Major Features**:
 - Multi-agent orchestration with dependency resolution
