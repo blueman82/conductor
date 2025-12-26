@@ -32,6 +32,15 @@ func NewPatternIntelligenceHook(pi pattern.PatternIntelligence, cfg *config.Patt
 	}
 }
 
+// RequireJustification returns whether STOP justification is required for custom implementations.
+// Returns false if the hook or config is nil (graceful degradation).
+func (h *PatternIntelligenceHook) RequireJustification() bool {
+	if h == nil || h.config == nil {
+		return false
+	}
+	return h.config.RequireJustification
+}
+
 // PreTaskCheckResult contains the result of a pre-task pattern check.
 type PreTaskCheckResult struct {
 	// ShouldBlock indicates if task execution should be blocked

@@ -201,6 +201,7 @@ type DefaultTaskExecutor struct {
 	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
 	lastCriterionResults []CriterionVerificationResult // Populated after RunCriterionVerifications
 	lastDocTargetResults []DocTargetResult             // Populated after VerifyDocumentationTargets
+	lastPatternResult    *PreTaskCheckResult           // Populated after Pattern Intelligence check (v2.24+)
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -796,6 +797,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 	}
 
 	// Pattern Intelligence pre-task hook: STOP protocol analysis and duplicate detection (v2.23+)
+	te.lastPatternResult = nil // Reset for new task
 	if te.PatternHook != nil {
 		patternResult, patternErr := te.PatternHook.CheckTask(ctx, task)
 		if patternErr != nil {
@@ -804,6 +806,9 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				te.Logger.Warnf("Pattern Intelligence check failed for task %s: %v", task.Number, patternErr)
 			}
 		} else if patternResult != nil {
+			// Store for QC integration (v2.24+)
+			te.lastPatternResult = patternResult
+
 			// Handle block mode - task should not proceed
 			if patternResult.ShouldBlock {
 				result.Status = models.StatusFailed
@@ -1208,6 +1213,13 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 			qc.TestCommandResults = te.lastTestResults
 			qc.CriterionVerifyResults = te.lastCriterionResults
 			qc.DocTargetResults = te.lastDocTargetResults
+
+			// Wire STOP protocol context to QC (v2.24+)
+			// This enables QC to request justification for custom implementations when prior art exists
+			if te.lastPatternResult != nil && te.lastPatternResult.STOPResult != nil {
+				qc.STOPSummary = BuildSTOPSummaryFromSTOPResult(te.lastPatternResult.STOPResult)
+				qc.RequireJustification = te.PatternHook.RequireJustification()
+			}
 		}
 
 		review, reviewErr := te.reviewer.Review(ctx, task, output)

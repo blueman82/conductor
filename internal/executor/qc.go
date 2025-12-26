@@ -13,6 +13,7 @@ import (
 	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
+	"github.com/harrison/conductor/internal/pattern"
 )
 
 // domainSpecificChecks maps file extensions to domain-specific QC review criteria
@@ -1024,6 +1025,72 @@ func FormatSTOPPriorArt(stopSummary string, requireJustification bool) string {
 		sb.WriteString("- **No justification when prior art exists**: Consider this a quality concern that should be flagged\n\n")
 	} else {
 		sb.WriteString("\n**Context only**: Prior art is provided for informational purposes. No justification required.\n\n")
+	}
+
+	return sb.String()
+}
+
+// BuildSTOPSummaryFromSTOPResult extracts the STOP summary from a pattern.STOPResult.
+// This is called from task.go after Pattern Intelligence check to wire STOP context to QC.
+// The summary is injected into the QC prompt to request justification for custom implementations.
+func BuildSTOPSummaryFromSTOPResult(stopResult *pattern.STOPResult) string {
+	if stopResult == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	hasPriorArt := false
+
+	// Check for similar patterns
+	if len(stopResult.Search.SimilarPatterns) > 0 {
+		hasPriorArt = true
+		sb.WriteString("**Similar Patterns Found:**\n")
+		for i, p := range stopResult.Search.SimilarPatterns {
+			if i >= 3 { // Limit to top 3
+				break
+			}
+			sb.WriteString(fmt.Sprintf("- %s (%s): %.0f%% similar - %s\n",
+				p.Name, p.FilePath, p.Similarity*100, p.Description))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Check for existing implementations
+	if len(stopResult.Search.ExistingImplementations) > 0 {
+		hasPriorArt = true
+		sb.WriteString("**Existing Implementations:**\n")
+		for i, impl := range stopResult.Search.ExistingImplementations {
+			if i >= 3 { // Limit to top 3
+				break
+			}
+			sb.WriteString(fmt.Sprintf("- %s (%s) in %s: %.0f%% relevant\n",
+				impl.Name, impl.Type, impl.FilePath, impl.Relevance*100))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Check for related files
+	if len(stopResult.Search.RelatedFiles) > 0 {
+		hasPriorArt = true
+		sb.WriteString("**Related Files:** ")
+		maxFiles := 5
+		if maxFiles > len(stopResult.Search.RelatedFiles) {
+			maxFiles = len(stopResult.Search.RelatedFiles)
+		}
+		sb.WriteString(strings.Join(stopResult.Search.RelatedFiles[:maxFiles], ", "))
+		sb.WriteString("\n\n")
+	}
+
+	// Add recommendations if any
+	if len(stopResult.Recommendations) > 0 {
+		sb.WriteString("**Recommendations:**\n")
+		for _, rec := range stopResult.Recommendations {
+			sb.WriteString(fmt.Sprintf("- %s\n", rec))
+		}
+	}
+
+	if !hasPriorArt {
+		return "" // No prior art found
 	}
 
 	return sb.String()
