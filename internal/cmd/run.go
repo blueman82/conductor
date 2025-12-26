@@ -284,14 +284,6 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		cfg.Executor.EnforceDocTargets = false
 	}
 
-	// Process GUARD Protocol flag
-	if cmd.Flags().Changed("no-guard") {
-		noGuard, _ := cmd.Flags().GetBool("no-guard")
-		if noGuard {
-			cfg.Guard.Enabled = false
-		}
-	}
-
 	// Validate merged configuration
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
