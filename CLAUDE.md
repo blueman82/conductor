@@ -211,7 +211,19 @@ pattern:
   enable_duplicate_detection: true
   inject_into_prompt: true        # Add context to agent prompts
   require_justification: true     # QC requests justification for custom impl
+  # LLM Enhancement (v2.26+)
+  llm_enhancement_enabled: true   # Claude-based confidence refinement
+  llm_min_confidence: 0.3         # Enhance when confidence >= this
+  llm_max_confidence: 0.7         # Enhance when confidence <= this
+  llm_timeout_seconds: 30         # Timeout for Claude CLI response
 ```
+
+**LLM Enhancement (v2.26+):**
+When confidence is in uncertain range (0.3-0.7), uses Claude CLI to refine:
+- Analyzes task context and pattern search results
+- Adjusts confidence based on prior art quality
+- Adds risk factors from LLM analysis
+- TTS + visual countdown during rate limit waits
 
 **Prior Art Justification (v2.24+):**
 When `require_justification: true` and STOP finds prior art, QC agents will:
