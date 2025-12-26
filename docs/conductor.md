@@ -23,6 +23,7 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [Learning Settings](#configuration-learning)
   - [Integration Tasks](#integration-tasks-v250)
   - [GUARD Protocol](#guard-protocol-v217)
+  - [Pattern Intelligence](#pattern-intelligence-v224)
   - [Budget & Rate Limits](#budget--rate-limits-v220)
 - [Multi-File Plans & Objective Splitting](#multi-file-plans--objective-splitting)
   - [Core Concepts](#core-concepts)
