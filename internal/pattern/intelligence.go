@@ -268,6 +268,9 @@ func (pi *PatternIntelligenceImpl) runSTOPAnalysis(ctx context.Context, descript
 	// Calculate overall confidence
 	result.Confidence = pi.calculateConfidence(searchResults)
 
+	// LLM enhancement for uncertain confidence range
+	result = pi.enhanceWithLLM(ctx, description, searchResults, result)
+
 	// Generate recommendations
 	result.Recommendations = pi.generateRecommendations(searchResults, hashResult)
 
