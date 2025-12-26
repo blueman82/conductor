@@ -440,6 +440,44 @@ type Config struct {
 
 	// Pattern contains Pattern Intelligence configuration
 	Pattern PatternConfig `yaml:"pattern"`
+
+	// Architecture contains Architecture Checkpoint configuration (v2.27+)
+	Architecture ArchitectureConfig `yaml:"architecture"`
+}
+
+// ArchitectureMode specifies the Architecture Checkpoint operating mode
+type ArchitectureMode string
+
+const (
+	// ArchitectureModeBlock fails tasks flagged for architectural review
+	ArchitectureModeBlock ArchitectureMode = "block"
+
+	// ArchitectureModeWarn logs warning but allows execution to proceed
+	ArchitectureModeWarn ArchitectureMode = "warn"
+
+	// ArchitectureModeEscalate pauses execution for user decision
+	ArchitectureModeEscalate ArchitectureMode = "escalate"
+)
+
+// ArchitectureConfig controls Architecture Checkpoint Gate behavior (v2.27+)
+type ArchitectureConfig struct {
+	// Enabled enables Architecture Checkpoint Gate
+	Enabled bool `yaml:"enabled"`
+
+	// Mode specifies operating mode: "block", "warn", or "escalate"
+	Mode ArchitectureMode `yaml:"mode"`
+
+	// TimeoutSeconds for Claude CLI call (default: 30)
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+
+	// RequireJustification requires task to justify architectural changes in output
+	RequireJustification bool `yaml:"require_justification"`
+
+	// EscalateOnUncertain escalates when Claude confidence < threshold
+	EscalateOnUncertain bool `yaml:"escalate_on_uncertain"`
+
+	// ConfidenceThreshold for escalation (default: 0.7)
+	ConfidenceThreshold float64 `yaml:"confidence_threshold"`
 }
 
 // DefaultAnomalyDetectionConfig returns AnomalyDetectionConfig with sensible default values
