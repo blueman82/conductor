@@ -583,3 +583,54 @@ pattern:
 # Example: Enable strict rubric validation for all plans with PlannerComplianceSpec
 # validation:
 #   strict_rubric: true
+
+# Architecture Checkpoint configuration (v2.27+)
+# LLM-based 6-question architecture assessment before task execution
+# Language/codebase agnostic - Claude reasons about architectural impact semantically
+architecture:
+  # Enable or disable Architecture Checkpoint (default: false)
+  enabled: false
+
+  # Operating mode:
+  # - block: Hard gate - fail tasks flagged for architectural review
+  # - warn: Soft signal - log warning and inject context (default)
+  # - escalate: Pause execution for user decision
+  mode: warn
+
+  # Timeout for Claude CLI assessment (default: 30)
+  timeout_seconds: 30
+
+  # Require justification for architectural changes (default: false)
+  # When true: QC agents verify architectural decisions are justified
+  require_justification: false
+
+  # Escalate when Claude confidence < threshold (default: false)
+  escalate_on_uncertain: false
+
+  # Confidence threshold for escalation (default: 0.7)
+  confidence_threshold: 0.7
+
+# Architecture Checkpoint Examples
+
+# Example: Enable in warn mode (recommended starting point)
+# architecture:
+#   enabled: true
+#   mode: warn
+
+# Example: Strict blocking mode for architectural changes
+# architecture:
+#   enabled: true
+#   mode: block
+
+# Example: Enable with justification requirement
+# architecture:
+#   enabled: true
+#   mode: warn
+#   require_justification: true
+
+# Example: Escalate on uncertain assessments
+# architecture:
+#   enabled: true
+#   mode: escalate
+#   escalate_on_uncertain: true
+#   confidence_threshold: 0.8
