@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/architecture"
 	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/display"
