@@ -568,11 +568,11 @@ func DefaultPatternConfig() PatternConfig {
 // Architecture Checkpoint is DISABLED by default to ensure zero behavior change.
 func DefaultArchitectureConfig() ArchitectureConfig {
 	return ArchitectureConfig{
-		Enabled:              false,                // Disabled by default
-		Mode:                 ArchitectureModeWarn, // Warn mode when enabled
-		TimeoutSeconds:       30,                   // 30 second timeout
-		RequireJustification: false,                // Don't require justification by default
-		EscalateOnUncertain:  false,                // Don't escalate on low confidence
+		Enabled:              false,                    // Disabled by default
+		Mode:                 ArchitectureModeEscalate, // Escalate mode when enabled
+		TimeoutSeconds:       30,                       // 30 second timeout
+		RequireJustification: false,                    // Don't require justification by default
+		EscalateOnUncertain:  false,                    // Don't escalate on low confidence
 		ConfidenceThreshold:  0.7,                  // 70% confidence threshold
 	}
 }
