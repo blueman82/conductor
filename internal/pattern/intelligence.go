@@ -36,6 +36,7 @@ type PatternIntelligenceImpl struct {
 	searcher *STOPSearcher
 	library  *PatternLibrary
 	store    *learning.Store
+	enhancer *ClaudeEnhancer // nil if LLM enhancement disabled
 
 	mu          sync.RWMutex
 	initialized bool
