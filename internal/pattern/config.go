@@ -62,11 +62,8 @@ type PatternConfig struct {
 	// LLMMaxConfidence is the maximum confidence to trigger LLM enhancement (default: 0.7)
 	LLMMaxConfidence float64 `yaml:"llm_max_confidence"`
 
-	// LLMTimeoutSeconds is the timeout for Claude CLI calls (default: 30)
+	// LLMTimeoutSeconds is the timeout for Claude CLI response (default: 30)
 	LLMTimeoutSeconds int `yaml:"llm_timeout_seconds"`
-
-	// LLMMaxWaitSeconds is the max time to wait for rate limit reset (default: 60)
-	LLMMaxWaitSeconds int `yaml:"llm_max_wait_seconds"`
 }
 
 // DefaultPatternConfig returns PatternConfig with sensible default values.
