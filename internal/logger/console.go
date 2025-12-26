@@ -56,18 +56,6 @@ type DetectedErrorDisplay interface {
 	GetRequiresHumanIntervention() bool
 }
 
-// GuardResultDisplay is an interface for objects that represent GUARD prediction results.
-// It's used to decouple the logger from executor.GuardResult to avoid import cycles.
-type GuardResultDisplay interface {
-	GetTaskNumber() string
-	GetProbability() float64
-	GetConfidence() float64
-	GetRiskLevel() string
-	GetShouldBlock() bool
-	GetBlockReason() string
-	GetRecommendations() []string
-}
-
 // ConsoleLogger logs execution progress to a writer with timestamps and thread safety.
 // All output is prefixed with [HH:MM:SS] timestamps for tracking execution flow.
 // It supports log level filtering to control message verbosity.
