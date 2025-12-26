@@ -42,8 +42,6 @@ type Logger interface {
 	LogQCAggregatedResult(verdict string, strategy string)
 	LogQCCriteriaResults(agentName string, results []models.CriterionResult)
 	LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string)
-	LogGuardPrediction(taskNumber string, result interface{})
-	LogAgentSwap(taskNumber string, fromAgent string, toAgent string)
 	LogAnomaly(anomaly interface{})
 
 	// Budget tracking methods (v2.19+)
