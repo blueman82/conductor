@@ -829,6 +829,41 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 		}
 	}
 
+	// Architecture Checkpoint pre-task hook: 6-question assessment (v2.27+)
+	te.lastArchResult = nil // Reset for new task
+	if te.ArchitectureHook != nil {
+		archResult, archErr := te.ArchitectureHook.CheckTask(ctx, task)
+		if archErr != nil {
+			// Graceful degradation: log but don't block
+			if te.Logger != nil {
+				te.Logger.Warnf("Architecture checkpoint failed for task %s: %v", task.Number, archErr)
+			}
+		} else if archResult != nil {
+			// Store for QC integration (v2.27+)
+			te.lastArchResult = archResult
+
+			// Handle block mode - task should not proceed
+			if archResult.ShouldBlock {
+				result.Status = models.StatusFailed
+				result.Error = fmt.Errorf("architecture checkpoint blocked: %s", archResult.BlockReason)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				return result, result.Error
+			}
+
+			// Handle escalate mode - for now, log and continue (user prompt TBD)
+			if archResult.ShouldEscalate {
+				if te.Logger != nil {
+					te.Logger.Warnf("Architecture checkpoint requires escalation for task %s", task.Number)
+				}
+			}
+
+			// Apply prompt injection (warn/escalate modes)
+			if archResult.PromptInjection != "" {
+				task.Prompt = task.Prompt + archResult.PromptInjection
+			}
+		}
+	}
+
 	// Run dependency checks before agent invocation (v2.9+)
 	if te.EnforceDependencyChecks && task.RuntimeMetadata != nil && len(task.RuntimeMetadata.DependencyChecks) > 0 {
 		runner := te.CommandRunner
