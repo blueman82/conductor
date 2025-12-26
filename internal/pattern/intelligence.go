@@ -415,6 +415,90 @@ func (pi *PatternIntelligenceImpl) generateProveResult(description string, files
 	return result
 }
 
+// enhanceWithLLM uses Claude to refine confidence when in uncertain range.
+// Graceful degradation: on error, returns original result unchanged.
+func (pi *PatternIntelligenceImpl) enhanceWithLLM(ctx context.Context, description string, searchResults SearchResults, result *STOPResult) *STOPResult {
+	if pi.enhancer == nil || pi.config == nil || !pi.config.LLMEnhancementEnabled {
+		return result
+	}
+
+	// Check if confidence is in uncertain range
+	if !pi.enhancer.ShouldEnhance(result.Confidence, pi.config.LLMMinConfidence, pi.config.LLMMaxConfidence) {
+		return result
+	}
+
+	// Format patterns for enhancement prompt
+	patterns := formatPatternsForLLM(searchResults)
+
+	// Call Claude for enhancement
+	enhanced, err := pi.enhancer.Enhance(ctx, description, patterns, result.Confidence)
+	if err != nil {
+		// Graceful degradation: log internally but return original result
+		return result
+	}
+
+	if enhanced == nil {
+		return result
+	}
+
+	// Apply enhanced confidence
+	result.Confidence = enhanced.AdjustedConfidence
+
+	// Add risk factors to Think phase
+	for _, rf := range enhanced.RiskFactors {
+		result.Think.RiskFactors = append(result.Think.RiskFactors, RiskFactor{
+			Name:       rf,
+			Severity:   "medium",
+			Mitigation: "Review before proceeding",
+		})
+	}
+
+	// Add LLM reasoning to recommendations
+	if enhanced.Reasoning != "" {
+		result.Recommendations = append([]string{
+			fmt.Sprintf("LLM Analysis: %s", enhanced.Reasoning),
+		}, result.Recommendations...)
+	}
+
+	return result
+}
+
+// formatPatternsForLLM formats search results for the LLM enhancement prompt.
+func formatPatternsForLLM(searchResults SearchResults) string {
+	var parts []string
+
+	if len(searchResults.GitMatches) > 0 {
+		parts = append(parts, fmt.Sprintf("Git commits: %d related commits found", len(searchResults.GitMatches)))
+		for i, match := range searchResults.GitMatches {
+			if i >= 3 {
+				break // Limit to top 3
+			}
+			parts = append(parts, fmt.Sprintf("  - %s: %s", match.CommitHash[:8], truncate(match.Message, 60)))
+		}
+	}
+
+	if len(searchResults.HistoryMatches) > 0 {
+		parts = append(parts, fmt.Sprintf("History: %d similar tasks found", len(searchResults.HistoryMatches)))
+		for i, match := range searchResults.HistoryMatches {
+			if i >= 3 {
+				break
+			}
+			parts = append(parts, fmt.Sprintf("  - %.0f%% similar: %s (agent: %s, successes: %d)",
+				match.Similarity*100, truncate(match.PatternDescription, 40), match.LastAgent, match.SuccessCount))
+		}
+	}
+
+	if len(searchResults.DocMatches) > 0 {
+		parts = append(parts, fmt.Sprintf("Documentation: %d relevant docs found", len(searchResults.DocMatches)))
+	}
+
+	if len(parts) == 0 {
+		return "No prior patterns found"
+	}
+
+	return strings.Join(parts, "\n")
+}
+
 // calculateConfidence calculates overall analysis confidence.
 func (pi *PatternIntelligenceImpl) calculateConfidence(searchResults SearchResults) float64 {
 	if !searchResults.HasRelevantResults() {
