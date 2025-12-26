@@ -157,7 +157,7 @@ Answer each question with true (YES) or false (NO), providing:
 - If ANY question = true → requires_review = true
 - If ALL questions = false → requires_review = false, provide skip_justification
 
-Respond with JSON only.`, task.Name, task.Description, files, criteria)
+Respond with JSON only.`, task.Name, description, files, criteria)
 }
 
 // AssessmentSchema returns the JSON schema for Claude response enforcement
