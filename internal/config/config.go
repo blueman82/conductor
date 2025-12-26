@@ -1177,6 +1177,31 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.Pattern.CacheTTLSeconds = pattern.CacheTTLSeconds
 			}
 		}
+
+		// Merge Architecture config
+		if architectureSection, exists := rawMap["architecture"]; exists && architectureSection != nil {
+			arch := yamlCfg.Architecture
+			archMap, _ := architectureSection.(map[string]interface{})
+
+			if _, exists := archMap["enabled"]; exists {
+				cfg.Architecture.Enabled = arch.Enabled
+			}
+			if _, exists := archMap["mode"]; exists {
+				cfg.Architecture.Mode = arch.Mode
+			}
+			if _, exists := archMap["timeout_seconds"]; exists {
+				cfg.Architecture.TimeoutSeconds = arch.TimeoutSeconds
+			}
+			if _, exists := archMap["require_justification"]; exists {
+				cfg.Architecture.RequireJustification = arch.RequireJustification
+			}
+			if _, exists := archMap["escalate_on_uncertain"]; exists {
+				cfg.Architecture.EscalateOnUncertain = arch.EscalateOnUncertain
+			}
+			if _, exists := archMap["confidence_threshold"]; exists {
+				cfg.Architecture.ConfidenceThreshold = arch.ConfidenceThreshold
+			}
+		}
 	}
 
 	// Apply environment variable overrides (highest priority)
