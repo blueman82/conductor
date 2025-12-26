@@ -183,50 +183,6 @@ learning:
   min_failures_before_adapt: 2    # Threshold
 ```
 
-### GUARD Protocol (v2.17+, LLM-enhanced v2.22+)
-
-**Pre-wave failure prediction** using behavioral analytics to gate task execution.
-
-**Modes:**
-- `block`: Hard gate - fails tasks with high failure probability
-- `warn`: Soft signal - logs warning but allows execution
-- `adaptive`: Smart gate - blocks only when both probability AND confidence exceed thresholds
-
-**LLM-Enhanced Prediction (v2.22+):**
-- Uses gpt-oss via Ollama for intelligent failure prediction
-- Hybrid mode: statistical prediction first, LLM for uncertain cases (0.3-0.7 probability)
-- Weighted blending: LLM confidence determines weight (max 50% to LLM)
-- Graceful degradation: falls back to stats if Ollama unavailable
-
-**Config** (.conductor/config.yaml):
-```yaml
-guard:
-  enabled: true                    # Master switch
-  mode: warn                       # block | warn | adaptive
-  probability_threshold: 0.7       # Minimum failure probability to trigger
-  confidence_threshold: 0.7        # For adaptive mode
-  min_history_sessions: 5          # Minimum data points needed
-  llm:                             # LLM-enhanced prediction (v2.22+)
-    enabled: false                 # Requires Ollama + gpt-oss
-    model: "gpt-oss:latest"        # Ollama model
-    think_level: "medium"          # Reasoning depth: low/medium/high
-    base_url: "http://localhost:11434"
-    timeout: 60s
-    fallback_to_stats: true
-    min_probability_for_llm: 0.3   # Use LLM when stats uncertain
-    max_probability_for_llm: 0.7
-```
-
-**CLI Override:** `--no-guard` disables GUARD at runtime regardless of config.
-
-**Graceful Degradation:** GUARD errors never block execution - failures are logged and tasks proceed.
-
-**Key Files:**
-- `guard.go`: Core GuardProtocol, CheckWave(), evaluateBlockDecision(), enhanceWithLLM()
-- `guard_llm.go`: OllamaPredictor for LLM-based failure prediction
-- `wave.go`: Gate insertion after task filtering, before semaphore
-- `guard_test.go`: Unit tests covering modes and thresholds
-
 ### Pattern Intelligence (v2.24+)
 
 **Prior art detection and duplicate prevention** using STOP protocol (Search/Think/Outline/Prove).
