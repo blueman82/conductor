@@ -593,9 +593,8 @@ architecture:
 
   # Operating mode:
   # - block: Hard gate - fail tasks flagged for architectural review
-  # - warn: Soft signal - log warning and inject context (default)
-  # - escalate: Pause execution for user decision
-  mode: warn
+  # - escalate: Soft signal - log warning and inject context (default)
+  mode: escalate
 
   # Timeout for Claude CLI assessment (default: 30)
   timeout_seconds: 30
@@ -612,10 +611,10 @@ architecture:
 
 # Architecture Checkpoint Examples
 
-# Example: Enable in warn mode (recommended starting point)
+# Example: Enable in escalate mode (recommended starting point)
 # architecture:
 #   enabled: true
-#   mode: warn
+#   mode: escalate
 
 # Example: Strict blocking mode for architectural changes
 # architecture:
@@ -625,7 +624,7 @@ architecture:
 # Example: Enable with justification requirement
 # architecture:
 #   enabled: true
-#   mode: warn
+#   mode: escalate
 #   require_justification: true
 
 # Example: Escalate on uncertain assessments

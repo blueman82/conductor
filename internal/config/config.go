@@ -573,7 +573,7 @@ func DefaultArchitectureConfig() ArchitectureConfig {
 		TimeoutSeconds:       30,                       // 30 second timeout
 		RequireJustification: false,                    // Don't require justification by default
 		EscalateOnUncertain:  false,                    // Don't escalate on low confidence
-		ConfidenceThreshold:  0.7,                  // 70% confidence threshold
+		ConfidenceThreshold:  0.7,                      // 70% confidence threshold
 	}
 }
 
