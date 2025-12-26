@@ -770,6 +770,7 @@ func LoadConfig(path string) (*Config, error) {
 		TTS            yamlTTSConfig        `yaml:"tts"`
 		Budget         yamlBudgetConfig     `yaml:"budget"`
 		Pattern        PatternConfig        `yaml:"pattern"`
+		Architecture   ArchitectureConfig   `yaml:"architecture"`
 	}
 
 	var yamlCfg yamlConfig
