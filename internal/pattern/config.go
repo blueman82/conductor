@@ -72,12 +72,12 @@ func DefaultPatternConfig() PatternConfig {
 	return PatternConfig{
 		Enabled:                  false, // Disabled by default for zero behavior change
 		Mode:                     PatternModeWarn,
-		SimilarityThreshold:      0.8,  // 80% similarity triggers action
-		DuplicateThreshold:       0.9,  // 90% similarity for duplicate detection
-		MinConfidence:            0.7,  // 70% confidence required
-		EnableSTOP:               true, // STOP analysis enabled when system is enabled
-		EnableDuplicateDetection: true, // Duplicate detection enabled when system is enabled
-		InjectIntoPrompt:         true, // Include analysis in prompts by default
+		SimilarityThreshold:      0.8,   // 80% similarity triggers action
+		DuplicateThreshold:       0.9,   // 90% similarity for duplicate detection
+		MinConfidence:            0.7,   // 70% confidence required
+		EnableSTOP:               true,  // STOP analysis enabled when system is enabled
+		EnableDuplicateDetection: true,  // Duplicate detection enabled when system is enabled
+		InjectIntoPrompt:         true,  // Include analysis in prompts by default
 		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
 		MaxRelatedFiles:          10,    // Limit related files
 		CacheTTLSeconds:          3600,  // 1 hour cache

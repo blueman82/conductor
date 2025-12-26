@@ -639,6 +639,14 @@ pattern:
   # - false: Prior art is informational only, no justification required
   require_justification: false
 
+  # LLM Enhancement (v2.26+)
+  # Uses Claude CLI to refine confidence when in uncertain range
+  # Provides TTS + visual countdown during rate limit waits
+  llm_enhancement_enabled: false  # Disabled by default
+  llm_min_confidence: 0.3         # Enhance when confidence >= this
+  llm_max_confidence: 0.7         # Enhance when confidence <= this
+  llm_timeout_seconds: 30         # Timeout for Claude CLI response
+
 # Pattern Intelligence Examples
 
 # Example: Enable Pattern Intelligence in warn mode (recommended starting point)
@@ -670,6 +678,13 @@ pattern:
 #   enabled: true
 #   enable_stop: false
 #   enable_duplicate_detection: true
+
+# Example: Enable LLM enhancement for uncertain confidence (v2.26+)
+# pattern:
+#   enabled: true
+#   llm_enhancement_enabled: true
+#   llm_min_confidence: 0.3
+#   llm_max_confidence: 0.7
 
 # Validation Examples
 
