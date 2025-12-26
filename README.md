@@ -16,6 +16,9 @@ Conductor orchestrates multiple Claude Code agents to execute implementation pla
 
 ## Features
 
+[![Run in Smithery](https://smithery.ai/badge/skills/blueman82)](https://smithery.ai/skills?ns=blueman82&utm_source=github&utm_medium=badge)
+
+
 - **Wave-Based Execution** — Parallel tasks within waves, sequential between waves
 - **Quality Control** — Automated reviews with GREEN/RED/YELLOW verdicts and retries
 - **Adaptive Learning** — Learns from history, swaps agents on failures
