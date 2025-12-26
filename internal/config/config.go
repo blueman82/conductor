@@ -452,10 +452,7 @@ const (
 	// ArchitectureModeBlock fails tasks flagged for architectural review
 	ArchitectureModeBlock ArchitectureMode = "block"
 
-	// ArchitectureModeWarn logs warning but allows execution to proceed
-	ArchitectureModeWarn ArchitectureMode = "warn"
-
-	// ArchitectureModeEscalate pauses execution for user decision
+	// ArchitectureModeEscalate logs warning, injects context, and continues
 	ArchitectureModeEscalate ArchitectureMode = "escalate"
 )
 
