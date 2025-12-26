@@ -587,7 +587,6 @@ func DefaultConfig() *Config {
 			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
 		TTS:     DefaultTTSConfig(),
-		Guard:   DefaultGuardConfig(),
 		Budget:  DefaultBudgetConfig(),
 		Pattern: DefaultPatternConfig(),
 	}
