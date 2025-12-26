@@ -90,7 +90,7 @@ type QualityController struct {
 	RequireJustification bool   // Whether to require justification for custom implementations
 
 	// Architecture Checkpoint integration (v2.27+)
-	ArchitectureSummary             string // Architecture assessment summary (injected into prompt)
+	ArchitectureSummary              string // Architecture assessment summary (injected into prompt)
 	RequireArchitectureJustification bool   // Whether to require justification for architectural changes
 }
 

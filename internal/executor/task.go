@@ -202,10 +202,10 @@ type DefaultTaskExecutor struct {
 	ArchitectureHook *ArchitectureCheckpointHook // Architecture checkpoint hook for 6-question assessment
 
 	// Runtime state for passing to QC
-	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
-	lastCriterionResults []CriterionVerificationResult // Populated after RunCriterionVerifications
-	lastDocTargetResults []DocTargetResult             // Populated after VerifyDocumentationTargets
-	lastPatternResult    *PreTaskCheckResult           // Populated after Pattern Intelligence check (v2.24+)
+	lastTestResults      []TestCommandResult            // Populated after RunTestCommands
+	lastCriterionResults []CriterionVerificationResult  // Populated after RunCriterionVerifications
+	lastDocTargetResults []DocTargetResult              // Populated after VerifyDocumentationTargets
+	lastPatternResult    *PreTaskCheckResult            // Populated after Pattern Intelligence check (v2.24+)
 	lastArchResult       *architecture.CheckpointResult // Populated after Architecture checkpoint (v2.27+)
 }
 
