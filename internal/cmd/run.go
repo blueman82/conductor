@@ -19,6 +19,7 @@ import (
 	"github.com/harrison/conductor/internal/logger"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/parser"
+	"github.com/harrison/conductor/internal/pattern"
 	"github.com/harrison/conductor/internal/tts"
 	"github.com/spf13/cobra"
 )
