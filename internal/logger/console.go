@@ -2194,14 +2194,6 @@ func (n *NoOpLogger) LogQCCriteriaResults(agentName string, results []models.Cri
 func (n *NoOpLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback bool, fallbackReason string) {
 }
 
-// LogGuardPrediction is a no-op implementation.
-func (n *NoOpLogger) LogGuardPrediction(taskNumber string, result interface{}) {
-}
-
-// LogAgentSwap is a no-op implementation.
-func (n *NoOpLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
-}
-
 // LogAnomaly is a no-op implementation.
 func (n *NoOpLogger) LogAnomaly(anomaly interface{}) {
 }
