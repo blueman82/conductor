@@ -134,7 +134,7 @@ func (h *PatternIntelligenceHook) buildPromptInjection(stopResult *pattern.STOPR
 	if stopResult != nil && stopResult.Confidence >= h.config.MinConfidence {
 		sb.WriteString("\n---\n## PATTERN INTELLIGENCE CONTEXT\n\n")
 
-		// Search results
+		// Search results - SimilarPatterns uses PatternMatch type
 		if len(stopResult.Search.SimilarPatterns) > 0 || len(stopResult.Search.RelatedFiles) > 0 {
 			sb.WriteString("### Similar Patterns Found\n")
 			for i, p := range stopResult.Search.SimilarPatterns {
@@ -170,7 +170,7 @@ func (h *PatternIntelligenceHook) buildPromptInjection(stopResult *pattern.STOPR
 			sb.WriteString("\n")
 		}
 
-		// Outline steps
+		// Outline steps - uses OutlineStep type
 		if len(stopResult.Outline.Steps) > 0 {
 			sb.WriteString("### Suggested Implementation Steps\n")
 			for _, step := range stopResult.Outline.Steps {

@@ -1194,6 +1194,12 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				return result, err
 			}
 			te.postTaskHook(ctx, &task, &result, models.StatusGreen)
+
+			// Pattern Intelligence post-task hook: Record successful pattern (v2.23+)
+			if te.PatternHook != nil {
+				_ = te.PatternHook.RecordSuccess(ctx, task, task.Agent)
+			}
+
 			return result, nil
 		}
 
@@ -1295,6 +1301,12 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				return result, err
 			}
 			te.postTaskHook(ctx, &task, &result, models.StatusGreen)
+
+			// Pattern Intelligence post-task hook: Record successful pattern (v2.23+)
+			if te.PatternHook != nil {
+				_ = te.PatternHook.RecordSuccess(ctx, task, task.Agent)
+			}
+
 			return result, nil
 		case review.Flag == models.StatusYellow:
 			result.Status = models.StatusYellow
