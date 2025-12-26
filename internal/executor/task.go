@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/architecture"
 	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
@@ -197,11 +198,15 @@ type DefaultTaskExecutor struct {
 	// Pattern Intelligence integration (v2.23+)
 	PatternHook *PatternIntelligenceHook // Pattern Intelligence hook for STOP protocol and duplicate detection
 
+	// Architecture Checkpoint integration (v2.27+)
+	ArchitectureHook *ArchitectureCheckpointHook // Architecture checkpoint hook for 6-question assessment
+
 	// Runtime state for passing to QC
-	lastTestResults      []TestCommandResult           // Populated after RunTestCommands
-	lastCriterionResults []CriterionVerificationResult // Populated after RunCriterionVerifications
-	lastDocTargetResults []DocTargetResult             // Populated after VerifyDocumentationTargets
-	lastPatternResult    *PreTaskCheckResult           // Populated after Pattern Intelligence check (v2.24+)
+	lastTestResults      []TestCommandResult            // Populated after RunTestCommands
+	lastCriterionResults []CriterionVerificationResult  // Populated after RunCriterionVerifications
+	lastDocTargetResults []DocTargetResult              // Populated after VerifyDocumentationTargets
+	lastPatternResult    *PreTaskCheckResult            // Populated after Pattern Intelligence check (v2.24+)
+	lastArchResult       *architecture.CheckpointResult // Populated after Architecture checkpoint (v2.27+)
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -820,6 +825,41 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 			// Apply prompt injection (warn/suggest modes)
 			if patternResult.PromptInjection != "" {
 				task = ApplyPromptInjection(task, patternResult)
+			}
+		}
+	}
+
+	// Architecture Checkpoint pre-task hook: 6-question assessment (v2.27+)
+	te.lastArchResult = nil // Reset for new task
+	if te.ArchitectureHook != nil {
+		archResult, archErr := te.ArchitectureHook.CheckTask(ctx, task)
+		if archErr != nil {
+			// Graceful degradation: log but don't block
+			if te.Logger != nil {
+				te.Logger.Warnf("Architecture checkpoint failed for task %s: %v", task.Number, archErr)
+			}
+		} else if archResult != nil {
+			// Store for QC integration (v2.27+)
+			te.lastArchResult = archResult
+
+			// Handle block mode - task should not proceed
+			if archResult.ShouldBlock {
+				result.Status = models.StatusFailed
+				result.Error = fmt.Errorf("architecture checkpoint blocked: %s", archResult.BlockReason)
+				_ = te.updatePlanStatus(task, StatusFailed, false)
+				return result, result.Error
+			}
+
+			// Handle escalate mode - for now, log and continue (user prompt TBD)
+			if archResult.ShouldEscalate {
+				if te.Logger != nil {
+					te.Logger.Warnf("Architecture checkpoint requires escalation for task %s", task.Number)
+				}
+			}
+
+			// Apply prompt injection (warn/escalate modes)
+			if archResult.PromptInjection != "" {
+				task.Prompt = task.Prompt + archResult.PromptInjection
 			}
 		}
 	}

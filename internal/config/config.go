@@ -440,6 +440,44 @@ type Config struct {
 
 	// Pattern contains Pattern Intelligence configuration
 	Pattern PatternConfig `yaml:"pattern"`
+
+	// Architecture contains Architecture Checkpoint configuration (v2.27+)
+	Architecture ArchitectureConfig `yaml:"architecture"`
+}
+
+// ArchitectureMode specifies the Architecture Checkpoint operating mode
+type ArchitectureMode string
+
+const (
+	// ArchitectureModeBlock fails tasks flagged for architectural review
+	ArchitectureModeBlock ArchitectureMode = "block"
+
+	// ArchitectureModeWarn logs warning but allows execution to proceed
+	ArchitectureModeWarn ArchitectureMode = "warn"
+
+	// ArchitectureModeEscalate pauses execution for user decision
+	ArchitectureModeEscalate ArchitectureMode = "escalate"
+)
+
+// ArchitectureConfig controls Architecture Checkpoint Gate behavior (v2.27+)
+type ArchitectureConfig struct {
+	// Enabled enables Architecture Checkpoint Gate
+	Enabled bool `yaml:"enabled"`
+
+	// Mode specifies operating mode: "block", "warn", or "escalate"
+	Mode ArchitectureMode `yaml:"mode"`
+
+	// TimeoutSeconds for Claude CLI call (default: 30)
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+
+	// RequireJustification requires task to justify architectural changes in output
+	RequireJustification bool `yaml:"require_justification"`
+
+	// EscalateOnUncertain escalates when Claude confidence < threshold
+	EscalateOnUncertain bool `yaml:"escalate_on_uncertain"`
+
+	// ConfidenceThreshold for escalation (default: 0.7)
+	ConfidenceThreshold float64 `yaml:"confidence_threshold"`
 }
 
 // DefaultAnomalyDetectionConfig returns AnomalyDetectionConfig with sensible default values
@@ -529,6 +567,19 @@ func DefaultPatternConfig() PatternConfig {
 	}
 }
 
+// DefaultArchitectureConfig returns ArchitectureConfig with sensible default values.
+// Architecture Checkpoint is DISABLED by default to ensure zero behavior change.
+func DefaultArchitectureConfig() ArchitectureConfig {
+	return ArchitectureConfig{
+		Enabled:              false,                // Disabled by default
+		Mode:                 ArchitectureModeWarn, // Warn mode when enabled
+		TimeoutSeconds:       30,                   // 30 second timeout
+		RequireJustification: false,                // Don't require justification by default
+		EscalateOnUncertain:  false,                // Don't escalate on low confidence
+		ConfidenceThreshold:  0.7,                  // 70% confidence threshold
+	}
+}
+
 // DefaultAgentWatchConfig returns AgentWatchConfig with sensible default values
 func DefaultAgentWatchConfig() AgentWatchConfig {
 	return AgentWatchConfig{
@@ -603,9 +654,10 @@ func DefaultConfig() *Config {
 			EnableClaudeClassification:  false,
 			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
-		TTS:     DefaultTTSConfig(),
-		Budget:  DefaultBudgetConfig(),
-		Pattern: DefaultPatternConfig(),
+		TTS:          DefaultTTSConfig(),
+		Budget:       DefaultBudgetConfig(),
+		Pattern:      DefaultPatternConfig(),
+		Architecture: DefaultArchitectureConfig(),
 	}
 }
 
@@ -718,6 +770,7 @@ func LoadConfig(path string) (*Config, error) {
 		TTS            yamlTTSConfig        `yaml:"tts"`
 		Budget         yamlBudgetConfig     `yaml:"budget"`
 		Pattern        PatternConfig        `yaml:"pattern"`
+		Architecture   ArchitectureConfig   `yaml:"architecture"`
 	}
 
 	var yamlCfg yamlConfig
@@ -1122,6 +1175,31 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := patternMap["cache_ttl_seconds"]; exists {
 				cfg.Pattern.CacheTTLSeconds = pattern.CacheTTLSeconds
+			}
+		}
+
+		// Merge Architecture config
+		if architectureSection, exists := rawMap["architecture"]; exists && architectureSection != nil {
+			arch := yamlCfg.Architecture
+			archMap, _ := architectureSection.(map[string]interface{})
+
+			if _, exists := archMap["enabled"]; exists {
+				cfg.Architecture.Enabled = arch.Enabled
+			}
+			if _, exists := archMap["mode"]; exists {
+				cfg.Architecture.Mode = arch.Mode
+			}
+			if _, exists := archMap["timeout_seconds"]; exists {
+				cfg.Architecture.TimeoutSeconds = arch.TimeoutSeconds
+			}
+			if _, exists := archMap["require_justification"]; exists {
+				cfg.Architecture.RequireJustification = arch.RequireJustification
+			}
+			if _, exists := archMap["escalate_on_uncertain"]; exists {
+				cfg.Architecture.EscalateOnUncertain = arch.EscalateOnUncertain
+			}
+			if _, exists := archMap["confidence_threshold"]; exists {
+				cfg.Architecture.ConfidenceThreshold = arch.ConfidenceThreshold
 			}
 		}
 	}

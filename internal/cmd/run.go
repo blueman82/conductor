@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/architecture"
 	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/display"
@@ -651,6 +652,15 @@ func runCommand(cmd *cobra.Command, args []string) error {
 			}
 			taskExec.PatternHook = executor.NewPatternIntelligenceHook(pi, &cfg.Pattern, consoleLog)
 		}
+	}
+
+	// Wire Architecture Checkpoint (v2.27+)
+	if cfg.Architecture.Enabled {
+		assessor := architecture.NewAssessorWithConfig(
+			time.Duration(cfg.Architecture.TimeoutSeconds)*time.Second,
+			multiLog,
+		)
+		taskExec.ArchitectureHook = executor.NewArchitectureCheckpointHook(assessor, &cfg.Architecture, consoleLog)
 	}
 
 	// Wire intelligent task agent selection (v2.15+)
