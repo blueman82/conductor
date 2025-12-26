@@ -176,13 +176,6 @@ func (c *PatternConfig) Validate() error {
 				Value:   c.LLMTimeoutSeconds,
 			}
 		}
-		if c.LLMMaxWaitSeconds <= 0 {
-			return &ConfigError{
-				Field:   "llm_max_wait_seconds",
-				Message: "must be > 0",
-				Value:   c.LLMMaxWaitSeconds,
-			}
-		}
 	}
 
 	return nil
