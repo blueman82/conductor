@@ -581,8 +581,3 @@ func (fl *FileLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 func (fl *FileLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
 	// No-op: TTS announcements are not logged to file
 }
-
-// SetGuardVerbose is a no-op for file logger (verbose only affects console)
-func (fl *FileLogger) SetGuardVerbose(verbose bool) {
-	// No-op: verbose mode is console-only for GUARD output
-}
