@@ -87,6 +87,10 @@ type QualityController struct {
 	// STOP Protocol integration (v2.24+)
 	STOPSummary          string // Prior art summary from Pattern Intelligence (injected into prompt)
 	RequireJustification bool   // Whether to require justification for custom implementations
+
+	// Architecture Checkpoint integration (v2.27+)
+	ArchitectureSummary             string // Architecture assessment summary (injected into prompt)
+	RequireArchitectureJustification bool   // Whether to require justification for architectural changes
 }
 
 // QCLogger is the minimal interface for QC logging functionality
