@@ -76,12 +76,6 @@ func (w *WaveExecutor) SetPackageGuard(enabled bool) {
 	}
 }
 
-// SetGuardProtocol sets the GUARD Protocol for failure prediction.
-// This enables pre-wave risk analysis and adaptive blocking.
-func (w *WaveExecutor) SetGuardProtocol(guard *GuardProtocol) {
-	w.guardProtocol = guard
-}
-
 // SetAnomalyConfig sets the anomaly detection configuration.
 // This enables real-time anomaly detection during wave execution.
 func (w *WaveExecutor) SetAnomalyConfig(config *AnomalyMonitorConfig) {
