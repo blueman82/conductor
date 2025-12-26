@@ -227,6 +227,47 @@ guard:
 - `wave.go`: Gate insertion after task filtering, before semaphore
 - `guard_test.go`: Unit tests covering modes and thresholds
 
+### Pattern Intelligence (v2.24+)
+
+**Prior art detection and duplicate prevention** using STOP protocol (Search/Think/Outline/Prove).
+
+**Features:**
+- Searches git history for similar commits
+- Searches GitHub issues for related discussions
+- Searches documentation for existing solutions
+- Searches learning database for past task patterns
+- Hash-based duplicate detection
+- Similarity scoring with configurable thresholds
+
+**Modes:**
+- `block`: Fail tasks with high similarity to existing work
+- `warn`: Log warning but allow execution (default)
+- `suggest`: Include analysis in prompt without blocking
+
+**Config** (.conductor/config.yaml):
+```yaml
+pattern:
+  enabled: true
+  mode: warn                      # block | warn | suggest
+  similarity_threshold: 0.8       # Trigger action above this
+  duplicate_threshold: 0.9        # Consider duplicate above this
+  enable_stop: true               # STOP protocol analysis
+  enable_duplicate_detection: true
+  inject_into_prompt: true        # Add context to agent prompts
+  require_justification: true     # QC requests justification for custom impl
+```
+
+**Prior Art Justification (v2.24+):**
+When `require_justification: true` and STOP finds prior art, QC agents will:
+- Request justification for custom implementations
+- Flag YELLOW verdict for weak/missing justification
+- Evaluate justification quality (minimum 50 chars, no weak phrases like "n/a")
+
+**Key Files:**
+- `internal/pattern/`: Config, types, search, library, intelligence modules
+- `internal/executor/pattern_integration.go`: Task executor hook
+- `internal/executor/qc.go`: FormatSTOPPriorArt(), EvaluateSTOPJustification()
+
 ### Budget & Rate Limits (v2.20+, enhanced v2.21+)
 
 **Intelligent rate limit auto-resume** with state persistence and mid-task recovery.
