@@ -699,7 +699,6 @@ func LoadConfig(path string) (*Config, error) {
 		Validation     ValidationConfig     `yaml:"validation"`
 		Executor       ExecutorConfig       `yaml:"executor"`
 		TTS            yamlTTSConfig        `yaml:"tts"`
-		Guard          GuardConfig          `yaml:"guard"`
 		Budget         yamlBudgetConfig     `yaml:"budget"`
 		Pattern        PatternConfig        `yaml:"pattern"`
 	}
