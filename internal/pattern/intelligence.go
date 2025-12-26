@@ -561,3 +561,15 @@ func (pi *PatternIntelligenceImpl) RecordSuccess(ctx context.Context, task model
 	description := buildTaskDescription(task)
 	return pi.library.Store(ctx, description, task.Files, agent)
 }
+
+// SetEnhancer sets the Claude enhancer for LLM-based confidence refinement.
+// Must be called after construction if LLM enhancement is enabled.
+// Logger is passed via enhancer for TTS + visual during rate limit waits.
+func (pi *PatternIntelligenceImpl) SetEnhancer(enhancer *ClaudeEnhancer) {
+	if pi == nil {
+		return
+	}
+	pi.mu.Lock()
+	defer pi.mu.Unlock()
+	pi.enhancer = enhancer
+}
