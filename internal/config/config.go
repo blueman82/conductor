@@ -461,7 +461,7 @@ type ArchitectureConfig struct {
 	// Enabled enables Architecture Checkpoint Gate
 	Enabled bool `yaml:"enabled"`
 
-	// Mode specifies operating mode: "block", "warn", or "escalate"
+	// Mode specifies operating mode: "block" or "escalate"
 	Mode ArchitectureMode `yaml:"mode"`
 
 	// TimeoutSeconds for Claude CLI call (default: 30)
