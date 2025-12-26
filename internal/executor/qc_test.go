@@ -12,6 +12,7 @@ import (
 	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
+	"github.com/harrison/conductor/internal/pattern"
 )
 
 // Mock invoker for testing
@@ -3397,5 +3398,259 @@ func TestBuildStructuredReviewPrompt_WithErrorClassification(t *testing.T) {
 		if contains(prompt, "## Error Classification Analysis") {
 			t.Error("BuildStructuredReviewPrompt() should not include error section when detected_errors empty")
 		}
+	})
+}
+
+// TestQCSTOP tests STOP protocol integration with QC prompts
+func TestQCSTOP(t *testing.T) {
+	t.Run("FormatSTOPPriorArt_empty_summary_returns_empty", func(t *testing.T) {
+		result := FormatSTOPPriorArt("", false)
+		if result != "" {
+			t.Errorf("expected empty string for empty summary, got %q", result)
+		}
+	})
+
+	t.Run("FormatSTOPPriorArt_formats_without_justification", func(t *testing.T) {
+		summary := "Found 3 similar commits:\n- abc123: Add pattern matching\n- def456: Pattern system refactor"
+		result := FormatSTOPPriorArt(summary, false)
+
+		if !strings.Contains(result, "STOP Protocol: Prior Art Analysis") {
+			t.Error("expected header in output")
+		}
+		if !strings.Contains(result, "Pattern Intelligence discovered existing solutions") {
+			t.Error("expected intro text in output")
+		}
+		if !strings.Contains(result, summary) {
+			t.Error("expected summary content in output")
+		}
+		if !strings.Contains(result, "Context only") {
+			t.Error("expected 'Context only' note when justification not required")
+		}
+		if strings.Contains(result, "JUSTIFICATION REQUIRED") {
+			t.Error("should not contain justification requirement when disabled")
+		}
+	})
+
+	t.Run("FormatSTOPPriorArt_formats_with_justification_requirement", func(t *testing.T) {
+		summary := "Found existing implementation in pattern/matcher.go"
+		result := FormatSTOPPriorArt(summary, true)
+
+		if !strings.Contains(result, "JUSTIFICATION REQUIRED") {
+			t.Error("expected justification requirement header")
+		}
+		if !strings.Contains(result, "Prior art exists") {
+			t.Error("expected prior art warning")
+		}
+		if !strings.Contains(result, "stop_justification") {
+			t.Error("expected reference to stop_justification field")
+		}
+		if !strings.Contains(result, "YELLOW") {
+			t.Error("expected YELLOW verdict warning for weak justification")
+		}
+		if strings.Contains(result, "Context only") {
+			t.Error("should not contain 'Context only' when justification is required")
+		}
+	})
+
+	t.Run("QualityController_STOP_fields_accessible", func(t *testing.T) {
+		qc := &QualityController{
+			STOPSummary:          "Found prior art",
+			RequireJustification: true,
+		}
+
+		if qc.STOPSummary != "Found prior art" {
+			t.Error("STOPSummary field not accessible")
+		}
+		if !qc.RequireJustification {
+			t.Error("RequireJustification field not accessible")
+		}
+	})
+
+	t.Run("BuildStructuredReviewPrompt_includes_STOP_summary", func(t *testing.T) {
+		qc := NewQualityController(nil)
+		qc.STOPSummary = "Found 2 similar commits related to pattern matching"
+		qc.RequireJustification = true
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Test Task",
+			Prompt: "Implement feature",
+		}
+
+		ctx := context.Background()
+		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
+
+		if !strings.Contains(prompt, "Found 2 similar commits") {
+			t.Error("STOP summary not included in prompt")
+		}
+		if !strings.Contains(prompt, "JUSTIFICATION REQUIRED") {
+			t.Error("justification requirement not in prompt")
+		}
+	})
+
+	t.Run("BuildSTOPSummaryFromSTOPResult_nil_returns_empty", func(t *testing.T) {
+		result := BuildSTOPSummaryFromSTOPResult(nil)
+		if result != "" {
+			t.Errorf("expected empty string for nil STOP result, got %q", result)
+		}
+	})
+
+	t.Run("BuildSTOPSummaryFromSTOPResult_empty_results_returns_empty", func(t *testing.T) {
+		stopResult := pattern.NewEmptySTOPResult()
+		result := BuildSTOPSummaryFromSTOPResult(stopResult)
+		if result != "" {
+			t.Errorf("expected empty string for empty STOP result, got %q", result)
+		}
+	})
+
+	t.Run("BuildSTOPSummaryFromSTOPResult_formats_similar_patterns", func(t *testing.T) {
+		stopResult := pattern.NewEmptySTOPResult()
+		stopResult.Search.SimilarPatterns = []pattern.PatternMatch{
+			{Name: "TestPattern", FilePath: "test.go", Similarity: 0.85, Description: "A test pattern"},
+		}
+
+		result := BuildSTOPSummaryFromSTOPResult(stopResult)
+		if !strings.Contains(result, "Similar Patterns Found") {
+			t.Error("expected Similar Patterns Found header")
+		}
+		if !strings.Contains(result, "TestPattern") {
+			t.Error("expected pattern name in output")
+		}
+		if !strings.Contains(result, "85%") {
+			t.Error("expected similarity percentage in output")
+		}
+	})
+
+	t.Run("BuildSTOPSummaryFromSTOPResult_formats_existing_implementations", func(t *testing.T) {
+		stopResult := pattern.NewEmptySTOPResult()
+		stopResult.Search.ExistingImplementations = []pattern.ImplementationRef{
+			{Name: "ExistingFunc", Type: "function", FilePath: "existing.go", Relevance: 0.9},
+		}
+
+		result := BuildSTOPSummaryFromSTOPResult(stopResult)
+		if !strings.Contains(result, "Existing Implementations") {
+			t.Error("expected Existing Implementations header")
+		}
+		if !strings.Contains(result, "ExistingFunc") {
+			t.Error("expected implementation name in output")
+		}
+		if !strings.Contains(result, "function") {
+			t.Error("expected implementation type in output")
+		}
+	})
+
+	t.Run("BuildSTOPSummaryFromSTOPResult_formats_related_files", func(t *testing.T) {
+		stopResult := pattern.NewEmptySTOPResult()
+		stopResult.Search.RelatedFiles = []string{"file1.go", "file2.go", "file3.go"}
+
+		result := BuildSTOPSummaryFromSTOPResult(stopResult)
+		if !strings.Contains(result, "Related Files") {
+			t.Error("expected Related Files header")
+		}
+		if !strings.Contains(result, "file1.go") {
+			t.Error("expected related file in output")
+		}
+	})
+}
+
+// TestQCJustification tests STOP justification evaluation in QC
+func TestQCJustification(t *testing.T) {
+	t.Run("no_prior_art_no_justification_needed", func(t *testing.T) {
+		got := EvaluateSTOPJustification("", "")
+		if !got {
+			t.Error("expected true when no prior art")
+		}
+	})
+
+	t.Run("no_prior_art_justification_ignored", func(t *testing.T) {
+		got := EvaluateSTOPJustification("", "Some justification")
+		if !got {
+			t.Error("expected true when no prior art")
+		}
+	})
+
+	t.Run("prior_art_no_justification_fails", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar commit abc123", "")
+		if got {
+			t.Error("expected false when prior art exists but no justification")
+		}
+	})
+
+	t.Run("prior_art_weak_n/a_justification_fails", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar commit abc123", "n/a")
+		if got {
+			t.Error("expected false for weak 'n/a' justification")
+		}
+	})
+
+	t.Run("prior_art_weak_not_applicable_fails", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar commit abc123", "not applicable")
+		if got {
+			t.Error("expected false for weak 'not applicable' justification")
+		}
+	})
+
+	t.Run("prior_art_weak_none_justification_fails", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar commit abc123", "none")
+		if got {
+			t.Error("expected false for weak 'none' justification")
+		}
+	})
+
+	t.Run("prior_art_weak_custom_implementation_fails", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar commit abc123", "custom implementation")
+		if got {
+			t.Error("expected false for weak 'custom implementation' justification")
+		}
+	})
+
+	t.Run("prior_art_too_short_justification_fails", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar commit abc123", "Different use case")
+		if got {
+			t.Error("expected false for too short justification (< 20 chars)")
+		}
+	})
+
+	t.Run("prior_art_adequate_justification_passes", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar commit abc123",
+			"The existing implementation uses a different hashing algorithm that doesn't support streaming input")
+		if !got {
+			t.Error("expected true for adequate technical justification")
+		}
+	})
+
+	t.Run("prior_art_technical_justification_passes", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found pattern in internal/legacy/matcher.go",
+			"The legacy matcher uses regex which is too slow for our use case. We need O(1) lookup via hash table.")
+		if !got {
+			t.Error("expected true for technical justification with performance reasoning")
+		}
+	})
+
+	t.Run("prior_art_whitespace_padded_weak_fails", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar pattern", "   n/a   ")
+		if got {
+			t.Error("expected false for whitespace-padded weak justification")
+		}
+	})
+
+	t.Run("prior_art_case_insensitive_weak_fails", func(t *testing.T) {
+		got := EvaluateSTOPJustification("Found similar pattern", "Not Applicable")
+		if got {
+			t.Error("expected false for case-insensitive weak pattern")
+		}
+	})
+
+	t.Run("QC_applies_YELLOW_for_missing_justification", func(t *testing.T) {
+		// When prior art exists and justification is weak/missing, verdict should be YELLOW
+		stopSummary := "Found similar implementation"
+		justification := ""
+
+		passed := EvaluateSTOPJustification(stopSummary, justification)
+		if passed {
+			t.Error("EvaluateSTOPJustification should return false for missing justification")
+		}
+		// The QC logic in qc.go applies YELLOW verdict when this returns false
+		// This is tested in integration tests
 	})
 }

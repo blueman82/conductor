@@ -274,6 +274,63 @@ WHERE (total_duration_seconds = 0 OR total_duration_seconds IS NULL)
 		// Required for cost calculation based on ModelCosts pricing.
 		SQL: ``,
 	},
+	{
+		Version:     8,
+		Description: "Add pattern storage tables for successful patterns, duplicate detection, and STOP analyses",
+		SQL: `
+-- Successful patterns table
+CREATE TABLE IF NOT EXISTS successful_patterns (
+    task_hash TEXT PRIMARY KEY,
+    pattern_description TEXT NOT NULL,
+    success_count INTEGER DEFAULT 1,
+    last_agent TEXT,
+    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_patterns_hash ON successful_patterns(task_hash);
+CREATE INDEX IF NOT EXISTS idx_successful_patterns_success ON successful_patterns(success_count DESC);
+CREATE INDEX IF NOT EXISTS idx_successful_patterns_last_used ON successful_patterns(last_used DESC);
+CREATE INDEX IF NOT EXISTS idx_successful_patterns_agent ON successful_patterns(last_agent);
+
+-- Duplicate detections table
+CREATE TABLE IF NOT EXISTS duplicate_detections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_hash TEXT NOT NULL,
+    matched_hash TEXT NOT NULL,
+    similarity REAL NOT NULL,
+    action TEXT NOT NULL,
+    task_name TEXT,
+    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_duplicates_source ON duplicate_detections(source_hash);
+CREATE INDEX IF NOT EXISTS idx_duplicate_detections_matched ON duplicate_detections(matched_hash);
+CREATE INDEX IF NOT EXISTS idx_duplicate_detections_action ON duplicate_detections(action);
+CREATE INDEX IF NOT EXISTS idx_duplicate_detections_time ON duplicate_detections(detected_at DESC);
+
+-- STOP analyses table
+CREATE TABLE IF NOT EXISTS stop_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_hash TEXT NOT NULL,
+    task_name TEXT,
+    search_results TEXT,
+    think_analysis TEXT,
+    outline_plan TEXT,
+    prove_justification TEXT,
+    final_decision TEXT,
+    confidence REAL,
+    analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_stop_analyses_task_hash ON stop_analyses(task_hash);
+CREATE INDEX IF NOT EXISTS idx_stop_analyses_decision ON stop_analyses(final_decision);
+CREATE INDEX IF NOT EXISTS idx_stop_analyses_time ON stop_analyses(analyzed_at DESC);
+`,
+	},
 }
 
 // MigrationVersion represents a record of an applied migration

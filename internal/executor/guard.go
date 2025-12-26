@@ -32,6 +32,7 @@ type GuardConfig struct {
 	ConfidenceThreshold  float64   // Minimum confidence for adaptive mode (0.0-1.0)
 	MinHistorySessions   int       // Minimum sessions required for predictions
 	AutoSelectAgent      bool      // Enable predictive agent selection (v2.18+)
+	Verbose              bool      // Enable verbose logging
 }
 
 // GuardResult contains prediction analysis for a single task
@@ -47,18 +48,20 @@ type GuardResult struct {
 // GuardProtocol implements the GUARD (Guided Adaptive Risk Detection) protocol.
 // It integrates the FailurePredictor from behavioral analytics into wave execution.
 type GuardProtocol struct {
-	config      GuardConfig
-	store       *learning.Store
-	predictor   *behavioral.FailurePredictor
-	scorer      *behavioral.PerformanceScorer // For predictive agent selection (v2.18+)
-	logger      Logger
-	initialized bool
+	config       GuardConfig
+	llmConfig    config.LLMGuardConfig // LLM configuration (v2.22+)
+	store        *learning.Store
+	predictor    *behavioral.FailurePredictor
+	scorer       *behavioral.PerformanceScorer // For predictive agent selection (v2.18+)
+	llmPredictor *OllamaPredictor              // LLM-based predictor (v2.22+)
+	logger       Logger
+	initialized  bool
 }
 
 // NewGuardProtocol creates a new GuardProtocol instance.
 // Returns nil if GUARD is disabled or store is nil (graceful degradation).
-func NewGuardProtocol(config GuardConfig, store *learning.Store, logger Logger) *GuardProtocol {
-	if !config.Enabled {
+func NewGuardProtocol(cfg GuardConfig, llmCfg config.LLMGuardConfig, store *learning.Store, logger Logger) *GuardProtocol {
+	if !cfg.Enabled {
 		return nil
 	}
 
@@ -66,12 +69,20 @@ func NewGuardProtocol(config GuardConfig, store *learning.Store, logger Logger) 
 		return nil
 	}
 
-	return &GuardProtocol{
-		config:      config,
+	gp := &GuardProtocol{
+		config:      cfg,
+		llmConfig:   llmCfg,
 		store:       store,
 		logger:      logger,
 		initialized: false,
 	}
+
+	// Initialize LLM predictor if enabled (v2.22+)
+	if llmCfg.Enabled {
+		gp.llmPredictor = NewOllamaPredictor(llmCfg, logger)
+	}
+
+	return gp
 }
 
 // Initialize performs lazy initialization of the GUARD protocol.
@@ -98,6 +109,15 @@ func (gp *GuardProtocol) Initialize(ctx context.Context) error {
 	gp.initialized = true
 
 	return nil
+}
+
+// IsVerbose returns whether verbose logging is enabled for GUARD.
+// This allows external consumers to check if detailed recommendations should be logged.
+func (gp *GuardProtocol) IsVerbose() bool {
+	if gp == nil {
+		return false
+	}
+	return gp.config.Verbose
 }
 
 // CheckWave analyzes all tasks in a wave and returns prediction results.
@@ -149,12 +169,15 @@ func (gp *GuardProtocol) checkTask(ctx context.Context, task models.Task) *Guard
 		Success:   false, // Predict failure
 	}
 
-	// Run prediction
+	// Run statistical prediction first
 	prediction, err := gp.predictor.PredictFailure(session, toolUsage)
 	if err != nil {
 		// Graceful degradation: return nil on prediction error
 		return nil
 	}
+
+	// Enhance with LLM if available and stats are uncertain (v2.22+)
+	gp.enhanceWithLLM(ctx, task, prediction)
 
 	// Evaluate whether to block based on mode
 	shouldBlock, blockReason := gp.evaluateBlockDecision(prediction)
@@ -173,6 +196,53 @@ func (gp *GuardProtocol) checkTask(ctx context.Context, task models.Task) *Guard
 		Recommendations: prediction.Recommendations,
 		SuggestedAgent:  suggestedAgent,
 	}
+}
+
+// enhanceWithLLM uses the LLM predictor to refine statistical predictions.
+// Only called when stats probability is uncertain (within configured range).
+// Gracefully degrades on any error - never blocks execution.
+func (gp *GuardProtocol) enhanceWithLLM(ctx context.Context, task models.Task, prediction *behavioral.PredictionResult) {
+	if gp.llmPredictor == nil {
+		return
+	}
+
+	// Only use LLM when stats are uncertain
+	if !gp.llmPredictor.ShouldUseLLM(prediction.Probability) {
+		return
+	}
+
+	// Check if LLM is available (lazy check)
+	if !gp.llmPredictor.IsAvailable(ctx) {
+		return
+	}
+
+	// Get LLM prediction
+	llmPred, err := gp.llmPredictor.PredictFailure(ctx, task)
+	if err != nil {
+		// Graceful degradation: continue with stats only
+		return
+	}
+
+	// Blend predictions: weighted average based on LLM confidence
+	// High LLM confidence = more weight to LLM, low = more weight to stats
+	llmWeight := llmPred.Confidence * 0.5 // Max 50% weight to LLM
+	statsWeight := 1.0 - llmWeight
+
+	blendedProb := (prediction.Probability * statsWeight) + (llmPred.Probability * llmWeight)
+	prediction.Probability = blendedProb
+
+	// Add LLM risk factors to recommendations
+	for _, risk := range llmPred.RiskFactors {
+		prediction.Recommendations = append(prediction.Recommendations, "LLM: "+risk)
+	}
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // selectBetterAgent finds a higher-performing agent based on historical data.
@@ -367,6 +437,7 @@ func LoadGuardConfig(cfg *config.Config) GuardConfig {
 		ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
 		MinHistorySessions:   cfg.Guard.MinHistorySessions,
 		AutoSelectAgent:      cfg.Guard.AutoSelectAgent,
+		Verbose:              cfg.Guard.Verbose,
 	}
 }
 

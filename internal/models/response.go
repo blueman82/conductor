@@ -42,13 +42,14 @@ type CriterionResult struct {
 
 // QCResponse represents structured JSON output from QC review
 type QCResponse struct {
-	Verdict         string            `json:"verdict"`                    // "GREEN", "RED", "YELLOW"
-	Feedback        string            `json:"feedback"`                   // Detailed review feedback
-	Issues          []Issue           `json:"issues"`                     // Specific issues found
-	Recommendations []string          `json:"recommendations"`            // Suggested improvements
-	ShouldRetry     bool              `json:"should_retry"`               // Whether to retry
-	SuggestedAgent  string            `json:"suggested_agent"`            // Alternative agent suggestion
-	CriteriaResults []CriterionResult `json:"criteria_results,omitempty"` // Per-criterion verification results
+	Verdict           string            `json:"verdict"`                      // "GREEN", "RED", "YELLOW"
+	Feedback          string            `json:"feedback"`                     // Detailed review feedback
+	Issues            []Issue           `json:"issues"`                       // Specific issues found
+	Recommendations   []string          `json:"recommendations"`              // Suggested improvements
+	ShouldRetry       bool              `json:"should_retry"`                 // Whether to retry
+	SuggestedAgent    string            `json:"suggested_agent"`              // Alternative agent suggestion
+	CriteriaResults   []CriterionResult `json:"criteria_results,omitempty"`   // Per-criterion verification results
+	STOPJustification string            `json:"stop_justification,omitempty"` // Justification for custom impl when prior art exists (v2.24+)
 }
 
 // Validate checks if required fields are present

@@ -286,3 +286,5 @@ func TestOrchestratorExecutionMetrics(t *testing.T) {
 		t.Errorf("expected duration >= 10ms, got %v", result.Duration)
 	}
 }
+
+func (m *mockLogger) SetGuardVerbose(verbose bool) {}

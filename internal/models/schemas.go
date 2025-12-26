@@ -62,7 +62,16 @@ func AgentResponseSchema() string {
 // When hasSuccessCriteria is true, it includes the criteria_results field schema
 // for per-criterion verification results.
 // It requires 'verdict' and 'feedback' fields, uses enum constraints for verdict.
+//
+// Deprecated: Use QCResponseSchemaWithOptions for new code that needs STOP justification support.
 func QCResponseSchema(hasSuccessCriteria bool) string {
+	return QCResponseSchemaWithOptions(hasSuccessCriteria, false)
+}
+
+// QCResponseSchemaWithOptions returns a JSON Schema for the QCResponse struct with full options.
+// When hasSuccessCriteria is true, includes criteria_results field.
+// When requireSTOPJustification is true, includes stop_justification field for prior art justification.
+func QCResponseSchemaWithOptions(hasSuccessCriteria bool, requireSTOPJustification bool) string {
 	baseSchema := map[string]interface{}{
 		"$schema":     "http://json-schema.org/draft-07/schema#",
 		"title":       "QC Response",
@@ -155,6 +164,15 @@ func QCResponseSchema(hasSuccessCriteria bool) string {
 				"additionalProperties": false,
 			},
 			"description": "Per-criterion verification results",
+		}
+	}
+
+	// Conditionally add stop_justification field for STOP protocol prior art justification
+	if requireSTOPJustification {
+		props := baseSchema["properties"].(map[string]interface{})
+		props["stop_justification"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Justification for custom implementation when prior art exists. Explain why existing solutions are insufficient.",
 		}
 	}
 

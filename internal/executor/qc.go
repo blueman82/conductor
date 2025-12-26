@@ -13,6 +13,7 @@ import (
 	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
+	"github.com/harrison/conductor/internal/pattern"
 )
 
 // domainSpecificChecks maps file extensions to domain-specific QC review criteria
@@ -82,6 +83,10 @@ type QualityController struct {
 	TestCommandResults     []TestCommandResult           // Results from RunTestCommands
 	CriterionVerifyResults []CriterionVerificationResult // Results from RunCriterionVerifications
 	DocTargetResults       []DocTargetResult             // Results from VerifyDocumentationTargets
+
+	// STOP Protocol integration (v2.24+)
+	STOPSummary          string // Prior art summary from Pattern Intelligence (injected into prompt)
+	RequireJustification bool   // Whether to require justification for custom implementations
 }
 
 // QCLogger is the minimal interface for QC logging functionality
@@ -281,6 +286,12 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
+	// Inject STOP protocol prior art context (v2.24+)
+	if qc.STOPSummary != "" {
+		sb.WriteString(FormatSTOPPriorArt(qc.STOPSummary, qc.RequireJustification))
+		sb.WriteString("\n")
+	}
+
 	// Load historical context if learning enabled
 	if qc.LearningStore != nil {
 		if historicalContext, err := qc.LoadContext(ctx, task, qc.LearningStore); err == nil && historicalContext != "" {
@@ -384,13 +395,16 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 		basePrompt = qc.BuildReviewPrompt(ctx, task, output)
 	}
 
+	// Determine if STOP justification is required (prior art exists and config enables it)
+	requireSTOPJustification := qc.RequireJustification && qc.STOPSummary != ""
+
 	// Create a review task for the invoker with JSON schema enforcement
 	reviewTask := models.Task{
 		Number:     task.Number,
 		Name:       fmt.Sprintf("QC Review: %s", task.Name),
 		Prompt:     basePrompt,
 		Agent:      qc.ReviewAgent,
-		JSONSchema: models.QCResponseSchema(hasSuccessCriteria), // Enforce QC response structure via schema
+		JSONSchema: models.QCResponseSchemaWithOptions(hasSuccessCriteria, requireSTOPJustification), // Enforce QC response structure via schema
 	}
 
 	// Invoke the QC agent and parse response
@@ -418,6 +432,15 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 		} else {
 			// Override verdict based on criteria aggregation
 			reviewResult.Flag = qc.aggregateCriteriaResults(qcResp, task, len(allCriteria))
+		}
+	}
+
+	// Apply STOP justification check if required (v2.24+)
+	// Weak/missing justification when prior art exists → YELLOW
+	if requireSTOPJustification && reviewResult.Flag == models.StatusGreen {
+		if !EvaluateSTOPJustification(qc.STOPSummary, qcResp.STOPJustification) {
+			reviewResult.Flag = models.StatusYellow
+			reviewResult.Feedback += " (Warning: Prior art exists but justification for custom implementation is weak or missing)"
 		}
 	}
 
@@ -553,12 +576,15 @@ func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.
 		basePrompt = qc.BuildReviewPrompt(ctx, task, output)
 	}
 
+	// Determine if STOP justification is required (prior art exists and config enables it)
+	requireSTOPJustification := qc.RequireJustification && qc.STOPSummary != ""
+
 	reviewTask := models.Task{
 		Number:     task.Number,
 		Name:       fmt.Sprintf("QC Review: %s", task.Name),
 		Prompt:     basePrompt,
 		Agent:      agentName,
-		JSONSchema: models.QCResponseSchema(hasSuccessCriteria), // Enforce QC response structure via schema
+		JSONSchema: models.QCResponseSchemaWithOptions(hasSuccessCriteria, requireSTOPJustification), // Enforce QC response structure via schema
 	}
 
 	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, agentName)
@@ -567,13 +593,23 @@ func (qc *QualityController) reviewSingleAgent(ctx context.Context, task models.
 		return nil, fmt.Errorf("QC review failed: %w", jsonErr)
 	}
 
-	return &ReviewResult{
+	reviewResult := &ReviewResult{
 		Flag:            qcResp.Verdict,
 		Feedback:        qcResp.Feedback,
 		SuggestedAgent:  qcResp.SuggestedAgent,
 		AgentName:       agentName,
 		CriteriaResults: qcResp.CriteriaResults,
-	}, nil
+	}
+
+	// Apply STOP justification check if required (v2.24+)
+	if requireSTOPJustification && reviewResult.Flag == models.StatusGreen {
+		if !EvaluateSTOPJustification(qc.STOPSummary, qcResp.STOPJustification) {
+			reviewResult.Flag = models.StatusYellow
+			reviewResult.Feedback += " (Warning: Prior art exists but justification for custom implementation is weak or missing)"
+		}
+	}
+
+	return reviewResult, nil
 }
 
 // invokeAgentsParallel invokes multiple QC agents concurrently
@@ -585,6 +621,9 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 	// Get combined criteria once (same for all agents)
 	allCriteria := getCombinedCriteria(task)
 	hasSuccessCriteria := len(allCriteria) > 0
+
+	// Determine if STOP justification is required (prior art exists and config enables it)
+	requireSTOPJustification := qc.RequireJustification && qc.STOPSummary != ""
 
 	for i, agentName := range agents {
 		wg.Add(1)
@@ -605,7 +644,7 @@ func (qc *QualityController) invokeAgentsParallel(ctx context.Context, task mode
 				Name:       fmt.Sprintf("QC Review: %s", task.Name),
 				Prompt:     basePrompt,
 				Agent:      agent,
-				JSONSchema: models.QCResponseSchema(hasSuccessCriteria), // Enforce QC response structure via schema
+				JSONSchema: models.QCResponseSchemaWithOptions(hasSuccessCriteria, requireSTOPJustification), // Enforce QC response structure via schema
 			}
 
 			// Invoke agent and parse response
@@ -961,4 +1000,140 @@ func FormatDetectedErrors(errors []*DetectedError) string {
 
 	sb.WriteString("**Use this context when reviewing code quality and deciding retry strategy.**\n\n")
 	return sb.String()
+}
+
+// FormatSTOPPriorArt formats STOP protocol prior art findings for QC prompt injection.
+// When requireJustification is true, the prompt instructs the QC agent to request
+// justification from the implementing agent for why custom implementation was needed.
+func FormatSTOPPriorArt(stopSummary string, requireJustification bool) string {
+	if stopSummary == "" {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n## STOP Protocol: Prior Art Analysis\n\n")
+	sb.WriteString("Pattern Intelligence discovered existing solutions related to this task:\n\n")
+	sb.WriteString(stopSummary)
+	sb.WriteString("\n")
+
+	if requireJustification {
+		sb.WriteString("\n### JUSTIFICATION REQUIRED\n")
+		sb.WriteString("⚠️ **Prior art exists.** The implementing agent MUST justify why a custom implementation was needed.\n")
+		sb.WriteString("Evaluate the `stop_justification` field in the agent's response:\n")
+		sb.WriteString("- **Strong justification**: Prior solutions are insufficient due to specific technical reasons → Proceed normally\n")
+		sb.WriteString("- **Weak/missing justification**: Agent did not explain why existing solutions don't work → **YELLOW** verdict\n")
+		sb.WriteString("- **No justification when prior art exists**: Consider this a quality concern that should be flagged\n\n")
+	} else {
+		sb.WriteString("\n**Context only**: Prior art is provided for informational purposes. No justification required.\n\n")
+	}
+
+	return sb.String()
+}
+
+// BuildSTOPSummaryFromSTOPResult extracts the STOP summary from a pattern.STOPResult.
+// This is called from task.go after Pattern Intelligence check to wire STOP context to QC.
+// The summary is injected into the QC prompt to request justification for custom implementations.
+func BuildSTOPSummaryFromSTOPResult(stopResult *pattern.STOPResult) string {
+	if stopResult == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	hasPriorArt := false
+
+	// Check for similar patterns
+	if len(stopResult.Search.SimilarPatterns) > 0 {
+		hasPriorArt = true
+		sb.WriteString("**Similar Patterns Found:**\n")
+		for i, p := range stopResult.Search.SimilarPatterns {
+			if i >= 3 { // Limit to top 3
+				break
+			}
+			sb.WriteString(fmt.Sprintf("- %s (%s): %.0f%% similar - %s\n",
+				p.Name, p.FilePath, p.Similarity*100, p.Description))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Check for existing implementations
+	if len(stopResult.Search.ExistingImplementations) > 0 {
+		hasPriorArt = true
+		sb.WriteString("**Existing Implementations:**\n")
+		for i, impl := range stopResult.Search.ExistingImplementations {
+			if i >= 3 { // Limit to top 3
+				break
+			}
+			sb.WriteString(fmt.Sprintf("- %s (%s) in %s: %.0f%% relevant\n",
+				impl.Name, impl.Type, impl.FilePath, impl.Relevance*100))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Check for related files
+	if len(stopResult.Search.RelatedFiles) > 0 {
+		hasPriorArt = true
+		sb.WriteString("**Related Files:** ")
+		maxFiles := 5
+		if maxFiles > len(stopResult.Search.RelatedFiles) {
+			maxFiles = len(stopResult.Search.RelatedFiles)
+		}
+		sb.WriteString(strings.Join(stopResult.Search.RelatedFiles[:maxFiles], ", "))
+		sb.WriteString("\n\n")
+	}
+
+	// Add recommendations if any
+	if len(stopResult.Recommendations) > 0 {
+		sb.WriteString("**Recommendations:**\n")
+		for _, rec := range stopResult.Recommendations {
+			sb.WriteString(fmt.Sprintf("- %s\n", rec))
+		}
+	}
+
+	if !hasPriorArt {
+		return "" // No prior art found
+	}
+
+	return sb.String()
+}
+
+// EvaluateSTOPJustification assesses the quality of STOP justification when prior art exists.
+// Returns true if justification is sufficient, false if weak/missing and verdict should be YELLOW.
+// Empty stopSummary (no prior art) always returns true (no justification needed).
+func EvaluateSTOPJustification(stopSummary, justification string) bool {
+	// No prior art found - no justification needed
+	if stopSummary == "" {
+		return true
+	}
+
+	// Prior art exists but no justification provided
+	if justification == "" {
+		return false
+	}
+
+	// Check for weak justifications (common non-answers)
+	weakPatterns := []string{
+		"n/a",
+		"not applicable",
+		"none",
+		"no justification needed",
+		"custom implementation",
+		"new implementation",
+	}
+
+	lowerJustification := strings.ToLower(strings.TrimSpace(justification))
+
+	// Reject very short justifications (likely inadequate)
+	if len(lowerJustification) < 20 {
+		return false
+	}
+
+	// Check for weak/dismissive patterns
+	for _, pattern := range weakPatterns {
+		if lowerJustification == pattern {
+			return false
+		}
+	}
+
+	// Justification exists and isn't a known weak pattern
+	return true
 }

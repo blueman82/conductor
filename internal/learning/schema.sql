@@ -149,3 +149,61 @@ CREATE TABLE IF NOT EXISTS token_usage (
 -- Indexes for token usage lookups
 CREATE INDEX IF NOT EXISTS idx_token_usage_session_id ON token_usage(session_id);
 CREATE INDEX IF NOT EXISTS idx_token_usage_time ON token_usage(measurement_time DESC);
+
+-- Successful patterns table
+-- Stores patterns that led to successful task completions for reuse
+CREATE TABLE IF NOT EXISTS successful_patterns (
+    task_hash TEXT PRIMARY KEY,
+    pattern_description TEXT NOT NULL,
+    success_count INTEGER DEFAULT 1,
+    last_agent TEXT,
+    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT -- JSON blob for additional pattern context
+);
+
+-- Indexes for pattern lookups
+CREATE INDEX IF NOT EXISTS idx_patterns_hash ON successful_patterns(task_hash);
+CREATE INDEX IF NOT EXISTS idx_successful_patterns_success ON successful_patterns(success_count DESC);
+CREATE INDEX IF NOT EXISTS idx_successful_patterns_last_used ON successful_patterns(last_used DESC);
+CREATE INDEX IF NOT EXISTS idx_successful_patterns_agent ON successful_patterns(last_agent);
+
+-- Duplicate detections table
+-- Records when duplicates were detected and what action was taken
+CREATE TABLE IF NOT EXISTS duplicate_detections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_hash TEXT NOT NULL,
+    matched_hash TEXT NOT NULL,
+    similarity REAL NOT NULL, -- 0.0 to 1.0
+    action TEXT NOT NULL, -- 'blocked', 'warned', 'suggested'
+    task_name TEXT,
+    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT -- JSON blob for additional context
+);
+
+-- Indexes for duplicate detection queries
+CREATE INDEX IF NOT EXISTS idx_duplicates_source ON duplicate_detections(source_hash);
+CREATE INDEX IF NOT EXISTS idx_duplicate_detections_matched ON duplicate_detections(matched_hash);
+CREATE INDEX IF NOT EXISTS idx_duplicate_detections_action ON duplicate_detections(action);
+CREATE INDEX IF NOT EXISTS idx_duplicate_detections_time ON duplicate_detections(detected_at DESC);
+
+-- STOP analyses table
+-- Stores STOP protocol analysis results for future reference
+CREATE TABLE IF NOT EXISTS stop_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_hash TEXT NOT NULL,
+    task_name TEXT,
+    search_results TEXT, -- JSON blob
+    think_analysis TEXT, -- JSON blob
+    outline_plan TEXT, -- JSON blob
+    prove_justification TEXT, -- JSON blob
+    final_decision TEXT, -- 'proceed', 'skip', 'modify'
+    confidence REAL, -- 0.0 to 1.0
+    analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT -- JSON blob for additional context
+);
+
+-- Indexes for STOP analysis lookups
+CREATE INDEX IF NOT EXISTS idx_stop_analyses_task_hash ON stop_analyses(task_hash);
+CREATE INDEX IF NOT EXISTS idx_stop_analyses_decision ON stop_analyses(final_decision);
+CREATE INDEX IF NOT EXISTS idx_stop_analyses_time ON stop_analyses(analyzed_at DESC);

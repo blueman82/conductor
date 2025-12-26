@@ -761,3 +761,5 @@ func TestWaveExecutor_MixedSkippedAndExecuted(t *testing.T) {
 		t.Errorf("expected task 4 to be executed, not skipped")
 	}
 }
+
+func (m *mockLoggerWithTaskLogging) SetGuardVerbose(verbose bool) {}

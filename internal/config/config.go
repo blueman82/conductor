@@ -24,6 +24,20 @@ const (
 	GuardModeAdaptive GuardMode = "adaptive"
 )
 
+// PatternMode specifies the Pattern Intelligence operating mode
+type PatternMode string
+
+const (
+	// PatternModeBlock fails tasks with high similarity to existing work
+	PatternModeBlock PatternMode = "block"
+
+	// PatternModeWarn logs a warning but allows task execution to proceed
+	PatternModeWarn PatternMode = "warn"
+
+	// PatternModeSuggest includes pattern analysis in agent prompt without blocking
+	PatternModeSuggest PatternMode = "suggest"
+)
+
 // GuardConfig represents GUARD Protocol configuration
 type GuardConfig struct {
 	// Enabled enables the GUARD Protocol failure prediction system
@@ -45,8 +59,41 @@ type GuardConfig struct {
 	// When true, GUARD will suggest a better-performing agent based on historical data
 	AutoSelectAgent bool `yaml:"auto_select_agent"`
 
+	// Verbose enables detailed GUARD logging output
+	Verbose bool `yaml:"verbose"`
+
 	// AnomalyDetection configuration for real-time anomaly monitoring (v2.18+)
 	AnomalyDetection AnomalyDetectionConfig `yaml:"anomaly_detection"`
+
+	// LLM configuration for LLM-enhanced failure prediction (v2.22+)
+	LLM LLMGuardConfig `yaml:"llm"`
+}
+
+// LLMGuardConfig defines LLM-enhanced GUARD configuration
+type LLMGuardConfig struct {
+	// Enabled enables LLM-based failure prediction
+	Enabled bool `yaml:"enabled"`
+
+	// Model specifies the Ollama model to use (e.g., "gpt-oss:latest")
+	Model string `yaml:"model"`
+
+	// ThinkLevel specifies reasoning depth: "low", "medium", "high"
+	ThinkLevel string `yaml:"think_level"`
+
+	// BaseURL is the Ollama API endpoint (default: http://localhost:11434)
+	BaseURL string `yaml:"base_url"`
+
+	// Timeout for LLM requests
+	Timeout time.Duration `yaml:"timeout"`
+
+	// FallbackToStats uses statistical prediction if LLM fails
+	FallbackToStats bool `yaml:"fallback_to_stats"`
+
+	// MinProbabilityForLLM only uses LLM when stats probability is uncertain
+	MinProbabilityForLLM float64 `yaml:"min_probability_for_llm"`
+
+	// MaxProbabilityForLLM upper bound for uncertainty range
+	MaxProbabilityForLLM float64 `yaml:"max_probability_for_llm"`
 }
 
 // AnomalyDetectionConfig controls real-time anomaly detection during wave execution
@@ -281,6 +328,51 @@ type BudgetConfig struct {
 	SafetyBuffer time.Duration `yaml:"safety_buffer"`
 }
 
+// PatternConfig represents Pattern Intelligence configuration
+type PatternConfig struct {
+	// Enabled enables the Pattern Intelligence system
+	Enabled bool `yaml:"enabled"`
+
+	// Mode specifies the operating mode: "block", "warn", or "suggest"
+	Mode PatternMode `yaml:"mode"`
+
+	// SimilarityThreshold is the minimum similarity score to trigger action (0.0-1.0)
+	// Tasks with similarity >= threshold will be flagged based on mode
+	SimilarityThreshold float64 `yaml:"similarity_threshold"`
+
+	// DuplicateThreshold is the minimum score to consider a task a duplicate (0.0-1.0)
+	// Tasks with duplicate score >= threshold may be skipped in block mode
+	DuplicateThreshold float64 `yaml:"duplicate_threshold"`
+
+	// MinConfidence is the minimum confidence required before taking action (0.0-1.0)
+	// Predictions with confidence < threshold are treated as suggestions only
+	MinConfidence float64 `yaml:"min_confidence"`
+
+	// EnableSTOP enables STOP protocol analysis (Search/Think/Outline/Prove)
+	EnableSTOP bool `yaml:"enable_stop"`
+
+	// EnableDuplicateDetection enables duplicate task detection
+	EnableDuplicateDetection bool `yaml:"enable_duplicate_detection"`
+
+	// InjectIntoPrompt includes pattern analysis in agent prompts
+	InjectIntoPrompt bool `yaml:"inject_into_prompt"`
+
+	// MaxPatternsPerTask limits patterns included in prompt injection
+	MaxPatternsPerTask int `yaml:"max_patterns_per_task"`
+
+	// MaxRelatedFiles limits related files included in analysis
+	MaxRelatedFiles int `yaml:"max_related_files"`
+
+	// CacheTTLSeconds is how long to cache pattern analysis results (default: 3600)
+	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
+
+	// RequireJustification requires implementing agent to justify custom implementations
+	// when STOP protocol finds prior art (existing solutions, similar commits, related issues).
+	// When true: QC agents will ask for justification; weak/missing justification → YELLOW.
+	// Default: false (disabled for backward compatibility)
+	RequireJustification bool `yaml:"require_justification"`
+}
+
 // TTSConfig controls text-to-speech functionality
 type TTSConfig struct {
 	// Enabled enables TTS functionality (default: false for zero behavior change)
@@ -407,6 +499,9 @@ type Config struct {
 
 	// Budget controls usage budget tracking and enforcement
 	Budget BudgetConfig `yaml:"budget"`
+
+	// Pattern contains Pattern Intelligence configuration
+	Pattern PatternConfig `yaml:"pattern"`
 }
 
 // DefaultGuardConfig returns GuardConfig with sensible default values
@@ -420,6 +515,21 @@ func DefaultGuardConfig() GuardConfig {
 		MinHistorySessions:   5,
 		AutoSelectAgent:      true, // Enabled when GUARD is enabled
 		AnomalyDetection:     DefaultAnomalyDetectionConfig(),
+		LLM:                  DefaultLLMGuardConfig(),
+	}
+}
+
+// DefaultLLMGuardConfig returns LLMGuardConfig with sensible default values
+func DefaultLLMGuardConfig() LLMGuardConfig {
+	return LLMGuardConfig{
+		Enabled:              false,
+		Model:                "gpt-oss:latest",
+		ThinkLevel:           "medium",
+		BaseURL:              "http://localhost:11434",
+		Timeout:              60 * time.Second,
+		FallbackToStats:      true,
+		MinProbabilityForLLM: 0.3,
+		MaxProbabilityForLLM: 0.7,
 	}
 }
 
@@ -485,6 +595,24 @@ func DefaultBudgetConfig() BudgetConfig {
 		MaxWaitDuration:  6 * time.Hour,    // 6 hours
 		AnnounceInterval: 15 * time.Minute, // 15 minutes for TTS announcements
 		SafetyBuffer:     60 * time.Second, // 60 seconds
+	}
+}
+
+// DefaultPatternConfig returns PatternConfig with sensible default values.
+// Pattern Intelligence is DISABLED by default to ensure zero behavior change unless explicitly enabled.
+func DefaultPatternConfig() PatternConfig {
+	return PatternConfig{
+		Enabled:                  false, // Disabled by default for zero behavior change
+		Mode:                     PatternModeWarn,
+		SimilarityThreshold:      0.8,  // 80% similarity triggers action
+		DuplicateThreshold:       0.9,  // 90% similarity for duplicate detection
+		MinConfidence:            0.7,  // 70% confidence required
+		EnableSTOP:               true, // STOP analysis enabled when system is enabled
+		EnableDuplicateDetection: true, // Duplicate detection enabled when system is enabled
+		InjectIntoPrompt:         true, // Include analysis in prompts by default
+		MaxPatternsPerTask:       5,    // Limit patterns to avoid prompt bloat
+		MaxRelatedFiles:          10,   // Limit related files
+		CacheTTLSeconds:          3600, // 1 hour cache
 	}
 }
 
@@ -562,9 +690,10 @@ func DefaultConfig() *Config {
 			EnableClaudeClassification:  false,
 			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
-		TTS:    DefaultTTSConfig(),
-		Guard:  DefaultGuardConfig(),
-		Budget: DefaultBudgetConfig(),
+		TTS:     DefaultTTSConfig(),
+		Guard:   DefaultGuardConfig(),
+		Budget:  DefaultBudgetConfig(),
+		Pattern: DefaultPatternConfig(),
 	}
 }
 
@@ -677,6 +806,7 @@ func LoadConfig(path string) (*Config, error) {
 		TTS            yamlTTSConfig        `yaml:"tts"`
 		Guard          GuardConfig          `yaml:"guard"`
 		Budget         yamlBudgetConfig     `yaml:"budget"`
+		Pattern        PatternConfig        `yaml:"pattern"`
 	}
 
 	var yamlCfg yamlConfig
@@ -1068,6 +1198,46 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.Budget.SafetyBuffer = d
 			}
 		}
+
+		// Merge Pattern config
+		if patternSection, exists := rawMap["pattern"]; exists && patternSection != nil {
+			pattern := yamlCfg.Pattern
+			patternMap, _ := patternSection.(map[string]interface{})
+
+			if _, exists := patternMap["enabled"]; exists {
+				cfg.Pattern.Enabled = pattern.Enabled
+			}
+			if _, exists := patternMap["mode"]; exists {
+				cfg.Pattern.Mode = pattern.Mode
+			}
+			if _, exists := patternMap["similarity_threshold"]; exists {
+				cfg.Pattern.SimilarityThreshold = pattern.SimilarityThreshold
+			}
+			if _, exists := patternMap["duplicate_threshold"]; exists {
+				cfg.Pattern.DuplicateThreshold = pattern.DuplicateThreshold
+			}
+			if _, exists := patternMap["min_confidence"]; exists {
+				cfg.Pattern.MinConfidence = pattern.MinConfidence
+			}
+			if _, exists := patternMap["enable_stop"]; exists {
+				cfg.Pattern.EnableSTOP = pattern.EnableSTOP
+			}
+			if _, exists := patternMap["enable_duplicate_detection"]; exists {
+				cfg.Pattern.EnableDuplicateDetection = pattern.EnableDuplicateDetection
+			}
+			if _, exists := patternMap["inject_into_prompt"]; exists {
+				cfg.Pattern.InjectIntoPrompt = pattern.InjectIntoPrompt
+			}
+			if _, exists := patternMap["max_patterns_per_task"]; exists {
+				cfg.Pattern.MaxPatternsPerTask = pattern.MaxPatternsPerTask
+			}
+			if _, exists := patternMap["max_related_files"]; exists {
+				cfg.Pattern.MaxRelatedFiles = pattern.MaxRelatedFiles
+			}
+			if _, exists := patternMap["cache_ttl_seconds"]; exists {
+				cfg.Pattern.CacheTTLSeconds = pattern.CacheTTLSeconds
+			}
+		}
 	}
 
 	// Apply environment variable overrides (highest priority)
@@ -1343,6 +1513,49 @@ func (c *Config) Validate() error {
 		}
 		if c.Budget.SafetyBuffer < 0 {
 			return fmt.Errorf("budget.safety_buffer must be >= 0, got %v", c.Budget.SafetyBuffer)
+		}
+	}
+
+	// Validate Pattern configuration
+	if c.Pattern.Enabled {
+		// Validate mode
+		validPatternModes := map[PatternMode]bool{
+			PatternModeBlock:   true,
+			PatternModeWarn:    true,
+			PatternModeSuggest: true,
+		}
+		if !validPatternModes[c.Pattern.Mode] {
+			return fmt.Errorf("pattern.mode must be one of: block, warn, suggest; got %q", c.Pattern.Mode)
+		}
+
+		// Validate similarity_threshold is between 0 and 1
+		if c.Pattern.SimilarityThreshold < 0 || c.Pattern.SimilarityThreshold > 1 {
+			return fmt.Errorf("pattern.similarity_threshold must be between 0 and 1, got %f", c.Pattern.SimilarityThreshold)
+		}
+
+		// Validate duplicate_threshold is between 0 and 1
+		if c.Pattern.DuplicateThreshold < 0 || c.Pattern.DuplicateThreshold > 1 {
+			return fmt.Errorf("pattern.duplicate_threshold must be between 0 and 1, got %f", c.Pattern.DuplicateThreshold)
+		}
+
+		// Validate min_confidence is between 0 and 1
+		if c.Pattern.MinConfidence < 0 || c.Pattern.MinConfidence > 1 {
+			return fmt.Errorf("pattern.min_confidence must be between 0 and 1, got %f", c.Pattern.MinConfidence)
+		}
+
+		// Validate max_patterns_per_task is non-negative
+		if c.Pattern.MaxPatternsPerTask < 0 {
+			return fmt.Errorf("pattern.max_patterns_per_task must be >= 0, got %d", c.Pattern.MaxPatternsPerTask)
+		}
+
+		// Validate max_related_files is non-negative
+		if c.Pattern.MaxRelatedFiles < 0 {
+			return fmt.Errorf("pattern.max_related_files must be >= 0, got %d", c.Pattern.MaxRelatedFiles)
+		}
+
+		// Validate cache_ttl_seconds is non-negative
+		if c.Pattern.CacheTTLSeconds < 0 {
+			return fmt.Errorf("pattern.cache_ttl_seconds must be >= 0, got %d", c.Pattern.CacheTTLSeconds)
 		}
 	}
 

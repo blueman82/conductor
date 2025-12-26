@@ -667,8 +667,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 				ConfidenceThreshold:  cfg.Guard.ConfidenceThreshold,
 				MinHistorySessions:   cfg.Guard.MinHistorySessions,
 			}
-			guardProtocol := executor.NewGuardProtocol(guardConfig, learningStore, multiLog)
+			guardProtocol := executor.NewGuardProtocol(guardConfig, cfg.Guard.LLM, learningStore, multiLog)
 			if guardProtocol != nil {
+				// Set GUARD verbosity based on config
+				multiLog.SetGuardVerbose(cfg.Guard.Verbose)
 				waveExec.SetGuardProtocol(guardProtocol)
 			}
 		}
@@ -870,6 +872,13 @@ func (ml *multiLogger) LogRateLimitCountdown(remaining, total time.Duration) {
 func (ml *multiLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
 	for _, logger := range ml.loggers {
 		logger.LogRateLimitAnnounce(remaining, total)
+	}
+}
+
+// SetGuardVerbose forwards to all loggers
+func (ml *multiLogger) SetGuardVerbose(verbose bool) {
+	for _, logger := range ml.loggers {
+		logger.SetGuardVerbose(verbose)
 	}
 }
 

@@ -96,6 +96,15 @@ func (w *WaveExecutor) SetBudgetTracking(tracker *budget.UsageTracker, cfg *conf
 	w.budgetConfig = cfg
 }
 
+// SetPatternHook configures Pattern Intelligence for the task executor.
+// When set, enables STOP protocol analysis and duplicate detection for tasks.
+// This method assumes the wave executor's taskExecutor is a *DefaultTaskExecutor.
+func (w *WaveExecutor) SetPatternHook(hook *PatternIntelligenceHook) {
+	if te, ok := w.taskExecutor.(*DefaultTaskExecutor); ok {
+		te.PatternHook = hook
+	}
+}
+
 // checkBudget verifies budget limits before wave execution.
 // Returns an error if budget is exceeded and execution should stop.
 // Logs warnings if approaching budget threshold.

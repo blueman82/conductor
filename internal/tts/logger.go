@@ -132,3 +132,6 @@ func (l *TTSLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
 		l.announcer.RateLimitCountdown(remaining, total)
 	}
 }
+
+// SetGuardVerbose is a no-op for TTS logger.
+func (l *TTSLogger) SetGuardVerbose(verbose bool) {}
