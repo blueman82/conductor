@@ -53,10 +53,12 @@ func (ce *ClaudeEnhancer) ShouldEnhance(confidence float64, minConf, maxConf flo
 func (ce *ClaudeEnhancer) Enhance(ctx context.Context, taskDesc string, patterns string, baseConfidence float64) (*EnhancementResult, error) {
 	result, err := ce.invoke(ctx, taskDesc, patterns, baseConfidence)
 
-	// Handle rate limit with retry (TTS + visual countdown if Logger provided)
+	// Handle rate limit with retry (TTS + visual countdown)
+	// Wait for actual reset time from Claude output - no arbitrary caps
 	if err != nil {
 		if info := budget.ParseRateLimitFromError(err.Error()); info != nil {
-			waiter := budget.NewRateLimitWaiter(ce.MaxWait, 15*time.Second, 30*time.Second, ce.Logger)
+			// Use 24h as max - waiter uses actual reset time from info
+			waiter := budget.NewRateLimitWaiter(24*time.Hour, 15*time.Second, 30*time.Second, ce.Logger)
 			if waiter.ShouldWait(info) {
 				if waitErr := waiter.WaitForReset(ctx, info); waitErr != nil {
 					return nil, waitErr
