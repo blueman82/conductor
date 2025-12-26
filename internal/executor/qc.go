@@ -296,6 +296,12 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
+	// Inject Architecture Checkpoint context (v2.27+)
+	if qc.ArchitectureSummary != "" {
+		sb.WriteString(FormatArchitectureContext(qc.ArchitectureSummary, qc.RequireArchitectureJustification))
+		sb.WriteString("\n")
+	}
+
 	// Load historical context if learning enabled
 	if qc.LearningStore != nil {
 		if historicalContext, err := qc.LoadContext(ctx, task, qc.LearningStore); err == nil && historicalContext != "" {
