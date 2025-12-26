@@ -586,6 +586,91 @@ budget:
 #   conductor budget resume         # Resume all ready executions
 #   conductor budget resume <id>    # Resume specific session
 
+# Pattern Intelligence configuration (v2.23+)
+# STOP protocol analysis (Search/Think/Outline/Prove) and duplicate detection
+# Analyzes tasks for existing solutions, prior art, and potential duplicates
+pattern:
+  # Enable or disable Pattern Intelligence (default: false)
+  enabled: false
+
+  # Operating mode:
+  # - block: Hard gate - fail tasks with high similarity to existing work
+  # - warn: Soft signal - log warning but allow execution (default)
+  # - suggest: Include analysis in agent prompt without any blocking
+  mode: warn
+
+  # Similarity threshold to trigger action (0.0-1.0, default: 0.8)
+  # Tasks with similarity >= threshold will be flagged based on mode
+  similarity_threshold: 0.8
+
+  # Duplicate threshold (0.0-1.0, default: 0.9)
+  # Tasks with duplicate score >= threshold may be skipped in block mode
+  duplicate_threshold: 0.9
+
+  # Minimum confidence before taking action (0.0-1.0, default: 0.7)
+  # Lower confidence predictions are treated as suggestions only
+  min_confidence: 0.7
+
+  # Enable STOP protocol analysis (default: true when enabled)
+  # STOP = Search / Think / Outline / Prove from CLAWED methodology
+  # Searches git history, GitHub issues, docs, and learning database
+  enable_stop: true
+
+  # Enable duplicate task detection (default: true when enabled)
+  # Uses content hashing and similarity scoring to detect duplicates
+  enable_duplicate_detection: true
+
+  # Include pattern analysis in agent prompts (default: true)
+  # When enabled, agents receive context about prior art and similar work
+  inject_into_prompt: true
+
+  # Maximum patterns to include in prompt injection (default: 5)
+  max_patterns_per_task: 5
+
+  # Maximum related files to include in analysis (default: 10)
+  max_related_files: 10
+
+  # Cache TTL in seconds for pattern analysis results (default: 3600)
+  cache_ttl_seconds: 3600
+
+  # Require implementing agent to justify custom implementations (v2.24+)
+  # When STOP protocol finds prior art (existing solutions, similar commits, related issues):
+  # - true: QC agents will request justification; weak/missing → YELLOW verdict
+  # - false: Prior art is informational only, no justification required
+  require_justification: false
+
+# Pattern Intelligence Examples
+
+# Example: Enable Pattern Intelligence in warn mode (recommended starting point)
+# pattern:
+#   enabled: true
+#   mode: warn
+
+# Example: Strict blocking mode for high-duplication prevention
+# pattern:
+#   enabled: true
+#   mode: block
+#   duplicate_threshold: 0.85
+
+# Example: Enable with justification requirement (v2.24+)
+# pattern:
+#   enabled: true
+#   mode: warn
+#   enable_stop: true
+#   require_justification: true
+
+# Example: Suggest-only mode (no warnings, just context injection)
+# pattern:
+#   enabled: true
+#   mode: suggest
+#   inject_into_prompt: true
+
+# Example: Disable STOP but keep duplicate detection
+# pattern:
+#   enabled: true
+#   enable_stop: false
+#   enable_duplicate_detection: true
+
 # Validation Examples
 
 # Example: Strict mode - fail validation if key_points exceed success_criteria
