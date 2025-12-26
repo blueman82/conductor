@@ -70,9 +70,6 @@ func TestNewClaudeEnhancer(t *testing.T) {
 	if enhancer.Timeout != 30*time.Second {
 		t.Errorf("Default Timeout = %v, want 30s", enhancer.Timeout)
 	}
-	if enhancer.MaxWait != 60*time.Second {
-		t.Errorf("Default MaxWait = %v, want 60s", enhancer.MaxWait)
-	}
 	if enhancer.ClaudePath != "claude" {
 		t.Errorf("Default ClaudePath = %s, want claude", enhancer.ClaudePath)
 	}
@@ -82,13 +79,10 @@ func TestNewClaudeEnhancer(t *testing.T) {
 }
 
 func TestNewClaudeEnhancerWithConfig(t *testing.T) {
-	enhancer := NewClaudeEnhancerWithConfig(45*time.Second, 120*time.Second, nil)
+	enhancer := NewClaudeEnhancerWithConfig(45*time.Second, nil)
 
 	if enhancer.Timeout != 45*time.Second {
 		t.Errorf("Timeout = %v, want 45s", enhancer.Timeout)
-	}
-	if enhancer.MaxWait != 120*time.Second {
-		t.Errorf("MaxWait = %v, want 120s", enhancer.MaxWait)
 	}
 }
 
