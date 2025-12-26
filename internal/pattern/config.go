@@ -81,9 +81,14 @@ func DefaultPatternConfig() PatternConfig {
 		EnableSTOP:               true, // STOP analysis enabled when system is enabled
 		EnableDuplicateDetection: true, // Duplicate detection enabled when system is enabled
 		InjectIntoPrompt:         true, // Include analysis in prompts by default
-		MaxPatternsPerTask:       5,    // Limit patterns to avoid prompt bloat
-		MaxRelatedFiles:          10,   // Limit related files
-		CacheTTLSeconds:          3600, // 1 hour cache
+		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
+		MaxRelatedFiles:          10,    // Limit related files
+		CacheTTLSeconds:          3600,  // 1 hour cache
+		LLMEnhancementEnabled:    false, // Disabled by default
+		LLMMinConfidence:         0.3,   // Enhance when >= 0.3
+		LLMMaxConfidence:         0.7,   // Enhance when <= 0.7
+		LLMTimeoutSeconds:        30,    // 30 second timeout
+		LLMMaxWaitSeconds:        60,    // 60 second max wait for rate limit
 	}
 }
 
