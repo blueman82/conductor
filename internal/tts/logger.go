@@ -81,16 +81,6 @@ func (l *TTSLogger) LogQCIntelligentSelectionMetadata(rationale string, fallback
 	l.announcer.QCIntelligentSelectionRationale(rationale)
 }
 
-// LogGuardPrediction delegates to announcer.GuardPrediction.
-func (l *TTSLogger) LogGuardPrediction(taskNumber string, result interface{}) {
-	l.announcer.GuardPrediction(taskNumber, result)
-}
-
-// LogAgentSwap delegates to announcer.AgentSwap.
-func (l *TTSLogger) LogAgentSwap(taskNumber string, fromAgent string, toAgent string) {
-	l.announcer.AgentSwap(taskNumber, fromAgent, toAgent)
-}
-
 // LogAnomaly delegates to announcer.Anomaly.
 func (l *TTSLogger) LogAnomaly(anomaly interface{}) {
 	l.announcer.Anomaly(anomaly)
