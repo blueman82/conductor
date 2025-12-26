@@ -1147,3 +1147,71 @@ func EvaluateSTOPJustification(stopSummary, justification string) bool {
 	// Justification exists and isn't a known weak pattern
 	return true
 }
+
+// FormatArchitectureContext formats architecture checkpoint findings for QC prompt injection.
+// When requireJustification is true, the QC agent will verify architectural decisions are justified.
+func FormatArchitectureContext(archSummary string, requireJustification bool) string {
+	if archSummary == "" {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n## Architecture Checkpoint Context\n\n")
+	sb.WriteString("This task was flagged for potential architectural impact:\n\n")
+	sb.WriteString(archSummary)
+	sb.WriteString("\n")
+
+	if requireJustification {
+		sb.WriteString("\n### ARCHITECTURAL JUSTIFICATION REQUIRED\n")
+		sb.WriteString("⚠️ **Architectural concerns flagged.** The implementing agent MUST justify architectural decisions.\n")
+		sb.WriteString("Evaluate the output for architectural justification:\n")
+		sb.WriteString("- **Strong justification**: Clear explanation of why architectural changes are necessary → Proceed normally\n")
+		sb.WriteString("- **Weak/missing justification**: No explanation for architectural decisions → **YELLOW** verdict\n")
+		sb.WriteString("- **Architectural changes without justification**: Consider this a quality concern\n\n")
+	} else {
+		sb.WriteString("\n**Context only**: Architectural context is provided for awareness. No justification required.\n\n")
+	}
+
+	return sb.String()
+}
+
+// BuildArchitectureSummary extracts architecture summary from CheckpointResult for QC injection.
+func BuildArchitectureSummary(result *architecture.CheckpointResult) string {
+	if result == nil || result.Assessment == nil || !result.Assessment.RequiresReview {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**Summary**: %s\n\n", result.Assessment.Summary))
+
+	flagged := result.Assessment.FlaggedQuestions()
+	if len(flagged) > 0 {
+		sb.WriteString("**Flagged Concerns:**\n")
+		for _, q := range flagged {
+			sb.WriteString(fmt.Sprintf("- %s\n", q))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Add reasoning for flagged questions
+	if result.Assessment.CoreInfrastructure.Answer {
+		sb.WriteString(fmt.Sprintf("**Core Infrastructure**: %s\n", result.Assessment.CoreInfrastructure.Reasoning))
+	}
+	if result.Assessment.ReuseConcerns.Answer {
+		sb.WriteString(fmt.Sprintf("**Reuse Concerns**: %s\n", result.Assessment.ReuseConcerns.Reasoning))
+	}
+	if result.Assessment.NewAbstractions.Answer {
+		sb.WriteString(fmt.Sprintf("**New Abstractions**: %s\n", result.Assessment.NewAbstractions.Reasoning))
+	}
+	if result.Assessment.APIContracts.Answer {
+		sb.WriteString(fmt.Sprintf("**API Contracts**: %s\n", result.Assessment.APIContracts.Reasoning))
+	}
+	if result.Assessment.FrameworkLifecycle.Answer {
+		sb.WriteString(fmt.Sprintf("**Framework Lifecycle**: %s\n", result.Assessment.FrameworkLifecycle.Reasoning))
+	}
+	if result.Assessment.CrossCuttingConcerns.Answer {
+		sb.WriteString(fmt.Sprintf("**Cross-Cutting Concerns**: %s\n", result.Assessment.CrossCuttingConcerns.Reasoning))
+	}
+
+	return sb.String()
+}
