@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/architecture"
 	"github.com/harrison/conductor/internal/behavioral"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
