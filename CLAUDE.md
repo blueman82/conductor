@@ -57,7 +57,7 @@ make build-major         # Auto-increment major (1.1.0 → 2.0.0) and build
 ### Execution Pipeline
 
 ```
-Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor → GUARD Gate → Task Executor → QC → Learning System
+Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor → Task Executor → QC → Learning System
 ```
 
 **Multi-File Plans** (v2.6+): Parser handles multiple files → Plan Merger validates cross-file deps → Rest of pipeline
