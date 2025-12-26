@@ -10,20 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// GuardMode specifies the GUARD Protocol operating mode
-type GuardMode string
-
-const (
-	// GuardModeBlock blocks task execution when failure probability exceeds threshold
-	GuardModeBlock GuardMode = "block"
-
-	// GuardModeWarn logs a warning but allows task execution to proceed
-	GuardModeWarn GuardMode = "warn"
-
-	// GuardModeAdaptive dynamically adjusts behavior based on historical accuracy
-	GuardModeAdaptive GuardMode = "adaptive"
-)
-
 // PatternMode specifies the Pattern Intelligence operating mode
 type PatternMode string
 
