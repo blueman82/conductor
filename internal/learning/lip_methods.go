@@ -294,7 +294,7 @@ func (s *Store) calculateLIPEventScore(ctx context.Context, taskExecutionID int6
 
 // calculateToolExecutionScore computes the score contribution from tool executions.
 func (s *Store) calculateToolExecutionScore(ctx context.Context, taskExecutionID int64) (float64, error) {
-	query := `SELECT COUNT(*) as total, SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count
+	query := `SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) as success_count
 		FROM tool_executions te
 		JOIN behavioral_sessions bs ON te.session_id = bs.id
 		WHERE bs.task_execution_id = ?`
