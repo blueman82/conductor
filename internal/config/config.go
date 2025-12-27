@@ -144,6 +144,9 @@ type QCAgentConfig struct {
 	// CacheTTLSeconds is how long to cache intelligent selection results (default: 3600)
 	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
 
+	// SelectionTimeoutSeconds is the timeout for Claude intelligent selection calls (default: 90)
+	SelectionTimeoutSeconds int `yaml:"selection_timeout_seconds"`
+
 	// RequireCodeReview ensures code-reviewer is always included as baseline (default: true)
 	RequireCodeReview bool `yaml:"require_code_review"`
 }
