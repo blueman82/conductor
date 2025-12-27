@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/mattn/go-runewidth"
