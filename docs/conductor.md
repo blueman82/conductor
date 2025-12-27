@@ -1586,6 +1586,7 @@ quality_control:
 | `mode` | string | `auto` | Selection mode: auto, explicit, mixed, or intelligent |
 | `max_agents` | int | `4` | Maximum number of QC agents to select |
 | `cache_ttl_seconds` | int | `3600` | Cache TTL in seconds (1 hour default) |
+| `selection_timeout_seconds` | int | `90` | Timeout for Claude intelligent selection calls |
 | `require_code_review` | bool | `true` | Always include code-reviewer as baseline |
 | `blocked` | []string | `[]` | Agents to never use for QC |
 | `explicit_list` | []string | `[]` | Agents for explicit mode |
