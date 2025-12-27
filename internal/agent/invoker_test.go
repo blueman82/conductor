@@ -1010,9 +1010,9 @@ Go development content
 	}
 }
 
-// TestBuildCommandArgsSystemPrompt verifies that all tasks get the --system-prompt flag
-// (Changed from --append-system-prompt to --system-prompt to fully override default prompt for strict JSON enforcement)
-func TestIsRateLimitOutput(t *testing.T) {
+// TestRateLimitDetection verifies rate limit detection via budget package
+// (Consolidated to use budget.ParseRateLimitFromOutput as single source of truth v2.28+)
+func TestRateLimitDetection(t *testing.T) {
 	tests := []struct {
 		name   string
 		output string
@@ -1072,9 +1072,9 @@ func TestIsRateLimitOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isRateLimitOutput(tt.output)
+			got := budget.ParseRateLimitFromOutput(tt.output) != nil
 			if got != tt.want {
-				t.Errorf("isRateLimitOutput(%q) = %v, want %v", tt.output, got, tt.want)
+				t.Errorf("budget.ParseRateLimitFromOutput(%q) detected=%v, want %v", tt.output, got, tt.want)
 			}
 		})
 	}
