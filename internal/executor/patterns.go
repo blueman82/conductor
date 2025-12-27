@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 )
 
