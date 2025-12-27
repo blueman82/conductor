@@ -622,23 +622,27 @@ func isRateLimitError(err error) bool {
 //   - On retry: uses --resume with session ID if available, or injects git diff context
 func (te *DefaultTaskExecutor) executeWithRateLimitRecovery(ctx context.Context, task models.Task) (models.TaskResult, error) {
 	var lastSessionID string // Track session ID from previous attempt for --resume
+	isRetry := false         // Track if this is a retry after rate limit
 
 	for {
 		// Prepare task for execution (potentially with resume context)
 		taskToExecute := task
-		if lastSessionID != "" {
-			// Primary: Resume previous session via Claude CLI --resume flag
-			taskToExecute.ResumeSessionID = lastSessionID
-			if te.Logger != nil {
-				te.Logger.Infof("Resuming session %s after rate limit", lastSessionID)
-			}
-		} else if te.hasGitChanges() {
-			// Fallback: Inject git diff context if no session ID but partial work exists
-			diffContext := te.getGitDiffContext()
-			if diffContext != "" {
-				taskToExecute.Prompt = task.Prompt + diffContext
+		if isRetry {
+			// Only inject context on retry, not first execution
+			if lastSessionID != "" {
+				// Primary: Resume previous session via Claude CLI --resume flag
+				taskToExecute.ResumeSessionID = lastSessionID
 				if te.Logger != nil {
-					te.Logger.Info("Injecting git diff context for rate limit retry (no session ID)")
+					te.Logger.Infof("Resuming session %s after rate limit", lastSessionID)
+				}
+			} else if te.hasGitChanges() {
+				// Fallback: Inject git diff context if no session ID but partial work exists
+				diffContext := te.getGitDiffContext()
+				if diffContext != "" {
+					taskToExecute.Prompt = task.Prompt + diffContext
+					if te.Logger != nil {
+						te.Logger.Info("Injecting git diff context for rate limit retry (no session ID)")
+					}
 				}
 			}
 		}
