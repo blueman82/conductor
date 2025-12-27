@@ -398,8 +398,9 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// are properly detected even when they fail JSON parsing
 	// NOTE: Only check if command failed (err != nil) to avoid false positives
 	// when agent output contains text about rate limiting (v2.28+)
+	// Uses budget.ParseRateLimitFromOutput for single source of truth
 	rawOutput := stdout.String()
-	if err != nil && isRateLimitOutput(rawOutput) {
+	if err != nil && budget.ParseRateLimitFromOutput(rawOutput) != nil {
 		rateLimitErr := &ErrRateLimit{RawMessage: rawOutput}
 		result.Error = rateLimitErr
 		return result, rateLimitErr // Return error so executeWithRateLimitRecovery can catch it
