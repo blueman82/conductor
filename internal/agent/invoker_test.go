@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/models"
 )
 
