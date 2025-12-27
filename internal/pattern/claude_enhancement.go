@@ -89,6 +89,7 @@ func (ce *ClaudeEnhancer) invoke(ctx context.Context, taskDesc, patterns string,
 	}
 
 	cmd := exec.CommandContext(ctxWithTimeout, ce.ClaudePath, args...)
+	claude.SetCleanEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
