@@ -16,6 +16,10 @@ type AgentStats struct {
 // SelectBetterAgent selects the best agent for a retry attempt based on QC suggestion
 // and historical performance data. Returns the selected agent and reasoning.
 //
+// Deprecated: Use IntelligentAgentSwapper for context-aware selection that considers
+// file extensions, knowledge graph history, LIP progress, and error patterns.
+// This function is retained for fallback when IntelligentAgentSwapper is unavailable.
+//
 // Priority order:
 // 1. Use QC suggestion if provided and different from current agent
 // 2. Analyze history for best success rate (excluding current agent)

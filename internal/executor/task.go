@@ -207,6 +207,9 @@ type DefaultTaskExecutor struct {
 	// Warm-Up Context integration (v2.29+)
 	WarmUpHook *WarmUpHook // Warm-up context hook for agent priming with historical patterns
 
+	// Intelligent Agent Swap integration (v2.30+)
+	IntelligentAgentSwapper *learning.IntelligentAgentSwapper // Claude-powered agent selection for retries (optional)
+
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult            // Populated after RunTestCommands
 	lastCriterionResults []CriterionVerificationResult  // Populated after RunCriterionVerifications
@@ -1424,22 +1427,57 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 
 			// Agent swap during retries: if enabled and threshold reached
 			if te.SwapDuringRetries && redCount >= te.MinFailuresBeforeAdapt {
-				// Load execution history for agent selection
-				var history []*learning.TaskExecution
-				if te.LearningStore != nil {
-					ctx2 := context.Background()
-					fileToQuery := te.PlanFile
-					if task.SourceFile != "" {
-						fileToQuery = task.SourceFile
+				var newAgent string
+				var swapReason string
+				swapped := false
+
+				// Try IntelligentAgentSwapper first (v2.30+)
+				if te.IntelligentAgentSwapper != nil {
+					swapCtx := &learning.SwapContext{
+						TaskNumber:      task.Number,
+						TaskName:        task.Name,
+						TaskDescription: task.Prompt,
+						Files:           extractTaskFiles(task),
+						CurrentAgent:    task.Agent,
+						ErrorContext:    review.Feedback,
+						AttemptNumber:   attempt + 1,
 					}
-					history, _ = te.LearningStore.GetExecutionHistory(ctx2, fileToQuery, task.Number)
+					recommendation, err := te.IntelligentAgentSwapper.SelectAgent(ctx, swapCtx)
+					if err == nil && recommendation != nil && recommendation.RecommendedAgent != "" && recommendation.RecommendedAgent != task.Agent {
+						newAgent = recommendation.RecommendedAgent
+						swapReason = fmt.Sprintf("intelligent: %s (%.0f%% confidence)", recommendation.Rationale, recommendation.Confidence*100)
+						swapped = true
+						if te.Logger != nil {
+							te.Logger.Infof("[Task %s] Intelligent agent swap: %s → %s (%s)", task.Number, task.Agent, newAgent, swapReason)
+						}
+					} else if err != nil && te.Logger != nil {
+						te.Logger.Warnf("[Task %s] Intelligent agent swap failed, falling back to stats-only: %v", task.Number, err)
+					}
 				}
 
-				// Call SelectBetterAgent to determine best agent
-				if newAgent, reason := learning.SelectBetterAgent(task.Agent, history, review.SuggestedAgent); newAgent != "" && newAgent != task.Agent {
-					// Log agent swap (in production: use proper logger)
-					// fmt.Printf("Swapping agent: %s → %s (reason: %s)\n", task.Agent, newAgent, reason)
-					_ = reason // Suppress unused variable warning
+				// Fallback to stats-only SelectBetterAgent if intelligent swap didn't work
+				if !swapped {
+					// Load execution history for agent selection
+					var history []*learning.TaskExecution
+					if te.LearningStore != nil {
+						ctx2 := context.Background()
+						fileToQuery := te.PlanFile
+						if task.SourceFile != "" {
+							fileToQuery = task.SourceFile
+						}
+						history, _ = te.LearningStore.GetExecutionHistory(ctx2, fileToQuery, task.Number)
+					}
+
+					// Call SelectBetterAgent to determine best agent (deprecated fallback)
+					if fallbackAgent, reason := learning.SelectBetterAgent(task.Agent, history, review.SuggestedAgent); fallbackAgent != "" && fallbackAgent != task.Agent {
+						newAgent = fallbackAgent
+						swapReason = fmt.Sprintf("stats-only: %s", reason)
+						swapped = true
+					}
+				}
+
+				// Apply the agent swap
+				if swapped && newAgent != "" {
 					task.Agent = newAgent
 					result.Task.Agent = newAgent
 				}
@@ -1589,6 +1627,49 @@ func formatFailedCriteria(results []models.CriterionResult) string {
 	}
 
 	return sb.String()
+}
+
+// extractTaskFiles extracts file paths from task metadata for intelligent agent swap.
+// Used to provide file context to IntelligentAgentSwapper.
+func extractTaskFiles(task models.Task) []string {
+	var files []string
+
+	// Extract from Metadata if available
+	if task.Metadata != nil {
+		if targetFiles, ok := task.Metadata["target_files"].([]string); ok {
+			files = append(files, targetFiles...)
+		}
+		if metaFiles, ok := task.Metadata["files"].([]string); ok {
+			files = append(files, metaFiles...)
+		}
+		// Handle []interface{} case (from YAML unmarshalling)
+		if targetFiles, ok := task.Metadata["target_files"].([]interface{}); ok {
+			for _, f := range targetFiles {
+				if s, ok := f.(string); ok {
+					files = append(files, s)
+				}
+			}
+		}
+		if metaFiles, ok := task.Metadata["files"].([]interface{}); ok {
+			for _, f := range metaFiles {
+				if s, ok := f.(string); ok {
+					files = append(files, s)
+				}
+			}
+		}
+	}
+
+	// Deduplicate
+	seen := make(map[string]bool)
+	unique := make([]string, 0, len(files))
+	for _, f := range files {
+		if !seen[f] {
+			seen[f] = true
+			unique = append(unique, f)
+		}
+	}
+
+	return unique
 }
 
 // formatClassificationForRetry formats classification suggestions for retry agent

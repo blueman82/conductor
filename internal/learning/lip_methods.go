@@ -13,14 +13,14 @@ var _ LIPCollector = (*Store)(nil)
 // Progress scoring weights for different event types
 const (
 	// Weights for existing behavioral data
-	toolExecutionWeight   = 0.1
-	fileOperationWeight   = 0.2
+	toolExecutionWeight = 0.1
+	fileOperationWeight = 0.2
 
 	// Weights for new LIP events
-	testPassWeight        = 0.3
-	testFailWeight        = 0.1 // Partial credit for attempting tests
-	buildSuccessWeight    = 0.3
-	buildFailWeight       = 0.1 // Partial credit for attempting builds
+	testPassWeight     = 0.3
+	testFailWeight     = 0.1 // Partial credit for attempting tests
+	buildSuccessWeight = 0.3
+	buildFailWeight    = 0.1 // Partial credit for attempting builds
 )
 
 // RecordEvent stores a new LIP progress event in the database.

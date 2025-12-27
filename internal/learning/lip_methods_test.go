@@ -14,9 +14,9 @@ func TestLIPRecordEvent(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name      string
-		event     *LIPEvent
-		wantErr   bool
+		name        string
+		event       *LIPEvent
+		wantErr     bool
 		errContains string
 	}{
 		{
@@ -64,9 +64,9 @@ func TestLIPRecordEvent(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:      "returns error for nil event",
-			event:     nil,
-			wantErr:   true,
+			name:        "returns error for nil event",
+			event:       nil,
+			wantErr:     true,
 			errContains: "event cannot be nil",
 		},
 		{
@@ -76,7 +76,7 @@ func TestLIPRecordEvent(t *testing.T) {
 				TaskNumber:      "1",
 				EventType:       LIPEventType("invalid_type"),
 			},
-			wantErr:   true,
+			wantErr:     true,
 			errContains: "invalid event type",
 		},
 	}
@@ -290,9 +290,9 @@ func TestLIPCalculateProgress(t *testing.T) {
 
 		// Create behavioral session
 		sessionData := &BehavioralSessionData{
-			TaskExecutionID:   exec.ID,
-			SessionStart:      time.Now(),
-			TotalToolCalls:    2,
+			TaskExecutionID:     exec.ID,
+			SessionStart:        time.Now(),
+			TotalToolCalls:      2,
 			TotalFileOperations: 1,
 		}
 		sessionID, err := store.RecordSessionMetrics(ctx, sessionData,
@@ -340,7 +340,7 @@ func TestLIPCalculateProgress(t *testing.T) {
 
 		// Record all positive LIP event types (score uses AVG per type, so multiple of same type averages)
 		for _, et := range []LIPEventType{
-			LIPEventTestPass,   // 0.3
+			LIPEventTestPass,     // 0.3
 			LIPEventBuildSuccess, // 0.3
 		} {
 			err = store.RecordEvent(ctx, &LIPEvent{

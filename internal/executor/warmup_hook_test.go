@@ -28,7 +28,7 @@ type mockWarmUpLogger struct {
 	infoMessages []string
 }
 
-func (m *mockWarmUpLogger) LogTestCommands(entries []models.TestCommandResult)                 {}
+func (m *mockWarmUpLogger) LogTestCommands(entries []models.TestCommandResult) {}
 func (m *mockWarmUpLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
 }
 func (m *mockWarmUpLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}

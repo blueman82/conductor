@@ -261,7 +261,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 
 		provider := NewWarmUpProvider(store)
 		task := &TaskInfo{
-			TaskNumber: "1",          // Same task number
+			TaskNumber: "1",                // Same task number
 			PlanFile:   "/plans/test.yaml", // Same plan file
 			TaskName:   "Test Task",
 		}
@@ -334,11 +334,11 @@ func TestJaccardSimilarity(t *testing.T) {
 
 func TestNormalizedLevenshteinSimilarity(t *testing.T) {
 	tests := []struct {
-		name     string
-		s1       string
-		s2       string
-		minSim   float64 // Minimum expected similarity
-		maxSim   float64 // Maximum expected similarity
+		name   string
+		s1     string
+		s2     string
+		minSim float64 // Minimum expected similarity
+		maxSim float64 // Maximum expected similarity
 	}{
 		{
 			name:   "identical strings",

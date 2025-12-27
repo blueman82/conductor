@@ -101,6 +101,13 @@ type LearningConfig struct {
 	// SwapDuringRetries enables agent swapping during retry attempts
 	SwapDuringRetries bool `yaml:"swap_during_retries"`
 
+	// IntelligentSwapEnabled enables Claude-powered intelligent agent selection (v2.30+)
+	// When true, uses IntelligentAgentSwapper for context-aware selection that considers
+	// file extensions, knowledge graph history, LIP progress, and error patterns.
+	// Falls back to stats-only SelectBetterAgent when false or on error.
+	// Default: true
+	IntelligentSwapEnabled bool `yaml:"intelligent_swap_enabled"`
+
 	// EnhancePrompts enables prompt enhancement based on learned patterns
 	EnhancePrompts bool `yaml:"enhance_prompts"`
 
@@ -623,6 +630,7 @@ func DefaultConfig() *Config {
 			DBPath:                 ".conductor/learning/executions.db",
 			AutoAdaptAgent:         false,
 			SwapDuringRetries:      true,
+			IntelligentSwapEnabled: true, // Enable intelligent agent swap by default (v2.30+)
 			EnhancePrompts:         true,
 			WarmUpEnabled:          true, // Enable warm-up context by default
 			QCReadsPlanContext:     true,
@@ -921,6 +929,9 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := learningMap["warmup_enabled"]; exists {
 				cfg.Learning.WarmUpEnabled = learning.WarmUpEnabled
+			}
+			if _, exists := learningMap["intelligent_swap_enabled"]; exists {
+				cfg.Learning.IntelligentSwapEnabled = learning.IntelligentSwapEnabled
 			}
 		}
 
