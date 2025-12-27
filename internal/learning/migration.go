@@ -331,6 +331,28 @@ CREATE INDEX IF NOT EXISTS idx_stop_analyses_decision ON stop_analyses(final_dec
 CREATE INDEX IF NOT EXISTS idx_stop_analyses_time ON stop_analyses(analyzed_at DESC);
 `,
 	},
+	{
+		Version:     9,
+		Description: "Add LIP events table for Learning-Informed Progress tracking",
+		SQL: `
+-- LIP events table for test and build result tracking
+CREATE TABLE IF NOT EXISTS lip_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_execution_id INTEGER NOT NULL,
+    task_number TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    details TEXT,
+    confidence REAL DEFAULT 1.0,
+    FOREIGN KEY (task_execution_id) REFERENCES task_executions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_lip_events_task_execution ON lip_events(task_execution_id);
+CREATE INDEX IF NOT EXISTS idx_lip_events_task_number ON lip_events(task_number);
+CREATE INDEX IF NOT EXISTS idx_lip_events_event_type ON lip_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_lip_events_timestamp ON lip_events(timestamp DESC);
+`,
+	},
 }
 
 // MigrationVersion represents a record of an applied migration
