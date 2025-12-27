@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
