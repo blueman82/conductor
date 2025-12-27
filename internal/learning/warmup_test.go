@@ -479,12 +479,14 @@ func TestNormalizeFilePaths(t *testing.T) {
 
 func TestWarmUpContextFields(t *testing.T) {
 	// Test that WarmUpContext has all required fields
+	// Note: SimilarPatterns is []string as per success criteria
 	warmUp := WarmUpContext{
 		RelevantHistory: []TaskExecution{
 			{ID: 1, TaskName: "Test"},
 		},
-		SimilarPatterns: []SuccessfulPattern{
-			{TaskHash: "abc123", PatternDescription: "pattern"},
+		SimilarPatterns: []string{
+			"pattern description 1",
+			"pattern description 2",
 		},
 		RecommendedApproach: "Use pattern X",
 		Confidence:          0.85,
@@ -495,7 +497,8 @@ func TestWarmUpContextFields(t *testing.T) {
 	}
 
 	assert.Len(t, warmUp.RelevantHistory, 1)
-	assert.Len(t, warmUp.SimilarPatterns, 1)
+	assert.Len(t, warmUp.SimilarPatterns, 2)
+	assert.Equal(t, "pattern description 1", warmUp.SimilarPatterns[0])
 	assert.Equal(t, "Use pattern X", warmUp.RecommendedApproach)
 	assert.Equal(t, 0.85, warmUp.Confidence)
 	assert.Len(t, warmUp.ProgressScores, 1)

@@ -15,8 +15,9 @@ type WarmUpContext struct {
 	// RelevantHistory contains similar past task executions
 	RelevantHistory []TaskExecution `json:"relevant_history"`
 
-	// SimilarPatterns contains patterns from tasks with similar file paths or names
-	SimilarPatterns []SuccessfulPattern `json:"similar_patterns"`
+	// SimilarPatterns contains pattern descriptions from tasks with similar file paths or names
+	// Each string is a pattern description extracted from successful historical tasks
+	SimilarPatterns []string `json:"similar_patterns"`
 
 	// RecommendedApproach suggests the best approach based on historical success
 	RecommendedApproach string `json:"recommended_approach"`
@@ -85,7 +86,7 @@ func (p *DefaultWarmUpProvider) BuildContext(ctx context.Context, task *TaskInfo
 
 	warmUp := &WarmUpContext{
 		RelevantHistory: []TaskExecution{},
-		SimilarPatterns: []SuccessfulPattern{},
+		SimilarPatterns: []string{},
 		ProgressScores:  make(map[int64]ProgressScore),
 		SimilarTaskIDs:  []int64{},
 	}
@@ -118,7 +119,7 @@ func (p *DefaultWarmUpProvider) BuildContext(ctx context.Context, task *TaskInfo
 	warmUp.SimilarPatterns, err = p.extractPatterns(ctx, task, similarTasks)
 	if err != nil {
 		// Non-fatal: continue without patterns
-		warmUp.SimilarPatterns = []SuccessfulPattern{}
+		warmUp.SimilarPatterns = []string{}
 	}
 
 	// Step 5: Determine recommended approach from top successful execution
@@ -208,9 +209,10 @@ func (p *DefaultWarmUpProvider) findSimilarTasks(ctx context.Context, task *Task
 	return similarTasks, nil
 }
 
-// extractPatterns extracts successful patterns from similar tasks.
-func (p *DefaultWarmUpProvider) extractPatterns(ctx context.Context, task *TaskInfo, similarTasks []SimilarTask) ([]SuccessfulPattern, error) {
-	var patterns []SuccessfulPattern
+// extractPatterns extracts successful pattern descriptions from similar tasks.
+// Returns a slice of pattern description strings.
+func (p *DefaultWarmUpProvider) extractPatterns(ctx context.Context, task *TaskInfo, similarTasks []SimilarTask) ([]string, error) {
+	var patterns []string
 
 	// Get top patterns from the store
 	topPatterns, err := p.store.GetTopPatterns(ctx, 20)
@@ -228,13 +230,14 @@ func (p *DefaultWarmUpProvider) extractPatterns(ctx context.Context, task *TaskI
 		}
 	}
 
-	// Filter patterns to those relevant to similar tasks
+	// Filter patterns to those relevant to similar tasks and extract descriptions
 	for _, pattern := range topPatterns {
 		// Check if pattern hash overlaps with similar task hashes (prefix match)
 		for hash := range similarHashes {
 			if strings.HasPrefix(pattern.TaskHash, hash[:min(len(hash), 8)]) ||
 				strings.HasPrefix(hash, pattern.TaskHash[:min(len(pattern.TaskHash), 8)]) {
-				patterns = append(patterns, *pattern)
+				// Extract the pattern description as a string
+				patterns = append(patterns, pattern.PatternDescription)
 				break
 			}
 		}

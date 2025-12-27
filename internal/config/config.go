@@ -104,6 +104,12 @@ type LearningConfig struct {
 	// EnhancePrompts enables prompt enhancement based on learned patterns
 	EnhancePrompts bool `yaml:"enhance_prompts"`
 
+	// WarmUpEnabled enables warm-up context injection for agent priming (v2.29+)
+	// When true, agents receive similar successful task approaches, common pitfalls,
+	// and file-specific patterns before task execution.
+	// Default: true
+	WarmUpEnabled bool `yaml:"warmup_enabled"`
+
 	// QCReadsPlanContext enables QC agent to read plan context
 	QCReadsPlanContext bool `yaml:"qc_reads_plan_context"`
 
@@ -618,6 +624,7 @@ func DefaultConfig() *Config {
 			AutoAdaptAgent:         false,
 			SwapDuringRetries:      true,
 			EnhancePrompts:         true,
+			WarmUpEnabled:          true, // Enable warm-up context by default
 			QCReadsPlanContext:     true,
 			QCReadsDBContext:       true,
 			MaxContextEntries:      10,
@@ -911,6 +918,9 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := learningMap["max_executions_per_task"]; exists {
 				cfg.Learning.MaxExecutionsPerTask = learning.MaxExecutionsPerTask
+			}
+			if _, exists := learningMap["warmup_enabled"]; exists {
+				cfg.Learning.WarmUpEnabled = learning.WarmUpEnabled
 			}
 		}
 

@@ -201,6 +201,12 @@ type DefaultTaskExecutor struct {
 	// Architecture Checkpoint integration (v2.27+)
 	ArchitectureHook *ArchitectureCheckpointHook // Architecture checkpoint hook for 6-question assessment
 
+	// LIP Collection integration (v2.29+)
+	LIPCollectorHook *LIPCollectorHook // LIP event collector for test/build results and knowledge graph
+
+	// Warm-Up Context integration (v2.29+)
+	WarmUpHook *WarmUpHook // Warm-up context hook for agent priming with historical patterns
+
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult            // Populated after RunTestCommands
 	lastCriterionResults []CriterionVerificationResult  // Populated after RunCriterionVerifications
@@ -268,7 +274,7 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 }
 
 // preTaskHook queries the learning database and adapts agent/prompt before execution.
-// This hook enables adaptive learning from past failures.
+// This hook enables adaptive learning from past failures and warm-up context injection.
 func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Task) error {
 	// Learning disabled - no-op
 	if te.LearningStore == nil {
@@ -308,6 +314,22 @@ func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Tas
 	// Enhance prompt with learning context if there are past failures
 	if analysis.FailedAttempts > 0 {
 		task.Prompt = enhancePromptWithLearning(task.Prompt, analysis)
+	}
+
+	// Warm-up context injection (v2.29+)
+	// Injects similar successful task approaches, common pitfalls, and file-specific patterns
+	// This happens AFTER failure analysis to avoid duplicating failure context
+	if te.WarmUpHook != nil {
+		modifiedTask, warmUpErr := te.WarmUpHook.InjectContext(ctx, *task)
+		if warmUpErr != nil {
+			// Graceful degradation - log but don't fail
+			if te.Logger != nil {
+				te.Logger.Warnf("WarmUp: failed to inject context for task %s: %v", task.Number, warmUpErr)
+			}
+		} else {
+			// Apply the modified task (with injected prompt)
+			*task = modifiedTask
+		}
 	}
 
 	return nil
@@ -517,6 +539,12 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 		// Log warning but don't fail task (graceful degradation)
 		// In production: log.Warn("failed to record execution: %v", err)
 		// For now, silently continue
+	}
+
+	// LIP Collection: Create knowledge graph edges in post-task hook (v2.29+)
+	// Records: task→succeeded_with→agent (or used_by for failures)
+	if te.LIPCollectorHook != nil {
+		te.LIPCollectorHook.PostTaskHook(ctx, *task, result, success)
 	}
 }
 
@@ -1010,6 +1038,9 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 		result.Duration = totalDuration
 		result.SessionID = invocation.SessionID // Capture for rate limit recovery
 
+		// Track task execution ID for LIP event collection (v2.29+)
+		var currentTaskExecutionID int64
+
 		// Collect behavioral metrics post-invocation (before QC)
 		// This captures the session_id from the invocation and loads JSONL metrics
 		if invocation.SessionID != "" {
@@ -1041,6 +1072,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 
 				// Record to get task_execution_id
 				if err := te.LearningStore.RecordExecution(ctx, prelimExec); err == nil {
+					currentTaskExecutionID = prelimExec.ID // Store for LIP event collection
 					// Collect behavioral metrics with the task_execution_id
 					_ = te.collectBehavioralMetrics(ctx, invocation.SessionID, task, prelimExec.ID)
 				}
@@ -1070,6 +1102,13 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 			if te.Logger != nil {
 				te.Logger.LogTestCommands(testResults)
 			}
+
+			// LIP Collection: Record test results as LIP events (v2.29+)
+			// This is a NEW event type - tool/file events are already tracked via RecordSessionMetrics
+			if te.LIPCollectorHook != nil && currentTaskExecutionID > 0 {
+				_ = te.LIPCollectorHook.RecordTestResults(ctx, currentTaskExecutionID, task.Number, testResults)
+			}
+
 			if testErr != nil {
 				// Track failure but continue to allow retry (v2.10+)
 				testFailureErr = testErr
