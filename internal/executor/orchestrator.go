@@ -76,6 +76,9 @@ type OrchestratorConfig struct {
 	FileToTaskMapping map[string]string
 	// Pattern Intelligence hook (v2.23+)
 	PatternHook *PatternIntelligenceHook
+	// TargetTask filters execution to a single task (v2.27+)
+	// Empty string means run all tasks
+	TargetTask string
 }
 
 // Orchestrator coordinates plan execution, handles graceful shutdown, and aggregates results.
@@ -91,6 +94,9 @@ type Orchestrator struct {
 	retryFailed       bool              // Retry tasks that have failed status
 	// Pattern Intelligence hook (v2.23+)
 	patternHook *PatternIntelligenceHook
+	// targetTask filters execution to a single task (v2.27+)
+	// Empty string means run all tasks
+	targetTask string
 }
 
 // NewOrchestrator creates a new Orchestrator instance.
@@ -170,6 +176,7 @@ func NewOrchestratorFromConfig(config OrchestratorConfig) *Orchestrator {
 		retryFailed:       config.RetryFailed,
 		FileToTaskMapping: config.FileToTaskMapping,
 		patternHook:       config.PatternHook,
+		targetTask:        config.TargetTask,
 	}
 
 	// Wire Pattern Intelligence hook to WaveExecutor if provided (v2.23+)
@@ -204,6 +211,27 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (
 				o.FileToTaskMapping[taskNum] = filePath
 			}
 		}
+	}
+
+	// Filter tasks if targetTask is set (--task flag)
+	if o.targetTask != "" {
+		var filteredTasks []models.Task
+		var targetFound bool
+		for _, task := range mergedPlan.Tasks {
+			if task.Number == o.targetTask {
+				filteredTasks = append(filteredTasks, task)
+				targetFound = true
+			} else {
+				// Log skipped tasks
+				if o.logger != nil {
+					fmt.Printf("Skipping task %s (--task filter)\n", task.Number)
+				}
+			}
+		}
+		if !targetFound {
+			return nil, fmt.Errorf("task %s not found in plan", o.targetTask)
+		}
+		mergedPlan.Tasks = filteredTasks
 	}
 
 	// Set up context with cancellation for signal handling

@@ -138,6 +138,9 @@ Examples:
 	cmd.Flags().Bool("no-enforce-package-guard", false, "Disable Go package conflict guard")
 	cmd.Flags().Bool("no-enforce-doc-targets", false, "Disable documentation target verification")
 
+	// Single task execution flag
+	cmd.Flags().String("task", "", "Run only the specified task number")
+
 	return cmd
 }
 
@@ -410,6 +413,22 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Handle --task flag: validate task exists (orchestrator does the filtering)
+	singleTask, _ := cmd.Flags().GetString("task")
+	if singleTask != "" {
+		var foundTask bool
+		for i := range plan.Tasks {
+			if plan.Tasks[i].Number == singleTask {
+				foundTask = true
+				break
+			}
+		}
+		if !foundTask {
+			return fmt.Errorf("task %s not found in plan", singleTask)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Running single task: %s\n", singleTask)
+	}
+
 	if warnings, alignmentErrors := parser.ValidateKeyPointCriteriaAlignment(plan.Tasks, cfg.Validation.KeyPointCriteria); len(warnings) > 0 || len(alignmentErrors) > 0 {
 		for _, warn := range warnings {
 			fmt.Fprintf(cmd.OutOrStdout(), "Warning: %s\n", warn)
@@ -478,14 +497,21 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Dry-run mode: validate only
 	if dryRun {
 		fmt.Fprintf(cmd.OutOrStdout(), "\nDry-run mode: Plan is valid and ready for execution.\n")
+		if singleTask != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "  Target task: %s\n", singleTask)
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "\nExecution waves:\n")
 		for i, wave := range waves {
-			// Filter tasks based on SkipCompleted config (same logic as wave executor)
+			// Filter tasks based on SkipCompleted and --task flag (same logic as orchestrator)
 			var tasksToDisplay []string
 			for _, taskNum := range wave.TaskNumbers {
 				task, ok := getTask(plan.Tasks, taskNum)
 				if !ok {
 					continue
+				}
+				// Apply --task filter in dry-run mode
+				if singleTask != "" && task.Number != singleTask {
+					continue // Skip tasks not matching --task filter
 				}
 				// Apply skip-completed filter in dry-run mode
 				if cfg.SkipCompleted && task.CanSkip() {
@@ -685,6 +711,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		PlanFile:      planFile,
 		SkipCompleted: cfg.SkipCompleted,
 		RetryFailed:   cfg.RetryFailed,
+		TargetTask:    singleTask,
 	})
 
 	// Create context with timeout

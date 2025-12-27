@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -160,6 +161,7 @@ func (tas *TaskAgentSelector) invokeClaudeForSelection(ctx context.Context, prom
 	}
 
 	cmd := exec.CommandContext(ctxWithTimeout, tas.ClaudePath, args...)
+	claude.SetCleanEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -315,6 +316,7 @@ func tryClaudeClassification(output string, invoker interface{}) *DetectedError 
 	// Call Claude CLI directly with schema enforcement
 	// No timeout - allow Claude to take as long as needed for deep analysis
 	cmd := exec.Command("claude", "-p", prompt, "--json-schema", schema, "--output-format", "json")
+	claude.SetCleanEnv(cmd)
 	outputBytes, err := cmd.Output()
 	if err != nil {
 		// Network error or command failure - fall back to regex

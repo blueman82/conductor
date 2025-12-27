@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
@@ -367,6 +368,7 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 
 	// Create command with context (for timeout)
 	cmd := exec.CommandContext(ctx, inv.ClaudePath, args...)
+	claude.SetCleanEnv(cmd)
 
 	// Capture stdout and stderr separately
 	// This prevents Claude CLI stderr noise (e.g., file watcher errors) from
