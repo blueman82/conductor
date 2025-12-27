@@ -294,7 +294,7 @@ func IntelligentSelectQCAgents(
 ) ([]string, string, error) {
 	// Use provided selector or create new one
 	if selector == nil {
-		selector = NewIntelligentSelector(registry, config.CacheTTLSeconds)
+		selector = NewIntelligentSelector(registry, config.CacheTTLSeconds, config.SelectionTimeoutSeconds)
 	}
 
 	// Ensure registry is set
