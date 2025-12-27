@@ -1270,9 +1270,10 @@ quality_control:
     # blocked: [deprecated-agent]                        # Agents to never use
 
     # Intelligent selection settings (v2.4+)
-    max_agents: 4              # Max QC agents to select (default: 4)
-    cache_ttl_seconds: 3600    # Cache TTL in seconds (default: 3600)
-    require_code_review: true  # Always include code-reviewer baseline (default: true)
+    max_agents: 4                    # Max QC agents to select (default: 4)
+    cache_ttl_seconds: 3600          # Cache TTL in seconds (default: 3600)
+    selection_timeout_seconds: 90    # Claude selection timeout (default: 90)
+    require_code_review: true        # Always include code-reviewer baseline (default: true)
 
 # Intelligent QC Agent Selection Example (v2.4+)
 # For domain-aware, context-sensitive agent selection:
