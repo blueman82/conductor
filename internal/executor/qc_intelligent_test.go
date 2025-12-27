@@ -234,7 +234,7 @@ func TestIntelligentSelectorGuardrails(t *testing.T) {
 }
 
 func TestBuildSelectionPrompt(t *testing.T) {
-	selector := NewIntelligentSelector(nil, 3600)
+	selector := NewIntelligentSelector(nil, 3600, 90)
 
 	task := models.Task{
 		Number: "5",
