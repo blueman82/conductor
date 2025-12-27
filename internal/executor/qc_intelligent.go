@@ -28,14 +28,18 @@ type IntelligentSelector struct {
 	Timeout    time.Duration
 }
 
-// NewIntelligentSelector creates a new intelligent selector with defaults
-func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int) *IntelligentSelector {
+// NewIntelligentSelector creates a new intelligent selector with configurable timeout
+func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int, timeoutSeconds int) *IntelligentSelector {
+	timeout := 90 * time.Second // default
+	if timeoutSeconds > 0 {
+		timeout = time.Duration(timeoutSeconds) * time.Second
+	}
 	return &IntelligentSelector{
 		Registry:   registry,
 		Cache:      NewQCSelectionCache(cacheTTLSeconds),
 		ClaudePath: "claude",
 		MaxAgents:  4,
-		Timeout:    30 * time.Second,
+		Timeout:    timeout,
 	}
 }
 
