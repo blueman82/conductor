@@ -10,6 +10,7 @@ import (
 
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/budget"
+	"github.com/harrison/conductor/internal/claude"
 )
 
 // EnhancementResult contains Claude's confidence assessment
