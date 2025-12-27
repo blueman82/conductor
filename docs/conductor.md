@@ -723,6 +723,24 @@ skip_completed: true
 - Dependencies from skipped tasks are still satisfied
 - Pending and failed tasks execute normally
 
+#### Run Single Task
+
+Execute only a specific task from the plan:
+
+```bash
+# Run only task 3
+conductor run plan.md --task 3
+
+# Combine with dry-run to preview
+conductor run plan.md --task 3 --dry-run
+```
+
+**Behavior:**
+- Only the specified task executes, all others are skipped
+- Dependencies are NOT auto-included (task runs in isolation)
+- Useful for debugging or re-running a specific task
+- Works with both execution and dry-run modes
+
 #### Retry Failed Tasks
 
 Retry previously failed tasks on plan resume:
