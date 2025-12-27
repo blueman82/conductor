@@ -503,7 +503,7 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 	if qc.AgentConfig.Mode == "intelligent" {
 		// Ensure intelligent selector is initialized
 		if qc.IntelligentSelector == nil && qc.Registry != nil {
-			qc.IntelligentSelector = NewIntelligentSelector(qc.Registry, qc.AgentConfig.CacheTTLSeconds)
+			qc.IntelligentSelector = NewIntelligentSelector(qc.Registry, qc.AgentConfig.CacheTTLSeconds, qc.AgentConfig.SelectionTimeoutSeconds)
 		}
 
 		selCtx = &SelectionContext{
