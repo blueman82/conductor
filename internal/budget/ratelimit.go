@@ -60,10 +60,10 @@ var (
 	resetsTimePattern = regexp.MustCompile(`resets\s+(\d+)(am|pm)\s*\(([^)]+)\)`)
 
 	// Pattern 6: False positive exclusions - displayed/logged text, not actual errors (v2.28+)
+	// Only excludes obvious log/display formats, NOT JSON error messages
 	falsePositivePattern = regexp.MustCompile(`(?i)(\[RATE.?LIMIT\]|` + // Log prefixes like [RATE LIMIT]
-		"`rate.?limit|" + // Markdown inline code
-		`"rate.?limit|` + // Quoted strings
-		`'rate.?limit|` + // Single-quoted strings
+		"`rate.?limit`|" + // Markdown inline code (with closing backtick)
+		`⏸️|⏳|` + // Emoji indicators from display output
 		`waiting for reset\.\.\.|` + // Historical log messages
 		`until auto-resume)`) // Countdown display text
 )
