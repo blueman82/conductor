@@ -680,6 +680,9 @@ conductor run plan.md --timeout 1h
 # Verbose output
 conductor run plan.md --verbose
 
+# Run only a specific task
+conductor run plan.md --task 3
+
 # Resume execution (skip completed tasks)
 conductor run plan.md --skip-completed
 
