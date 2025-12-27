@@ -79,6 +79,12 @@ func ParseRateLimitFromOutput(output string) *RateLimitInfo {
 		return nil
 	}
 
+	// Skip false positives - displayed/logged text that mentions rate limits
+	// but isn't an actual rate limit error (v2.28+)
+	if falsePositivePattern.MatchString(output) {
+		return nil
+	}
+
 	info := &RateLimitInfo{
 		DetectedAt: time.Now(),
 		RawMessage: output,
