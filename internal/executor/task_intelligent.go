@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 )
 
