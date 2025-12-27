@@ -58,6 +58,14 @@ var (
 
 	// Pattern 5: "resets 1am (Europe/Dublin)" format from Claude CLI (v2.20.1+)
 	resetsTimePattern = regexp.MustCompile(`resets\s+(\d+)(am|pm)\s*\(([^)]+)\)`)
+
+	// Pattern 6: False positive exclusions - displayed/logged text, not actual errors (v2.28+)
+	falsePositivePattern = regexp.MustCompile(`(?i)(\[RATE.?LIMIT\]|` + // Log prefixes like [RATE LIMIT]
+		"`rate.?limit|" + // Markdown inline code
+		`"rate.?limit|` + // Quoted strings
+		`'rate.?limit|` + // Single-quoted strings
+		`waiting for reset\.\.\.|` + // Historical log messages
+		`until auto-resume)`) // Countdown display text
 )
 
 // ParseRateLimitFromOutput parses rate limit info from CLI stdout/stderr
