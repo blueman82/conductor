@@ -515,6 +515,14 @@ Run: conductor run docs/plans/<slug>.yaml
 
 ---
 
+## Golden Rules (NON-NEGOTIABLE)
+
+1. **Code Reuse First**: Before creating new code, search for existing implementations (`grep -r "pattern" internal/`). Use directly, extend, or implement existing interfaces. New utilities require justification in `implementation.approach`.
+
+2. **No Wrappers Without Value**: Only create adapter layers when they add real functionality (interface adaptation, lifecycle management). Direct usage preferred over unnecessary abstraction.
+
+---
+
 ## Quick Reference: Common Failures
 
 | Failure | Cause | Prevention |
