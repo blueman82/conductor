@@ -405,8 +405,10 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// Check for rate limit in raw output BEFORE JSON parsing (v2.20.1+)
 	// This ensures rate limit messages like "You're out of extra usage · resets 1am"
 	// are properly detected even when they fail JSON parsing
+	// NOTE: Only check if command failed (err != nil) to avoid false positives
+	// when agent output contains text about rate limiting (v2.28+)
 	rawOutput := stdout.String()
-	if isRateLimitOutput(rawOutput) {
+	if err != nil && isRateLimitOutput(rawOutput) {
 		rateLimitErr := &ErrRateLimit{RawMessage: rawOutput}
 		result.Error = rateLimitErr
 		return result, rateLimitErr // Return error so executeWithRateLimitRecovery can catch it
