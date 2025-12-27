@@ -74,6 +74,7 @@ func (a *Assessor) invoke(ctx context.Context, task models.Task) (*AssessmentRes
 	}
 
 	cmd := exec.CommandContext(ctxWithTimeout, a.ClaudePath, args...)
+	claude.SetCleanEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
