@@ -325,7 +325,7 @@ func TestLIPCalculateProgress(t *testing.T) {
 		assert.InDelta(t, 0.6, float64(score), 0.01)
 	})
 
-	t.Run("caps score at 1.0", func(t *testing.T) {
+	t.Run("reaches maximum achievable score", func(t *testing.T) {
 		store, cleanup := setupLIPTestStore(t)
 		defer cleanup()
 
@@ -338,10 +338,10 @@ func TestLIPCalculateProgress(t *testing.T) {
 		err := store.RecordExecution(ctx, exec)
 		require.NoError(t, err)
 
-		// Record all positive LIP events
+		// Record all positive LIP event types (score uses AVG per type, so multiple of same type averages)
 		for _, et := range []LIPEventType{
-			LIPEventTestPass,
-			LIPEventBuildSuccess,
+			LIPEventTestPass,   // 0.3
+			LIPEventBuildSuccess, // 0.3
 		} {
 			err = store.RecordEvent(ctx, &LIPEvent{
 				TaskExecutionID: exec.ID,
@@ -354,9 +354,9 @@ func TestLIPCalculateProgress(t *testing.T) {
 
 		// Create behavioral session with all successful operations
 		sessionData := &BehavioralSessionData{
-			TaskExecutionID:   exec.ID,
-			SessionStart:      time.Now(),
-			TotalToolCalls:    5,
+			TaskExecutionID:     exec.ID,
+			SessionStart:        time.Now(),
+			TotalToolCalls:      5,
 			TotalFileOperations: 3,
 		}
 		_, err = store.RecordSessionMetrics(ctx, sessionData,
@@ -380,6 +380,7 @@ func TestLIPCalculateProgress(t *testing.T) {
 		score, err := store.CalculateProgress(ctx, exec.ID)
 		require.NoError(t, err)
 		// Max achievable: test_pass(0.3) + build_success(0.3) + tool(0.1) + file(0.2) = 0.9
+		// The algorithm caps at 1.0 but max weights sum to 0.9
 		assert.InDelta(t, 0.9, float64(score), 0.01)
 	})
 }
