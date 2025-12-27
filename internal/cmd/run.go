@@ -138,6 +138,9 @@ Examples:
 	cmd.Flags().Bool("no-enforce-package-guard", false, "Disable Go package conflict guard")
 	cmd.Flags().Bool("no-enforce-doc-targets", false, "Disable documentation target verification")
 
+	// Single task execution flag
+	cmd.Flags().String("task", "", "Run only the specified task number")
+
 	return cmd
 }
 
@@ -408,6 +411,23 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	if len(plan.Tasks) == 0 {
 		fmt.Fprintf(cmd.OutOrStdout(), "Plan file is valid but contains no tasks.\n")
 		return nil
+	}
+
+	// Handle --task flag: filter to single task if specified
+	singleTask, _ := cmd.Flags().GetString("task")
+	if singleTask != "" {
+		var foundTask *models.Task
+		for i := range plan.Tasks {
+			if plan.Tasks[i].Number == singleTask {
+				foundTask = &plan.Tasks[i]
+				break
+			}
+		}
+		if foundTask == nil {
+			return fmt.Errorf("task %s not found in plan", singleTask)
+		}
+		plan.Tasks = []models.Task{*foundTask}
+		fmt.Fprintf(cmd.OutOrStdout(), "Running single task: %s\n", singleTask)
 	}
 
 	if warnings, alignmentErrors := parser.ValidateKeyPointCriteriaAlignment(plan.Tasks, cfg.Validation.KeyPointCriteria); len(warnings) > 0 || len(alignmentErrors) > 0 {
@@ -685,6 +705,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		PlanFile:      planFile,
 		SkipCompleted: cfg.SkipCompleted,
 		RetryFailed:   cfg.RetryFailed,
+		TargetTask:    singleTask,
 	})
 
 	// Create context with timeout
