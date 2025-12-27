@@ -319,7 +319,7 @@ func (s *Store) calculateToolExecutionScore(ctx context.Context, taskExecutionID
 
 // calculateFileOperationScore computes the score contribution from file operations.
 func (s *Store) calculateFileOperationScore(ctx context.Context, taskExecutionID int64) (float64, error) {
-	query := `SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) as success_count
+	query := `SELECT COALESCE(COUNT(*), 0) as total, COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) as success_count
 		FROM file_operations fo
 		JOIN behavioral_sessions bs ON fo.session_id = bs.id
 		WHERE bs.task_execution_id = ?`
