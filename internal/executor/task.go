@@ -723,6 +723,8 @@ func (te *DefaultTaskExecutor) executeWithRateLimitRecovery(ctx context.Context,
 			te.EventLogger.LogRateLimitResume()
 		}
 
+		// Mark as retry so context injection happens on next iteration
+		isRetry = true
 		// Retry the task (loop continues with lastSessionID set)
 	}
 }
