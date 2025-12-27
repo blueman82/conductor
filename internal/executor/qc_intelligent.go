@@ -185,6 +185,7 @@ func (is *IntelligentSelector) invokeClaudeForSelection(ctx context.Context, pro
 	}
 
 	cmd := exec.CommandContext(ctxWithTimeout, is.ClaudePath, args...)
+	claude.SetCleanEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
