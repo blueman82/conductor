@@ -46,6 +46,7 @@ See [releases](https://github.com/blueman82/conductor/releases) for other platfo
 conductor validate plan.md          # Check syntax and dependencies
 conductor run plan.md               # Execute the plan
 conductor run plan.md --dry-run     # Preview without executing
+conductor run plan.md --task 3      # Run only task 3
 conductor run plan.md --skip-completed --retry-failed  # Resume
 ```
 
