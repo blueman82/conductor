@@ -123,9 +123,6 @@ type LearningConfig struct {
 	// MaxContextEntries limits context entries loaded from DB
 	MaxContextEntries int `yaml:"max_context_entries"`
 
-	// MinFailuresBeforeAdapt is the minimum number of failures before adapting
-	MinFailuresBeforeAdapt int `yaml:"min_failures_before_adapt"`
-
 	// KeepExecutionsDays is the number of days to keep execution history
 	KeepExecutionsDays int `yaml:"keep_executions_days"`
 
