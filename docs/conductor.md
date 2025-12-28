@@ -3183,10 +3183,8 @@ learning:
   # Database path (default: .conductor/learning/executions.db)
   db_path: .conductor/learning/executions.db
 
-  # Auto-adapt agent selection based on learned patterns (default: false)
-  auto_adapt_agent: false
-
   # Enable agent swapping during retry loops (default: true)
+  # Uses IntelligentAgentSwapper for Claude-powered agent selection
   swap_during_retries: true
 
   # Enhance prompts with learned context (default: true)
@@ -3201,9 +3199,6 @@ learning:
   # Maximum context entries to load (default: 10)
   max_context_entries: 10
 
-  # Minimum failures before adapting strategy (default: 2)
-  min_failures_before_adapt: 2
-
   # Days to keep execution history (default: 90, 0 = forever)
   keep_executions_days: 90
 
@@ -3217,13 +3212,11 @@ learning:
 |--------|------|---------|-------------|
 | `enabled` | bool | `true` | Master switch for learning system |
 | `db_path` | string | `.conductor/learning/executions.db` | Path to SQLite database file |
-| `auto_adapt_agent` | bool | `false` | Automatically switch agents on failures |
-| `swap_during_retries` | bool | `true` | Enable inter-retry agent swapping |
+| `swap_during_retries` | bool | `true` | Enable inter-retry agent swapping via IntelligentAgentSwapper |
 | `enhance_prompts` | bool | `true` | Add learned context to prompts |
 | `qc_reads_plan_context` | bool | `true` | QC loads execution history from plan |
 | `qc_reads_db_context` | bool | `true` | QC loads execution history from database |
 | `max_context_entries` | int | `10` | Maximum historical entries for QC context |
-| `min_failures_before_adapt` | int | `2` | Failure threshold before adapting |
 | `keep_executions_days` | int | `90` | Days to retain history (0 = forever) |
 | `max_executions_per_task` | int | `100` | Max records per task |
 
