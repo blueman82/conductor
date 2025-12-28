@@ -233,12 +233,11 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 
 	te := &DefaultTaskExecutor{
 		invoker:                invoker,
-		reviewer:               reviewer,
-		planUpdater:            planUpdater,
-		cfg:                    cfg,
-		clock:                  time.Now,
-		FileLockManager:        NewFileLockManager(),
-		MinFailuresBeforeAdapt: 2, // Default threshold
+		reviewer:        reviewer,
+		planUpdater:     planUpdater,
+		cfg:             cfg,
+		clock:           time.Now,
+		FileLockManager: NewFileLockManager(),
 	}
 
 	if cfg.QualityControl.Enabled {
