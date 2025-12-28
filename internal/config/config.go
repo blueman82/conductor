@@ -95,10 +95,7 @@ type LearningConfig struct {
 	// DBPath is the path to the learning database
 	DBPath string `yaml:"db_path"`
 
-	// AutoAdaptAgent enables automatic agent adaptation based on learned patterns
-	AutoAdaptAgent bool `yaml:"auto_adapt_agent"`
-
-	// SwapDuringRetries enables agent swapping during retry attempts
+	// SwapDuringRetries enables agent swapping during retry attempts using IntelligentAgentSwapper
 	SwapDuringRetries bool `yaml:"swap_during_retries"`
 
 	// IntelligentSwapEnabled enables Claude-powered intelligent agent selection (v2.30+)
