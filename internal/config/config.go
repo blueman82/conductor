@@ -910,9 +910,6 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := learningMap["max_context_entries"]; exists {
 				cfg.Learning.MaxContextEntries = learning.MaxContextEntries
 			}
-			if _, exists := learningMap["min_failures_before_adapt"]; exists {
-				cfg.Learning.MinFailuresBeforeAdapt = learning.MinFailuresBeforeAdapt
-			}
 			if _, exists := learningMap["keep_executions_days"]; exists {
 				cfg.Learning.KeepExecutionsDays = learning.KeepExecutionsDays
 			}
