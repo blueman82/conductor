@@ -3408,28 +3408,28 @@ quality_control:
 }
 ```
 
-#### Scenario 2: Automatic Agent Adaptation (Cross-Run)
+#### Scenario 2: Intelligent Agent Swap During Retries
 
 ```yaml
 # .conductor/config.yaml
 learning:
   enabled: true
-  auto_adapt_agent: true
-  min_failures_before_adapt: 2
+  swap_during_retries: true
 ```
 
 **What happens:**
 
-1. **First run**: Task 3 fails with `backend-developer` agent
-2. **Second run**: Task 3 fails again with `backend-developer` agent
-3. **Third run**: System automatically switches to `golang-pro` agent
-4. **Result**: Task 3 succeeds with adapted agent
+1. **Attempt 1**: Task 3 fails with `backend-developer` agent
+2. **QC Review**: Returns RED verdict with error context
+3. **IntelligentAgentSwapper**: Claude analyzes file types, error patterns, and knowledge graph
+4. **Recommendation**: "golang-pro" with 85% confidence (Go files detected)
+5. **Attempt 2**: Task 3 retries with `golang-pro` agent
+6. **Result**: Task 3 succeeds
 
 **Console output:**
 ```
-[INFO] Pre-task hook: Analyzing Task 3 history...
-[INFO] Detected 2 failures with agent: backend-developer
-[INFO] Adapting agent: backend-developer → golang-pro
+[INFO] Task 3: QC returned RED
+[INFO] Task 3: Agent swap: backend-developer → golang-pro (Go files detected, 85% confidence)
 [INFO] Executing Task 3 with agent: golang-pro
 [SUCCESS] Task 3 completed: GREEN
 ```
