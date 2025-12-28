@@ -172,10 +172,8 @@ type DefaultTaskExecutor struct {
 	PlanFile                    string                   // Plan file path for learning queries
 	SessionID                   string                   // Session ID for learning tracking
 	RunNumber                   int                      // Run number for learning tracking
-	metrics                     *learning.PatternMetrics // Pattern detection metrics (optional)
-	AutoAdaptAgent              bool                     // Enable automatic agent adaptation
-	MinFailuresBeforeAdapt      int                      // Minimum failures before adapting agent
-	SwapDuringRetries           bool                     // Enable inter-retry agent swapping
+	metrics           *learning.PatternMetrics // Pattern detection metrics (optional)
+	SwapDuringRetries bool                     // Enable inter-retry agent swapping (uses IntelligentAgentSwapper)
 	Plan                        *models.Plan             // Plan reference for integration prompt builder
 	EnforceDependencyChecks     bool                     // Run dependency checks before task invocation
 	CommandRunner               CommandRunner            // Command runner for dependency checks (optional)
