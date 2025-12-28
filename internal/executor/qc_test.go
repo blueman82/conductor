@@ -3654,3 +3654,198 @@ func TestQCJustification(t *testing.T) {
 		// This is tested in integration tests
 	})
 }
+
+// TestFormatCommitVerification tests commit verification formatting for QC prompts (v2.30+)
+func TestFormatCommitVerification(t *testing.T) {
+	t.Run("no_commit_spec_returns_empty", func(t *testing.T) {
+		cv := &CommitVerification{Found: true, CommitHash: "abc123", Message: "feat: test"}
+		result := FormatCommitVerification(cv, false)
+		if result != "" {
+			t.Errorf("expected empty string when hasCommitSpec is false, got %q", result)
+		}
+	})
+
+	t.Run("nil_verification_returns_empty", func(t *testing.T) {
+		result := FormatCommitVerification(nil, true)
+		if result != "" {
+			t.Errorf("expected empty string when verification is nil, got %q", result)
+		}
+	})
+
+	t.Run("found_commit_shows_verified", func(t *testing.T) {
+		cv := &CommitVerification{
+			Found:      true,
+			CommitHash: "abc1234",
+			FullHash:   "abc1234567890def",
+			Message:    "feat: add new feature",
+			Duration:   50 * time.Millisecond,
+		}
+		result := FormatCommitVerification(cv, true)
+
+		if !strings.Contains(result, "COMMIT VERIFICATION STATUS") {
+			t.Error("expected header in output")
+		}
+		if !strings.Contains(result, "✅ **Commit verified**") {
+			t.Error("expected verified indicator")
+		}
+		if !strings.Contains(result, "feat: add new feature") {
+			t.Error("expected commit message in output")
+		}
+		if !strings.Contains(result, "abc1234") {
+			t.Error("expected commit hash in output")
+		}
+		if !strings.Contains(result, "Agent followed commit instructions correctly") {
+			t.Error("expected positive note in output")
+		}
+	})
+
+	t.Run("missing_commit_shows_warning", func(t *testing.T) {
+		cv := &CommitVerification{
+			Found:    false,
+			Mismatch: "no commit found matching \"feat: expected\"",
+			Duration: 30 * time.Millisecond,
+		}
+		result := FormatCommitVerification(cv, true)
+
+		if !strings.Contains(result, "COMMIT VERIFICATION STATUS") {
+			t.Error("expected header in output")
+		}
+		if !strings.Contains(result, "❌ **MISSING COMMIT**") {
+			t.Error("expected missing commit indicator")
+		}
+		if !strings.Contains(result, "no commit found matching") {
+			t.Error("expected mismatch reason in output")
+		}
+		if !strings.Contains(result, "COMMIT VERIFICATION FAILED") {
+			t.Error("expected failure warning")
+		}
+		if !strings.Contains(result, "**RED** factor") {
+			t.Error("expected RED verdict guidance")
+		}
+	})
+
+	t.Run("missing_commit_without_mismatch", func(t *testing.T) {
+		cv := &CommitVerification{
+			Found:    false,
+			Duration: 25 * time.Millisecond,
+		}
+		result := FormatCommitVerification(cv, true)
+
+		if !strings.Contains(result, "❌ **MISSING COMMIT**") {
+			t.Error("expected missing commit indicator")
+		}
+		// Should not contain empty Reason line
+		if strings.Contains(result, "**Reason**:") {
+			t.Error("should not show Reason when mismatch is empty")
+		}
+	})
+}
+
+// TestQCCommitVerificationIntegration tests commit verification wiring in QC prompts
+func TestQCCommitVerificationIntegration(t *testing.T) {
+	t.Run("commit_verified_in_structured_prompt", func(t *testing.T) {
+		qc := NewQualityController(nil)
+		qc.CommitVerification = &CommitVerification{
+			Found:      true,
+			CommitHash: "def5678",
+			Message:    "fix: resolve bug",
+			Duration:   40 * time.Millisecond,
+		}
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Fix bug",
+			Prompt: "Fix the bug",
+			CommitSpec: &models.CommitSpec{
+				Type:    "fix",
+				Message: "resolve bug",
+			},
+		}
+
+		ctx := context.Background()
+		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Bug fixed")
+
+		if !strings.Contains(prompt, "COMMIT VERIFICATION STATUS") {
+			t.Error("expected commit verification section in prompt")
+		}
+		if !strings.Contains(prompt, "✅ **Commit verified**") {
+			t.Error("expected verified indicator in prompt")
+		}
+		if !strings.Contains(prompt, "fix: resolve bug") {
+			t.Error("expected commit message in prompt")
+		}
+	})
+
+	t.Run("commit_missing_in_structured_prompt", func(t *testing.T) {
+		qc := NewQualityController(nil)
+		qc.CommitVerification = &CommitVerification{
+			Found:    false,
+			Mismatch: "no matching commit found",
+			Duration: 30 * time.Millisecond,
+		}
+
+		task := models.Task{
+			Number: "2",
+			Name:   "Add feature",
+			Prompt: "Add the feature",
+			CommitSpec: &models.CommitSpec{
+				Type:    "feat",
+				Message: "add feature",
+			},
+		}
+
+		ctx := context.Background()
+		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Feature added")
+
+		if !strings.Contains(prompt, "COMMIT VERIFICATION STATUS") {
+			t.Error("expected commit verification section in prompt")
+		}
+		if !strings.Contains(prompt, "❌ **MISSING COMMIT**") {
+			t.Error("expected missing commit warning in prompt")
+		}
+		if !strings.Contains(prompt, "QUALITY CONCERN") {
+			t.Error("expected quality concern in prompt")
+		}
+	})
+
+	t.Run("no_commit_spec_no_section", func(t *testing.T) {
+		qc := NewQualityController(nil)
+		// CommitVerification is nil
+
+		task := models.Task{
+			Number: "3",
+			Name:   "Simple task",
+			Prompt: "Do something",
+			// No CommitSpec
+		}
+
+		ctx := context.Background()
+		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Done")
+
+		if strings.Contains(prompt, "COMMIT VERIFICATION STATUS") {
+			t.Error("should not include commit verification section without CommitSpec")
+		}
+	})
+
+	t.Run("empty_commit_spec_no_section", func(t *testing.T) {
+		qc := NewQualityController(nil)
+		qc.CommitVerification = &CommitVerification{
+			Found:      true,
+			CommitHash: "xyz",
+		}
+
+		task := models.Task{
+			Number:     "4",
+			Name:       "Empty spec task",
+			Prompt:     "Do something",
+			CommitSpec: &models.CommitSpec{}, // Empty spec
+		}
+
+		ctx := context.Background()
+		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Done")
+
+		if strings.Contains(prompt, "COMMIT VERIFICATION STATUS") {
+			t.Error("should not include commit verification section with empty CommitSpec")
+		}
+	})
+}

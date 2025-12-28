@@ -1345,6 +1345,10 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				qc.STOPSummary = BuildSTOPSummaryFromSTOPResult(te.lastPatternResult.STOPResult)
 				qc.RequireJustification = te.PatternHook.RequireJustification()
 			}
+
+			// Wire commit verification result to QC (v2.30+)
+			// This enables QC to consider commit presence/absence in verdict
+			qc.CommitVerification = te.lastCommitVerification
 		}
 
 		review, reviewErr := te.reviewer.Review(ctx, task, output)

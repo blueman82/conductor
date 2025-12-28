@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/architecture"
@@ -92,6 +93,9 @@ type QualityController struct {
 	// Architecture Checkpoint integration (v2.27+)
 	ArchitectureSummary              string // Architecture assessment summary (injected into prompt)
 	RequireArchitectureJustification bool   // Whether to require justification for architectural changes
+
+	// Commit Verification integration (v2.30+)
+	CommitVerification *CommitVerification // Result from postVerifyCommitHook (injected into prompt)
 }
 
 // QCLogger is the minimal interface for QC logging functionality
@@ -300,6 +304,14 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 	// Inject Architecture Checkpoint context (v2.27+)
 	if qc.ArchitectureSummary != "" {
 		sb.WriteString(FormatArchitectureContext(qc.ArchitectureSummary, qc.RequireArchitectureJustification))
+		sb.WriteString("\n")
+	}
+
+	// Inject commit verification results (v2.30+)
+	// Shows whether agent created the expected commit as specified in task
+	hasCommitSpec := task.CommitSpec != nil && !task.CommitSpec.IsEmpty()
+	if commitSection := FormatCommitVerification(qc.CommitVerification, hasCommitSpec); commitSection != "" {
+		sb.WriteString(commitSection)
 		sb.WriteString("\n")
 	}
 
@@ -1212,6 +1224,48 @@ func BuildArchitectureSummary(result *architecture.CheckpointResult) string {
 	}
 	if result.Assessment.CrossCuttingConcerns.Answer {
 		sb.WriteString(fmt.Sprintf("**Cross-Cutting Concerns**: %s\n", result.Assessment.CrossCuttingConcerns.Reasoning))
+	}
+
+	return sb.String()
+}
+
+// FormatCommitVerification formats commit verification results for QC prompt injection (v2.30+).
+// Clearly indicates whether the expected commit was found or missing.
+// For mandatory commits, missing commits should contribute to RED verdict consideration.
+func FormatCommitVerification(cv *CommitVerification, hasCommitSpec bool) string {
+	if !hasCommitSpec {
+		return "" // No commit spec - nothing to verify
+	}
+
+	if cv == nil {
+		return "" // No verification result available
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n## COMMIT VERIFICATION STATUS\n\n")
+
+	if cv.Found {
+		// Commit verified successfully
+		sb.WriteString("✅ **Commit verified**: ")
+		sb.WriteString(fmt.Sprintf("`%s` (%s)\n", cv.Message, cv.CommitHash))
+		if cv.FullHash != "" {
+			sb.WriteString(fmt.Sprintf("   Full hash: `%s`\n", cv.FullHash))
+		}
+		sb.WriteString(fmt.Sprintf("   Verification time: %v\n\n", cv.Duration.Round(time.Millisecond)))
+		sb.WriteString("**Note**: Agent followed commit instructions correctly.\n\n")
+	} else {
+		// Commit NOT found - this is a quality concern
+		sb.WriteString("❌ **MISSING COMMIT**: Agent was instructed to create a commit but none was found.\n\n")
+		if cv.Mismatch != "" {
+			sb.WriteString(fmt.Sprintf("**Reason**: %s\n\n", cv.Mismatch))
+		}
+		sb.WriteString("### COMMIT VERIFICATION FAILED - QUALITY CONCERN\n")
+		sb.WriteString("⚠️ The task specification required the agent to commit their changes.\n")
+		sb.WriteString("A missing commit indicates the agent did not follow instructions.\n\n")
+		sb.WriteString("**Verdict Guidance**:\n")
+		sb.WriteString("- If task explicitly required a commit → Consider this a **RED** factor\n")
+		sb.WriteString("- If commit was optional → Note in feedback but may still be GREEN/YELLOW\n")
+		sb.WriteString("- Agent should be retried to create the required commit\n\n")
 	}
 
 	return sb.String()
