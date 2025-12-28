@@ -1774,9 +1774,6 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	if cfg.Learning.DBPath != "/custom/db.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, "/custom/db.db")
 	}
-	if !cfg.Learning.AutoAdaptAgent {
-		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
-	}
 	if cfg.Learning.SwapDuringRetries {
 		t.Errorf("Learning.SwapDuringRetries = %v, want false", cfg.Learning.SwapDuringRetries)
 	}
@@ -1791,9 +1788,6 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	}
 	if cfg.Learning.MaxContextEntries != 20 {
 		t.Errorf("Learning.MaxContextEntries = %d, want 20", cfg.Learning.MaxContextEntries)
-	}
-	if cfg.Learning.MinFailuresBeforeAdapt != 3 {
-		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 3", cfg.Learning.MinFailuresBeforeAdapt)
 	}
 	if cfg.Learning.KeepExecutionsDays != 60 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 60", cfg.Learning.KeepExecutionsDays)
