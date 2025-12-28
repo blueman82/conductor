@@ -636,8 +636,6 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	taskExec.PlanFile = planFile
 	taskExec.SessionID = sessionID
 	taskExec.RunNumber = 1 // Increment per plan re-run
-	taskExec.AutoAdaptAgent = cfg.Learning.AutoAdaptAgent
-	taskExec.MinFailuresBeforeAdapt = cfg.Learning.MinFailuresBeforeAdapt
 	taskExec.SwapDuringRetries = cfg.Learning.SwapDuringRetries
 	taskExec.Logger = consoleLog    // Runtime enforcement logging
 	taskExec.EventLogger = multiLog // Event logging (TTS agent announcements, etc.)
