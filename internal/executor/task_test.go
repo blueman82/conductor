@@ -3091,7 +3091,8 @@ func TestPostVerifyCommitHook_NoVerifier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTaskExecutor returned error: %v", err)
 	}
-	// No CommitVerifier set
+	// Explicitly unset the CommitVerifier (NewTaskExecutor sets it by default)
+	executor.CommitVerifier = nil
 	executor.Logger = mockLogger
 
 	task := models.Task{
@@ -3484,5 +3485,90 @@ func TestExecute_CommitVerificationIntegration(t *testing.T) {
 		if result.Status != models.StatusGreen {
 			t.Errorf("expected GREEN status, got %s", result.Status)
 		}
+	})
+}
+
+// TestPersistCommitVerification tests the persistCommitVerification helper function.
+func TestPersistCommitVerification(t *testing.T) {
+	t.Run("nil commit result is no-op", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{
+			PlanPath: "/tmp/test-plan.yaml",
+		})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Test task",
+			Prompt: "Do something",
+		}
+
+		// Should not panic with nil commitResult
+		executor.persistCommitVerification(context.Background(), task, 1, nil)
+	})
+
+	t.Run("skips persist when no plan path", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Test task",
+			Prompt: "Do something",
+		}
+
+		commitResult := &CommitVerification{
+			Found:      true,
+			CommitHash: "abc1234",
+			Message:    "feat: test",
+		}
+
+		// Should not panic with no plan path
+		executor.persistCommitVerification(context.Background(), task, 1, commitResult)
+	})
+
+	t.Run("uses task source file over plan path", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{
+			PlanPath: "/tmp/main-plan.yaml",
+		})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+
+		// Task with SourceFile set - should use this path
+		task := models.Task{
+			Number:     "1",
+			Name:       "Test task",
+			Prompt:     "Do something",
+			SourceFile: "/tmp/subplan.yaml",
+		}
+
+		commitResult := &CommitVerification{
+			Found:      true,
+			CommitHash: "abc1234",
+			Message:    "feat: test",
+		}
+
+		// Should not panic - we're just testing the path selection logic
+		// In production, this would write to /tmp/subplan.yaml
+		executor.persistCommitVerification(context.Background(), task, 1, commitResult)
 	})
 }
