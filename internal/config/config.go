@@ -622,7 +622,6 @@ func DefaultConfig() *Config {
 		Learning: LearningConfig{
 			Enabled:                true,
 			DBPath:                 ".conductor/learning/executions.db",
-			AutoAdaptAgent:         false,
 			SwapDuringRetries:      true,
 			IntelligentSwapEnabled: true, // Enable intelligent agent swap by default (v2.30+)
 			EnhancePrompts:         true,
@@ -630,7 +629,6 @@ func DefaultConfig() *Config {
 			QCReadsPlanContext:     true,
 			QCReadsDBContext:       true,
 			MaxContextEntries:      10,
-			MinFailuresBeforeAdapt: 2,
 			KeepExecutionsDays:     90,
 			MaxExecutionsPerTask:   100,
 		},
