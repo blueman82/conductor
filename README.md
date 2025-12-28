@@ -23,6 +23,7 @@ Conductor orchestrates multiple Claude Code agents to execute implementation pla
 - **Multi-File Plans** — Cross-file dependencies, split large plans
 - **Runtime Enforcement** — Test commands, criterion verification
 - **Pattern Intelligence** — STOP protocol for prior art detection, duplicate prevention
+- **Mandatory Commits** — Agents instructed to commit, conductor verifies via git log
 - **Budget & Rate Limits** — Intelligent auto-resume, session resume, state persistence
 - **Voice Feedback** — Optional TTS via local Orpheus server
 
