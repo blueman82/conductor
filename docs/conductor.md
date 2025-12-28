@@ -4187,46 +4187,25 @@ $ export CGO_ENABLED=1
 $ go build ./cmd/conductor
 ```
 
-#### Agent Not Adapting Despite Failures
+#### Agent Not Swapping During Retries
 
-**Symptom**: Same agent used after multiple failures
-
-**Solution:**
-```bash
-# Check configuration
-$ cat .conductor/config.yaml | grep auto_adapt
-
-# Enable auto-adaptation
-learning:
-  auto_adapt_agent: true  # Enable this
-  min_failures_before_adapt: 2
-
-# Check failure count
-$ conductor learning show plan.md "Task 3"
-
-# Check available agent history
-$ conductor learning stats plan.md
-```
-
-#### Inter-Retry Swapping Not Working
-
-**Symptom**: Agent not swapping during retries despite QC suggestions
+**Symptom**: Same agent used after failures despite having swap enabled
 
 **Solution:**
 ```bash
 # Check swap configuration
 $ cat .conductor/config.yaml | grep swap_during_retries
 
-# Enable inter-retry swapping
+# Enable inter-retry swapping with IntelligentAgentSwapper
 learning:
   swap_during_retries: true  # Must be true
 
-# Verify QC response includes suggested_agent
-# Check task logs for QC response:
-$ grep "suggested_agent" .conductor/logs/task-*.log
+# Check if IntelligentAgentSwapper is making recommendations
+# Look for agent swap logs:
+$ grep "Agent swap" .conductor/logs/task-*.log
 
-# Check QC agent returns proper JSON format
-# QC must return structured response with suggested_agent field
+# Check available agents in registry
+$ conductor agents list
 ```
 
 #### QC JSON Parsing Errors
