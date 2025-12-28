@@ -95,14 +95,24 @@ type LearningConfig struct {
 	// DBPath is the path to the learning database
 	DBPath string `yaml:"db_path"`
 
-	// AutoAdaptAgent enables automatic agent adaptation based on learned patterns
-	AutoAdaptAgent bool `yaml:"auto_adapt_agent"`
-
-	// SwapDuringRetries enables agent swapping during retry attempts
+	// SwapDuringRetries enables agent swapping during retry attempts using IntelligentAgentSwapper
 	SwapDuringRetries bool `yaml:"swap_during_retries"`
+
+	// IntelligentSwapEnabled enables Claude-powered intelligent agent selection (v2.30+)
+	// When true, uses IntelligentAgentSwapper for context-aware selection that considers
+	// file extensions, knowledge graph history, LIP progress, and error patterns.
+	// Falls back to stats-only SelectBetterAgent when false or on error.
+	// Default: true
+	IntelligentSwapEnabled bool `yaml:"intelligent_swap_enabled"`
 
 	// EnhancePrompts enables prompt enhancement based on learned patterns
 	EnhancePrompts bool `yaml:"enhance_prompts"`
+
+	// WarmUpEnabled enables warm-up context injection for agent priming (v2.29+)
+	// When true, agents receive similar successful task approaches, common pitfalls,
+	// and file-specific patterns before task execution.
+	// Default: true
+	WarmUpEnabled bool `yaml:"warmup_enabled"`
 
 	// QCReadsPlanContext enables QC agent to read plan context
 	QCReadsPlanContext bool `yaml:"qc_reads_plan_context"`
@@ -112,9 +122,6 @@ type LearningConfig struct {
 
 	// MaxContextEntries limits context entries loaded from DB
 	MaxContextEntries int `yaml:"max_context_entries"`
-
-	// MinFailuresBeforeAdapt is the minimum number of failures before adapting
-	MinFailuresBeforeAdapt int `yaml:"min_failures_before_adapt"`
 
 	// KeepExecutionsDays is the number of days to keep execution history
 	KeepExecutionsDays int `yaml:"keep_executions_days"`
@@ -143,6 +150,9 @@ type QCAgentConfig struct {
 
 	// CacheTTLSeconds is how long to cache intelligent selection results (default: 3600)
 	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
+
+	// SelectionTimeoutSeconds is the timeout for Claude intelligent selection calls (default: 90)
+	SelectionTimeoutSeconds int `yaml:"selection_timeout_seconds"`
 
 	// RequireCodeReview ensures code-reviewer is always included as baseline (default: true)
 	RequireCodeReview bool `yaml:"require_code_review"`
@@ -612,13 +622,13 @@ func DefaultConfig() *Config {
 		Learning: LearningConfig{
 			Enabled:                true,
 			DBPath:                 ".conductor/learning/executions.db",
-			AutoAdaptAgent:         false,
 			SwapDuringRetries:      true,
+			IntelligentSwapEnabled: true, // Enable intelligent agent swap by default (v2.30+)
 			EnhancePrompts:         true,
+			WarmUpEnabled:          true, // Enable warm-up context by default
 			QCReadsPlanContext:     true,
 			QCReadsDBContext:       true,
 			MaxContextEntries:      10,
-			MinFailuresBeforeAdapt: 2,
 			KeepExecutionsDays:     90,
 			MaxExecutionsPerTask:   100,
 		},
@@ -626,13 +636,14 @@ func DefaultConfig() *Config {
 			Enabled:     false,
 			ReviewAgent: "quality-control", // Deprecated, kept for backward compat
 			Agents: QCAgentConfig{
-				Mode:              "auto",
-				ExplicitList:      []string{},
-				AdditionalAgents:  []string{},
-				BlockedAgents:     []string{},
-				MaxAgents:         4,
-				CacheTTLSeconds:   3600,
-				RequireCodeReview: true,
+				Mode:                    "auto",
+				ExplicitList:            []string{},
+				AdditionalAgents:        []string{},
+				BlockedAgents:           []string{},
+				MaxAgents:               4,
+				CacheTTLSeconds:         3600,
+				SelectionTimeoutSeconds: 90,
+				RequireCodeReview:       true,
 			},
 			RetryOnRed: 2,
 		},
@@ -881,9 +892,6 @@ func LoadConfig(path string) (*Config, error) {
 				// Explicitly set db_path, even if empty string
 				cfg.Learning.DBPath = learning.DBPath
 			}
-			if _, exists := learningMap["auto_adapt_agent"]; exists {
-				cfg.Learning.AutoAdaptAgent = learning.AutoAdaptAgent
-			}
 			if _, exists := learningMap["swap_during_retries"]; exists {
 				cfg.Learning.SwapDuringRetries = learning.SwapDuringRetries
 			}
@@ -899,14 +907,17 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := learningMap["max_context_entries"]; exists {
 				cfg.Learning.MaxContextEntries = learning.MaxContextEntries
 			}
-			if _, exists := learningMap["min_failures_before_adapt"]; exists {
-				cfg.Learning.MinFailuresBeforeAdapt = learning.MinFailuresBeforeAdapt
-			}
 			if _, exists := learningMap["keep_executions_days"]; exists {
 				cfg.Learning.KeepExecutionsDays = learning.KeepExecutionsDays
 			}
 			if _, exists := learningMap["max_executions_per_task"]; exists {
 				cfg.Learning.MaxExecutionsPerTask = learning.MaxExecutionsPerTask
+			}
+			if _, exists := learningMap["warmup_enabled"]; exists {
+				cfg.Learning.WarmUpEnabled = learning.WarmUpEnabled
+			}
+			if _, exists := learningMap["intelligent_swap_enabled"]; exists {
+				cfg.Learning.IntelligentSwapEnabled = learning.IntelligentSwapEnabled
 			}
 		}
 
@@ -1324,9 +1335,6 @@ func (c *Config) Validate() error {
 	if c.Learning.Enabled {
 		if c.Learning.DBPath == "" {
 			return fmt.Errorf("learning.db_path cannot be empty when learning is enabled")
-		}
-		if c.Learning.MinFailuresBeforeAdapt <= 0 {
-			return fmt.Errorf("learning.min_failures_before_adapt must be > 0, got %d", c.Learning.MinFailuresBeforeAdapt)
 		}
 		if c.Learning.KeepExecutionsDays < 0 {
 			return fmt.Errorf("learning.keep_executions_days must be >= 0, got %d", c.Learning.KeepExecutionsDays)

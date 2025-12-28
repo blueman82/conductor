@@ -58,6 +58,14 @@ var (
 
 	// Pattern 5: "resets 1am (Europe/Dublin)" format from Claude CLI (v2.20.1+)
 	resetsTimePattern = regexp.MustCompile(`resets\s+(\d+)(am|pm)\s*\(([^)]+)\)`)
+
+	// Pattern 6: False positive exclusions - displayed/logged text, not actual errors (v2.28+)
+	// Only excludes obvious log/display formats, NOT JSON error messages
+	falsePositivePattern = regexp.MustCompile(`(?i)(\[RATE.?LIMIT\]|` + // Log prefixes like [RATE LIMIT]
+		"`rate.?limit`|" + // Markdown inline code (with closing backtick)
+		`⏸️|⏳|` + // Emoji indicators from display output
+		`waiting for reset\.\.\.|` + // Historical log messages
+		`until auto-resume)`) // Countdown display text
 )
 
 // ParseRateLimitFromOutput parses rate limit info from CLI stdout/stderr
@@ -68,6 +76,12 @@ func ParseRateLimitFromOutput(output string) *RateLimitInfo {
 
 	// Check if this looks like a rate limit message
 	if !rateLimitIndicator.MatchString(output) {
+		return nil
+	}
+
+	// Skip false positives - displayed/logged text that mentions rate limits
+	// but isn't an actual rate limit error (v2.28+)
+	if falsePositivePattern.MatchString(output) {
 		return nil
 	}
 

@@ -1270,9 +1270,10 @@ quality_control:
     # blocked: [deprecated-agent]                        # Agents to never use
 
     # Intelligent selection settings (v2.4+)
-    max_agents: 4              # Max QC agents to select (default: 4)
-    cache_ttl_seconds: 3600    # Cache TTL in seconds (default: 3600)
-    require_code_review: true  # Always include code-reviewer baseline (default: true)
+    max_agents: 4                    # Max QC agents to select (default: 4)
+    cache_ttl_seconds: 3600          # Cache TTL in seconds (default: 3600)
+    selection_timeout_seconds: 90    # Claude selection timeout (default: 90)
+    require_code_review: true        # Always include code-reviewer baseline (default: true)
 
 # Intelligent QC Agent Selection Example (v2.4+)
 # For domain-aware, context-sensitive agent selection:
@@ -1317,11 +1318,8 @@ learning:
   # Database path (default: .conductor/learning/executions.db)
   db_path: .conductor/learning/executions.db
 
-  # Auto-adapt agent selection based on learned patterns (default: false)
-  auto_adapt_agent: false
-
   # Enable agent swapping during retry loops (default: true)
-  # When a task fails, QC can suggest a better agent for the next retry attempt
+  # When a task fails, uses IntelligentAgentSwapper to select a better agent
   swap_during_retries: true
 
   # Enhance prompts with learned context (default: true)
@@ -1338,9 +1336,6 @@ learning:
   # Maximum context entries to load (default: 10)
   # Limits the number of historical attempts included in QC context
   max_context_entries: 10
-
-  # Minimum failures before adapting strategy (default: 2)
-  min_failures_before_adapt: 2
 
   # Days to keep execution history (default: 90, 0 = forever)
   keep_executions_days: 90
@@ -1586,6 +1581,7 @@ quality_control:
 | `mode` | string | `auto` | Selection mode: auto, explicit, mixed, or intelligent |
 | `max_agents` | int | `4` | Maximum number of QC agents to select |
 | `cache_ttl_seconds` | int | `3600` | Cache TTL in seconds (1 hour default) |
+| `selection_timeout_seconds` | int | `90` | Timeout for Claude intelligent selection calls |
 | `require_code_review` | bool | `true` | Always include code-reviewer as baseline |
 | `blocked` | []string | `[]` | Agents to never use for QC |
 | `explicit_list` | []string | `[]` | Agents for explicit mode |
@@ -3116,17 +3112,16 @@ Retry 1:
 **Configuration:**
 ```yaml
 learning:
-  swap_during_retries: true        # Enable inter-retry swapping
-  min_failures_before_adapt: 2     # Require 2+ failures before adapting
+  swap_during_retries: true        # Enable inter-retry swapping with IntelligentAgentSwapper
 ```
 
 **Workflow:**
 
 1. Task executes with assigned agent
 2. QC reviews output and returns RED verdict
-3. QC includes `suggested_agent` field in response
-4. Conductor checks if `swap_during_retries` is enabled
-5. If enabled, conductor swaps to suggested agent for next retry
+3. IntelligentAgentSwapper analyzes context (files, errors, knowledge graph)
+4. Claude recommends best agent with confidence score
+5. Conductor swaps to recommended agent for next retry
 6. Retry executes with new agent
 7. If successful, learning system records which agent succeeded
 
@@ -3188,10 +3183,8 @@ learning:
   # Database path (default: .conductor/learning/executions.db)
   db_path: .conductor/learning/executions.db
 
-  # Auto-adapt agent selection based on learned patterns (default: false)
-  auto_adapt_agent: false
-
   # Enable agent swapping during retry loops (default: true)
+  # Uses IntelligentAgentSwapper for Claude-powered agent selection
   swap_during_retries: true
 
   # Enhance prompts with learned context (default: true)
@@ -3206,9 +3199,6 @@ learning:
   # Maximum context entries to load (default: 10)
   max_context_entries: 10
 
-  # Minimum failures before adapting strategy (default: 2)
-  min_failures_before_adapt: 2
-
   # Days to keep execution history (default: 90, 0 = forever)
   keep_executions_days: 90
 
@@ -3222,13 +3212,11 @@ learning:
 |--------|------|---------|-------------|
 | `enabled` | bool | `true` | Master switch for learning system |
 | `db_path` | string | `.conductor/learning/executions.db` | Path to SQLite database file |
-| `auto_adapt_agent` | bool | `false` | Automatically switch agents on failures |
-| `swap_during_retries` | bool | `true` | Enable inter-retry agent swapping |
+| `swap_during_retries` | bool | `true` | Enable inter-retry agent swapping via IntelligentAgentSwapper |
 | `enhance_prompts` | bool | `true` | Add learned context to prompts |
 | `qc_reads_plan_context` | bool | `true` | QC loads execution history from plan |
 | `qc_reads_db_context` | bool | `true` | QC loads execution history from database |
 | `max_context_entries` | int | `10` | Maximum historical entries for QC context |
-| `min_failures_before_adapt` | int | `2` | Failure threshold before adapting |
 | `keep_executions_days` | int | `90` | Days to retain history (0 = forever) |
 | `max_executions_per_task` | int | `100` | Max records per task |
 
@@ -3246,8 +3234,7 @@ timeout: 30m
 # Learning settings
 learning:
   enabled: true
-  auto_adapt_agent: true
-  min_failures_before_adapt: 3
+  swap_during_retries: true
 ```
 
 #### Disabling Learning
@@ -3421,28 +3408,28 @@ quality_control:
 }
 ```
 
-#### Scenario 2: Automatic Agent Adaptation (Cross-Run)
+#### Scenario 2: Intelligent Agent Swap During Retries
 
 ```yaml
 # .conductor/config.yaml
 learning:
   enabled: true
-  auto_adapt_agent: true
-  min_failures_before_adapt: 2
+  swap_during_retries: true
 ```
 
 **What happens:**
 
-1. **First run**: Task 3 fails with `backend-developer` agent
-2. **Second run**: Task 3 fails again with `backend-developer` agent
-3. **Third run**: System automatically switches to `golang-pro` agent
-4. **Result**: Task 3 succeeds with adapted agent
+1. **Attempt 1**: Task 3 fails with `backend-developer` agent
+2. **QC Review**: Returns RED verdict with error context
+3. **IntelligentAgentSwapper**: Claude analyzes file types, error patterns, and knowledge graph
+4. **Recommendation**: "golang-pro" with 85% confidence (Go files detected)
+5. **Attempt 2**: Task 3 retries with `golang-pro` agent
+6. **Result**: Task 3 succeeds
 
 **Console output:**
 ```
-[INFO] Pre-task hook: Analyzing Task 3 history...
-[INFO] Detected 2 failures with agent: backend-developer
-[INFO] Adapting agent: backend-developer → golang-pro
+[INFO] Task 3: QC returned RED
+[INFO] Task 3: Agent swap: backend-developer → golang-pro (Go files detected, 85% confidence)
 [INFO] Executing Task 3 with agent: golang-pro
 [SUCCESS] Task 3 completed: GREEN
 ```
@@ -3652,17 +3639,11 @@ A: Not recommended. Learning data is optimized for individual developer environm
 **Q: Does learning slow down execution?**
 A: Minimal impact. Hook operations are async where possible, and database queries are optimized with indexes.
 
-**Q: Should I enable `auto_adapt_agent` by default?**
-A: Recommended to start with `false` (manual control) and enable after understanding behavior.
-
 **Q: Does learning work in CI/CD environments?**
 A: Yes, but learning database won't persist between runs unless you configure persistent storage. For CI/CD, you may want to disable learning.
 
-**Q: What's the difference between inter-retry swapping and auto_adapt_agent?**
-A: Inter-retry swapping (`swap_during_retries`) occurs during the retry loop based on QC suggestions. Auto-adapt agent (`auto_adapt_agent`) occurs at pre-task hook based on historical failures across runs.
-
-**Q: How does QC know which agent to suggest?**
-A: QC analyzes the task output and failure patterns. It can suggest agents based on:
+**Q: How does IntelligentAgentSwapper choose an agent?**
+A: It uses Claude to analyze multiple factors:
 - Task type (Go code suggests golang-pro)
 - Failure patterns (syntax errors suggest different approach)
 - Historical success data from database context
@@ -4206,46 +4187,25 @@ $ export CGO_ENABLED=1
 $ go build ./cmd/conductor
 ```
 
-#### Agent Not Adapting Despite Failures
+#### Agent Not Swapping During Retries
 
-**Symptom**: Same agent used after multiple failures
-
-**Solution:**
-```bash
-# Check configuration
-$ cat .conductor/config.yaml | grep auto_adapt
-
-# Enable auto-adaptation
-learning:
-  auto_adapt_agent: true  # Enable this
-  min_failures_before_adapt: 2
-
-# Check failure count
-$ conductor learning show plan.md "Task 3"
-
-# Check available agent history
-$ conductor learning stats plan.md
-```
-
-#### Inter-Retry Swapping Not Working
-
-**Symptom**: Agent not swapping during retries despite QC suggestions
+**Symptom**: Same agent used after failures despite having swap enabled
 
 **Solution:**
 ```bash
 # Check swap configuration
 $ cat .conductor/config.yaml | grep swap_during_retries
 
-# Enable inter-retry swapping
+# Enable inter-retry swapping with IntelligentAgentSwapper
 learning:
   swap_during_retries: true  # Must be true
 
-# Verify QC response includes suggested_agent
-# Check task logs for QC response:
-$ grep "suggested_agent" .conductor/logs/task-*.log
+# Check if IntelligentAgentSwapper is making recommendations
+# Look for agent swap logs:
+$ grep "Agent swap" .conductor/logs/task-*.log
 
-# Check QC agent returns proper JSON format
-# QC must return structured response with suggested_agent field
+# Check available agents in registry
+$ conductor agents list
 ```
 
 #### QC JSON Parsing Errors

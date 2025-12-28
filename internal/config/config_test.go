@@ -751,14 +751,8 @@ func TestConfig_LearningDefaults(t *testing.T) {
 	if cfg.Learning.DBPath != ".conductor/learning/executions.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, ".conductor/learning/executions.db")
 	}
-	if cfg.Learning.AutoAdaptAgent {
-		t.Errorf("Learning.AutoAdaptAgent = %v, want false", cfg.Learning.AutoAdaptAgent)
-	}
 	if !cfg.Learning.EnhancePrompts {
 		t.Errorf("Learning.EnhancePrompts = %v, want true", cfg.Learning.EnhancePrompts)
-	}
-	if cfg.Learning.MinFailuresBeforeAdapt != 2 {
-		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 2", cfg.Learning.MinFailuresBeforeAdapt)
 	}
 	if cfg.Learning.KeepExecutionsDays != 90 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 90", cfg.Learning.KeepExecutionsDays)
@@ -802,9 +796,7 @@ func TestConfig_LearningCustomPath(t *testing.T) {
 	configContent := `learning:
   enabled: true
   db_path: /custom/path/learning.db
-  auto_adapt_agent: true
   enhance_prompts: false
-  min_failures_before_adapt: 5
   keep_executions_days: 30
   max_executions_per_task: 50
 `
@@ -823,14 +815,8 @@ func TestConfig_LearningCustomPath(t *testing.T) {
 	if cfg.Learning.DBPath != "/custom/path/learning.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, "/custom/path/learning.db")
 	}
-	if !cfg.Learning.AutoAdaptAgent {
-		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
-	}
 	if cfg.Learning.EnhancePrompts {
 		t.Errorf("Learning.EnhancePrompts = %v, want false", cfg.Learning.EnhancePrompts)
-	}
-	if cfg.Learning.MinFailuresBeforeAdapt != 5 {
-		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 5", cfg.Learning.MinFailuresBeforeAdapt)
 	}
 	if cfg.Learning.KeepExecutionsDays != 30 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 30", cfg.Learning.KeepExecutionsDays)
@@ -878,7 +864,6 @@ func TestConfig_LearningValidation(t *testing.T) {
 			config: `learning:
   enabled: true
   db_path: .conductor/learning/executions.db
-  min_failures_before_adapt: 2
   keep_executions_days: 90
   max_executions_per_task: 100
 `,
@@ -889,22 +874,6 @@ func TestConfig_LearningValidation(t *testing.T) {
 			config: `learning:
   enabled: true
   db_path: ""
-`,
-			wantError: true,
-		},
-		{
-			name: "negative min_failures_before_adapt",
-			config: `learning:
-  enabled: true
-  min_failures_before_adapt: -1
-`,
-			wantError: true,
-		},
-		{
-			name: "zero min_failures_before_adapt",
-			config: `learning:
-  enabled: true
-  min_failures_before_adapt: 0
 `,
 			wantError: true,
 		},
@@ -1761,13 +1730,11 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	configContent := `learning:
   enabled: true
   db_path: /custom/db.db
-  auto_adapt_agent: true
   swap_during_retries: false
   enhance_prompts: false
   qc_reads_plan_context: false
   qc_reads_db_context: false
   max_context_entries: 20
-  min_failures_before_adapt: 3
   keep_executions_days: 60
   max_executions_per_task: 200
 `
@@ -1786,9 +1753,6 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	if cfg.Learning.DBPath != "/custom/db.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, "/custom/db.db")
 	}
-	if !cfg.Learning.AutoAdaptAgent {
-		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
-	}
 	if cfg.Learning.SwapDuringRetries {
 		t.Errorf("Learning.SwapDuringRetries = %v, want false", cfg.Learning.SwapDuringRetries)
 	}
@@ -1803,9 +1767,6 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	}
 	if cfg.Learning.MaxContextEntries != 20 {
 		t.Errorf("Learning.MaxContextEntries = %d, want 20", cfg.Learning.MaxContextEntries)
-	}
-	if cfg.Learning.MinFailuresBeforeAdapt != 3 {
-		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 3", cfg.Learning.MinFailuresBeforeAdapt)
 	}
 	if cfg.Learning.KeepExecutionsDays != 60 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 60", cfg.Learning.KeepExecutionsDays)
@@ -2323,10 +2284,8 @@ quality_control:
 
 learning:
   enabled: true
-  auto_adapt_agent: true
   swap_during_retries: true
   qc_reads_db_context: true
-  min_failures_before_adapt: 2
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -2362,9 +2321,6 @@ learning:
 	// Verify learning config
 	if !cfg.Learning.Enabled {
 		t.Errorf("Learning.Enabled = %v, want true", cfg.Learning.Enabled)
-	}
-	if !cfg.Learning.AutoAdaptAgent {
-		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
 	}
 	if !cfg.Learning.QCReadsDBContext {
 		t.Errorf("Learning.QCReadsDBContext = %v, want true", cfg.Learning.QCReadsDBContext)

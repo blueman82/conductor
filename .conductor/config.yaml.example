@@ -81,6 +81,9 @@ quality_control:
     # Cache TTL in seconds for intelligent selection results (default: 3600)
     cache_ttl_seconds: 3600
 
+    # Timeout for Claude intelligent selection calls (default: 90)
+    selection_timeout_seconds: 90
+
     # Always include code-reviewer as baseline (default: true)
     require_code_review: true
 

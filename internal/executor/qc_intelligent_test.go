@@ -164,7 +164,7 @@ func TestIntelligentSelectorGuardrails(t *testing.T) {
 	registry.Discover() // Initialize empty map
 
 	// Create selector
-	selector := NewIntelligentSelector(registry, 3600)
+	selector := NewIntelligentSelector(registry, 3600, 90)
 
 	t.Run("caps agents at MaxAgents", func(t *testing.T) {
 		recommendation := &IntelligentAgentRecommendation{
@@ -234,7 +234,7 @@ func TestIntelligentSelectorGuardrails(t *testing.T) {
 }
 
 func TestBuildSelectionPrompt(t *testing.T) {
-	selector := NewIntelligentSelector(nil, 3600)
+	selector := NewIntelligentSelector(nil, 3600, 90)
 
 	task := models.Task{
 		Number: "5",

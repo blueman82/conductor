@@ -331,6 +331,64 @@ CREATE INDEX IF NOT EXISTS idx_stop_analyses_decision ON stop_analyses(final_dec
 CREATE INDEX IF NOT EXISTS idx_stop_analyses_time ON stop_analyses(analyzed_at DESC);
 `,
 	},
+	{
+		Version:     9,
+		Description: "Add LIP events table for Learning-Informed Progress tracking",
+		SQL: `
+-- LIP events table for test and build result tracking
+CREATE TABLE IF NOT EXISTS lip_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_execution_id INTEGER NOT NULL,
+    task_number TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    details TEXT,
+    confidence REAL DEFAULT 1.0,
+    FOREIGN KEY (task_execution_id) REFERENCES task_executions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_lip_events_task_execution ON lip_events(task_execution_id);
+CREATE INDEX IF NOT EXISTS idx_lip_events_task_number ON lip_events(task_number);
+CREATE INDEX IF NOT EXISTS idx_lip_events_event_type ON lip_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_lip_events_timestamp ON lip_events(timestamp DESC);
+`,
+	},
+	{
+		Version:     10,
+		Description: "Add knowledge graph tables for task/file/pattern/agent relationships",
+		SQL: `
+-- Knowledge graph nodes table
+-- Stores entities (tasks, files, agents, patterns) as graph nodes
+CREATE TABLE IF NOT EXISTS kg_nodes (
+    id TEXT PRIMARY KEY,
+    node_type TEXT NOT NULL,
+    properties TEXT DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_kg_nodes_type ON kg_nodes(node_type);
+CREATE INDEX IF NOT EXISTS idx_kg_nodes_created ON kg_nodes(created_at DESC);
+
+-- Knowledge graph edges table
+-- Stores relationships between nodes (modifies, succeeded_with, similar_to, caused_failure)
+CREATE TABLE IF NOT EXISTS kg_edges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    edge_type TEXT NOT NULL,
+    weight REAL DEFAULT 1.0,
+    metadata TEXT DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (source_id) REFERENCES kg_nodes(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_id) REFERENCES kg_nodes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kg_edges_source ON kg_edges(source_id);
+CREATE INDEX IF NOT EXISTS idx_kg_edges_target ON kg_edges(target_id);
+CREATE INDEX IF NOT EXISTS idx_kg_edges_type ON kg_edges(edge_type);
+CREATE INDEX IF NOT EXISTS idx_kg_edges_weight ON kg_edges(weight DESC);
+`,
+	},
 }
 
 // MigrationVersion represents a record of an applied migration

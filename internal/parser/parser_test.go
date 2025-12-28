@@ -1195,7 +1195,7 @@ func TestApplyRetryOnRedFallback(t *testing.T) {
 			planRetryOnRed:     0,
 			configMinFailures:  3,
 			expectedRetryOnRed: 3,
-			description:        "When plan doesn't set retry_on_red, fall back to config.learning.min_failures_before_adapt",
+			description:        "When plan doesn't set retry_on_red, fall back to config fallback value",
 		},
 		{
 			name:               "plan unset, config unset - use default",
@@ -1298,7 +1298,7 @@ func TestApplyRetryOnRedFallback_Integration(t *testing.T) {
 			},
 		}
 
-		// Config has min_failures_before_adapt=5
+		// Config has fallback value of 5
 		ApplyRetryOnRedFallback(plan, 5)
 
 		// Should use plan's explicit value, not config
@@ -1316,7 +1316,7 @@ func TestApplyRetryOnRedFallback_Integration(t *testing.T) {
 			},
 		}
 
-		// Config has min_failures_before_adapt=5
+		// Config has fallback value of 5
 		ApplyRetryOnRedFallback(plan, 5)
 
 		// Should use config value as fallback
@@ -1334,7 +1334,7 @@ func TestApplyRetryOnRedFallback_Integration(t *testing.T) {
 			},
 		}
 
-		// Config doesn't have min_failures_before_adapt (0)
+		// Config doesn't have fallback value (0)
 		ApplyRetryOnRedFallback(plan, 0)
 
 		// Should use default value of 2

@@ -7,19 +7,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
-
-// rateLimitPattern detects rate limit messages from Claude CLI
-// Matches: "out of extra usage", "rate limit", "usage limit", etc.
-var rateLimitPattern = regexp.MustCompile(`(?i)(out of.*usage|rate.?limit|usage.?limit|429|too.?many.?requests)`)
 
 // ErrRateLimit is returned when Claude CLI output indicates a rate limit
 type ErrRateLimit struct {
@@ -28,11 +24,6 @@ type ErrRateLimit struct {
 
 func (e *ErrRateLimit) Error() string {
 	return fmt.Sprintf("rate limit: %s", e.RawMessage)
-}
-
-// isRateLimitOutput checks if CLI output indicates a rate limit
-func isRateLimitOutput(output string) bool {
-	return rateLimitPattern.MatchString(output)
 }
 
 // Invoker manages execution of claude CLI commands
@@ -405,8 +396,11 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// Check for rate limit in raw output BEFORE JSON parsing (v2.20.1+)
 	// This ensures rate limit messages like "You're out of extra usage · resets 1am"
 	// are properly detected even when they fail JSON parsing
+	// NOTE: Only check if command failed (err != nil) to avoid false positives
+	// when agent output contains text about rate limiting (v2.28+)
+	// Uses budget.ParseRateLimitFromOutput for single source of truth
 	rawOutput := stdout.String()
-	if isRateLimitOutput(rawOutput) {
+	if err != nil && budget.ParseRateLimitFromOutput(rawOutput) != nil {
 		rateLimitErr := &ErrRateLimit{RawMessage: rawOutput}
 		result.Error = rateLimitErr
 		return result, rateLimitErr // Return error so executeWithRateLimitRecovery can catch it

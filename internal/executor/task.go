@@ -172,10 +172,8 @@ type DefaultTaskExecutor struct {
 	PlanFile                    string                   // Plan file path for learning queries
 	SessionID                   string                   // Session ID for learning tracking
 	RunNumber                   int                      // Run number for learning tracking
-	metrics                     *learning.PatternMetrics // Pattern detection metrics (optional)
-	AutoAdaptAgent              bool                     // Enable automatic agent adaptation
-	MinFailuresBeforeAdapt      int                      // Minimum failures before adapting agent
-	SwapDuringRetries           bool                     // Enable inter-retry agent swapping
+	metrics           *learning.PatternMetrics // Pattern detection metrics (optional)
+	SwapDuringRetries bool                     // Enable inter-retry agent swapping (uses IntelligentAgentSwapper)
 	Plan                        *models.Plan             // Plan reference for integration prompt builder
 	EnforceDependencyChecks     bool                     // Run dependency checks before task invocation
 	CommandRunner               CommandRunner            // Command runner for dependency checks (optional)
@@ -200,6 +198,15 @@ type DefaultTaskExecutor struct {
 
 	// Architecture Checkpoint integration (v2.27+)
 	ArchitectureHook *ArchitectureCheckpointHook // Architecture checkpoint hook for 6-question assessment
+
+	// LIP Collection integration (v2.29+)
+	LIPCollectorHook *LIPCollectorHook // LIP event collector for test/build results and knowledge graph
+
+	// Warm-Up Context integration (v2.29+)
+	WarmUpHook *WarmUpHook // Warm-up context hook for agent priming with historical patterns
+
+	// Intelligent Agent Swap integration (v2.30+)
+	IntelligentAgentSwapper *learning.IntelligentAgentSwapper // Claude-powered agent selection for retries (optional)
 
 	// Runtime state for passing to QC
 	lastTestResults      []TestCommandResult            // Populated after RunTestCommands
@@ -226,12 +233,11 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 
 	te := &DefaultTaskExecutor{
 		invoker:                invoker,
-		reviewer:               reviewer,
-		planUpdater:            planUpdater,
-		cfg:                    cfg,
-		clock:                  time.Now,
-		FileLockManager:        NewFileLockManager(),
-		MinFailuresBeforeAdapt: 2, // Default threshold
+		reviewer:        reviewer,
+		planUpdater:     planUpdater,
+		cfg:             cfg,
+		clock:           time.Now,
+		FileLockManager: NewFileLockManager(),
 	}
 
 	if cfg.QualityControl.Enabled {
@@ -268,19 +274,18 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 }
 
 // preTaskHook queries the learning database and adapts agent/prompt before execution.
-// This hook enables adaptive learning from past failures.
+// This hook enables adaptive learning from past failures and warm-up context injection.
 func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Task) error {
 	// Learning disabled - no-op
 	if te.LearningStore == nil {
 		return nil
 	}
 
-	// Query learning store for failure analysis with configurable threshold
-	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number, te.MinFailuresBeforeAdapt)
+	// Query learning store for failure analysis (for prompt enhancement only)
+	// Agent selection now handled by IntelligentAgentSwapper during retries
+	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number, 1)
 	if err != nil {
 		// Log warning but don't break execution (graceful degradation)
-		// In production, this would use a proper logger
-		// For now, just continue without learning
 		return nil
 	}
 
@@ -289,25 +294,25 @@ func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Tas
 		return nil
 	}
 
-	// Adapt agent if auto-adaptation is enabled and recommended
-	if te.AutoAdaptAgent && analysis.ShouldTryDifferentAgent && analysis.SuggestedAgent != "" {
-		// Only switch if different from current agent
-		if task.Agent != analysis.SuggestedAgent {
-			// Store original agent for logging
-			originalAgent := task.Agent
-			if originalAgent == "" {
-				originalAgent = "default"
-			}
-
-			// Log agent switch for observability
-			// In production: log.Info("Switching agent: %s → %s based on failure patterns", originalAgent, analysis.SuggestedAgent)
-			task.Agent = analysis.SuggestedAgent
-		}
-	}
-
 	// Enhance prompt with learning context if there are past failures
 	if analysis.FailedAttempts > 0 {
 		task.Prompt = enhancePromptWithLearning(task.Prompt, analysis)
+	}
+
+	// Warm-up context injection (v2.29+)
+	// Injects similar successful task approaches, common pitfalls, and file-specific patterns
+	// This happens AFTER failure analysis to avoid duplicating failure context
+	if te.WarmUpHook != nil {
+		modifiedTask, warmUpErr := te.WarmUpHook.InjectContext(ctx, *task)
+		if warmUpErr != nil {
+			// Graceful degradation - log but don't fail
+			if te.Logger != nil {
+				te.Logger.Warnf("WarmUp: failed to inject context for task %s: %v", task.Number, warmUpErr)
+			}
+		} else {
+			// Apply the modified task (with injected prompt)
+			*task = modifiedTask
+		}
 	}
 
 	return nil
@@ -517,6 +522,12 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 		// Log warning but don't fail task (graceful degradation)
 		// In production: log.Warn("failed to record execution: %v", err)
 		// For now, silently continue
+	}
+
+	// LIP Collection: Create knowledge graph edges in post-task hook (v2.29+)
+	// Records: task→succeeded_with→agent (or used_by for failures)
+	if te.LIPCollectorHook != nil {
+		te.LIPCollectorHook.PostTaskHook(ctx, *task, result, success)
 	}
 }
 
@@ -1010,6 +1021,9 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 		result.Duration = totalDuration
 		result.SessionID = invocation.SessionID // Capture for rate limit recovery
 
+		// Track task execution ID for LIP event collection (v2.29+)
+		var currentTaskExecutionID int64
+
 		// Collect behavioral metrics post-invocation (before QC)
 		// This captures the session_id from the invocation and loads JSONL metrics
 		if invocation.SessionID != "" {
@@ -1041,6 +1055,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 
 				// Record to get task_execution_id
 				if err := te.LearningStore.RecordExecution(ctx, prelimExec); err == nil {
+					currentTaskExecutionID = prelimExec.ID // Store for LIP event collection
 					// Collect behavioral metrics with the task_execution_id
 					_ = te.collectBehavioralMetrics(ctx, invocation.SessionID, task, prelimExec.ID)
 				}
@@ -1070,6 +1085,13 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 			if te.Logger != nil {
 				te.Logger.LogTestCommands(testResults)
 			}
+
+			// LIP Collection: Record test results as LIP events (v2.29+)
+			// This is a NEW event type - tool/file events are already tracked via RecordSessionMetrics
+			if te.LIPCollectorHook != nil && currentTaskExecutionID > 0 {
+				_ = te.LIPCollectorHook.RecordTestResults(ctx, currentTaskExecutionID, task.Number, testResults)
+			}
+
 			if testErr != nil {
 				// Track failure but continue to allow retry (v2.10+)
 				testFailureErr = testErr
@@ -1380,27 +1402,38 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 		case review.Flag == models.StatusRed:
 			lastErr = ErrQualityGateFailed
 
-			// Track RED failures for agent swap
-			redCount := attempt + 1
+			// Agent swap during retries using IntelligentAgentSwapper
+			if te.SwapDuringRetries {
+				var newAgent string
+				var swapReason string
+				swapped := false
 
-			// Agent swap during retries: if enabled and threshold reached
-			if te.SwapDuringRetries && redCount >= te.MinFailuresBeforeAdapt {
-				// Load execution history for agent selection
-				var history []*learning.TaskExecution
-				if te.LearningStore != nil {
-					ctx2 := context.Background()
-					fileToQuery := te.PlanFile
-					if task.SourceFile != "" {
-						fileToQuery = task.SourceFile
+				// Use IntelligentAgentSwapper for context-aware agent selection (v2.29+)
+				if te.IntelligentAgentSwapper != nil {
+					swapCtx := &learning.SwapContext{
+						TaskNumber:      task.Number,
+						TaskName:        task.Name,
+						TaskDescription: task.Prompt,
+						Files:           extractTaskFiles(task),
+						CurrentAgent:    task.Agent,
+						ErrorContext:    review.Feedback,
+						AttemptNumber:   attempt + 1,
 					}
-					history, _ = te.LearningStore.GetExecutionHistory(ctx2, fileToQuery, task.Number)
+					recommendation, err := te.IntelligentAgentSwapper.SelectAgent(ctx, swapCtx)
+					if err == nil && recommendation != nil && recommendation.RecommendedAgent != "" && recommendation.RecommendedAgent != task.Agent {
+						newAgent = recommendation.RecommendedAgent
+						swapReason = fmt.Sprintf("%s (%.0f%% confidence)", recommendation.Rationale, recommendation.Confidence*100)
+						swapped = true
+						if te.Logger != nil {
+							te.Logger.Infof("[Task %s] Agent swap: %s → %s (%s)", task.Number, task.Agent, newAgent, swapReason)
+						}
+					} else if err != nil && te.Logger != nil {
+						te.Logger.Warnf("[Task %s] Intelligent agent swap failed: %v", task.Number, err)
+					}
 				}
 
-				// Call SelectBetterAgent to determine best agent
-				if newAgent, reason := learning.SelectBetterAgent(task.Agent, history, review.SuggestedAgent); newAgent != "" && newAgent != task.Agent {
-					// Log agent swap (in production: use proper logger)
-					// fmt.Printf("Swapping agent: %s → %s (reason: %s)\n", task.Agent, newAgent, reason)
-					_ = reason // Suppress unused variable warning
+				// Apply the agent swap
+				if swapped && newAgent != "" {
 					task.Agent = newAgent
 					result.Task.Agent = newAgent
 				}
@@ -1550,6 +1583,49 @@ func formatFailedCriteria(results []models.CriterionResult) string {
 	}
 
 	return sb.String()
+}
+
+// extractTaskFiles extracts file paths from task metadata for intelligent agent swap.
+// Used to provide file context to IntelligentAgentSwapper.
+func extractTaskFiles(task models.Task) []string {
+	var files []string
+
+	// Extract from Metadata if available
+	if task.Metadata != nil {
+		if targetFiles, ok := task.Metadata["target_files"].([]string); ok {
+			files = append(files, targetFiles...)
+		}
+		if metaFiles, ok := task.Metadata["files"].([]string); ok {
+			files = append(files, metaFiles...)
+		}
+		// Handle []interface{} case (from YAML unmarshalling)
+		if targetFiles, ok := task.Metadata["target_files"].([]interface{}); ok {
+			for _, f := range targetFiles {
+				if s, ok := f.(string); ok {
+					files = append(files, s)
+				}
+			}
+		}
+		if metaFiles, ok := task.Metadata["files"].([]interface{}); ok {
+			for _, f := range metaFiles {
+				if s, ok := f.(string); ok {
+					files = append(files, s)
+				}
+			}
+		}
+	}
+
+	// Deduplicate
+	seen := make(map[string]bool)
+	unique := make([]string, 0, len(files))
+	for _, f := range files {
+		if !seen[f] {
+			seen[f] = true
+			unique = append(unique, f)
+		}
+	}
+
+	return unique
 }
 
 // formatClassificationForRetry formats classification suggestions for retry agent
