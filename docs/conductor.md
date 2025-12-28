@@ -1318,11 +1318,8 @@ learning:
   # Database path (default: .conductor/learning/executions.db)
   db_path: .conductor/learning/executions.db
 
-  # Auto-adapt agent selection based on learned patterns (default: false)
-  auto_adapt_agent: false
-
   # Enable agent swapping during retry loops (default: true)
-  # When a task fails, QC can suggest a better agent for the next retry attempt
+  # When a task fails, uses IntelligentAgentSwapper to select a better agent
   swap_during_retries: true
 
   # Enhance prompts with learned context (default: true)
@@ -1339,9 +1336,6 @@ learning:
   # Maximum context entries to load (default: 10)
   # Limits the number of historical attempts included in QC context
   max_context_entries: 10
-
-  # Minimum failures before adapting strategy (default: 2)
-  min_failures_before_adapt: 2
 
   # Days to keep execution history (default: 90, 0 = forever)
   keep_executions_days: 90
