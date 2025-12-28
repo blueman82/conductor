@@ -3639,17 +3639,11 @@ A: Not recommended. Learning data is optimized for individual developer environm
 **Q: Does learning slow down execution?**
 A: Minimal impact. Hook operations are async where possible, and database queries are optimized with indexes.
 
-**Q: Should I enable `auto_adapt_agent` by default?**
-A: Recommended to start with `false` (manual control) and enable after understanding behavior.
-
 **Q: Does learning work in CI/CD environments?**
 A: Yes, but learning database won't persist between runs unless you configure persistent storage. For CI/CD, you may want to disable learning.
 
-**Q: What's the difference between inter-retry swapping and auto_adapt_agent?**
-A: Inter-retry swapping (`swap_during_retries`) occurs during the retry loop based on QC suggestions. Auto-adapt agent (`auto_adapt_agent`) occurs at pre-task hook based on historical failures across runs.
-
-**Q: How does QC know which agent to suggest?**
-A: QC analyzes the task output and failure patterns. It can suggest agents based on:
+**Q: How does IntelligentAgentSwapper choose an agent?**
+A: It uses Claude to analyze multiple factors:
 - Task type (Go code suggests golang-pro)
 - Failure patterns (syntax errors suggest different approach)
 - Historical success data from database context
