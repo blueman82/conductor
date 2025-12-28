@@ -864,7 +864,6 @@ func TestConfig_LearningValidation(t *testing.T) {
 			config: `learning:
   enabled: true
   db_path: .conductor/learning/executions.db
-  min_failures_before_adapt: 2
   keep_executions_days: 90
   max_executions_per_task: 100
 `,
@@ -875,22 +874,6 @@ func TestConfig_LearningValidation(t *testing.T) {
 			config: `learning:
   enabled: true
   db_path: ""
-`,
-			wantError: true,
-		},
-		{
-			name: "negative min_failures_before_adapt",
-			config: `learning:
-  enabled: true
-  min_failures_before_adapt: -1
-`,
-			wantError: true,
-		},
-		{
-			name: "zero min_failures_before_adapt",
-			config: `learning:
-  enabled: true
-  min_failures_before_adapt: 0
 `,
 			wantError: true,
 		},
