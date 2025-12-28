@@ -5,7 +5,7 @@
 
 Conductor is a Go CLI for autonomous multi-agent orchestration. It parses plan files (Markdown/YAML), calculates task dependencies via graph algorithms, and executes tasks in parallel waves with QC reviews and adaptive learning.
 
-**Current**: v2.28.0 - Production-ready with Pattern Intelligence, Architecture Checkpoint, TTS feedback, budget tracking, and 86%+ test coverage.
+**Current**: v2.30.0 - Production-ready with Pattern Intelligence, Architecture Checkpoint, Mandatory Commit Verification, TTS feedback, budget tracking, and 86%+ test coverage.
 
 ## Quick Reference
 
