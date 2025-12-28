@@ -2284,10 +2284,8 @@ quality_control:
 
 learning:
   enabled: true
-  auto_adapt_agent: true
   swap_during_retries: true
   qc_reads_db_context: true
-  min_failures_before_adapt: 2
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
