@@ -1431,7 +1431,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				var swapReason string
 				swapped := false
 
-				// Try IntelligentAgentSwapper first (v2.30+)
+				// Use IntelligentAgentSwapper for context-aware agent selection (v2.29+)
 				if te.IntelligentAgentSwapper != nil {
 					swapCtx := &learning.SwapContext{
 						TaskNumber:      task.Number,
@@ -1445,34 +1445,13 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 					recommendation, err := te.IntelligentAgentSwapper.SelectAgent(ctx, swapCtx)
 					if err == nil && recommendation != nil && recommendation.RecommendedAgent != "" && recommendation.RecommendedAgent != task.Agent {
 						newAgent = recommendation.RecommendedAgent
-						swapReason = fmt.Sprintf("intelligent: %s (%.0f%% confidence)", recommendation.Rationale, recommendation.Confidence*100)
+						swapReason = fmt.Sprintf("%s (%.0f%% confidence)", recommendation.Rationale, recommendation.Confidence*100)
 						swapped = true
 						if te.Logger != nil {
-							te.Logger.Infof("[Task %s] Intelligent agent swap: %s → %s (%s)", task.Number, task.Agent, newAgent, swapReason)
+							te.Logger.Infof("[Task %s] Agent swap: %s → %s (%s)", task.Number, task.Agent, newAgent, swapReason)
 						}
 					} else if err != nil && te.Logger != nil {
-						te.Logger.Warnf("[Task %s] Intelligent agent swap failed, falling back to stats-only: %v", task.Number, err)
-					}
-				}
-
-				// Fallback to stats-only SelectBetterAgent if intelligent swap didn't work
-				if !swapped {
-					// Load execution history for agent selection
-					var history []*learning.TaskExecution
-					if te.LearningStore != nil {
-						ctx2 := context.Background()
-						fileToQuery := te.PlanFile
-						if task.SourceFile != "" {
-							fileToQuery = task.SourceFile
-						}
-						history, _ = te.LearningStore.GetExecutionHistory(ctx2, fileToQuery, task.Number)
-					}
-
-					// Call SelectBetterAgent to determine best agent (deprecated fallback)
-					if fallbackAgent, reason := learning.SelectBetterAgent(task.Agent, history, review.SuggestedAgent); fallbackAgent != "" && fallbackAgent != task.Agent {
-						newAgent = fallbackAgent
-						swapReason = fmt.Sprintf("stats-only: %s", reason)
-						swapped = true
+						te.Logger.Warnf("[Task %s] Intelligent agent swap failed: %v", task.Number, err)
 					}
 				}
 
