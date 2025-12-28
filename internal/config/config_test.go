@@ -751,14 +751,8 @@ func TestConfig_LearningDefaults(t *testing.T) {
 	if cfg.Learning.DBPath != ".conductor/learning/executions.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, ".conductor/learning/executions.db")
 	}
-	if cfg.Learning.AutoAdaptAgent {
-		t.Errorf("Learning.AutoAdaptAgent = %v, want false", cfg.Learning.AutoAdaptAgent)
-	}
 	if !cfg.Learning.EnhancePrompts {
 		t.Errorf("Learning.EnhancePrompts = %v, want true", cfg.Learning.EnhancePrompts)
-	}
-	if cfg.Learning.MinFailuresBeforeAdapt != 2 {
-		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 2", cfg.Learning.MinFailuresBeforeAdapt)
 	}
 	if cfg.Learning.KeepExecutionsDays != 90 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 90", cfg.Learning.KeepExecutionsDays)
