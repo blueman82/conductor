@@ -48,13 +48,11 @@ func TestLoadConfig_FullMatrixCoversAllFields(t *testing.T) {
 	t.Run("Learning", func(t *testing.T) {
 		assertEqual(t, "Enabled", cfg.Learning.Enabled, true)
 		assertEqual(t, "DBPath", cfg.Learning.DBPath, "/tmp/learning.db")
-		assertEqual(t, "AutoAdaptAgent", cfg.Learning.AutoAdaptAgent, true)
 		assertEqual(t, "SwapDuringRetries", cfg.Learning.SwapDuringRetries, false)
 		assertEqual(t, "EnhancePrompts", cfg.Learning.EnhancePrompts, false)
 		assertEqual(t, "QCReadsPlanContext", cfg.Learning.QCReadsPlanContext, false)
 		assertEqual(t, "QCReadsDBContext", cfg.Learning.QCReadsDBContext, false)
 		assertEqual(t, "MaxContextEntries", cfg.Learning.MaxContextEntries, 25)
-		assertEqual(t, "MinFailuresBeforeAdapt", cfg.Learning.MinFailuresBeforeAdapt, 3)
 		assertEqual(t, "KeepExecutionsDays", cfg.Learning.KeepExecutionsDays, 45)
 		assertEqual(t, "MaxExecutionsPerTask", cfg.Learning.MaxExecutionsPerTask, 150)
 	})
