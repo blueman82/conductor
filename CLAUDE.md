@@ -103,6 +103,21 @@ tts:
   voice: "tara"
 ```
 
+### Mandatory Commit Verification (v2.30+)
+Tasks can specify required commits. Agents are instructed to commit, conductor verifies:
+```yaml
+# In plan YAML task:
+commit:
+  type: "feat"
+  message: "add user authentication"
+  files:
+    - "internal/auth/*.go"
+```
+- Agent receives MANDATORY COMMIT instructions in prompt
+- After agent completion, `git log --grep` verifies commit exists
+- QC is informed of commit status (missing = RED factor)
+- Results persisted to plan `execution_history` and learning DB
+
 ## QC Response Schema
 ```go
 type QCResponse struct {
