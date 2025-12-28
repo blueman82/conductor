@@ -242,6 +242,7 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 		cfg:             cfg,
 		clock:           time.Now,
 		FileLockManager: NewFileLockManager(),
+		CommitVerifier:  NewGitLogVerifier(),
 	}
 
 	if cfg.QualityControl.Enabled {
