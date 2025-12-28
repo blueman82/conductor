@@ -2496,3 +2496,28 @@ func (s *Store) GetRecentSTOPAnalyses(ctx context.Context, limit int) ([]*STOPAn
 
 	return analyses, nil
 }
+
+// UpdateCommitVerification updates the commit verification columns for a task execution.
+// This is called after commit verification completes to persist results for analytics.
+// Uses the most recent execution for the given plan_file, task_number, and run_number.
+func (s *Store) UpdateCommitVerification(ctx context.Context, planFile, taskNumber string, runNumber int, verified bool, commitHash string) error {
+	query := `UPDATE task_executions
+		SET commit_verified = ?, commit_hash = ?
+		WHERE plan_file = ? AND task_number = ? AND run_number = ?
+		AND id = (
+			SELECT id FROM task_executions
+			WHERE plan_file = ? AND task_number = ? AND run_number = ?
+			ORDER BY id DESC LIMIT 1
+		)`
+
+	_, err := s.db.ExecContext(ctx, query,
+		verified, commitHash,
+		planFile, taskNumber, runNumber,
+		planFile, taskNumber, runNumber,
+	)
+	if err != nil {
+		return fmt.Errorf("update commit verification: %w", err)
+	}
+
+	return nil
+}

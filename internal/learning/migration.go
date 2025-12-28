@@ -389,6 +389,14 @@ CREATE INDEX IF NOT EXISTS idx_kg_edges_type ON kg_edges(edge_type);
 CREATE INDEX IF NOT EXISTS idx_kg_edges_weight ON kg_edges(weight DESC);
 `,
 	},
+	{
+		Version:     11,
+		Description: "Add commit verification columns to task_executions for audit trail",
+		// This migration adds columns for persisting commit verification results.
+		// commit_verified: boolean indicating if a matching commit was found
+		// commit_hash: the short git commit hash if found
+		SQL: ``,
+	},
 }
 
 // MigrationVersion represents a record of an applied migration
@@ -441,6 +449,13 @@ func (s *Store) ApplyMigrations(ctx context.Context) error {
 		// Handle migration 7 special case: add model_name column idempotently
 		if migration.Version == 7 {
 			if err := s.applyMigration7Tx(ctx, tx); err != nil {
+				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
+			}
+		}
+
+		// Handle migration 11 special case: add commit verification columns idempotently
+		if migration.Version == 11 {
+			if err := s.applyMigration11Tx(ctx, tx); err != nil {
 				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
 			}
 		}
@@ -678,6 +693,25 @@ func (s *Store) applyMigration7Tx(ctx context.Context, tx *sql.Tx) error {
 	if err := s.addColumnIfNotExistsTx(ctx, tx, "behavioral_sessions", "model_name", "TEXT"); err != nil {
 		return fmt.Errorf("add column model_name: %w", err)
 	}
+	return nil
+}
+
+// applyMigration11Tx adds commit verification columns for audit trail (within transaction).
+func (s *Store) applyMigration11Tx(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		def  string
+	}{
+		{"commit_verified", "BOOLEAN"},
+		{"commit_hash", "TEXT"},
+	}
+
+	for _, col := range columns {
+		if err := s.addColumnIfNotExistsTx(ctx, tx, "task_executions", col.name, col.def); err != nil {
+			return fmt.Errorf("add column %s: %w", col.name, err)
+		}
+	}
+
 	return nil
 }
 

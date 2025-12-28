@@ -44,6 +44,14 @@ type ExecutionAttempt struct {
 	Timestamp     time.Time
 }
 
+// CommitVerificationData captures the result of commit verification for persistence.
+type CommitVerificationData struct {
+	Found    bool   // Whether a matching commit was found
+	Hash     string // Short commit hash (if found)
+	Message  string // Actual commit message (if found)
+	Mismatch string // Reason for mismatch (if not found)
+}
+
 var (
 	markdownStatusPattern = regexp.MustCompile(`(?i)status\s*:\s*([^)|]+)`)
 
@@ -551,4 +559,269 @@ func updateYAMLFeedback(content []byte, taskNumber string, attempt *ExecutionAtt
 	}
 
 	return buf.Bytes(), nil
+}
+
+// UpdateTaskCommitVerification adds commit verification data to a specific execution attempt.
+// For YAML plans, this adds a commit_verification field to the execution_history entry.
+// For Markdown plans, this appends commit info to the execution history section.
+// Uses file locking for atomic read-modify-write operations.
+func UpdateTaskCommitVerification(planPath string, taskNumber string, attemptNumber int, verif *CommitVerificationData) error {
+	if verif == nil {
+		return nil
+	}
+
+	format := parser.DetectFormat(planPath)
+	if format == parser.FormatUnknown {
+		return fmt.Errorf("%w: %s", ErrUnsupportedFormat, filepath.Ext(planPath))
+	}
+
+	lockPath := planPath + ".lock"
+	lock := filelock.NewFileLock(lockPath)
+
+	if err := lock.Lock(); err != nil {
+		return err
+	}
+	defer lock.Unlock()
+
+	content, err := os.ReadFile(planPath)
+	if err != nil {
+		return err
+	}
+
+	var updated []byte
+	switch format {
+	case parser.FormatMarkdown:
+		updated, err = updateMarkdownCommitVerification(content, taskNumber, attemptNumber, verif)
+	case parser.FormatYAML:
+		updated, err = updateYAMLCommitVerification(content, taskNumber, attemptNumber, verif)
+	default:
+		return fmt.Errorf("%w: unsupported format", ErrUnsupportedFormat)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return filelock.AtomicWrite(planPath, updated)
+}
+
+// updateMarkdownCommitVerification adds commit verification info to markdown execution history.
+func updateMarkdownCommitVerification(content []byte, taskNumber string, attemptNumber int, verif *CommitVerificationData) ([]byte, error) {
+	lines := strings.Split(string(content), "\n")
+
+	// Find the attempt header (e.g., "#### Attempt 1")
+	attemptPattern := regexp.MustCompile(fmt.Sprintf(`^####\s+Attempt\s+%d\s+\(`, attemptNumber))
+	taskPattern := regexp.MustCompile(fmt.Sprintf(`^(?:\s*[-*+]\s+\[[xX ]\]\s+)?Task\s+%s\b`, regexp.QuoteMeta(taskNumber)))
+
+	// Find task first
+	taskIdx := -1
+	for i, line := range lines {
+		if taskPattern.MatchString(line) {
+			taskIdx = i
+			break
+		}
+	}
+
+	if taskIdx == -1 {
+		return nil, fmt.Errorf("%w: task %s not found in markdown plan", ErrTaskNotFound, taskNumber)
+	}
+
+	// Find attempt header within this task's execution history
+	nextTaskPattern := regexp.MustCompile(`^(?:\s*[-*+]\s+\[[xX ]\]\s+)?Task\s+\d+\b`)
+	endIdx := len(lines)
+	for i := taskIdx + 1; i < len(lines); i++ {
+		if nextTaskPattern.MatchString(lines[i]) {
+			endIdx = i
+			break
+		}
+	}
+
+	// Find the attempt within the task section
+	attemptIdx := -1
+	for i := taskIdx + 1; i < endIdx; i++ {
+		if attemptPattern.MatchString(lines[i]) {
+			attemptIdx = i
+			break
+		}
+	}
+
+	if attemptIdx == -1 {
+		// Attempt not found, append to end of task section
+		commitLine := formatCommitVerificationMarkdown(verif)
+		newLines := make([]string, 0, len(lines)+2)
+		newLines = append(newLines, lines[:endIdx]...)
+		newLines = append(newLines, commitLine, "")
+		newLines = append(newLines, lines[endIdx:]...)
+		return []byte(strings.Join(newLines, "\n")), nil
+	}
+
+	// Insert commit verification after the attempt header block
+	// Find the end of the attempt block (next "####" or end of task)
+	insertIdx := attemptIdx + 1
+	for i := attemptIdx + 1; i < endIdx; i++ {
+		if strings.HasPrefix(lines[i], "####") {
+			insertIdx = i
+			break
+		}
+		insertIdx = i + 1
+	}
+
+	commitLine := formatCommitVerificationMarkdown(verif)
+	newLines := make([]string, 0, len(lines)+2)
+	newLines = append(newLines, lines[:insertIdx]...)
+	newLines = append(newLines, commitLine, "")
+	newLines = append(newLines, lines[insertIdx:]...)
+
+	return []byte(strings.Join(newLines, "\n")), nil
+}
+
+// formatCommitVerificationMarkdown formats commit verification for markdown output.
+func formatCommitVerificationMarkdown(verif *CommitVerificationData) string {
+	if verif.Found {
+		return fmt.Sprintf("Commit Verified: ✓ %s (%s)", verif.Hash, verif.Message)
+	}
+	return fmt.Sprintf("Commit Verified: ✗ %s", verif.Mismatch)
+}
+
+// updateYAMLCommitVerification adds commit_verification to a YAML execution_history entry.
+func updateYAMLCommitVerification(content []byte, taskNumber string, attemptNumber int, verif *CommitVerificationData) ([]byte, error) {
+	var doc yaml.Node
+
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+	if err := decoder.Decode(&doc); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidPlan, err)
+	}
+
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil, fmt.Errorf("%w: missing document node", ErrInvalidPlan)
+	}
+
+	root := doc.Content[0]
+	planNode := findMapValue(root, "plan")
+	if planNode == nil {
+		return nil, fmt.Errorf("%w: plan section not found", ErrInvalidPlan)
+	}
+
+	tasksNode := findMapValue(planNode, "tasks")
+	if tasksNode == nil || tasksNode.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("%w: tasks sequence not found", ErrInvalidPlan)
+	}
+
+	taskNode := findTaskNode(tasksNode, taskNumber)
+	if taskNode == nil {
+		return nil, fmt.Errorf("%w: task %s not found in YAML plan", ErrTaskNotFound, taskNumber)
+	}
+
+	// Find execution_history and the specific attempt
+	historyNode := findMapValue(taskNode, "execution_history")
+	if historyNode == nil || historyNode.Kind != yaml.SequenceNode {
+		// No execution_history yet, create with commit verification
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "execution_history"}
+		historyNode = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+
+		// Create attempt entry with commit_verification
+		attemptNode := createCommitVerificationAttemptNode(attemptNumber, verif)
+		historyNode.Content = append(historyNode.Content, attemptNode)
+
+		taskNode.Content = append(taskNode.Content, keyNode, historyNode)
+	} else {
+		// Find or create the attempt entry
+		foundAttempt := false
+		for _, item := range historyNode.Content {
+			if item.Kind != yaml.MappingNode {
+				continue
+			}
+			attemptNumNode := findMapValue(item, "attempt_number")
+			if attemptNumNode != nil && attemptNumNode.Value == fmt.Sprintf("%d", attemptNumber) {
+				// Add commit_verification to this attempt
+				addCommitVerificationToNode(item, verif)
+				foundAttempt = true
+				break
+			}
+		}
+
+		if !foundAttempt {
+			// Create new attempt entry with commit_verification
+			attemptNode := createCommitVerificationAttemptNode(attemptNumber, verif)
+			historyNode.Content = append(historyNode.Content, attemptNode)
+		}
+	}
+
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&doc); err != nil {
+		return nil, fmt.Errorf("failed to encode YAML plan: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// createCommitVerificationAttemptNode creates a new attempt node with commit_verification.
+func createCommitVerificationAttemptNode(attemptNumber int, verif *CommitVerificationData) *yaml.Node {
+	attemptNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+
+	// Add attempt_number
+	attemptNode.Content = append(attemptNode.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "attempt_number"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprintf("%d", attemptNumber)})
+
+	// Add commit_verification
+	addCommitVerificationToNode(attemptNode, verif)
+
+	return attemptNode
+}
+
+// addCommitVerificationToNode adds commit_verification fields to an existing mapping node.
+func addCommitVerificationToNode(node *yaml.Node, verif *CommitVerificationData) {
+	// Check if commit_verification already exists and update it
+	for i := 0; i < len(node.Content); i += 2 {
+		if node.Content[i].Value == "commit_verification" {
+			// Update existing
+			node.Content[i+1] = createCommitVerificationValueNode(verif)
+			return
+		}
+	}
+
+	// Add new commit_verification
+	node.Content = append(node.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "commit_verification"},
+		createCommitVerificationValueNode(verif))
+}
+
+// createCommitVerificationValueNode creates the value node for commit_verification.
+func createCommitVerificationValueNode(verif *CommitVerificationData) *yaml.Node {
+	verifNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+
+	// Add found (boolean)
+	foundValue := "false"
+	if verif.Found {
+		foundValue = "true"
+	}
+	verifNode.Content = append(verifNode.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "found"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: foundValue})
+
+	// Add hash if found
+	if verif.Hash != "" {
+		verifNode.Content = append(verifNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "hash"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: verif.Hash})
+	}
+
+	// Add message if found
+	if verif.Message != "" {
+		verifNode.Content = append(verifNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "message"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: verif.Message})
+	}
+
+	// Add mismatch if not found
+	if !verif.Found && verif.Mismatch != "" {
+		verifNode.Content = append(verifNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "mismatch"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: verif.Mismatch})
+	}
+
+	return verifNode
 }

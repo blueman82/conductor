@@ -1201,7 +1201,11 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 
 		// Commit verification hook: verify agent created expected commit (v2.30+)
 		// Runs after agent output, before QC review. Non-blocking (warning only).
-		_ = te.postVerifyCommitHook(ctx, task)
+		// Result is captured for explicit data flow to QC and persistence.
+		commitResult := te.postVerifyCommitHook(ctx, task)
+
+		// Persist commit verification result to plan file and learning DB (v2.30+)
+		te.persistCommitVerification(ctx, task, attempt+1, commitResult)
 
 		// Handle test failures (v2.10+)
 		// Test failures are treated like QC RED verdicts - retry with feedback injection
@@ -1687,6 +1691,46 @@ func extractTaskFiles(task models.Task) []string {
 	}
 
 	return unique
+}
+
+// persistCommitVerification persists commit verification results to both plan file and learning DB.
+// This is called after postVerifyCommitHook to maintain audit trail and enable analytics.
+// If commitResult is nil (no commit spec or no verifier), this is a no-op.
+func (te *DefaultTaskExecutor) persistCommitVerification(ctx context.Context, task models.Task, attemptNumber int, commitResult *CommitVerification) {
+	// Skip if no commit verification was performed
+	if commitResult == nil {
+		return
+	}
+
+	// Determine which file to update (multi-file plan support)
+	fileToUpdate := te.cfg.PlanPath
+	if task.SourceFile != "" {
+		fileToUpdate = task.SourceFile
+	} else if te.SourceFile != "" {
+		fileToUpdate = te.SourceFile
+	}
+
+	// Persist to plan file (execution_history.commit_verification)
+	if fileToUpdate != "" {
+		commitVerif := &updater.CommitVerificationData{
+			Found:   commitResult.Found,
+			Hash:    commitResult.CommitHash,
+			Message: commitResult.Message,
+		}
+		if !commitResult.Found && commitResult.Mismatch != "" {
+			commitVerif.Mismatch = commitResult.Mismatch
+		}
+		// Non-fatal: graceful degradation on write error
+		_ = updater.UpdateTaskCommitVerification(fileToUpdate, task.Number, attemptNumber, commitVerif)
+	}
+
+	// Persist to learning DB (commit_verified, commit_hash columns)
+	if te.LearningStore != nil {
+		if store, ok := te.LearningStore.(*learning.Store); ok {
+			// Non-fatal: graceful degradation on DB error
+			_ = store.UpdateCommitVerification(ctx, te.PlanFile, task.Number, te.RunNumber, commitResult.Found, commitResult.CommitHash)
+		}
+	}
 }
 
 // formatClassificationForRetry formats classification suggestions for retry agent
