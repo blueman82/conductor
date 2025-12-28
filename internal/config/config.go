@@ -892,9 +892,6 @@ func LoadConfig(path string) (*Config, error) {
 				// Explicitly set db_path, even if empty string
 				cfg.Learning.DBPath = learning.DBPath
 			}
-			if _, exists := learningMap["auto_adapt_agent"]; exists {
-				cfg.Learning.AutoAdaptAgent = learning.AutoAdaptAgent
-			}
 			if _, exists := learningMap["swap_during_retries"]; exists {
 				cfg.Learning.SwapDuringRetries = learning.SwapDuringRetries
 			}
