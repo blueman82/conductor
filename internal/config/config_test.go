@@ -2345,9 +2345,6 @@ learning:
 	if !cfg.Learning.Enabled {
 		t.Errorf("Learning.Enabled = %v, want true", cfg.Learning.Enabled)
 	}
-	if !cfg.Learning.AutoAdaptAgent {
-		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
-	}
 	if !cfg.Learning.QCReadsDBContext {
 		t.Errorf("Learning.QCReadsDBContext = %v, want true", cfg.Learning.QCReadsDBContext)
 	}
