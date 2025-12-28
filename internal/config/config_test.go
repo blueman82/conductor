@@ -796,9 +796,7 @@ func TestConfig_LearningCustomPath(t *testing.T) {
 	configContent := `learning:
   enabled: true
   db_path: /custom/path/learning.db
-  auto_adapt_agent: true
   enhance_prompts: false
-  min_failures_before_adapt: 5
   keep_executions_days: 30
   max_executions_per_task: 50
 `
