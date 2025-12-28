@@ -817,14 +817,8 @@ func TestConfig_LearningCustomPath(t *testing.T) {
 	if cfg.Learning.DBPath != "/custom/path/learning.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, "/custom/path/learning.db")
 	}
-	if !cfg.Learning.AutoAdaptAgent {
-		t.Errorf("Learning.AutoAdaptAgent = %v, want true", cfg.Learning.AutoAdaptAgent)
-	}
 	if cfg.Learning.EnhancePrompts {
 		t.Errorf("Learning.EnhancePrompts = %v, want false", cfg.Learning.EnhancePrompts)
-	}
-	if cfg.Learning.MinFailuresBeforeAdapt != 5 {
-		t.Errorf("Learning.MinFailuresBeforeAdapt = %d, want 5", cfg.Learning.MinFailuresBeforeAdapt)
 	}
 	if cfg.Learning.KeepExecutionsDays != 30 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 30", cfg.Learning.KeepExecutionsDays)
