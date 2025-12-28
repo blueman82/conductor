@@ -3112,17 +3112,16 @@ Retry 1:
 **Configuration:**
 ```yaml
 learning:
-  swap_during_retries: true        # Enable inter-retry swapping
-  min_failures_before_adapt: 2     # Require 2+ failures before adapting
+  swap_during_retries: true        # Enable inter-retry swapping with IntelligentAgentSwapper
 ```
 
 **Workflow:**
 
 1. Task executes with assigned agent
 2. QC reviews output and returns RED verdict
-3. QC includes `suggested_agent` field in response
-4. Conductor checks if `swap_during_retries` is enabled
-5. If enabled, conductor swaps to suggested agent for next retry
+3. IntelligentAgentSwapper analyzes context (files, errors, knowledge graph)
+4. Claude recommends best agent with confidence score
+5. Conductor swaps to recommended agent for next retry
 6. Retry executes with new agent
 7. If successful, learning system records which agent succeeded
 
