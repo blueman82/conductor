@@ -1196,45 +1196,30 @@ func TestRetryFlow_ConfigVariations(t *testing.T) {
 		{
 			name: "SwapDuringRetries disabled prevents agent swap",
 			setupExecutor: func(te *DefaultTaskExecutor) {
-				te.SwapDuringRetries = false  // Disable swapping
-				te.MinFailuresBeforeAdapt = 1 // But allow threshold
+				te.SwapDuringRetries = false // Disable swapping
 			},
 			expectedAgentSeq: []string{"backend-developer", "backend-developer"}, // No swap
 			shouldSwap:       false,
 			description:      "When SwapDuringRetries=false, agent should never swap even on RED",
 		},
 		{
-			name: "MinFailuresBeforeAdapt threshold enforced",
-			setupExecutor: func(te *DefaultTaskExecutor) {
-				te.SwapDuringRetries = true
-				te.MinFailuresBeforeAdapt = 3 // Require 3 RED verdicts before swap
-			},
-			expectedAgentSeq: []string{"backend-developer", "backend-developer"}, // No swap on first RED
-			shouldSwap:       false,
-			description:      "When MinFailuresBeforeAdapt=3, no swap on first RED verdict",
-		},
-		{
-			name: "LearningStore nil disables historical analysis fallback",
+			name: "LearningStore nil still allows swap via IntelligentAgentSwapper",
 			setupExecutor: func(te *DefaultTaskExecutor) {
 				te.LearningStore = nil // Disable learning store
 				te.SwapDuringRetries = true
-				te.MinFailuresBeforeAdapt = 1
 			},
-			expectedAgentSeq: []string{"backend-developer", "golang-pro"}, // Still swaps to QC suggestion
+			expectedAgentSeq: []string{"backend-developer", "golang-pro"}, // Still swaps via IntelligentAgentSwapper
 			shouldSwap:       true,
-			description:      "When LearningStore=nil but QC suggests, agent still swaps to QC suggestion",
+			description:      "When LearningStore=nil, agent still swaps via IntelligentAgentSwapper",
 		},
 		{
-			name: "All conditions met enables agent swap",
+			name: "SwapDuringRetries enabled allows agent swap",
 			setupExecutor: func(te *DefaultTaskExecutor) {
-				// All conditions for swap are met
 				te.SwapDuringRetries = true
-				te.MinFailuresBeforeAdapt = 1
-				// LearningStore already configured
 			},
 			expectedAgentSeq: []string{"backend-developer", "golang-pro"}, // Swap to suggested agent
 			shouldSwap:       true,
-			description:      "With all conditions met, agent should swap to suggested agent",
+			description:      "With SwapDuringRetries=true, agent should swap on first retry",
 		},
 	}
 
