@@ -282,34 +282,17 @@ func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Tas
 		return nil
 	}
 
-	// Query learning store for failure analysis with configurable threshold
-	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number, te.MinFailuresBeforeAdapt)
+	// Query learning store for failure analysis (for prompt enhancement only)
+	// Agent selection now handled by IntelligentAgentSwapper during retries
+	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number, 1)
 	if err != nil {
 		// Log warning but don't break execution (graceful degradation)
-		// In production, this would use a proper logger
-		// For now, just continue without learning
 		return nil
 	}
 
 	// No analysis available
 	if analysis == nil {
 		return nil
-	}
-
-	// Adapt agent if auto-adaptation is enabled and recommended
-	if te.AutoAdaptAgent && analysis.ShouldTryDifferentAgent && analysis.SuggestedAgent != "" {
-		// Only switch if different from current agent
-		if task.Agent != analysis.SuggestedAgent {
-			// Store original agent for logging
-			originalAgent := task.Agent
-			if originalAgent == "" {
-				originalAgent = "default"
-			}
-
-			// Log agent switch for observability
-			// In production: log.Info("Switching agent: %s → %s based on failure patterns", originalAgent, analysis.SuggestedAgent)
-			task.Agent = analysis.SuggestedAgent
-		}
 	}
 
 	// Enhance prompt with learning context if there are past failures
