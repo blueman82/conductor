@@ -1342,9 +1342,6 @@ func (c *Config) Validate() error {
 		if c.Learning.DBPath == "" {
 			return fmt.Errorf("learning.db_path cannot be empty when learning is enabled")
 		}
-		if c.Learning.MinFailuresBeforeAdapt <= 0 {
-			return fmt.Errorf("learning.min_failures_before_adapt must be > 0, got %d", c.Learning.MinFailuresBeforeAdapt)
-		}
 		if c.Learning.KeepExecutionsDays < 0 {
 			return fmt.Errorf("learning.keep_executions_days must be >= 0, got %d", c.Learning.KeepExecutionsDays)
 		}
