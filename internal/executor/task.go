@@ -1402,11 +1402,8 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 		case review.Flag == models.StatusRed:
 			lastErr = ErrQualityGateFailed
 
-			// Track RED failures for agent swap
-			redCount := attempt + 1
-
-			// Agent swap during retries: if enabled and threshold reached
-			if te.SwapDuringRetries && redCount >= te.MinFailuresBeforeAdapt {
+			// Agent swap during retries using IntelligentAgentSwapper
+			if te.SwapDuringRetries {
 				var newAgent string
 				var swapReason string
 				swapped := false
