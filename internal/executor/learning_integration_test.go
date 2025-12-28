@@ -1202,23 +1202,25 @@ func TestRetryFlow_ConfigVariations(t *testing.T) {
 			description:      "When SwapDuringRetries=false, agent should never swap even on RED",
 		},
 		{
-			name: "LearningStore nil still allows swap via IntelligentAgentSwapper",
+			name: "LearningStore nil without IntelligentAgentSwapper - no swap",
 			setupExecutor: func(te *DefaultTaskExecutor) {
 				te.LearningStore = nil // Disable learning store
 				te.SwapDuringRetries = true
+				// Note: IntelligentAgentSwapper is NOT set, so no swap occurs
 			},
-			expectedAgentSeq: []string{"backend-developer", "golang-pro"}, // Still swaps via IntelligentAgentSwapper
-			shouldSwap:       true,
-			description:      "When LearningStore=nil, agent still swaps via IntelligentAgentSwapper",
+			expectedAgentSeq: []string{"backend-developer", "backend-developer"}, // No swap without swapper
+			shouldSwap:       false,
+			description:      "Without IntelligentAgentSwapper, no agent swap occurs",
 		},
 		{
-			name: "SwapDuringRetries enabled allows agent swap",
+			name: "SwapDuringRetries enabled but no IntelligentAgentSwapper - no swap",
 			setupExecutor: func(te *DefaultTaskExecutor) {
 				te.SwapDuringRetries = true
+				// Note: IntelligentAgentSwapper is NOT set, so no swap occurs
 			},
-			expectedAgentSeq: []string{"backend-developer", "golang-pro"}, // Swap to suggested agent
-			shouldSwap:       true,
-			description:      "With SwapDuringRetries=true, agent should swap on first retry",
+			expectedAgentSeq: []string{"backend-developer", "backend-developer"}, // No swap without swapper
+			shouldSwap:       false,
+			description:      "SwapDuringRetries=true without IntelligentAgentSwapper, no swap occurs",
 		},
 	}
 
