@@ -1334,7 +1334,7 @@ func TestApplyRetryOnRedFallback_Integration(t *testing.T) {
 			},
 		}
 
-		// Config doesn't have min_failures_before_adapt (0)
+		// Config doesn't have fallback value (0)
 		ApplyRetryOnRedFallback(plan, 0)
 
 		// Should use default value of 2
