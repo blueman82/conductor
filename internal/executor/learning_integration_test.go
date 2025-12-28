@@ -1045,7 +1045,6 @@ func TestRetryFlow_AgentSwappingAfterThreshold(t *testing.T) {
 	require.NoError(t, err)
 	executor.LearningStore = store
 	executor.SwapDuringRetries = true
-	executor.MinFailuresBeforeAdapt = 1 // Swap on first RED
 
 	// Execute task with initial agent
 	task := models.Task{
