@@ -1547,6 +1547,438 @@ plan:
 	}
 }
 
+// =============================================================================
+// CommitSpec Parsing Tests (v2.30+)
+// =============================================================================
+
+func TestYAMLParser_CommitSpec_Full(t *testing.T) {
+	yamlContent := `
+plan:
+  metadata:
+    feature_name: "Commit Spec Test"
+  tasks:
+    - task_number: 1
+      name: "Task with full commit spec"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test task"
+      commit:
+        type: "feat"
+        message: "add new feature"
+        body: "This adds a comprehensive new feature."
+        files:
+          - "internal/parser/yaml.go"
+          - "internal/parser/yaml_test.go"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	if len(plan.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(plan.Tasks))
+	}
+
+	task := plan.Tasks[0]
+	if task.CommitSpec == nil {
+		t.Fatal("expected CommitSpec to be populated")
+	}
+
+	if task.CommitSpec.Type != "feat" {
+		t.Errorf("expected type 'feat', got %q", task.CommitSpec.Type)
+	}
+	if task.CommitSpec.Message != "add new feature" {
+		t.Errorf("expected message 'add new feature', got %q", task.CommitSpec.Message)
+	}
+	if task.CommitSpec.Body != "This adds a comprehensive new feature." {
+		t.Errorf("expected body 'This adds a comprehensive new feature.', got %q", task.CommitSpec.Body)
+	}
+	if len(task.CommitSpec.Files) != 2 {
+		t.Errorf("expected 2 files, got %d", len(task.CommitSpec.Files))
+	}
+	if len(task.CommitSpec.Files) > 0 && task.CommitSpec.Files[0] != "internal/parser/yaml.go" {
+		t.Errorf("expected first file 'internal/parser/yaml.go', got %q", task.CommitSpec.Files[0])
+	}
+}
+
+func TestYAMLParser_CommitSpec_MinimalValid(t *testing.T) {
+	yamlContent := `
+plan:
+  metadata:
+    feature_name: "Minimal Commit Test"
+  tasks:
+    - task_number: 1
+      name: "Task with minimal commit spec"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test task"
+      commit:
+        message: "fix bug"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	task := plan.Tasks[0]
+	if task.CommitSpec == nil {
+		t.Fatal("expected CommitSpec to be populated")
+	}
+
+	if task.CommitSpec.Type != "" {
+		t.Errorf("expected empty type, got %q", task.CommitSpec.Type)
+	}
+	if task.CommitSpec.Message != "fix bug" {
+		t.Errorf("expected message 'fix bug', got %q", task.CommitSpec.Message)
+	}
+}
+
+func TestYAMLParser_CommitSpec_MissingMessage(t *testing.T) {
+	yamlContent := `
+plan:
+  metadata:
+    feature_name: "Invalid Commit Test"
+  tasks:
+    - task_number: 1
+      name: "Task with invalid commit spec"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test task"
+      commit:
+        type: "feat"
+        files:
+          - "some/file.go"
+`
+	parser := NewYAMLParser()
+	_, err := parser.Parse(strings.NewReader(yamlContent))
+	if err == nil {
+		t.Error("expected error for commit spec without message")
+	}
+	if !strings.Contains(err.Error(), "commit message is required") {
+		t.Errorf("expected error about missing message, got: %v", err)
+	}
+}
+
+func TestYAMLParser_CommitSpec_BackwardCompatible(t *testing.T) {
+	// Tasks without commit section should work and have nil CommitSpec
+	yamlContent := `
+plan:
+  metadata:
+    feature_name: "No Commit Test"
+  tasks:
+    - task_number: 1
+      name: "Task without commit"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Legacy task"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	task := plan.Tasks[0]
+	if task.CommitSpec != nil {
+		t.Errorf("expected nil CommitSpec for task without commit section, got %+v", task.CommitSpec)
+	}
+}
+
+func TestYAMLParser_CommitSpec_EmptySection(t *testing.T) {
+	// Empty commit section should result in nil CommitSpec (backward compat)
+	yamlContent := `
+plan:
+  metadata:
+    feature_name: "Empty Commit Test"
+  tasks:
+    - task_number: 1
+      name: "Task with empty commit"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Task"
+      commit:
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	task := plan.Tasks[0]
+	if task.CommitSpec != nil {
+		t.Errorf("expected nil CommitSpec for empty commit section, got %+v", task.CommitSpec)
+	}
+}
+
+func TestYAMLParser_CommitSpec_InPrompt(t *testing.T) {
+	// Verify commit section appears in generated prompt
+	yamlContent := `
+plan:
+  metadata:
+    feature_name: "Commit Prompt Test"
+  tasks:
+    - task_number: 1
+      name: "Task with commit in prompt"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test task"
+      commit:
+        type: "fix"
+        message: "resolve memory leak"
+        files:
+          - "internal/cache.go"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	task := plan.Tasks[0]
+	if !strings.Contains(task.Prompt, "## Commit") {
+		t.Error("expected prompt to contain '## Commit' section")
+	}
+	if !strings.Contains(task.Prompt, "fix") {
+		t.Error("expected prompt to contain commit type 'fix'")
+	}
+	if !strings.Contains(task.Prompt, "resolve memory leak") {
+		t.Error("expected prompt to contain commit message")
+	}
+	if !strings.Contains(task.Prompt, "internal/cache.go") {
+		t.Error("expected prompt to contain commit file")
+	}
+}
+
+func TestYAMLParser_CommitSpec_MandatoryCommitSection(t *testing.T) {
+	// Verify MANDATORY COMMIT section with imperative instructions
+	yamlContent := `
+plan:
+  metadata:
+    feature_name: "Mandatory Commit Test"
+  tasks:
+    - task_number: 1
+      name: "Task with mandatory commit"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test task"
+      commit:
+        type: "feat"
+        message: "add CommitExecutor interface"
+        files:
+          - "internal/executor/commit.go"
+          - "internal/executor/commit_test.go"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	task := plan.Tasks[0]
+	prompt := task.Prompt
+
+	// Verify MANDATORY COMMIT section exists
+	if !strings.Contains(prompt, "## MANDATORY COMMIT (REQUIRED)") {
+		t.Error("expected prompt to contain '## MANDATORY COMMIT (REQUIRED)' section")
+	}
+
+	// Verify imperative instruction
+	if !strings.Contains(prompt, "you MUST commit them to git") {
+		t.Error("expected prompt to contain imperative commit instruction")
+	}
+
+	// Verify exact commit message format (feat: add CommitExecutor interface)
+	if !strings.Contains(prompt, "feat: add CommitExecutor interface") {
+		t.Error("expected prompt to contain formatted commit message 'feat: add CommitExecutor interface'")
+	}
+
+	// Verify files are listed for staging
+	if !strings.Contains(prompt, "internal/executor/commit.go") {
+		t.Error("expected prompt to contain first commit file")
+	}
+	if !strings.Contains(prompt, "internal/executor/commit_test.go") {
+		t.Error("expected prompt to contain second commit file")
+	}
+
+	// Verify git add command example
+	if !strings.Contains(prompt, "git add") {
+		t.Error("expected prompt to contain 'git add' command")
+	}
+
+	// Verify git commit command example
+	if !strings.Contains(prompt, "git commit -m") {
+		t.Error("expected prompt to contain 'git commit -m' command")
+	}
+
+	// Verify warning about task completion
+	if !strings.Contains(prompt, "Your task is NOT complete until changes are committed") {
+		t.Error("expected prompt to contain task completion warning")
+	}
+}
+
+func TestYAMLParser_CommitSpec_MandatoryCommitWithoutType(t *testing.T) {
+	// Verify MANDATORY COMMIT section works without type prefix
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Task without type"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+      commit:
+        message: "quick fix for edge case"
+        files:
+          - "internal/parser/yaml.go"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	prompt := plan.Tasks[0].Prompt
+
+	// Should contain message without type prefix
+	if !strings.Contains(prompt, "quick fix for edge case") {
+		t.Error("expected prompt to contain raw commit message")
+	}
+	if !strings.Contains(prompt, "git commit -m \"quick fix for edge case\"") {
+		t.Error("expected git commit command with raw message (no type prefix)")
+	}
+}
+
+func TestYAMLParser_CommitSpec_MandatoryCommitNoFiles(t *testing.T) {
+	// Verify MANDATORY COMMIT section works without explicit file list
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Task without files"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+      commit:
+        type: "docs"
+        message: "update documentation"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	prompt := plan.Tasks[0].Prompt
+
+	// Should have MANDATORY COMMIT section
+	if !strings.Contains(prompt, "## MANDATORY COMMIT (REQUIRED)") {
+		t.Error("expected MANDATORY COMMIT section even without files")
+	}
+
+	// Should have generic file staging instruction
+	if !strings.Contains(prompt, "Stage your modified files") {
+		t.Error("expected generic file staging instruction when no files specified")
+	}
+
+	// Should have proper commit message
+	if !strings.Contains(prompt, "docs: update documentation") {
+		t.Error("expected formatted commit message")
+	}
+}
+
+func TestYAMLParser_CommitSpec_NoMandatoryCommitWithoutSpec(t *testing.T) {
+	// Verify MANDATORY COMMIT section is NOT present when no commit spec
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Task without commit"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Legacy task"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	prompt := plan.Tasks[0].Prompt
+
+	// Should NOT have MANDATORY COMMIT section
+	if strings.Contains(prompt, "MANDATORY COMMIT") {
+		t.Error("expected NO MANDATORY COMMIT section when commit spec is absent")
+	}
+}
+
+func TestYAMLParser_CommitSpec_AllConventionalTypes(t *testing.T) {
+	types := []string{"feat", "fix", "docs", "style", "refactor", "test", "chore", "perf", "ci", "build", "revert"}
+
+	for _, commitType := range types {
+		t.Run(commitType, func(t *testing.T) {
+			yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Test Task"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+      commit:
+        type: "` + commitType + `"
+        message: "test message"
+`
+			parser := NewYAMLParser()
+			plan, err := parser.Parse(strings.NewReader(yamlContent))
+			if err != nil {
+				t.Fatalf("Failed to parse with type %q: %v", commitType, err)
+			}
+
+			if plan.Tasks[0].CommitSpec == nil {
+				t.Fatalf("expected CommitSpec for type %q", commitType)
+			}
+			if plan.Tasks[0].CommitSpec.Type != commitType {
+				t.Errorf("expected type %q, got %q", commitType, plan.Tasks[0].CommitSpec.Type)
+			}
+		})
+	}
+}
+
+func TestYAMLParser_CommitSpec_WithGlobPatterns(t *testing.T) {
+	yamlContent := `
+plan:
+  tasks:
+    - task_number: 1
+      name: "Glob Pattern Test"
+      depends_on: []
+      estimated_time: "30m"
+      description: "Test"
+      commit:
+        type: "refactor"
+        message: "restructure parser"
+        files:
+          - "internal/parser/*.go"
+          - "internal/parser/**/*_test.go"
+`
+	parser := NewYAMLParser()
+	plan, err := parser.Parse(strings.NewReader(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	if plan.Tasks[0].CommitSpec == nil {
+		t.Fatal("expected CommitSpec")
+	}
+	if len(plan.Tasks[0].CommitSpec.Files) != 2 {
+		t.Errorf("expected 2 file patterns, got %d", len(plan.Tasks[0].CommitSpec.Files))
+	}
+	if plan.Tasks[0].CommitSpec.Files[0] != "internal/parser/*.go" {
+		t.Errorf("expected glob pattern preserved, got %q", plan.Tasks[0].CommitSpec.Files[0])
+	}
+}
+
 // mustParseYAMLFile is a test helper that parses a YAML file and fails on error
 func mustParseYAMLFile(t *testing.T, path string) *models.Plan {
 	t.Helper()

@@ -2918,3 +2918,657 @@ func TestDefaultTaskExecutor_RateLimitRecovery(t *testing.T) {
 		}
 	})
 }
+
+// ========================================================================
+// Commit Verification Tests (v2.30+)
+// ========================================================================
+
+// MockCommitVerifier implements CommitVerifier for testing.
+type MockCommitVerifier struct {
+	mu          sync.Mutex
+	CallCount   int
+	LastSpec    *models.CommitSpec
+	LastWorkDir string
+	Result      *CommitVerification
+	Error       error
+	VerifyFunc  func(ctx context.Context, spec *models.CommitSpec, workDir string) (*CommitVerification, error)
+}
+
+func (m *MockCommitVerifier) Verify(ctx context.Context, spec *models.CommitSpec, workDir string) (*CommitVerification, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.CallCount++
+	m.LastSpec = spec
+	m.LastWorkDir = workDir
+
+	if m.VerifyFunc != nil {
+		return m.VerifyFunc(ctx, spec, workDir)
+	}
+
+	if m.Error != nil {
+		return nil, m.Error
+	}
+
+	if m.Result != nil {
+		return m.Result, nil
+	}
+
+	// Default: return not found
+	return &CommitVerification{
+		Found:    false,
+		Mismatch: "no commit found",
+	}, nil
+}
+
+// MockRuntimeEnforcementLogger implements RuntimeEnforcementLogger for testing.
+type MockRuntimeEnforcementLogger struct {
+	mu           sync.Mutex
+	InfoMessages []string
+	WarnMessages []string
+}
+
+func (m *MockRuntimeEnforcementLogger) LogTestCommands(entries []models.TestCommandResult) {}
+
+func (m *MockRuntimeEnforcementLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
+}
+
+func (m *MockRuntimeEnforcementLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}
+
+func (m *MockRuntimeEnforcementLogger) LogErrorPattern(pattern interface{})   {}
+func (m *MockRuntimeEnforcementLogger) LogDetectedError(detected interface{}) {}
+
+func (m *MockRuntimeEnforcementLogger) Warnf(format string, args ...interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.WarnMessages = append(m.WarnMessages, fmt.Sprintf(format, args...))
+}
+
+func (m *MockRuntimeEnforcementLogger) Info(message string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.InfoMessages = append(m.InfoMessages, message)
+}
+
+func (m *MockRuntimeEnforcementLogger) Infof(format string, args ...interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.InfoMessages = append(m.InfoMessages, fmt.Sprintf(format, args...))
+}
+
+func (m *MockRuntimeEnforcementLogger) GetInfoMessages() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string{}, m.InfoMessages...)
+}
+
+func (m *MockRuntimeEnforcementLogger) GetWarnMessages() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string{}, m.WarnMessages...)
+}
+
+// TestPostVerifyCommitHook_NoCommitSpec verifies hook is no-op when task has no commit spec.
+func TestPostVerifyCommitHook_NoCommitSpec(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	mockVerifier := &MockCommitVerifier{}
+	mockLogger := &MockRuntimeEnforcementLogger{}
+
+	executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+	executor.CommitVerifier = mockVerifier
+	executor.Logger = mockLogger
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		// No CommitSpec
+	}
+
+	result := executor.postVerifyCommitHook(context.Background(), task)
+
+	// Should return nil and not call verifier
+	if result != nil {
+		t.Errorf("expected nil result for task without commit spec, got %+v", result)
+	}
+	if mockVerifier.CallCount != 0 {
+		t.Errorf("expected verifier not to be called, but was called %d times", mockVerifier.CallCount)
+	}
+}
+
+// TestPostVerifyCommitHook_EmptyCommitSpec verifies hook is no-op when commit spec is empty.
+func TestPostVerifyCommitHook_EmptyCommitSpec(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	mockVerifier := &MockCommitVerifier{}
+	mockLogger := &MockRuntimeEnforcementLogger{}
+
+	executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+	executor.CommitVerifier = mockVerifier
+	executor.Logger = mockLogger
+
+	task := models.Task{
+		Number:     "1",
+		Name:       "Test task",
+		Prompt:     "Do something",
+		CommitSpec: &models.CommitSpec{}, // Empty spec
+	}
+
+	result := executor.postVerifyCommitHook(context.Background(), task)
+
+	// Should return nil and not call verifier
+	if result != nil {
+		t.Errorf("expected nil result for task with empty commit spec, got %+v", result)
+	}
+	if mockVerifier.CallCount != 0 {
+		t.Errorf("expected verifier not to be called, but was called %d times", mockVerifier.CallCount)
+	}
+}
+
+// TestPostVerifyCommitHook_NoVerifier verifies hook logs warning when verifier not configured.
+func TestPostVerifyCommitHook_NoVerifier(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	mockLogger := &MockRuntimeEnforcementLogger{}
+
+	executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+	// Explicitly unset the CommitVerifier (NewTaskExecutor sets it by default)
+	executor.CommitVerifier = nil
+	executor.Logger = mockLogger
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		CommitSpec: &models.CommitSpec{
+			Type:    "feat",
+			Message: "add new feature",
+		},
+	}
+
+	result := executor.postVerifyCommitHook(context.Background(), task)
+
+	// Should return nil and log warning
+	if result != nil {
+		t.Errorf("expected nil result when verifier not configured, got %+v", result)
+	}
+
+	warnMsgs := mockLogger.GetWarnMessages()
+	if len(warnMsgs) != 1 {
+		t.Fatalf("expected 1 warning message, got %d", len(warnMsgs))
+	}
+	if !strings.Contains(warnMsgs[0], "no CommitVerifier configured") {
+		t.Errorf("expected warning about missing verifier, got %q", warnMsgs[0])
+	}
+}
+
+// TestPostVerifyCommitHook_CommitFound verifies hook correctly handles found commits.
+func TestPostVerifyCommitHook_CommitFound(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	mockVerifier := &MockCommitVerifier{
+		Result: &CommitVerification{
+			Found:      true,
+			CommitHash: "abc1234",
+			FullHash:   "abc1234567890",
+			Message:    "feat: add new feature",
+		},
+	}
+	mockLogger := &MockRuntimeEnforcementLogger{}
+
+	executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+	executor.CommitVerifier = mockVerifier
+	executor.Logger = mockLogger
+	executor.WorkDir = "/test/workdir"
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		CommitSpec: &models.CommitSpec{
+			Type:    "feat",
+			Message: "add new feature",
+		},
+	}
+
+	result := executor.postVerifyCommitHook(context.Background(), task)
+
+	// Verify result
+	if result == nil {
+		t.Fatal("expected non-nil result when commit found")
+	}
+	if !result.Found {
+		t.Error("expected Found to be true")
+	}
+	if result.CommitHash != "abc1234" {
+		t.Errorf("expected CommitHash 'abc1234', got %q", result.CommitHash)
+	}
+
+	// Verify verifier was called correctly
+	if mockVerifier.CallCount != 1 {
+		t.Errorf("expected verifier to be called once, got %d", mockVerifier.CallCount)
+	}
+	if mockVerifier.LastWorkDir != "/test/workdir" {
+		t.Errorf("expected workdir '/test/workdir', got %q", mockVerifier.LastWorkDir)
+	}
+	if mockVerifier.LastSpec.Message != "add new feature" {
+		t.Errorf("expected spec message 'add new feature', got %q", mockVerifier.LastSpec.Message)
+	}
+
+	// Verify stored in executor for QC access
+	if executor.lastCommitVerification == nil {
+		t.Error("expected lastCommitVerification to be stored")
+	}
+	if !executor.lastCommitVerification.Found {
+		t.Error("expected stored verification to have Found=true")
+	}
+
+	// Verify info message logged
+	infoMsgs := mockLogger.GetInfoMessages()
+	if len(infoMsgs) != 1 {
+		t.Fatalf("expected 1 info message, got %d", len(infoMsgs))
+	}
+	if !strings.Contains(infoMsgs[0], "Commit verified") {
+		t.Errorf("expected info about verified commit, got %q", infoMsgs[0])
+	}
+}
+
+// TestPostVerifyCommitHook_CommitNotFound verifies hook correctly handles missing commits.
+func TestPostVerifyCommitHook_CommitNotFound(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	mockVerifier := &MockCommitVerifier{
+		Result: &CommitVerification{
+			Found:    false,
+			Mismatch: "no commit found matching \"feat: add feature\"",
+		},
+	}
+	mockLogger := &MockRuntimeEnforcementLogger{}
+
+	executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+	executor.CommitVerifier = mockVerifier
+	executor.Logger = mockLogger
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		CommitSpec: &models.CommitSpec{
+			Type:    "feat",
+			Message: "add feature",
+		},
+	}
+
+	result := executor.postVerifyCommitHook(context.Background(), task)
+
+	// Result should be returned (non-nil) even when not found
+	if result == nil {
+		t.Fatal("expected non-nil result even when commit not found")
+	}
+	if result.Found {
+		t.Error("expected Found to be false")
+	}
+	if result.Mismatch == "" {
+		t.Error("expected Mismatch to be set")
+	}
+
+	// Verify warning logged
+	warnMsgs := mockLogger.GetWarnMessages()
+	if len(warnMsgs) != 1 {
+		t.Fatalf("expected 1 warning message, got %d", len(warnMsgs))
+	}
+	if !strings.Contains(warnMsgs[0], "Commit not found") {
+		t.Errorf("expected warning about missing commit, got %q", warnMsgs[0])
+	}
+}
+
+// TestPostVerifyCommitHook_VerifierError verifies hook gracefully handles verifier errors.
+func TestPostVerifyCommitHook_VerifierError(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	mockVerifier := &MockCommitVerifier{
+		Error: fmt.Errorf("git not found"),
+	}
+	mockLogger := &MockRuntimeEnforcementLogger{}
+
+	executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+	executor.CommitVerifier = mockVerifier
+	executor.Logger = mockLogger
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		CommitSpec: &models.CommitSpec{
+			Type:    "feat",
+			Message: "add feature",
+		},
+	}
+
+	result := executor.postVerifyCommitHook(context.Background(), task)
+
+	// Should return nil on error (graceful degradation)
+	if result != nil {
+		t.Errorf("expected nil result on verifier error, got %+v", result)
+	}
+
+	// Verify warning logged
+	warnMsgs := mockLogger.GetWarnMessages()
+	if len(warnMsgs) != 1 {
+		t.Fatalf("expected 1 warning message, got %d", len(warnMsgs))
+	}
+	if !strings.Contains(warnMsgs[0], "Commit verification error") {
+		t.Errorf("expected warning about verification error, got %q", warnMsgs[0])
+	}
+}
+
+// TestPostVerifyCommitHook_ResetsLastResult verifies hook resets lastCommitVerification.
+func TestPostVerifyCommitHook_ResetsLastResult(t *testing.T) {
+	invoker := newStubInvoker(&agent.InvocationResult{
+		Output:   `{"content":"done"}`,
+		ExitCode: 0,
+	})
+
+	executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+	if err != nil {
+		t.Fatalf("NewTaskExecutor returned error: %v", err)
+	}
+
+	// Set a previous result
+	executor.lastCommitVerification = &CommitVerification{
+		Found:      true,
+		CommitHash: "old123",
+	}
+
+	task := models.Task{
+		Number: "1",
+		Name:   "Test task",
+		Prompt: "Do something",
+		// No commit spec - should reset lastCommitVerification
+	}
+
+	executor.postVerifyCommitHook(context.Background(), task)
+
+	// Should have reset to nil
+	if executor.lastCommitVerification != nil {
+		t.Error("expected lastCommitVerification to be reset to nil")
+	}
+}
+
+// TestExecute_CommitVerificationIntegration tests commit verification during task execution.
+func TestExecute_CommitVerificationIntegration(t *testing.T) {
+	t.Run("commit verification runs after agent output before QC", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		// Track call order
+		callOrder := []string{}
+		mockVerifier := &MockCommitVerifier{
+			VerifyFunc: func(ctx context.Context, spec *models.CommitSpec, workDir string) (*CommitVerification, error) {
+				callOrder = append(callOrder, "verifier")
+				return &CommitVerification{Found: true, CommitHash: "abc123", Message: "feat: test"}, nil
+			},
+		}
+
+		reviewer := &stubReviewer{
+			results: []*ReviewResult{
+				{Flag: models.StatusGreen, Feedback: "Good"},
+			},
+		}
+
+		executor, err := NewTaskExecutor(invoker, reviewer, nil, TaskExecutorConfig{
+			QualityControl: models.QualityControlConfig{
+				Enabled:    true,
+				RetryOnRed: 0,
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+		executor.CommitVerifier = mockVerifier
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Test",
+			Prompt: "Do thing",
+			CommitSpec: &models.CommitSpec{
+				Type:    "feat",
+				Message: "test",
+			},
+		}
+
+		result, err := executor.Execute(context.Background(), task)
+		if err != nil {
+			t.Fatalf("Execute returned error: %v", err)
+		}
+
+		if result.Status != models.StatusGreen {
+			t.Errorf("expected GREEN status, got %s", result.Status)
+		}
+
+		// Verify commit verifier was called
+		if mockVerifier.CallCount != 1 {
+			t.Errorf("expected verifier to be called once, got %d", mockVerifier.CallCount)
+		}
+
+		// Verify lastCommitVerification is populated
+		if executor.lastCommitVerification == nil {
+			t.Error("expected lastCommitVerification to be populated")
+		}
+		if !executor.lastCommitVerification.Found {
+			t.Error("expected commit verification Found=true")
+		}
+	})
+
+	t.Run("missing commit does not block task success", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		mockVerifier := &MockCommitVerifier{
+			Result: &CommitVerification{
+				Found:    false,
+				Mismatch: "no commit found",
+			},
+		}
+		mockLogger := &MockRuntimeEnforcementLogger{}
+
+		executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+		executor.CommitVerifier = mockVerifier
+		executor.Logger = mockLogger
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Test",
+			Prompt: "Do thing",
+			CommitSpec: &models.CommitSpec{
+				Type:    "feat",
+				Message: "test",
+			},
+		}
+
+		result, err := executor.Execute(context.Background(), task)
+		if err != nil {
+			t.Fatalf("Execute returned error: %v", err)
+		}
+
+		// Task should still succeed (commit verification is non-blocking)
+		if result.Status != models.StatusGreen {
+			t.Errorf("expected GREEN status (non-blocking), got %s", result.Status)
+		}
+
+		// Warning should be logged
+		warnMsgs := mockLogger.GetWarnMessages()
+		hasCommitWarning := false
+		for _, msg := range warnMsgs {
+			if strings.Contains(msg, "Commit not found") {
+				hasCommitWarning = true
+				break
+			}
+		}
+		if !hasCommitWarning {
+			t.Error("expected warning about missing commit")
+		}
+	})
+
+	t.Run("backward compatibility without commit verifier", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+		// No CommitVerifier set (backward compatibility)
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Test",
+			Prompt: "Do thing",
+			CommitSpec: &models.CommitSpec{
+				Type:    "feat",
+				Message: "test",
+			},
+		}
+
+		result, err := executor.Execute(context.Background(), task)
+		if err != nil {
+			t.Fatalf("Execute returned error: %v", err)
+		}
+
+		// Should succeed without verifier
+		if result.Status != models.StatusGreen {
+			t.Errorf("expected GREEN status, got %s", result.Status)
+		}
+	})
+}
+
+// TestPersistCommitVerification tests the persistCommitVerification helper function.
+func TestPersistCommitVerification(t *testing.T) {
+	t.Run("nil commit result is no-op", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{
+			PlanPath: "/tmp/test-plan.yaml",
+		})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Test task",
+			Prompt: "Do something",
+		}
+
+		// Should not panic with nil commitResult
+		executor.persistCommitVerification(context.Background(), task, 1, nil)
+	})
+
+	t.Run("skips persist when no plan path", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+
+		task := models.Task{
+			Number: "1",
+			Name:   "Test task",
+			Prompt: "Do something",
+		}
+
+		commitResult := &CommitVerification{
+			Found:      true,
+			CommitHash: "abc1234",
+			Message:    "feat: test",
+		}
+
+		// Should not panic with no plan path
+		executor.persistCommitVerification(context.Background(), task, 1, commitResult)
+	})
+
+	t.Run("uses task source file over plan path", func(t *testing.T) {
+		invoker := newStubInvoker(&agent.InvocationResult{
+			Output:   `{"content":"done"}`,
+			ExitCode: 0,
+		})
+
+		executor, err := NewTaskExecutor(invoker, nil, nil, TaskExecutorConfig{
+			PlanPath: "/tmp/main-plan.yaml",
+		})
+		if err != nil {
+			t.Fatalf("NewTaskExecutor returned error: %v", err)
+		}
+
+		// Task with SourceFile set - should use this path
+		task := models.Task{
+			Number:     "1",
+			Name:       "Test task",
+			Prompt:     "Do something",
+			SourceFile: "/tmp/subplan.yaml",
+		}
+
+		commitResult := &CommitVerification{
+			Found:      true,
+			CommitHash: "abc1234",
+			Message:    "feat: test",
+		}
+
+		// Should not panic - we're just testing the path selection logic
+		// In production, this would write to /tmp/subplan.yaml
+		executor.persistCommitVerification(context.Background(), task, 1, commitResult)
+	})
+}

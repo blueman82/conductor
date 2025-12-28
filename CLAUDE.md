@@ -5,7 +5,7 @@
 
 Conductor is a Go CLI for autonomous multi-agent orchestration. It parses plan files (Markdown/YAML), calculates task dependencies via graph algorithms, and executes tasks in parallel waves with QC reviews and adaptive learning.
 
-**Current**: v2.28.0 - Production-ready with Pattern Intelligence, Architecture Checkpoint, TTS feedback, budget tracking, and 86%+ test coverage.
+**Current**: v2.30.0 - Production-ready with Pattern Intelligence, Architecture Checkpoint, Mandatory Commit Verification, TTS feedback, budget tracking, and 86%+ test coverage.
 
 ## Quick Reference
 
@@ -103,6 +103,21 @@ tts:
   voice: "tara"
 ```
 
+### Mandatory Commit Verification (v2.30+)
+Tasks can specify required commits. Agents are instructed to commit, conductor verifies:
+```yaml
+# In plan YAML task:
+commit:
+  type: "feat"
+  message: "add user authentication"
+  files:
+    - "internal/auth/*.go"
+```
+- Agent receives MANDATORY COMMIT instructions in prompt
+- After agent completion, `git log --grep` verifies commit exists
+- QC is informed of commit status (missing = RED factor)
+- Results persisted to plan `execution_history` and learning DB
+
 ## QC Response Schema
 ```go
 type QCResponse struct {
@@ -153,6 +168,7 @@ conductor observe export --format json
 ## Key Files
 - `internal/executor/task.go` - Task execution pipeline
 - `internal/executor/qc.go` - Quality control, STOP justification
+- `internal/executor/commit_verifier.go` - Git commit verification
 - `internal/pattern/intelligence.go` - Pattern orchestrator
 - `internal/pattern/claude_enhancement.go` - LLM confidence refinement
 - `internal/budget/waiter.go` - Rate limit waiting with TTS

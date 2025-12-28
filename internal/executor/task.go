@@ -208,12 +208,16 @@ type DefaultTaskExecutor struct {
 	// Intelligent Agent Swap integration (v2.30+)
 	IntelligentAgentSwapper *learning.IntelligentAgentSwapper // Claude-powered agent selection for retries (optional)
 
+	// Commit Verification integration (v2.30+)
+	CommitVerifier CommitVerifier // Verifies agent created expected commit (optional)
+
 	// Runtime state for passing to QC
-	lastTestResults      []TestCommandResult            // Populated after RunTestCommands
-	lastCriterionResults []CriterionVerificationResult  // Populated after RunCriterionVerifications
-	lastDocTargetResults []DocTargetResult              // Populated after VerifyDocumentationTargets
-	lastPatternResult    *PreTaskCheckResult            // Populated after Pattern Intelligence check (v2.24+)
-	lastArchResult       *architecture.CheckpointResult // Populated after Architecture checkpoint (v2.27+)
+	lastTestResults        []TestCommandResult            // Populated after RunTestCommands
+	lastCriterionResults   []CriterionVerificationResult  // Populated after RunCriterionVerifications
+	lastDocTargetResults   []DocTargetResult              // Populated after VerifyDocumentationTargets
+	lastPatternResult      *PreTaskCheckResult            // Populated after Pattern Intelligence check (v2.24+)
+	lastArchResult         *architecture.CheckpointResult // Populated after Architecture checkpoint (v2.27+)
+	lastCommitVerification *CommitVerification            // Populated after commit verification (v2.30+)
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -238,6 +242,7 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 		cfg:             cfg,
 		clock:           time.Now,
 		FileLockManager: NewFileLockManager(),
+		CommitVerifier:  NewGitLogVerifier(),
 	}
 
 	if cfg.QualityControl.Enabled {
@@ -529,6 +534,55 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 	if te.LIPCollectorHook != nil {
 		te.LIPCollectorHook.PostTaskHook(ctx, *task, result, success)
 	}
+}
+
+// postVerifyCommitHook verifies that the agent created the expected commit (v2.30+).
+// This hook runs AFTER agent output is received but BEFORE QC review starts.
+// It is non-blocking: missing commits are logged as warnings but don't fail the task.
+// The verification result is stored in lastCommitVerification for QC to access.
+//
+// This is for VERIFICATION only - agents commit via instructions in the prompt.
+// Conductor only verifies the commit exists after agent completion.
+func (te *DefaultTaskExecutor) postVerifyCommitHook(ctx context.Context, task models.Task) *CommitVerification {
+	// Reset previous result
+	te.lastCommitVerification = nil
+
+	// Skip if no commit spec present
+	if task.CommitSpec == nil || task.CommitSpec.IsEmpty() {
+		return nil
+	}
+
+	// Skip if no verifier configured (backward compatibility)
+	if te.CommitVerifier == nil {
+		if te.Logger != nil {
+			te.Logger.Warnf("Task %s has commit spec but no CommitVerifier configured", task.Number)
+		}
+		return nil
+	}
+
+	// Perform verification
+	result, err := te.CommitVerifier.Verify(ctx, task.CommitSpec, te.WorkDir)
+	if err != nil {
+		// Graceful degradation: log error but don't fail task
+		if te.Logger != nil {
+			te.Logger.Warnf("Commit verification error for task %s: %v", task.Number, err)
+		}
+		return nil
+	}
+
+	// Store result for QC access
+	te.lastCommitVerification = result
+
+	// Log verification outcome
+	if te.Logger != nil {
+		if result.Found {
+			te.Logger.Infof("Commit verified for task %s: %s (%s)", task.Number, result.CommitHash, result.Message)
+		} else {
+			te.Logger.Warnf("Commit not found for task %s: %s", task.Number, result.Mismatch)
+		}
+	}
+
+	return result
 }
 
 // collectBehavioralMetrics extracts metrics from a session JSONL file and stores in database
@@ -1146,6 +1200,14 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 			}
 		}
 
+		// Commit verification hook: verify agent created expected commit (v2.30+)
+		// Runs after agent output, before QC review. Non-blocking (warning only).
+		// Result is captured for explicit data flow to QC and persistence.
+		commitResult := te.postVerifyCommitHook(ctx, task)
+
+		// Persist commit verification result to plan file and learning DB (v2.30+)
+		te.persistCommitVerification(ctx, task, attempt+1, commitResult)
+
 		// Handle test failures (v2.10+)
 		// Test failures are treated like QC RED verdicts - retry with feedback injection
 		if testFailureErr != nil {
@@ -1288,6 +1350,10 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				qc.STOPSummary = BuildSTOPSummaryFromSTOPResult(te.lastPatternResult.STOPResult)
 				qc.RequireJustification = te.PatternHook.RequireJustification()
 			}
+
+			// Wire commit verification result to QC (v2.30+)
+			// This enables QC to consider commit presence/absence in verdict
+			qc.CommitVerification = te.lastCommitVerification
 		}
 
 		review, reviewErr := te.reviewer.Review(ctx, task, output)
@@ -1626,6 +1692,46 @@ func extractTaskFiles(task models.Task) []string {
 	}
 
 	return unique
+}
+
+// persistCommitVerification persists commit verification results to both plan file and learning DB.
+// This is called after postVerifyCommitHook to maintain audit trail and enable analytics.
+// If commitResult is nil (no commit spec or no verifier), this is a no-op.
+func (te *DefaultTaskExecutor) persistCommitVerification(ctx context.Context, task models.Task, attemptNumber int, commitResult *CommitVerification) {
+	// Skip if no commit verification was performed
+	if commitResult == nil {
+		return
+	}
+
+	// Determine which file to update (multi-file plan support)
+	fileToUpdate := te.cfg.PlanPath
+	if task.SourceFile != "" {
+		fileToUpdate = task.SourceFile
+	} else if te.SourceFile != "" {
+		fileToUpdate = te.SourceFile
+	}
+
+	// Persist to plan file (execution_history.commit_verification)
+	if fileToUpdate != "" {
+		commitVerif := &updater.CommitVerificationData{
+			Found:   commitResult.Found,
+			Hash:    commitResult.CommitHash,
+			Message: commitResult.Message,
+		}
+		if !commitResult.Found && commitResult.Mismatch != "" {
+			commitVerif.Mismatch = commitResult.Mismatch
+		}
+		// Non-fatal: graceful degradation on write error
+		_ = updater.UpdateTaskCommitVerification(fileToUpdate, task.Number, attemptNumber, commitVerif)
+	}
+
+	// Persist to learning DB (commit_verified, commit_hash columns)
+	if te.LearningStore != nil {
+		if store, ok := te.LearningStore.(*learning.Store); ok {
+			// Non-fatal: graceful degradation on DB error
+			_ = store.UpdateCommitVerification(ctx, te.PlanFile, task.Number, te.RunNumber, commitResult.Found, commitResult.CommitHash)
+		}
+	}
 }
 
 // formatClassificationForRetry formats classification suggestions for retry agent

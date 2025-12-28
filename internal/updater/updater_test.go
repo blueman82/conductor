@@ -1025,3 +1025,221 @@ func readFile(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
+// TestUpdateTaskCommitVerification_YAML tests YAML commit verification persistence.
+func TestUpdateTaskCommitVerification_YAML(t *testing.T) {
+	t.Run("adds commit_verification to existing attempt", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		planPath := filepath.Join(tmpDir, "plan.yaml")
+
+		yamlContent := `plan:
+  name: Test Plan
+  tasks:
+    - task_number: "1"
+      title: "Test Task"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: "golang-pro"
+          verdict: "GREEN"
+`
+		writeFile(t, planPath, yamlContent)
+
+		verif := &CommitVerificationData{
+			Found:   true,
+			Hash:    "abc1234",
+			Message: "feat: add new feature",
+		}
+
+		err := UpdateTaskCommitVerification(planPath, "1", 1, verif)
+		if err != nil {
+			t.Fatalf("UpdateTaskCommitVerification failed: %v", err)
+		}
+
+		content := readFile(t, planPath)
+		if !strings.Contains(content, "commit_verification") {
+			t.Errorf("expected commit_verification field, got:\n%s", content)
+		}
+		if !strings.Contains(content, "found: true") {
+			t.Errorf("expected found: true, got:\n%s", content)
+		}
+		if !strings.Contains(content, "hash: abc1234") {
+			t.Errorf("expected hash: abc1234, got:\n%s", content)
+		}
+		if !strings.Contains(content, "message:") || !strings.Contains(content, "feat: add new feature") {
+			t.Errorf("expected message field with 'feat: add new feature', got:\n%s", content)
+		}
+	})
+
+	t.Run("adds commit_verification with mismatch for not found", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		planPath := filepath.Join(tmpDir, "plan.yaml")
+
+		yamlContent := `plan:
+  name: Test Plan
+  tasks:
+    - task_number: "1"
+      title: "Test Task"
+      status: "completed"
+      execution_history:
+        - attempt_number: "1"
+          agent: "golang-pro"
+          verdict: "GREEN"
+`
+		writeFile(t, planPath, yamlContent)
+
+		verif := &CommitVerificationData{
+			Found:    false,
+			Mismatch: "no commit found matching \"feat: add feature\"",
+		}
+
+		err := UpdateTaskCommitVerification(planPath, "1", 1, verif)
+		if err != nil {
+			t.Fatalf("UpdateTaskCommitVerification failed: %v", err)
+		}
+
+		content := readFile(t, planPath)
+		if !strings.Contains(content, "commit_verification") {
+			t.Errorf("expected commit_verification field, got:\n%s", content)
+		}
+		if !strings.Contains(content, "found: false") {
+			t.Errorf("expected found: false, got:\n%s", content)
+		}
+		if !strings.Contains(content, "mismatch:") {
+			t.Errorf("expected mismatch field, got:\n%s", content)
+		}
+	})
+
+	t.Run("creates execution_history if not exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		planPath := filepath.Join(tmpDir, "plan.yaml")
+
+		yamlContent := `plan:
+  name: Test Plan
+  tasks:
+    - task_number: "1"
+      title: "Test Task"
+      status: "pending"
+`
+		writeFile(t, planPath, yamlContent)
+
+		verif := &CommitVerificationData{
+			Found:   true,
+			Hash:    "def5678",
+			Message: "fix: bug fix",
+		}
+
+		err := UpdateTaskCommitVerification(planPath, "1", 1, verif)
+		if err != nil {
+			t.Fatalf("UpdateTaskCommitVerification failed: %v", err)
+		}
+
+		content := readFile(t, planPath)
+		if !strings.Contains(content, "execution_history") {
+			t.Errorf("expected execution_history to be created, got:\n%s", content)
+		}
+		if !strings.Contains(content, "commit_verification") {
+			t.Errorf("expected commit_verification field, got:\n%s", content)
+		}
+	})
+
+	t.Run("nil verification is no-op", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		planPath := filepath.Join(tmpDir, "plan.yaml")
+
+		yamlContent := `plan:
+  name: Test Plan
+  tasks:
+    - task_number: "1"
+      title: "Test Task"
+      status: "pending"
+`
+		writeFile(t, planPath, yamlContent)
+
+		err := UpdateTaskCommitVerification(planPath, "1", 1, nil)
+		if err != nil {
+			t.Fatalf("UpdateTaskCommitVerification with nil should not error: %v", err)
+		}
+
+		content := readFile(t, planPath)
+		if strings.Contains(content, "commit_verification") {
+			t.Errorf("expected no commit_verification for nil verif, got:\n%s", content)
+		}
+	})
+}
+
+// TestUpdateTaskCommitVerification_Markdown tests Markdown commit verification persistence.
+func TestUpdateTaskCommitVerification_Markdown(t *testing.T) {
+	t.Run("adds commit verification to markdown task", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		planPath := filepath.Join(tmpDir, "plan.md")
+
+		markdown := `# Test Plan
+
+- [x] Task 1: Implement feature
+
+### Execution History
+
+#### Attempt 1 (2025-01-15 10:30:00)
+Agent: golang-pro
+Verdict: GREEN
+
+Agent Output:
+Done
+
+QC Feedback:
+Good
+
+`
+		writeFile(t, planPath, markdown)
+
+		verif := &CommitVerificationData{
+			Found:   true,
+			Hash:    "abc1234",
+			Message: "feat: add feature",
+		}
+
+		err := UpdateTaskCommitVerification(planPath, "1", 1, verif)
+		if err != nil {
+			t.Fatalf("UpdateTaskCommitVerification failed: %v", err)
+		}
+
+		content := readFile(t, planPath)
+		if !strings.Contains(content, "Commit Verified: ✓ abc1234") {
+			t.Errorf("expected commit verified message, got:\n%s", content)
+		}
+	})
+
+	t.Run("adds commit not found to markdown task", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		planPath := filepath.Join(tmpDir, "plan.md")
+
+		markdown := `# Test Plan
+
+- [x] Task 1: Implement feature
+
+### Execution History
+
+#### Attempt 1 (2025-01-15 10:30:00)
+Agent: golang-pro
+Verdict: GREEN
+
+`
+		writeFile(t, planPath, markdown)
+
+		verif := &CommitVerificationData{
+			Found:    false,
+			Mismatch: "no commit found",
+		}
+
+		err := UpdateTaskCommitVerification(planPath, "1", 1, verif)
+		if err != nil {
+			t.Fatalf("UpdateTaskCommitVerification failed: %v", err)
+		}
+
+		content := readFile(t, planPath)
+		if !strings.Contains(content, "Commit Verified: ✗") {
+			t.Errorf("expected commit not verified message, got:\n%s", content)
+		}
+	})
+}

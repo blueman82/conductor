@@ -2,6 +2,7 @@ package learning
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1704,5 +1705,111 @@ func TestGetRecentSessions(t *testing.T) {
 		sessions, err = store.GetRecentSessions(ctx, "", 2, 2)
 		require.NoError(t, err)
 		assert.Len(t, sessions, 2)
+	})
+}
+
+// TestUpdateCommitVerification tests the UpdateCommitVerification method.
+func TestUpdateCommitVerification(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("updates commit verification for latest execution", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Record a task execution first
+		exec := &TaskExecution{
+			PlanFile:   "test-plan.yaml",
+			TaskNumber: "1",
+			TaskName:   "Test Task",
+			Agent:      "golang-pro",
+			Prompt:     "Do something",
+			Success:    true,
+			Output:     "Done",
+			RunNumber:  1,
+		}
+
+		err := store.RecordExecution(ctx, exec)
+		require.NoError(t, err)
+
+		// Update commit verification
+		err = store.UpdateCommitVerification(ctx, "test-plan.yaml", "1", 1, true, "abc1234")
+		require.NoError(t, err)
+
+		// Verify the update by querying directly
+		var verified bool
+		var hash string
+		err = store.db.QueryRowContext(ctx,
+			"SELECT commit_verified, commit_hash FROM task_executions WHERE plan_file = ? AND task_number = ?",
+			"test-plan.yaml", "1").Scan(&verified, &hash)
+		require.NoError(t, err)
+		assert.True(t, verified)
+		assert.Equal(t, "abc1234", hash)
+	})
+
+	t.Run("handles not found commit", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Record a task execution first
+		exec := &TaskExecution{
+			PlanFile:   "test-plan.yaml",
+			TaskNumber: "2",
+			TaskName:   "Test Task 2",
+			Agent:      "golang-pro",
+			Prompt:     "Do something",
+			Success:    true,
+			Output:     "Done",
+			RunNumber:  1,
+		}
+
+		err := store.RecordExecution(ctx, exec)
+		require.NoError(t, err)
+
+		// Update commit verification with not found
+		err = store.UpdateCommitVerification(ctx, "test-plan.yaml", "2", 1, false, "")
+		require.NoError(t, err)
+
+		// Verify the update
+		var verified bool
+		var hash sql.NullString
+		err = store.db.QueryRowContext(ctx,
+			"SELECT commit_verified, commit_hash FROM task_executions WHERE plan_file = ? AND task_number = ?",
+			"test-plan.yaml", "2").Scan(&verified, &hash)
+		require.NoError(t, err)
+		assert.False(t, verified)
+		assert.Equal(t, "", hash.String)
+	})
+
+	t.Run("updates only latest execution for same task", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Record multiple executions for the same task
+		for i := 1; i <= 3; i++ {
+			exec := &TaskExecution{
+				PlanFile:   "test-plan.yaml",
+				TaskNumber: "3",
+				TaskName:   "Test Task 3",
+				Agent:      "golang-pro",
+				Prompt:     "Do something",
+				Success:    i == 3, // Only last one succeeds
+				Output:     fmt.Sprintf("Attempt %d", i),
+				RunNumber:  1,
+			}
+			err := store.RecordExecution(ctx, exec)
+			require.NoError(t, err)
+		}
+
+		// Update commit verification (should only update the latest)
+		err := store.UpdateCommitVerification(ctx, "test-plan.yaml", "3", 1, true, "xyz7890")
+		require.NoError(t, err)
+
+		// Count how many have commit_verified set
+		var count int
+		err = store.db.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM task_executions WHERE plan_file = ? AND task_number = ? AND commit_verified = 1",
+			"test-plan.yaml", "3").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count, "only latest execution should be updated")
 	})
 }

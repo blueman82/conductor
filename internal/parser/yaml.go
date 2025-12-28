@@ -300,6 +300,21 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 			return nil, fmt.Errorf("task %s: %w", taskNum, err)
 		}
 
+		// Parse commit specification if present
+		if yt.Commit.Message != "" || yt.Commit.Type != "" || yt.Commit.Body != "" || len(yt.Commit.Files) > 0 {
+			commitSpec := &models.CommitSpec{
+				Type:    yt.Commit.Type,
+				Message: yt.Commit.Message,
+				Body:    yt.Commit.Body,
+				Files:   yt.Commit.Files,
+			}
+			// Validate the commit spec
+			if err := commitSpec.Validate(); err != nil {
+				return nil, fmt.Errorf("task %s: invalid commit specification: %w", taskNum, err)
+			}
+			task.CommitSpec = commitSpec
+		}
+
 		// Build comprehensive prompt from all sections
 		task.Prompt = buildPromptFromYAML(&yt)
 
@@ -737,7 +752,7 @@ func buildPromptFromYAML(yt *yamlTask) string {
 		}
 	}
 
-	// Commit section
+	// Commit section - informational reference
 	if yt.Commit.Message != "" {
 		fmt.Fprintf(&prompt, "## Commit\n\n")
 		if yt.Commit.Type != "" {
@@ -754,6 +769,47 @@ func buildPromptFromYAML(yt *yamlTask) string {
 			}
 		}
 		fmt.Fprintf(&prompt, "\n")
+
+		// MANDATORY COMMIT section - imperative instructions for the agent
+		fmt.Fprintf(&prompt, "---\n\n")
+		fmt.Fprintf(&prompt, "## MANDATORY COMMIT (REQUIRED)\n\n")
+		fmt.Fprintf(&prompt, "After completing your changes, you MUST commit them to git:\n\n")
+
+		// Build the commit message using CommitSpec logic
+		commitSpec := &models.CommitSpec{
+			Type:    yt.Commit.Type,
+			Message: yt.Commit.Message,
+			Body:    yt.Commit.Body,
+			Files:   yt.Commit.Files,
+		}
+		commitMessage := commitSpec.BuildCommitMessage()
+
+		// Step 1: Stage files
+		if len(yt.Commit.Files) > 0 {
+			fmt.Fprintf(&prompt, "1. Stage the following files:\n")
+			for _, file := range yt.Commit.Files {
+				fmt.Fprintf(&prompt, "   - %s\n", strings.TrimSpace(file))
+			}
+			fmt.Fprintf(&prompt, "\n")
+		} else {
+			fmt.Fprintf(&prompt, "1. Stage your modified files.\n\n")
+		}
+
+		// Step 2: Create commit with exact message
+		fmt.Fprintf(&prompt, "2. Create commit with this EXACT message:\n")
+		fmt.Fprintf(&prompt, "   %s\n\n", commitMessage)
+
+		// Step 3: Example git commands
+		fmt.Fprintf(&prompt, "3. Use these commands:\n")
+		if len(yt.Commit.Files) > 0 {
+			fmt.Fprintf(&prompt, "   git add %s\n", strings.Join(yt.Commit.Files, " "))
+		} else {
+			fmt.Fprintf(&prompt, "   git add <your-modified-files>\n")
+		}
+		fmt.Fprintf(&prompt, "   git commit -m \"%s\"\n\n", commitMessage)
+
+		// Warning about task completion
+		fmt.Fprintf(&prompt, "⚠️ Your task is NOT complete until changes are committed.\n\n")
 	}
 
 	return prompt.String()
