@@ -3234,8 +3234,7 @@ timeout: 30m
 # Learning settings
 learning:
   enabled: true
-  auto_adapt_agent: true
-  min_failures_before_adapt: 3
+  swap_during_retries: true
 ```
 
 #### Disabling Learning
