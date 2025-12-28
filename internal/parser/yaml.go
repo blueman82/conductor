@@ -300,6 +300,21 @@ func (p *YAMLParser) Parse(r io.Reader) (*models.Plan, error) {
 			return nil, fmt.Errorf("task %s: %w", taskNum, err)
 		}
 
+		// Parse commit specification if present
+		if yt.Commit.Message != "" || yt.Commit.Type != "" || yt.Commit.Body != "" || len(yt.Commit.Files) > 0 {
+			commitSpec := &models.CommitSpec{
+				Type:    yt.Commit.Type,
+				Message: yt.Commit.Message,
+				Body:    yt.Commit.Body,
+				Files:   yt.Commit.Files,
+			}
+			// Validate the commit spec
+			if err := commitSpec.Validate(); err != nil {
+				return nil, fmt.Errorf("task %s: invalid commit specification: %w", taskNum, err)
+			}
+			task.CommitSpec = commitSpec
+		}
+
 		// Build comprehensive prompt from all sections
 		task.Prompt = buildPromptFromYAML(&yt)
 

@@ -59,6 +59,9 @@ type Task struct {
 	// Rate limit recovery (v2.21+)
 	ResumeSessionID string `json:"-" yaml:"-"` // Session ID for --resume flag (runtime only, not persisted)
 
+	// Commit specification (v2.30+)
+	CommitSpec *CommitSpec `yaml:"commit,omitempty" json:"commit,omitempty"` // Expected commit for verification
+
 	// Execution metadata for enhanced console output
 	ExecutionStartTime time.Time     `json:"execution_start_time,omitempty" yaml:"execution_start_time,omitempty"`
 	ExecutionEndTime   time.Time     `json:"execution_end_time,omitempty" yaml:"execution_end_time,omitempty"`
