@@ -208,12 +208,16 @@ type DefaultTaskExecutor struct {
 	// Intelligent Agent Swap integration (v2.30+)
 	IntelligentAgentSwapper *learning.IntelligentAgentSwapper // Claude-powered agent selection for retries (optional)
 
+	// Commit Verification integration (v2.30+)
+	CommitVerifier CommitVerifier // Verifies agent created expected commit (optional)
+
 	// Runtime state for passing to QC
-	lastTestResults      []TestCommandResult            // Populated after RunTestCommands
-	lastCriterionResults []CriterionVerificationResult  // Populated after RunCriterionVerifications
-	lastDocTargetResults []DocTargetResult              // Populated after VerifyDocumentationTargets
-	lastPatternResult    *PreTaskCheckResult            // Populated after Pattern Intelligence check (v2.24+)
-	lastArchResult       *architecture.CheckpointResult // Populated after Architecture checkpoint (v2.27+)
+	lastTestResults        []TestCommandResult            // Populated after RunTestCommands
+	lastCriterionResults   []CriterionVerificationResult  // Populated after RunCriterionVerifications
+	lastDocTargetResults   []DocTargetResult              // Populated after VerifyDocumentationTargets
+	lastPatternResult      *PreTaskCheckResult            // Populated after Pattern Intelligence check (v2.24+)
+	lastArchResult         *architecture.CheckpointResult // Populated after Architecture checkpoint (v2.27+)
+	lastCommitVerification *CommitVerification            // Populated after commit verification (v2.30+)
 }
 
 // NewTaskExecutor constructs a TaskExecutor implementation.
@@ -529,6 +533,55 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 	if te.LIPCollectorHook != nil {
 		te.LIPCollectorHook.PostTaskHook(ctx, *task, result, success)
 	}
+}
+
+// postVerifyCommitHook verifies that the agent created the expected commit (v2.30+).
+// This hook runs AFTER agent output is received but BEFORE QC review starts.
+// It is non-blocking: missing commits are logged as warnings but don't fail the task.
+// The verification result is stored in lastCommitVerification for QC to access.
+//
+// This is for VERIFICATION only - agents commit via instructions in the prompt.
+// Conductor only verifies the commit exists after agent completion.
+func (te *DefaultTaskExecutor) postVerifyCommitHook(ctx context.Context, task models.Task) *CommitVerification {
+	// Reset previous result
+	te.lastCommitVerification = nil
+
+	// Skip if no commit spec present
+	if task.CommitSpec == nil || task.CommitSpec.IsEmpty() {
+		return nil
+	}
+
+	// Skip if no verifier configured (backward compatibility)
+	if te.CommitVerifier == nil {
+		if te.Logger != nil {
+			te.Logger.Warnf("Task %s has commit spec but no CommitVerifier configured", task.Number)
+		}
+		return nil
+	}
+
+	// Perform verification
+	result, err := te.CommitVerifier.Verify(ctx, task.CommitSpec, te.WorkDir)
+	if err != nil {
+		// Graceful degradation: log error but don't fail task
+		if te.Logger != nil {
+			te.Logger.Warnf("Commit verification error for task %s: %v", task.Number, err)
+		}
+		return nil
+	}
+
+	// Store result for QC access
+	te.lastCommitVerification = result
+
+	// Log verification outcome
+	if te.Logger != nil {
+		if result.Found {
+			te.Logger.Infof("Commit verified for task %s: %s (%s)", task.Number, result.CommitHash, result.Message)
+		} else {
+			te.Logger.Warnf("Commit not found for task %s: %s", task.Number, result.Mismatch)
+		}
+	}
+
+	return result
 }
 
 // collectBehavioralMetrics extracts metrics from a session JSONL file and stores in database
@@ -1145,6 +1198,10 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				}
 			}
 		}
+
+		// Commit verification hook: verify agent created expected commit (v2.30+)
+		// Runs after agent output, before QC review. Non-blocking (warning only).
+		_ = te.postVerifyCommitHook(ctx, task)
 
 		// Handle test failures (v2.10+)
 		// Test failures are treated like QC RED verdicts - retry with feedback injection
