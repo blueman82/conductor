@@ -1730,13 +1730,11 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	configContent := `learning:
   enabled: true
   db_path: /custom/db.db
-  auto_adapt_agent: true
   swap_during_retries: false
   enhance_prompts: false
   qc_reads_plan_context: false
   qc_reads_db_context: false
   max_context_entries: 20
-  min_failures_before_adapt: 3
   keep_executions_days: 60
   max_executions_per_task: 200
 `
