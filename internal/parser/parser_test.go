@@ -1195,7 +1195,7 @@ func TestApplyRetryOnRedFallback(t *testing.T) {
 			planRetryOnRed:     0,
 			configMinFailures:  3,
 			expectedRetryOnRed: 3,
-			description:        "When plan doesn't set retry_on_red, fall back to config.learning.min_failures_before_adapt",
+			description:        "When plan doesn't set retry_on_red, fall back to config fallback value",
 		},
 		{
 			name:               "plan unset, config unset - use default",
