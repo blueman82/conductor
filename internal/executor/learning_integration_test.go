@@ -1000,8 +1000,8 @@ func TestCrossRun_MultipleFailuresAndRecovery(t *testing.T) {
 	assert.Contains(t, analysis.CommonPatterns, "compilation_error")
 }
 
-// TestRetryFlow_AgentSwappingAfterThreshold tests full retry flow with agent swapping
-func TestRetryFlow_AgentSwappingAfterThreshold(t *testing.T) {
+// TestRetryFlow_NoSwapWithoutIntelligentSwapper tests that without IntelligentAgentSwapper, no swap occurs
+func TestRetryFlow_NoSwapWithoutIntelligentSwapper(t *testing.T) {
 	// Setup: Create DB for learning store
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
@@ -1013,16 +1013,15 @@ func TestRetryFlow_AgentSwappingAfterThreshold(t *testing.T) {
 	// ExitCode must be 0 for QC to review - non-zero exits immediately
 	mockInv := newStubInvoker(
 		&agent.InvocationResult{Output: `{"status": "failed", "errors": ["compilation error"]}`, ExitCode: 0},
-		&agent.InvocationResult{Output: `{"status": "success", "summary": "Fixed with new agent"}`, ExitCode: 0},
+		&agent.InvocationResult{Output: `{"status": "success", "summary": "Fixed"}`, ExitCode: 0},
 	)
 
-	// Mock QC reviewer that returns RED with suggested agent, then GREEN
+	// Mock QC reviewer that returns RED then GREEN
 	mockReviewer := &stubReviewer{
 		results: []*ReviewResult{
 			{
-				Flag:           models.StatusRed,
-				Feedback:       "Code has compilation errors",
-				SuggestedAgent: "golang-pro", // QC suggests better agent
+				Flag:     models.StatusRed,
+				Feedback: "Code has compilation errors",
 			},
 			{
 				Flag:     models.StatusGreen,
@@ -1035,7 +1034,7 @@ func TestRetryFlow_AgentSwappingAfterThreshold(t *testing.T) {
 	// Mock updater
 	updater := &recordingUpdater{}
 
-	// Create executor with learning store
+	// Create executor with learning store but NO IntelligentAgentSwapper
 	executor, err := NewTaskExecutor(mockInv, mockReviewer, updater, TaskExecutorConfig{
 		QualityControl: models.QualityControlConfig{
 			Enabled:    true, // Enable QC
@@ -1045,11 +1044,12 @@ func TestRetryFlow_AgentSwappingAfterThreshold(t *testing.T) {
 	require.NoError(t, err)
 	executor.LearningStore = store
 	executor.SwapDuringRetries = true
+	// Note: IntelligentAgentSwapper is NOT set
 
 	// Execute task with initial agent
 	task := models.Task{
 		Number: "1",
-		Name:   "Test agent swap",
+		Name:   "Test no swap without swapper",
 		Prompt: "Fix compilation error",
 		Agent:  "backend-developer", // Initial agent
 	}
@@ -1060,21 +1060,20 @@ func TestRetryFlow_AgentSwappingAfterThreshold(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
-	// Key assertion: Agent should have been swapped
-	// First call uses backend-developer, second call uses golang-pro
+	// Key assertion: Without IntelligentAgentSwapper, agent should NOT be swapped
+	// All calls should use the same agent
 	agentsUsed := []string{}
 	for _, call := range mockInv.calls {
 		agentsUsed = append(agentsUsed, call.Agent)
 	}
 
 	assert.GreaterOrEqual(t, len(agentsUsed), 2, "Expected at least 2 agent invocations")
-	if len(agentsUsed) >= 2 {
-		assert.Equal(t, "backend-developer", agentsUsed[0], "First attempt should use initial agent")
-		assert.Equal(t, "golang-pro", agentsUsed[1], "Second attempt should use suggested agent")
+	for _, agent := range agentsUsed {
+		assert.Equal(t, "backend-developer", agent, "Without IntelligentAgentSwapper, agent should not swap")
 	}
 
-	// Verify final result has swapped agent
-	assert.Equal(t, "golang-pro", result.Task.Agent, "Task should end with swapped agent")
+	// Verify final result still has original agent
+	assert.Equal(t, "backend-developer", result.Task.Agent, "Task should end with original agent")
 }
 
 // TestRetryFlow_FeedbackStorageFormats tests dual feedback storage
