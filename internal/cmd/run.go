@@ -458,9 +458,9 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Apply retry_on_red fallback logic: plan value -> config value -> default 2
+	// Apply retry_on_red fallback logic: plan value -> default 2
 	// This ensures plans without explicit retry_on_red get sensible defaults
-	parser.ApplyRetryOnRedFallback(plan, cfg.Learning.MinFailuresBeforeAdapt)
+	parser.ApplyRetryOnRedFallback(plan, 0)
 
 	// Build dependency graph and validate
 	fmt.Fprintf(cmd.OutOrStdout(), "Validating dependencies...\n")
