@@ -2152,6 +2152,45 @@ Pattern Intelligence never blocks execution due to its own errors:
 - If store unavailable → continues with in-memory only
 - If disabled → zero behavior change from previous versions
 
+### Mandatory Commit Verification (v2.30+)
+
+Tasks can specify required git commits. Agents are instructed to commit their changes, and conductor verifies the commit was created.
+
+**Plan YAML:**
+
+```yaml
+tasks:
+  - id: 1
+    name: "Add authentication"
+    files: ["internal/auth/*.go"]
+    commit:
+      type: "feat"
+      message: "add user authentication"
+      files:
+        - "internal/auth/*.go"
+```
+
+**How It Works:**
+
+1. **Prompt Injection**: Agent receives MANDATORY COMMIT section with exact commit message and files
+2. **Verification**: After agent completes, `git log --grep` verifies matching commit exists
+3. **QC Integration**: Missing commits flagged as RED factor in quality control review
+4. **Persistence**: Results saved to plan `execution_history.commit_verification` and learning DB
+
+**Verification Output in execution_history:**
+
+```yaml
+execution_history:
+  - attempt_number: "1"
+    verdict: "GREEN"
+    commit_verification:
+      found: true
+      hash: "abc123"
+      message: "feat: add user authentication"
+```
+
+**Backward Compatible:** Tasks without `commit:` section work unchanged.
+
 ### Budget & Rate Limits (v2.20+, enhanced v2.21+)
 
 Intelligent rate limit auto-resume with state persistence and mid-task recovery.
