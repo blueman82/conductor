@@ -120,21 +120,30 @@ Required JSON structure:
 }
 
 // PrepareQCPrompt adds formatting instructions to QC review prompts
-// Includes explicit JSON format instruction at end of prompt for guaranteed valid QC response
+// Includes Claude 4 enhancements and XML-formatted response instructions for guaranteed valid QC response
 // Note: --json-schema is not enforced with --agents flag, so explicit format instruction is critical
 func PrepareQCPrompt(prompt string) string {
-	const instructionSuffix = `
+	// Add Claude 4-specific enhancements
+	enhanced := EnhancePromptForClaude4(prompt)
 
-## RESPONSE INSTRUCTIONS
+	// Build XML-formatted instructions
+	var sb strings.Builder
 
-CRITICAL CONSISTENCY RULE: Your feedback text MUST be consistent with criteria_results:
+	sb.WriteString(XMLSection("response_instructions", `
+<consistency_rule>
+CRITICAL: Your feedback text MUST be consistent with criteria_results:
 - If ANY criterion has "passed": false, feedback MUST mention which criterion failed and why
 - NEVER say "successfully completed" or similar if any criterion failed
 - If verdict is RED, feedback MUST describe what needs to be fixed
+</consistency_rule>
 
-CRITICAL: Respond with ONLY this exact JSON, nothing else - no prose, no explanation, no markdown, no tags:
-{"verdict":"GREEN","feedback":"...","criteria_results":[{"index":0,"criterion":"...","passed":true,"evidence":"..."}],"should_retry":false}`
-	return prompt + instructionSuffix
+<response_format>
+Respond with ONLY valid JSON matching the QC schema. No prose, no markdown.
+Required structure:
+{"verdict":"GREEN|YELLOW|RED","feedback":"...","criteria_results":[{"index":0,"criterion":"...","passed":true,"evidence":"..."}],"should_retry":false}
+</response_format>`))
+
+	return enhanced + "\n\n" + sb.String()
 }
 
 // parseAgentJSON parses JSON response from agent
