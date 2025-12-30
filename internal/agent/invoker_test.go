@@ -136,17 +136,18 @@ func TestBuildCommandArgs(t *testing.T) {
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Verify prompt includes JSON instruction suffix and task prompt
+					// Verify prompt includes XML-formatted response instructions and task prompt
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
+						if strings.Contains(arg, "<response_format>") &&
+							strings.Contains(arg, "Respond with ONLY valid JSON") &&
 							strings.Contains(arg, "Do something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Command should include JSON instruction suffix and the task prompt")
+						t.Error("Command should include XML-formatted response instructions and the task prompt")
 					}
 				},
 			},
@@ -181,16 +182,17 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify JSON instruction suffix (formatting instruction removed)
+					// Verify XML-formatted response instructions
 					hasFormatting := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") {
+						if strings.Contains(arg, "<response_format>") &&
+							strings.Contains(arg, "Respond with ONLY valid JSON") {
 							hasFormatting = true
 							break
 						}
 					}
 					if !hasFormatting {
-						t.Error("Prompt should include JSON instruction suffix")
+						t.Error("Prompt should include XML-formatted response instructions")
 					}
 				},
 			},
@@ -211,30 +213,32 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes JSON instruction suffix
+					// Verify prompt includes XML-formatted response instructions
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
+						if strings.Contains(arg, "<response_format>") &&
+							strings.Contains(arg, "Respond with ONLY valid JSON") &&
 							strings.Contains(arg, "Do work") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions when agent doesn't exist in registry")
+						t.Error("Prompt should include XML-formatted response instructions when agent doesn't exist in registry")
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Verify new JSON instruction format is present
-					hasNewFormat := false
+					// Verify Claude 4 enhancements are present
+					hasClaude4 := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") {
-							hasNewFormat = true
+						if strings.Contains(arg, "<context_awareness>") &&
+							strings.Contains(arg, "<thinking_guidance>") {
+							hasClaude4 = true
 							break
 						}
 					}
-					if !hasNewFormat {
-						t.Error("Prompt should include new JSON instruction format")
+					if !hasClaude4 {
+						t.Error("Prompt should include Claude 4 enhancements")
 					}
 				},
 			},
@@ -251,17 +255,18 @@ Swift agent content
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes JSON instruction suffix
+					// Verify prompt includes XML-formatted response instructions
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
+						if strings.Contains(arg, "<response_format>") &&
+							strings.Contains(arg, "Respond with ONLY valid JSON") &&
 							strings.Contains(arg, "Create something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include JSON instruction when no registry is available")
+						t.Error("Prompt should include XML-formatted response instructions when no registry is available")
 					}
 				},
 			},

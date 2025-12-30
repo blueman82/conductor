@@ -101,14 +101,22 @@ func serializeAgentToJSON(agent *Agent) (string, error) {
 }
 
 // PrepareAgentPrompt adds formatting instructions to agent prompts for consistent output
-// Includes explicit JSON format instruction at end of prompt for guaranteed valid JSON output
+// Includes Claude 4 enhancements and XML-formatted response instructions for guaranteed valid JSON output
 // Note: --json-schema is not enforced with --agents flag, so explicit format instruction is critical
 func PrepareAgentPrompt(prompt string) string {
-	const instructionSuffix = `
+	// Add Claude 4-specific enhancements
+	enhanced := EnhancePromptForClaude4(prompt)
 
-CRITICAL: Respond with ONLY this exact JSON, nothing else - no prose, no explanation, no markdown, no tags:
-{"status":"success","summary":"...","output":"...","errors":[],"files_modified":[]}`
-	return prompt + instructionSuffix
+	// XML-formatted response instructions
+	responseFormat := XMLSection("response_format",
+		`CRITICAL: Respond with ONLY valid JSON matching the provided schema.
+No markdown, no code fences, no XML tags in output, no prose, no explanations.
+Output raw JSON only.
+
+Required JSON structure:
+{"status":"success","summary":"...","output":"...","errors":[],"files_modified":[]}`)
+
+	return enhanced + "\n\n" + responseFormat
 }
 
 // PrepareQCPrompt adds formatting instructions to QC review prompts
