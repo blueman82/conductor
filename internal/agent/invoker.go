@@ -238,9 +238,8 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	}
 
 	// Add -p flag for non-interactive print mode (essential for automation)
-	// NOTE: -p is a boolean flag, NOT a flag that takes an argument
-	// The prompt must be passed as a positional argument at the END
-	args = append(args, "-p")
+	// Note: -p "prompt" works (prompt as positional arg after -p flag)
+	args = append(args, "-p", prompt)
 
 	// Skip permissions for automation (allow file creation)
 	args = append(args, "--permission-mode", "bypassPermissions")
@@ -250,9 +249,6 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 
 	// JSON output for easier parsing (wrapper format, not content format)
 	args = append(args, "--output-format", "json")
-
-	// Prompt as positional argument at END (per claude --help: "Usage: claude [options] [command] [prompt]")
-	args = append(args, prompt)
 
 	return args
 }

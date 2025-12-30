@@ -1532,8 +1532,8 @@ func TestBuildStructuredReviewPrompt_WithIntegrationCriteria(t *testing.T) {
 		t.Error("integration criterion 2 (index 4) not found")
 	}
 
-	// Verify INTEGRATION CRITERIA section header
-	if !contains(prompt, "## INTEGRATION CRITERIA") {
+	// Verify INTEGRATION CRITERIA section header (XML format)
+	if !contains(prompt, "<integration_criteria>") {
 		t.Error("INTEGRATION CRITERIA section header not found")
 	}
 }
@@ -1562,8 +1562,8 @@ func TestBuildStructuredReviewPrompt_IntegrationWithoutSuccessCriteria(t *testin
 		t.Error("integration criterion 1 (index 1) not found")
 	}
 
-	// Verify INTEGRATION CRITERIA section header
-	if !contains(prompt, "## INTEGRATION CRITERIA") {
+	// Verify INTEGRATION CRITERIA section header (XML format)
+	if !contains(prompt, "<integration_criteria>") {
 		t.Error("INTEGRATION CRITERIA section header not found")
 	}
 }
@@ -2666,21 +2666,21 @@ func TestBuildStructuredReviewPrompt_DualCriteria(t *testing.T) {
 			ctx := context.Background()
 			prompt := qc.BuildStructuredReviewPrompt(ctx, task, "agent output")
 
-			// Verify SUCCESS CRITERIA section is present if there are any criteria
+			// Verify SUCCESS CRITERIA section is present if there are any criteria (XML format)
 			if (tt.successCriteria != nil && len(tt.successCriteria) > 0) || (tt.integrationCriteria != nil && len(tt.integrationCriteria) > 0) {
-				if !contains(prompt, "## SUCCESS CRITERIA") {
+				if !contains(prompt, "<success_criteria>") {
 					t.Error("SUCCESS CRITERIA section header missing")
 				}
 			}
 
-			// Verify INTEGRATION CRITERIA section presence
+			// Verify INTEGRATION CRITERIA section presence (XML format)
 			if tt.wantIntegrationCriteria && tt.taskType == "integration" && len(tt.integrationCriteria) > 0 {
-				if !contains(prompt, "## INTEGRATION CRITERIA") {
+				if !contains(prompt, "<integration_criteria>") {
 					t.Error("INTEGRATION CRITERIA section header missing")
 				}
 			} else if tt.wantIntegrationCriteria && tt.taskType == "integration" && len(tt.integrationCriteria) == 0 {
 				// Integration type but no integration criteria - should NOT have the header
-				if contains(prompt, "## INTEGRATION CRITERIA - VERIFY EACH ONE") {
+				if contains(prompt, "<integration_criteria>") {
 					t.Error("INTEGRATION CRITERIA section header should not be present when no integration criteria")
 				}
 			}
@@ -2708,8 +2708,8 @@ func TestBuildStructuredReviewPrompt_DualCriteria(t *testing.T) {
 				t.Error("Task name not found in prompt")
 			}
 
-			// Verify agent output section
-			if !contains(prompt, "## AGENT OUTPUT") {
+			// Verify agent output section (XML format)
+			if !contains(prompt, "<agent_output>") {
 				t.Error("AGENT OUTPUT section missing")
 			}
 			if !contains(prompt, "agent output") {
@@ -2749,13 +2749,13 @@ func TestBuildStructuredReviewPrompt_DualCriteria_Ordering(t *testing.T) {
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "implementation output")
 
-	// Verify SUCCESS CRITERIA section
-	if !contains(prompt, "## SUCCESS CRITERIA") {
+	// Verify SUCCESS CRITERIA section (XML format)
+	if !contains(prompt, "<success_criteria>") {
 		t.Error("SUCCESS CRITERIA header missing")
 	}
 
-	// Verify INTEGRATION CRITERIA section
-	if !contains(prompt, "## INTEGRATION CRITERIA") {
+	// Verify INTEGRATION CRITERIA section (XML format)
+	if !contains(prompt, "<integration_criteria>") {
 		t.Error("INTEGRATION CRITERIA header missing")
 	}
 
@@ -2794,9 +2794,9 @@ func TestBuildStructuredReviewPrompt_DualCriteria_Ordering(t *testing.T) {
 		}
 	}
 
-	// Verify SUCCESS CRITERIA comes before INTEGRATION CRITERIA
-	successIdx := strings.Index(prompt, "## SUCCESS CRITERIA")
-	integrationIdx := strings.Index(prompt, "## INTEGRATION CRITERIA")
+	// Verify SUCCESS CRITERIA comes before INTEGRATION CRITERIA (XML format)
+	successIdx := strings.Index(prompt, "<success_criteria>")
+	integrationIdx := strings.Index(prompt, "<integration_criteria>")
 	if successIdx < 0 {
 		t.Fatal("SUCCESS CRITERIA section not found")
 	}
@@ -2831,8 +2831,8 @@ func TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegrati
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-	// Verify SUCCESS CRITERIA is present
-	if !contains(prompt, "## SUCCESS CRITERIA") {
+	// Verify SUCCESS CRITERIA is present (XML format)
+	if !contains(prompt, "<success_criteria>") {
 		t.Error("SUCCESS CRITERIA header should be present")
 	}
 
@@ -2844,8 +2844,8 @@ func TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegrati
 		t.Error("Success criterion 1 not found")
 	}
 
-	// Verify INTEGRATION CRITERIA section is NOT present
-	if contains(prompt, "## INTEGRATION CRITERIA - VERIFY EACH ONE") {
+	// Verify INTEGRATION CRITERIA section is NOT present (XML format)
+	if contains(prompt, "<integration_criteria>") {
 		t.Error("INTEGRATION CRITERIA section should NOT be present for non-integration tasks")
 	}
 
@@ -3047,8 +3047,8 @@ func TestBuildStructuredReviewPrompt_KeyPointsSection(t *testing.T) {
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-	// Verify KEY POINTS section is present
-	if !contains(prompt, "## KEY POINTS (GUIDANCE - NOT SCORED)") {
+	// Verify KEY POINTS section is present (XML format)
+	if !contains(prompt, "<key_points guidance=\"true\">") {
 		t.Error("KEY POINTS section should be present when task has key_points")
 	}
 
@@ -3091,8 +3091,8 @@ func TestBuildStructuredReviewPrompt_KeyPointsWarning(t *testing.T) {
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-	// Verify KEY POINTS section is present
-	if !contains(prompt, "## KEY POINTS (GUIDANCE - NOT SCORED)") {
+	// Verify KEY POINTS section is present (XML format)
+	if !contains(prompt, "<key_points guidance=\"true\">") {
 		t.Error("KEY POINTS section should be present")
 	}
 
