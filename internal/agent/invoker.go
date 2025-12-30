@@ -238,7 +238,9 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	}
 
 	// Add -p flag for non-interactive print mode (essential for automation)
-	args = append(args, "-p", prompt)
+	// NOTE: -p is a boolean flag, NOT a flag that takes an argument
+	// The prompt must be passed as a positional argument at the END
+	args = append(args, "-p")
 
 	// Skip permissions for automation (allow file creation)
 	args = append(args, "--permission-mode", "bypassPermissions")
@@ -248,6 +250,9 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 
 	// JSON output for easier parsing (wrapper format, not content format)
 	args = append(args, "--output-format", "json")
+
+	// Prompt as positional argument at END (per claude --help: "Usage: claude [options] [command] [prompt]")
+	args = append(args, prompt)
 
 	return args
 }
@@ -370,6 +375,19 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 
 	// Build command args
 	args := inv.BuildCommandArgs(task)
+
+	// DEBUG: Log raw command syntax for debugging invocation issues
+	fmt.Fprintf(os.Stderr, "\n\033[33m[DEBUG] Raw Claude CLI command:\033[0m\n")
+	fmt.Fprintf(os.Stderr, "\033[36m%s", inv.ClaudePath)
+	for _, arg := range args {
+		// Quote args containing spaces or special chars
+		if strings.ContainsAny(arg, " \t\n\"'{}[]") {
+			fmt.Fprintf(os.Stderr, " '%s'", strings.ReplaceAll(arg, "'", "'\"'\"'"))
+		} else {
+			fmt.Fprintf(os.Stderr, " %s", arg)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "\033[0m\n\n")
 
 	// Pretty log the agent invocation
 	inv.logInvocation(task, args)
