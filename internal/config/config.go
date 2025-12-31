@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1255,6 +1256,7 @@ func LoadConfig(path string) (*Config, error) {
 		}
 
 		// Merge Timeouts config
+		timeoutsLLMExplicitlySet := false
 		if timeoutsSection, exists := rawMap["timeouts"]; exists && timeoutsSection != nil {
 			timeouts := yamlCfg.Timeouts
 			timeoutsMap, _ := timeoutsSection.(map[string]interface{})
@@ -1272,6 +1274,7 @@ func LoadConfig(path string) (*Config, error) {
 					return nil, fmt.Errorf("invalid timeouts.llm format %q: %w", timeouts.LLM, err)
 				}
 				cfg.Timeouts.LLM = d
+				timeoutsLLMExplicitlySet = true
 			}
 			if _, exists := timeoutsMap["http"]; exists && timeouts.HTTP != "" {
 				d, err := time.ParseDuration(timeouts.HTTP)
@@ -1288,12 +1291,95 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.Timeouts.Search = d
 			}
 		}
+
+		// Handle deprecated timeout fields with migration to timeouts.llm
+		// Only migrate if timeouts.llm was NOT explicitly set
+		handleDeprecatedTimeoutFields(rawMap, cfg, timeoutsLLMExplicitlySet)
 	}
 
 	// Apply environment variable overrides (highest priority)
 	applyConsoleEnvOverrides(&cfg.Console)
 
 	return cfg, nil
+}
+
+// handleDeprecatedTimeoutFields checks for deprecated timeout fields and migrates
+// their values to the new timeouts.llm field if it was not explicitly set.
+// Logs deprecation warnings for each deprecated field found.
+//
+// Deprecated fields:
+//   - pattern.llm_timeout_seconds → timeouts.llm
+//   - architecture.timeout_seconds → timeouts.llm
+//   - quality_control.agents.selection_timeout_seconds → timeouts.llm
+func handleDeprecatedTimeoutFields(rawMap map[string]interface{}, cfg *Config, timeoutsLLMExplicitlySet bool) {
+	// Track the highest deprecated value to use for migration
+	var deprecatedValue time.Duration
+	var deprecatedSource string
+
+	// Check pattern.llm_timeout_seconds
+	if patternSection, exists := rawMap["pattern"]; exists && patternSection != nil {
+		patternMap, _ := patternSection.(map[string]interface{})
+		if llmTimeout, exists := patternMap["llm_timeout_seconds"]; exists {
+			log.Printf("[DEPRECATED] pattern.llm_timeout_seconds is deprecated. "+
+				"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
+				"This field will be removed in a future version.", cfg.Pattern.LLMTimeoutSeconds)
+
+			if seconds, ok := llmTimeout.(int); ok && seconds > 0 {
+				d := time.Duration(seconds) * time.Second
+				if d > deprecatedValue {
+					deprecatedValue = d
+					deprecatedSource = "pattern.llm_timeout_seconds"
+				}
+			}
+		}
+	}
+
+	// Check architecture.timeout_seconds
+	if archSection, exists := rawMap["architecture"]; exists && archSection != nil {
+		archMap, _ := archSection.(map[string]interface{})
+		if timeout, exists := archMap["timeout_seconds"]; exists {
+			log.Printf("[DEPRECATED] architecture.timeout_seconds is deprecated. "+
+				"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
+				"This field will be removed in a future version.", cfg.Architecture.TimeoutSeconds)
+
+			if seconds, ok := timeout.(int); ok && seconds > 0 {
+				d := time.Duration(seconds) * time.Second
+				if d > deprecatedValue {
+					deprecatedValue = d
+					deprecatedSource = "architecture.timeout_seconds"
+				}
+			}
+		}
+	}
+
+	// Check quality_control.agents.selection_timeout_seconds
+	if qcSection, exists := rawMap["quality_control"]; exists && qcSection != nil {
+		qcMap, _ := qcSection.(map[string]interface{})
+		if agentsSection, exists := qcMap["agents"]; exists && agentsSection != nil {
+			agentsMap, _ := agentsSection.(map[string]interface{})
+			if timeout, exists := agentsMap["selection_timeout_seconds"]; exists {
+				log.Printf("[DEPRECATED] quality_control.agents.selection_timeout_seconds is deprecated. "+
+					"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
+					"This field will be removed in a future version.", cfg.QualityControl.Agents.SelectionTimeoutSeconds)
+
+				if seconds, ok := timeout.(int); ok && seconds > 0 {
+					d := time.Duration(seconds) * time.Second
+					if d > deprecatedValue {
+						deprecatedValue = d
+						deprecatedSource = "quality_control.agents.selection_timeout_seconds"
+					}
+				}
+			}
+		}
+	}
+
+	// Migrate deprecated value to timeouts.llm if not explicitly set
+	if !timeoutsLLMExplicitlySet && deprecatedValue > 0 {
+		cfg.Timeouts.LLM = deprecatedValue
+		log.Printf("[DEPRECATED] Migrating %s value (%v) to timeouts.llm. "+
+			"Please update your configuration to use timeouts.llm directly.",
+			deprecatedSource, deprecatedValue)
+	}
 }
 
 // LoadConfigFromRootWithBuildTime loads configuration from conductor repo root
