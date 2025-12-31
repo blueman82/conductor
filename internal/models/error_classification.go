@@ -370,7 +370,6 @@ func ErrorClassificationPrompt() string {
 `
 }
 
-
 // ErrorClassificationPromptWithContext builds the classification prompt with specific
 // error output and task context injected. This is called by the executor before
 // invoking Claude.

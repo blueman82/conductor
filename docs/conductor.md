@@ -11,6 +11,7 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [Markdown Format](#markdown-format)
   - [YAML Format](#yaml-format)
   - [Task Metadata](#task-metadata)
+  - [XML Format for Descriptions (v2.31+)](#xml-format-for-descriptions-v231)
 - [Usage & Commands](#usage--commands)
   - [conductor validate](#conductor-validate)
   - [conductor run](#conductor-run)
