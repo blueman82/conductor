@@ -208,8 +208,12 @@ plan:
 	}
 
 	prompt := plan.Tasks[0].Prompt
+	// XML format: <description> section wraps description content
+	if !strings.Contains(prompt, "<description>") {
+		t.Error("Prompt should contain '<description>' XML tag")
+	}
 	if !strings.Contains(prompt, "Main task description") {
-		t.Error("Prompt should contain description")
+		t.Error("Prompt should contain description content")
 	}
 	if !strings.Contains(prompt, "Example test code") {
 		t.Error("Prompt should contain test example")
