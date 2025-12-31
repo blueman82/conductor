@@ -14,6 +14,7 @@ import (
 	"github.com/yuin/goldmark/text"
 	"gopkg.in/yaml.v3"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -23,18 +24,22 @@ type MarkdownParser struct {
 
 // injectFilesIntoPrompt prepends the target files section to the prompt content
 // This ensures agents know exactly which files they MUST create/modify
+// Output format: XML (for Claude 4 enhanced parsing)
 func injectFilesIntoPrompt(content string, files []string) string {
 	if len(files) == 0 {
 		return content
 	}
 
 	var sb strings.Builder
-	sb.WriteString("## Target Files (REQUIRED)\n\n")
-	sb.WriteString("**You MUST create/modify these exact files:**\n")
+	sb.WriteString("<target_files required=\"true\">\n")
+	sb.WriteString(agent.XMLTag("instruction", "You MUST create/modify these exact files"))
+	sb.WriteString("\n")
 	for _, file := range files {
-		fmt.Fprintf(&sb, "- `%s`\n", file)
+		sb.WriteString(agent.XMLTag("file", file))
+		sb.WriteString("\n")
 	}
-	sb.WriteString("\n⚠️ Do NOT create files with different names or paths. Use the exact paths listed above.\n\n")
+	sb.WriteString(agent.XMLTag("warning", "Do NOT create files with different names or paths. Use the exact paths listed above."))
+	sb.WriteString("\n</target_files>\n\n")
 	sb.WriteString(content)
 	return sb.String()
 }
