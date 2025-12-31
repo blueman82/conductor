@@ -182,36 +182,36 @@ func TestSimilaritySchema_HasSemanticMatch(t *testing.T) {
 
 func TestSimilarityResult_JSONParsing(t *testing.T) {
 	tests := []struct {
-		name            string
-		jsonInput       string
-		wantScore       float64
-		wantReasoning   string
-		wantMatch       bool
-		wantErr         bool
+		name          string
+		jsonInput     string
+		wantScore     float64
+		wantReasoning string
+		wantMatch     bool
+		wantErr       bool
 	}{
 		{
-			name:            "valid high similarity",
-			jsonInput:       `{"score": 0.95, "reasoning": "Both describe user login functionality", "semantic_match": true}`,
-			wantScore:       0.95,
-			wantReasoning:   "Both describe user login functionality",
-			wantMatch:       true,
-			wantErr:         false,
+			name:          "valid high similarity",
+			jsonInput:     `{"score": 0.95, "reasoning": "Both describe user login functionality", "semantic_match": true}`,
+			wantScore:     0.95,
+			wantReasoning: "Both describe user login functionality",
+			wantMatch:     true,
+			wantErr:       false,
 		},
 		{
-			name:            "valid low similarity",
-			jsonInput:       `{"score": 0.15, "reasoning": "Completely different concepts", "semantic_match": false}`,
-			wantScore:       0.15,
-			wantReasoning:   "Completely different concepts",
-			wantMatch:       false,
-			wantErr:         false,
+			name:          "valid low similarity",
+			jsonInput:     `{"score": 0.15, "reasoning": "Completely different concepts", "semantic_match": false}`,
+			wantScore:     0.15,
+			wantReasoning: "Completely different concepts",
+			wantMatch:     false,
+			wantErr:       false,
 		},
 		{
-			name:            "valid medium similarity",
-			jsonInput:       `{"score": 0.65, "reasoning": "Some shared concepts", "semantic_match": false}`,
-			wantScore:       0.65,
-			wantReasoning:   "Some shared concepts",
-			wantMatch:       false,
-			wantErr:         false,
+			name:          "valid medium similarity",
+			jsonInput:     `{"score": 0.65, "reasoning": "Some shared concepts", "semantic_match": false}`,
+			wantScore:     0.65,
+			wantReasoning: "Some shared concepts",
+			wantMatch:     false,
+			wantErr:       false,
 		},
 		{
 			name:      "invalid json",
@@ -219,12 +219,12 @@ func TestSimilarityResult_JSONParsing(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:            "partial fields",
-			jsonInput:       `{"score": 0.5, "reasoning": "", "semantic_match": false}`,
-			wantScore:       0.5,
-			wantReasoning:   "",
-			wantMatch:       false,
-			wantErr:         false, // JSON unmarshal allows empty values
+			name:          "partial fields",
+			jsonInput:     `{"score": 0.5, "reasoning": "", "semantic_match": false}`,
+			wantScore:     0.5,
+			wantReasoning: "",
+			wantMatch:     false,
+			wantErr:       false, // JSON unmarshal allows empty values
 		},
 	}
 

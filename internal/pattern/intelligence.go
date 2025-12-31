@@ -37,8 +37,8 @@ type PatternIntelligenceImpl struct {
 	searcher   *STOPSearcher
 	library    *PatternLibrary
 	store      *learning.Store
-	enhancer   *ClaudeEnhancer                   // nil if LLM enhancement disabled
-	similarity *similarity.ClaudeSimilarity      // Claude-based semantic similarity
+	enhancer   *ClaudeEnhancer              // nil if LLM enhancement disabled
+	similarity *similarity.ClaudeSimilarity // Claude-based semantic similarity
 
 	mu          sync.RWMutex
 	initialized bool

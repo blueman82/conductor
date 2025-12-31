@@ -144,7 +144,6 @@ func (h *TaskHasher) normalize(input string) string {
 	return strings.Join(filtered, " ")
 }
 
-
 // CompareTasks compares two HashResults using ClaudeSimilarity for semantic matching.
 // Returns 1.0 for exact hash matches, otherwise uses Claude for semantic comparison.
 // Requires a ClaudeSimilarity instance for semantic comparison.
