@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 )
@@ -125,7 +126,7 @@ func extractFilePaths(task models.Task) []string {
 }
 
 // FormatWarmUpContext formats a WarmUpContext into prompt injection string.
-// Uses the standardized format: --- WARM-UP CONTEXT ---\n[context]\n--- END WARM-UP ---
+// Uses XML format for structured content per Claude 4 best practices.
 func FormatWarmUpContext(ctx *learning.WarmUpContext) string {
 	if ctx == nil {
 		return ""
@@ -133,31 +134,32 @@ func FormatWarmUpContext(ctx *learning.WarmUpContext) string {
 
 	var sb strings.Builder
 
-	sb.WriteString("--- WARM-UP CONTEXT ---\n")
-	sb.WriteString(fmt.Sprintf("Historical context (confidence: %.0f%%):\n\n", ctx.Confidence*100))
+	sb.WriteString("<warmup_context>\n")
+	sb.WriteString(agent.XMLTag("confidence", fmt.Sprintf("%.0f%%", ctx.Confidence*100)))
+	sb.WriteString("\n")
 
 	// Add recommended approach if available
 	if ctx.RecommendedApproach != "" {
-		sb.WriteString("## Recommended Approach\n")
-		sb.WriteString(ctx.RecommendedApproach)
-		sb.WriteString("\n\n")
+		sb.WriteString(agent.XMLSection("recommended_approach", ctx.RecommendedApproach))
+		sb.WriteString("\n")
 	}
 
 	// Add similar patterns if available
 	if len(ctx.SimilarPatterns) > 0 {
-		sb.WriteString("## Patterns from Similar Tasks\n")
+		sb.WriteString("<similar_task_patterns>\n")
 		for i, pattern := range ctx.SimilarPatterns {
 			if i >= 5 {
 				break // Limit to 5 patterns to avoid prompt bloat
 			}
-			sb.WriteString(fmt.Sprintf("- %s\n", pattern))
+			sb.WriteString(agent.XMLTag("pattern", pattern))
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</similar_task_patterns>\n")
 	}
 
 	// Add relevant history summary if available
 	if len(ctx.RelevantHistory) > 0 {
-		sb.WriteString("## Similar Historical Tasks\n")
+		sb.WriteString("<historical_tasks>\n")
 		successCount := 0
 		failCount := 0
 		for _, exec := range ctx.RelevantHistory {
@@ -167,28 +169,30 @@ func FormatWarmUpContext(ctx *learning.WarmUpContext) string {
 				failCount++
 			}
 		}
-		sb.WriteString(fmt.Sprintf("Found %d similar tasks (%d successful, %d failed)\n", len(ctx.RelevantHistory), successCount, failCount))
+		sb.WriteString(agent.XMLTag("summary", fmt.Sprintf("Found %d similar tasks (%d successful, %d failed)", len(ctx.RelevantHistory), successCount, failCount)))
+		sb.WriteString("\n")
 
 		// Add brief details for top 3 successful tasks
 		shown := 0
 		for _, exec := range ctx.RelevantHistory {
 			if exec.Success && shown < 3 {
-				agent := exec.Agent
-				if agent == "" {
-					agent = "default"
+				agentName := exec.Agent
+				if agentName == "" {
+					agentName = "default"
 				}
-				sb.WriteString(fmt.Sprintf("- \"%s\" succeeded with agent %s", exec.TaskName, agent))
+				detail := fmt.Sprintf("%s succeeded with agent %s", exec.TaskName, agentName)
 				if exec.QCVerdict == "GREEN" {
-					sb.WriteString(" (GREEN)")
+					detail += " (GREEN)"
 				}
+				sb.WriteString(agent.XMLTag("task", detail))
 				sb.WriteString("\n")
 				shown++
 			}
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</historical_tasks>\n")
 	}
 
-	sb.WriteString("--- END WARM-UP ---")
+	sb.WriteString("</warmup_context>")
 
 	return sb.String()
 }
