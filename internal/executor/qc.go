@@ -1202,35 +1202,35 @@ func BuildArchitectureSummary(result *architecture.CheckpointResult) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**Summary**: %s\n\n", result.Assessment.Summary))
+	sb.WriteString(fmt.Sprintf("<summary>%s</summary>\n\n", result.Assessment.Summary))
 
 	flagged := result.Assessment.FlaggedQuestions()
 	if len(flagged) > 0 {
-		sb.WriteString("**Flagged Concerns:**\n")
+		sb.WriteString("<flagged_concerns>\n")
 		for _, q := range flagged {
-			sb.WriteString(fmt.Sprintf("- %s\n", q))
+			sb.WriteString(fmt.Sprintf("<concern>%s</concern>\n", q))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</flagged_concerns>\n\n")
 	}
 
 	// Add reasoning for flagged questions
 	if result.Assessment.CoreInfrastructure.Answer {
-		sb.WriteString(fmt.Sprintf("**Core Infrastructure**: %s\n", result.Assessment.CoreInfrastructure.Reasoning))
+		sb.WriteString(fmt.Sprintf("<core_infrastructure>%s</core_infrastructure>\n", result.Assessment.CoreInfrastructure.Reasoning))
 	}
 	if result.Assessment.ReuseConcerns.Answer {
-		sb.WriteString(fmt.Sprintf("**Reuse Concerns**: %s\n", result.Assessment.ReuseConcerns.Reasoning))
+		sb.WriteString(fmt.Sprintf("<reuse_concerns>%s</reuse_concerns>\n", result.Assessment.ReuseConcerns.Reasoning))
 	}
 	if result.Assessment.NewAbstractions.Answer {
-		sb.WriteString(fmt.Sprintf("**New Abstractions**: %s\n", result.Assessment.NewAbstractions.Reasoning))
+		sb.WriteString(fmt.Sprintf("<new_abstractions>%s</new_abstractions>\n", result.Assessment.NewAbstractions.Reasoning))
 	}
 	if result.Assessment.APIContracts.Answer {
-		sb.WriteString(fmt.Sprintf("**API Contracts**: %s\n", result.Assessment.APIContracts.Reasoning))
+		sb.WriteString(fmt.Sprintf("<api_contracts>%s</api_contracts>\n", result.Assessment.APIContracts.Reasoning))
 	}
 	if result.Assessment.FrameworkLifecycle.Answer {
-		sb.WriteString(fmt.Sprintf("**Framework Lifecycle**: %s\n", result.Assessment.FrameworkLifecycle.Reasoning))
+		sb.WriteString(fmt.Sprintf("<framework_lifecycle>%s</framework_lifecycle>\n", result.Assessment.FrameworkLifecycle.Reasoning))
 	}
 	if result.Assessment.CrossCuttingConcerns.Answer {
-		sb.WriteString(fmt.Sprintf("**Cross-Cutting Concerns**: %s\n", result.Assessment.CrossCuttingConcerns.Reasoning))
+		sb.WriteString(fmt.Sprintf("<cross_cutting_concerns>%s</cross_cutting_concerns>\n", result.Assessment.CrossCuttingConcerns.Reasoning))
 	}
 
 	return sb.String()
