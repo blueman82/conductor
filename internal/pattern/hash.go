@@ -1,11 +1,14 @@
 package pattern
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/harrison/conductor/internal/similarity"
 )
 
 // HashResult contains both exact and normalized hashes for a task.
@@ -248,4 +251,37 @@ func CompareTasks(hash1, hash2 HashResult) float64 {
 // IsDuplicate checks if two tasks are duplicates based on similarity threshold.
 func IsDuplicate(hash1, hash2 HashResult, threshold float64) bool {
 	return CompareTasks(hash1, hash2) >= threshold
+}
+
+// CompareTasksWithSimilarity compares two task descriptions using Claude-based semantic similarity.
+// Returns the Claude similarity score, or falls back to Jaccard if similarity is nil or errors.
+// This function uses ClaudeSimilarity.Compare for semantic matching.
+func CompareTasksWithSimilarity(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, sim similarity.Similarity) float64 {
+	// Fast path: exact hash match
+	if hash1.FullHash == hash2.FullHash {
+		return 1.0
+	}
+
+	// Fast path: normalized hash match
+	if hash1.NormalizedHash == hash2.NormalizedHash {
+		return 1.0
+	}
+
+	// Use ClaudeSimilarity for semantic comparison if available
+	if sim != nil {
+		result, err := sim.Compare(ctx, desc1, desc2)
+		if err == nil && result != nil {
+			return result.Score
+		}
+		// Fall back to Jaccard on error
+	}
+
+	// Fallback: Jaccard similarity on keywords
+	return JaccardSimilarity(hash1.Keywords, hash2.Keywords)
+}
+
+// IsDuplicateWithSimilarity checks if two tasks are duplicates using Claude-based semantic similarity.
+// Falls back to Jaccard similarity when ClaudeSimilarity is nil or errors.
+func IsDuplicateWithSimilarity(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, threshold float64, sim similarity.Similarity) bool {
+	return CompareTasksWithSimilarity(ctx, desc1, desc2, hash1, hash2, sim) >= threshold
 }
