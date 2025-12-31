@@ -678,8 +678,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		if pi != nil {
 			// Set up LLM enhancement if enabled
 			if cfg.Pattern.LLMEnhancementEnabled {
-				enhancer := pattern.NewClaudeEnhancerWithConfig(
-					time.Duration(cfg.Pattern.LLMTimeoutSeconds)*time.Second,
+				enhancer := pattern.NewClaudeEnhancer(
+					cfg.Timeouts.LLM,
 					multiLog,
 				)
 				if impl, ok := pi.(*pattern.PatternIntelligenceImpl); ok {
@@ -699,8 +699,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Wire Architecture Checkpoint (v2.27+)
 	if cfg.Architecture.Enabled {
-		assessor := architecture.NewAssessorWithConfig(
-			time.Duration(cfg.Architecture.TimeoutSeconds)*time.Second,
+		assessor := architecture.NewAssessor(
+			cfg.Timeouts.LLM,
 			multiLog,
 		)
 		taskExec.ArchitectureHook = executor.NewArchitectureCheckpointHook(assessor, &cfg.Architecture, consoleLog)

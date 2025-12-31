@@ -2,27 +2,30 @@ package architecture
 
 import (
 	"testing"
+	"time"
 )
 
 func TestNewAssessor(t *testing.T) {
-	a := NewAssessor(nil)
+	timeout := 90 * time.Second
+	a := NewAssessor(timeout, nil)
 
 	if a == nil {
 		t.Fatal("expected non-nil assessor")
 	}
-	if a.Timeout != 30*1e9 { // 30 seconds in nanoseconds
-		t.Errorf("expected 30s timeout, got %v", a.Timeout)
+	if a.Timeout != timeout {
+		t.Errorf("expected %v timeout, got %v", timeout, a.Timeout)
 	}
 	if a.ClaudePath != "claude" {
 		t.Errorf("expected claude path, got %s", a.ClaudePath)
 	}
 }
 
-func TestNewAssessorWithConfig(t *testing.T) {
-	a := NewAssessorWithConfig(60*1e9, nil)
+func TestNewAssessor_CustomTimeout(t *testing.T) {
+	timeout := 60 * time.Second
+	a := NewAssessor(timeout, nil)
 
-	if a.Timeout != 60*1e9 {
-		t.Errorf("expected 60s timeout, got %v", a.Timeout)
+	if a.Timeout != timeout {
+		t.Errorf("expected %v timeout, got %v", timeout, a.Timeout)
 	}
 }
 
