@@ -116,50 +116,71 @@ func (a *Assessor) buildPrompt(task models.Task) string {
 		description = description[:500] + "..." // Truncate long prompts
 	}
 
-	return fmt.Sprintf(`Analyze this task for architectural impact using the 6-question framework.
+	return fmt.Sprintf(`<architecture_assessment>
+  <task_context>
+    <name>%s</name>
+    <description>%s</description>
+    <files>%s</files>
+    <success_criteria>%s</success_criteria>
+  </task_context>
 
-Task: %s
-Description: %s
-Files: %s
-Success Criteria:
-- %s
+  <instructions>
+    Analyze this task for architectural impact using the 6-question framework.
+    Answer each question with true (YES) or false (NO), providing:
+    <requirements>
+      <item>Specific examples from THIS task (not generic examples)</item>
+      <item>Confidence score (0.0-1.0)</item>
+      <item>Brief reasoning</item>
+    </requirements>
+  </instructions>
 
-Answer each question with true (YES) or false (NO), providing:
-- Specific examples from THIS task (not generic examples)
-- Confidence score (0.0-1.0)
-- Brief reasoning
+  <assessment_questions>
+    <question id="1" name="core_infrastructure">
+      <prompt>Does this touch core/shared infrastructure?</prompt>
+      <yes_examples>caching layers, auth services, database connections, shared utilities</yes_examples>
+      <no_examples>single form validation, typo fixes, isolated component changes</no_examples>
+    </question>
 
-## The 6 Architecture Assessment Questions
+    <question id="2" name="reuse_concerns">
+      <prompt>Are there reuse concerns?</prompt>
+      <yes_examples>first-of-kind feature (sets pattern), reusable components, shared libraries</yes_examples>
+      <no_examples>one-off fixes, local helpers, single-use utilities</no_examples>
+    </question>
 
-1. **core_infrastructure**: Does this touch core/shared infrastructure?
-   - YES examples: caching layers, auth services, database connections, shared utilities
-   - NO examples: single form validation, typo fixes, isolated component changes
+    <question id="3" name="new_abstractions">
+      <prompt>Does this introduce new abstractions or patterns?</prompt>
+      <yes_examples>new base classes, design patterns, error handling strategies, interfaces</yes_examples>
+      <no_examples>utility functions, simple helpers, concrete implementations</no_examples>
+    </question>
 
-2. **reuse_concerns**: Are there reuse concerns?
-   - YES examples: first-of-kind feature (sets pattern), reusable components, shared libraries
-   - NO examples: one-off fixes, local helpers, single-use utilities
+    <question id="4" name="api_contracts">
+      <prompt>Are there API contract decisions?</prompt>
+      <yes_examples>new endpoints, parameter placement decisions, schema changes, public interfaces</yes_examples>
+      <no_examples>internal method changes, local variable renames, private helpers</no_examples>
+    </question>
 
-3. **new_abstractions**: Does this introduce new abstractions or patterns?
-   - YES examples: new base classes, design patterns, error handling strategies, interfaces
-   - NO examples: utility functions, simple helpers, concrete implementations
+    <question id="5" name="framework_lifecycle">
+      <prompt>Does this integrate with framework lifecycle?</prompt>
+      <yes_examples>startup hooks, shutdown handlers, middleware registration, plugin systems</yes_examples>
+      <no_examples>pure functions, isolated utilities, standalone scripts</no_examples>
+    </question>
 
-4. **api_contracts**: Are there API contract decisions?
-   - YES examples: new endpoints, parameter placement decisions, schema changes, public interfaces
-   - NO examples: internal method changes, local variable renames, private helpers
+    <question id="6" name="cross_cutting_concerns">
+      <prompt>Are there cross-cutting concerns?</prompt>
+      <yes_examples>logging strategies, rate limiting, metrics collection, security policies</yes_examples>
+      <no_examples>single component changes, isolated fixes, local error handling</no_examples>
+    </question>
+  </assessment_questions>
 
-5. **framework_lifecycle**: Does this integrate with framework lifecycle?
-   - YES examples: startup hooks, shutdown handlers, middleware registration, plugin systems
-   - NO examples: pure functions, isolated utilities, standalone scripts
+  <decision_rule>
+    <condition>If ANY question = true</condition>
+    <result>requires_review = true</result>
+    <condition>If ALL questions = false</condition>
+    <result>requires_review = false, provide skip_justification</result>
+  </decision_rule>
 
-6. **cross_cutting_concerns**: Are there cross-cutting concerns?
-   - YES examples: logging strategies, rate limiting, metrics collection, security policies
-   - NO examples: single component changes, isolated fixes, local error handling
-
-## Decision Rule
-- If ANY question = true → requires_review = true
-- If ALL questions = false → requires_review = false, provide skip_justification
-
-Respond with JSON only.`, task.Name, description, files, criteria)
+  <output_format>Respond with JSON only.</output_format>
+</architecture_assessment>`, task.Name, description, files, criteria)
 }
 
 // AssessmentSchema returns the JSON schema for Claude response enforcement

@@ -217,133 +217,136 @@ func ErrorClassificationSchema() string {
 // 5. Instructions for JSON response format
 // 6. Notes on confidence scoring
 func ErrorClassificationPrompt() string {
-	return `You are an expert error classifier for automated software testing and task execution.
-Your role is to analyze error messages and classify them into actionable categories that help
-determine how to fix the error and who should fix it.
+	return `<error_classification>
+  <role>
+    You are an expert error classifier for automated software testing and task execution.
+    Your role is to analyze error messages and classify them into actionable categories that help
+    determine how to fix the error and who should fix it.
+  </role>
 
-## ERROR CATEGORIES
+  <error_categories>
+    <category name="CODE_LEVEL">
+      <description>Errors that the executing agent can fix by modifying source code and retrying.</description>
+      <characteristics>
+        <item>Agent has source code available</item>
+        <item>Fix requires code changes (logic, syntax, imports, types)</item>
+        <item>Retry strategy: agent writes fix → reruns tests → validation</item>
+      </characteristics>
+      <signals>
+        <signal>Syntax errors, undefined identifiers, import errors</signal>
+        <signal>Type mismatches, assertion failures</signal>
+        <signal>Logic bugs (test failures with clear expected vs actual)</signal>
+        <signal>Missing methods/functions agent can implement</signal>
+        <signal>Compilation/build errors</signal>
+        <signal>No external tool/permission/config changes needed</signal>
+      </signals>
+      <examples>
+        <example>"undefined: parsedConfig" in Go code → Missing import or type definition</example>
+        <example>"FAIL: expected 42, got 41" in test output → Test assertion failure, logic bug</example>
+        <example>"SyntaxError: Unexpected token }" in TypeScript → Bracket mismatch</example>
+        <example>"cannot find symbol" in Java → Missing import or undefined variable</example>
+        <example>"NameError: name 'user' is not defined" in Python → Missing variable definition</example>
+      </examples>
+    </category>
 
-### 1. CODE_LEVEL
-Errors that the executing agent can fix by modifying source code and retrying.
-- Agent has source code available
-- Fix requires code changes (logic, syntax, imports, types)
-- Retry strategy: agent writes fix → reruns tests → validation
+    <category name="PLAN_LEVEL">
+      <description>Errors that require updating the implementation plan file (e.g., YAML/MD) but not environment config.</description>
+      <characteristics>
+        <item>Issue is plan/configuration mismatch, not code quality</item>
+        <item>Fix requires changing task dependencies, test commands, file paths, or scheme names</item>
+        <item>Agent cannot fix because the issue is in the plan, not the code</item>
+        <item>Requires human review of plan correctness</item>
+      </characteristics>
+      <signals>
+        <signal>Wrong test target, incorrect file paths in test commands</signal>
+        <signal>Missing scheme/configuration referenced in plan</signal>
+        <signal>Test host mismatch, build target unavailable</signal>
+        <signal>File paths don't exist (but could if plan changed)</signal>
+        <signal>Wrong test command format for the framework</signal>
+      </signals>
+      <examples>
+        <example>"scheme 'MyApp' does not exist" → Scheme name in plan is wrong, need to correct it</example>
+        <example>"No such file or directory: test/specs/missing_test.swift" → Path in test command is wrong</example>
+        <example>"Tests in target 'UnitTests' can't be run" → Test target not in scheme, plan needs update</example>
+        <example>"Could not find test host 'MyAppTests'" → Test host setup missing from plan</example>
+        <example>"no test bundles available" → Plan references wrong test target</example>
+      </examples>
+    </category>
 
-SIGNALS:
-- Syntax errors, undefined identifiers, import errors
-- Type mismatches, assertion failures
-- Logic bugs (test failures with clear expected vs actual)
-- Missing methods/functions agent can implement
-- Compilation/build errors
-- No external tool/permission/config changes needed
+    <category name="ENV_LEVEL">
+      <description>Errors caused by environment configuration, system resources, or tool availability.</description>
+      <characteristics>
+        <item>NOT a code or plan problem</item>
+        <item>Agent cannot fix without external intervention (install tools, free disk space, permissions)</item>
+        <item>Requires human operator action or environment setup</item>
+        <item>Retry without environment fix will fail identically</item>
+      </characteristics>
+      <signals>
+        <signal>Tool not found (command not found in PATH)</signal>
+        <signal>Permission denied (file access, directory write)</signal>
+        <signal>Resource exhaustion (disk full, memory exceeded)</signal>
+        <signal>Duplicate/conflicting system state (multiple simulators, port already in use)</signal>
+        <signal>Missing external dependencies, SDKs, or system libraries</signal>
+        <signal>Network unavailability (if API is needed)</signal>
+      </signals>
+      <examples>
+        <example>"command not found: swiftc" → Swift compiler not installed, need env setup</example>
+        <example>"permission denied: /Users/.../.git" → File permissions incorrect, need chmod</example>
+        <example>"No space left on device" → Disk full, need to clean up</example>
+        <example>"multiple devices matched the query" → Two simulators with same name, need to delete</example>
+        <example>"EACCES: permission denied, open '/tmp/test.log'" → Write permission issue, need sudo or change umask</example>
+      </examples>
+    </category>
+  </error_categories>
 
-CODE_LEVEL EXAMPLES:
-1. "undefined: parsedConfig" in Go code → Missing import or type definition
-2. "FAIL: expected 42, got 41" in test output → Test assertion failure, logic bug
-3. "SyntaxError: Unexpected token }" in TypeScript → Bracket mismatch
-4. "cannot find symbol" in Java → Missing import or undefined variable
-5. "NameError: name 'user' is not defined" in Python → Missing variable definition
+  <edge_cases>
+    <ambiguous_errors>
+      <case pattern="Test target not found">
+        <could_be>PLAN or ENV</could_be>
+        <plan_level_if>plan references non-existent target name, fix plan</plan_level_if>
+        <env_level_if>project file corrupted, Xcode not installed, fix env</env_level_if>
+        <context_hint>If error mentions scheme or xcodebuild, likely PLAN (project file config)</context_hint>
+      </case>
+      <case pattern="Compilation error">
+        <could_be>CODE or ENV</could_be>
+        <code_level_if>clear syntax issue or missing import (agent can fix)</code_level_if>
+        <env_level_if>SDK missing, wrong Xcode version, incompatible compiler</env_level_if>
+        <context_hint>If error mentions SDK path or compiler flags, likely ENV</context_hint>
+      </case>
+      <case pattern="File not found">
+        <could_be>CODE, PLAN, or ENV</could_be>
+        <code_level_if>code has wrong path, agent should fix path in code</code_level_if>
+        <plan_level_if>plan has wrong path in test_commands, fix plan</plan_level_if>
+        <env_level_if>dependency missing from system, file should exist in /usr/local/bin</env_level_if>
+        <context_hint>Look at context of file (test data file = PLAN, binary = ENV)</context_hint>
+      </case>
+    </ambiguous_errors>
 
----
+    <multiple_errors>
+      <rule>Classify the FIRST blocking error (highest priority to fix)</rule>
+      <rule>Mention related patterns in "related_patterns" array</rule>
+      <rule>Suggest fixing primary error first</rule>
+    </multiple_errors>
 
-### 2. PLAN_LEVEL
-Errors that require updating the implementation plan file (e.g., YAML/MD) but not environment config.
-- Issue is plan/configuration mismatch, not code quality
-- Fix requires changing task dependencies, test commands, file paths, or scheme names
-- Agent cannot fix because the issue is in the plan, not the code
-- Requires human review of plan correctness
+    <locale_variations>
+      <rule>Some errors are translated (e.g., Python's locale-specific messages)</rule>
+      <rule>Classify based on semantic meaning, not exact text</rule>
+      <rule>Handle both "SyntaxError" and "Syntax error" formats</rule>
+    </locale_variations>
+  </edge_cases>
 
-SIGNALS:
-- Wrong test target, incorrect file paths in test commands
-- Missing scheme/configuration referenced in plan
-- Test host mismatch, build target unavailable
-- File paths don't exist (but could if plan changed)
-- Wrong test command format for the framework
+  <confidence_scoring>
+    <level score="1.0">Crystal clear (e.g., "SyntaxError: unexpected token")</level>
+    <level score="0.9">Very confident (e.g., "command not found: xyz")</level>
+    <level score="0.8">Confident (e.g., test failure with assertion output)</level>
+    <level score="0.7">Moderately confident (e.g., ambiguous but leans toward one category)</level>
+    <level score="0.6">Uncertain (e.g., context-dependent, could be 2 categories equally)</level>
+    <level score="below_0.6">Don't classify if confidence is too low; suggest human review</level>
+  </confidence_scoring>
 
-PLAN_LEVEL EXAMPLES:
-1. "scheme 'MyApp' does not exist" → Scheme name in plan is wrong, need to correct it
-2. "No such file or directory: test/specs/missing_test.swift" → Path in test command is wrong
-3. "Tests in target 'UnitTests' can't be run" → Test target not in scheme, plan needs update
-4. "Could not find test host 'MyAppTests'" → Test host setup missing from plan
-5. "no test bundles available" → Plan references wrong test target
-
----
-
-### 3. ENV_LEVEL
-Errors caused by environment configuration, system resources, or tool availability.
-- NOT a code or plan problem
-- Agent cannot fix without external intervention (install tools, free disk space, permissions)
-- Requires human operator action or environment setup
-- Retry without environment fix will fail identically
-
-SIGNALS:
-- Tool not found (command not found in PATH)
-- Permission denied (file access, directory write)
-- Resource exhaustion (disk full, memory exceeded)
-- Duplicate/conflicting system state (multiple simulators, port already in use)
-- Missing external dependencies, SDKs, or system libraries
-- Network unavailability (if API is needed)
-
-ENV_LEVEL EXAMPLES:
-1. "command not found: swiftc" → Swift compiler not installed, need env setup
-2. "permission denied: /Users/.../.git" → File permissions incorrect, need chmod
-3. "No space left on device" → Disk full, need to clean up
-4. "multiple devices matched the query" → Two simulators with same name, need to delete
-5. "EACCES: permission denied, open '/tmp/test.log'" → Write permission issue, need sudo or change umask
-
----
-
-## EDGE CASES & DISAMBIGUATION
-
-### Ambiguous Errors
-If an error could belong to multiple categories, use these tiebreakers:
-
-1. **"Test target not found" (Could be PLAN or ENV)**
-   - PLAN_LEVEL if: plan references non-existent target name, fix plan
-   - ENV_LEVEL if: project file corrupted, Xcode not installed, fix env
-   - Context: If error mentions scheme or xcodebuild, likely PLAN (project file config)
-
-2. **"Compilation error" (Could be CODE or ENV)**
-   - CODE_LEVEL if: clear syntax issue or missing import (agent can fix)
-   - ENV_LEVEL if: SDK missing, wrong Xcode version, incompatible compiler
-   - Context: If error mentions SDK path or compiler flags, likely ENV
-
-3. **"File not found" (Could be CODE, PLAN, or ENV)**
-   - CODE_LEVEL if: code has wrong path, agent should fix path in code
-   - PLAN_LEVEL if: plan has wrong path in test_commands, fix plan
-   - ENV_LEVEL if: dependency missing from system, file should exist in /usr/local/bin
-   - Context: Look at context of file (test data file = PLAN, binary = ENV)
-
-### Multiple Errors in Output
-If output contains multiple different errors:
-- Classify the FIRST blocking error (highest priority to fix)
-- Mention related patterns in "related_patterns" array
-- Suggest fixing primary error first
-
-### Locale/Language Variations
-- Some errors are translated (e.g., Python's locale-specific messages)
-- Classify based on semantic meaning, not exact text
-- Handle both "SyntaxError" and "Syntax error" formats
-
----
-
-## CONFIDENCE SCORING
-
-Provide a confidence score (0.0-1.0) reflecting your certainty:
-- 1.0: Crystal clear (e.g., "SyntaxError: unexpected token")
-- 0.9: Very confident (e.g., "command not found: xyz")
-- 0.8: Confident (e.g., test failure with assertion output)
-- 0.7: Moderately confident (e.g., ambiguous but leans toward one category)
-- 0.6: Uncertain (e.g., context-dependent, could be 2 categories equally)
-- <0.6: Don't classify if confidence is too low; suggest human review
-
----
-
-## JSON RESPONSE FORMAT
-
-Respond with ONLY valid JSON (no explanation, no markdown, no fences).
-
-Example response:
+  <response_format>
+    <instruction>Respond with ONLY valid JSON (no explanation, no markdown, no fences).</instruction>
+    <example_response>
 {
   "category": "CODE_LEVEL",
   "suggestion": "Syntax error: missing closing brace on line 42. Add '}' before the semicolon.",
@@ -356,17 +359,17 @@ Example response:
   "time_to_resolve": "quick",
   "reasoning": "Clear syntax error with line number. Agent can immediately fix."
 }
+    </example_response>
+  </response_format>
 
----
-
-## NOW CLASSIFY THIS ERROR:
-
-[ERROR_OUTPUT_PLACEHOLDER]
-
-Context (if available):
-[CONTEXT_PLACEHOLDER]
+  <classify_now>
+    <error_output>[ERROR_OUTPUT_PLACEHOLDER]</error_output>
+    <context>[CONTEXT_PLACEHOLDER]</context>
+  </classify_now>
+</error_classification>
 `
 }
+
 
 // ErrorClassificationPromptWithContext builds the classification prompt with specific
 // error output and task context injected. This is called by the executor before
