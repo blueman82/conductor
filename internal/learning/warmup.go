@@ -149,7 +149,7 @@ func (p *DefaultWarmUpProvider) findSimilarTasks(ctx context.Context, task *Task
 	}
 
 	// Query recent task executions from the store, filtered by project directory
-	// This fixes the cross-project pollution bug identified in the Jaccard analysis
+	// to prevent cross-project pollution when finding similar tasks
 	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt,
 		success, output, error_message, duration_seconds, qc_verdict, qc_feedback,
 		failure_patterns, timestamp, context
