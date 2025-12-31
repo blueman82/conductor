@@ -636,3 +636,43 @@ architecture:
 #   mode: escalate
 #   escalate_on_uncertain: true
 #   confidence_threshold: 0.8
+
+# Timeouts configuration (v2.33+)
+# Centralized timeout settings for different operation categories
+# These settings replace scattered per-component timeout settings
+timeouts:
+  # Task execution timeout - maximum time for agent to complete a task
+  # This is the overall timeout for main agent task execution (default: 12h)
+  task: 12h
+
+  # LLM timeout - internal Claude CLI calls (default: 90s)
+  # Used by: ClaudeEnhancer, Assessor, ClaudeSimilarity, TaskAgentSelector,
+  #          IntelligentAgentSwapper, QC IntelligentSelector
+  llm: 90s
+
+  # HTTP timeout - external HTTP services (default: 30s)
+  # Used by: TTS client, webhooks, external API calls
+  http: 30s
+
+  # Search timeout - fast local CLI operations (default: 30s)
+  # Used by: STOPSearcher (git, grep, issue search, doc search)
+  search: 30s
+
+# Timeouts Examples
+
+# Example: Faster LLM responses for simple tasks
+# timeouts:
+#   llm: 30s
+
+# Example: Longer task timeout for complex implementations
+# timeouts:
+#   task: 24h
+#   llm: 2m
+
+# Example: Slower TTS server requires longer HTTP timeout
+# timeouts:
+#   http: 60s
+
+# Example: Comprehensive search with longer timeout
+# timeouts:
+#   search: 60s

@@ -715,6 +715,18 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		taskExec.IntelligentAgentSelection = true
 	}
 
+	// Wire intelligent agent swapper for retry loops (v2.29+)
+	// Uses Claude to analyze context and select better agents during retries
+	if cfg.Learning.SwapDuringRetries && agentRegistry != nil {
+		taskExec.IntelligentAgentSwapper = learning.NewIntelligentAgentSwapper(
+			agentRegistry,
+			nil, // Knowledge graph not yet implemented
+			nil, // LIP store not yet implemented
+			cfg.Timeouts.LLM,
+			multiLog,
+		)
+	}
+
 	// Create wave executor with task executor and config
 	waveExec := executor.NewWaveExecutorWithPackageGuard(taskExec, multiLog, cfg.SkipCompleted, cfg.RetryFailed, cfg.Executor.EnforcePackageGuard)
 

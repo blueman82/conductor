@@ -1412,6 +1412,25 @@ tts:
   # Request timeout (default: 30s)
   # Orpheus typically takes 2-3s per phrase
   timeout: 30s
+
+# Timeouts configuration (v2.33+)
+# Centralized timeout settings for different operation categories
+timeouts:
+  # Task execution timeout - main agent task execution (default: 12h)
+  task: 12h
+
+  # LLM timeout - internal Claude CLI calls (default: 90s)
+  # Used by: ClaudeEnhancer, Assessor, ClaudeSimilarity, TaskAgentSelector,
+  #          IntelligentAgentSwapper, QC IntelligentSelector
+  llm: 90s
+
+  # HTTP timeout - external HTTP services (default: 30s)
+  # Used by: TTS client, webhooks, external API calls
+  http: 30s
+
+  # Search timeout - fast local CLI operations (default: 30s)
+  # Used by: STOPSearcher (git, grep, issue search, doc search)
+  search: 30s
 ```
 
 ### Configuration Priority

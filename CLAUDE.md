@@ -105,6 +105,15 @@ tts:
   voice: "tara"
 ```
 
+### Timeouts (v2.33+)
+```yaml
+timeouts:
+  task: 12h    # Main agent task execution
+  llm: 90s     # Claude CLI calls (enhancer, assessor, similarity, selectors)
+  http: 30s    # External HTTP (TTS, webhooks)
+  search: 30s  # Local CLI operations (git, grep)
+```
+
 ### Mandatory Commit Verification (v2.30+)
 Tasks can specify required commits. Agents are instructed to commit, conductor verifies:
 ```yaml
