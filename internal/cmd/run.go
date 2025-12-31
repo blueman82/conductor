@@ -314,7 +314,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Use merged config values
 	dryRun := cfg.DryRun
 	maxConcurrency := cfg.MaxConcurrency
-	timeout := cfg.Timeout
+	timeout := cfg.Timeouts.Task // Use new centralized timeout (v2.33+)
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	logDir := cfg.LogDir
 
@@ -447,13 +447,14 @@ func runCommand(cmd *cobra.Command, args []string) error {
 			Enabled:     cfg.QualityControl.Enabled,
 			ReviewAgent: cfg.QualityControl.ReviewAgent,
 			Agents: models.QCAgentConfig{
-				Mode:              cfg.QualityControl.Agents.Mode,
-				ExplicitList:      cfg.QualityControl.Agents.ExplicitList,
-				AdditionalAgents:  cfg.QualityControl.Agents.AdditionalAgents,
-				BlockedAgents:     cfg.QualityControl.Agents.BlockedAgents,
-				MaxAgents:         cfg.QualityControl.Agents.MaxAgents,
-				CacheTTLSeconds:   cfg.QualityControl.Agents.CacheTTLSeconds,
-				RequireCodeReview: cfg.QualityControl.Agents.RequireCodeReview,
+				Mode:                    cfg.QualityControl.Agents.Mode,
+				ExplicitList:            cfg.QualityControl.Agents.ExplicitList,
+				AdditionalAgents:        cfg.QualityControl.Agents.AdditionalAgents,
+				BlockedAgents:           cfg.QualityControl.Agents.BlockedAgents,
+				MaxAgents:               cfg.QualityControl.Agents.MaxAgents,
+				CacheTTLSeconds:         cfg.QualityControl.Agents.CacheTTLSeconds,
+				SelectionTimeoutSeconds: int(cfg.Timeouts.LLM.Seconds()), // Wire cfg.Timeouts.LLM to QC IntelligentSelector (v2.33+)
+				RequireCodeReview:       cfg.QualityControl.Agents.RequireCodeReview,
 			},
 			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}

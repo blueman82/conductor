@@ -1467,6 +1467,7 @@ func (c *Config) MergeWithFlags(maxConcurrency *int, timeout *time.Duration, log
 	}
 	if timeout != nil {
 		c.Timeout = *timeout
+		c.Timeouts.Task = *timeout // Also update centralized timeout (v2.33+)
 	}
 	if logDir != nil {
 		c.LogDir = *logDir
