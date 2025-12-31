@@ -360,7 +360,10 @@ type TTSConfig struct {
 	// Voice is the TTS voice to use
 	Voice string `yaml:"voice"`
 
-	// Timeout is the maximum time to wait for TTS response
+	// Timeout is the maximum time to wait for TTS response.
+	// DEPRECATED: Use timeouts.http instead. When tts.timeout is not explicitly set,
+	// the value from timeouts.http will be used as a fallback.
+	// This field will be removed in a future version.
 	Timeout time.Duration `yaml:"timeout"`
 }
 
@@ -1119,6 +1122,7 @@ func LoadConfig(path string) (*Config, error) {
 		}
 
 		// Merge TTS config
+		ttsTimeoutExplicitlySet := false
 		if ttsSection, exists := rawMap["tts"]; exists && ttsSection != nil {
 			tts := yamlCfg.TTS
 			ttsMap, _ := ttsSection.(map[string]interface{})
@@ -1141,8 +1145,12 @@ func LoadConfig(path string) (*Config, error) {
 					return nil, fmt.Errorf("invalid tts.timeout format %q: %w", tts.Timeout, err)
 				}
 				cfg.TTS.Timeout = timeout
+				ttsTimeoutExplicitlySet = true
 			}
 		}
+
+		// Handle TTS timeout fallback to timeouts.http
+		handleTTSTimeoutFallback(rawMap, cfg, ttsTimeoutExplicitlySet)
 
 		// Merge Budget config
 		if budgetSection, exists := rawMap["budget"]; exists && budgetSection != nil {
@@ -1379,6 +1387,24 @@ func handleDeprecatedTimeoutFields(rawMap map[string]interface{}, cfg *Config, t
 		log.Printf("[DEPRECATED] Migrating %s value (%v) to timeouts.llm. "+
 			"Please update your configuration to use timeouts.llm directly.",
 			deprecatedSource, deprecatedValue)
+	}
+}
+
+// handleTTSTimeoutFallback handles the migration of tts.timeout to timeouts.http.
+// When tts.timeout is explicitly set, logs a deprecation warning.
+// When tts.timeout is not set, uses timeouts.http as the fallback value.
+//
+// Migration path:
+//   - tts.timeout → timeouts.http (for external HTTP services)
+func handleTTSTimeoutFallback(rawMap map[string]interface{}, cfg *Config, ttsTimeoutExplicitlySet bool) {
+	if ttsTimeoutExplicitlySet {
+		// Log deprecation warning when tts.timeout is explicitly set
+		log.Printf("[DEPRECATED] tts.timeout is deprecated. "+
+			"Please migrate to timeouts.http (e.g., 'timeouts:\\n  http: %v'). "+
+			"This field will be removed in a future version.", cfg.TTS.Timeout)
+	} else {
+		// Use timeouts.http as fallback when tts.timeout not explicitly set
+		cfg.TTS.Timeout = cfg.Timeouts.HTTP
 	}
 }
 
