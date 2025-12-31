@@ -674,7 +674,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Wire Pattern Intelligence (v2.24+) with shared ClaudeSimilarity
 	if cfg.Pattern.Enabled && claudeSim != nil {
-		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore, claudeSim)
+		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore, claudeSim, cfg.Timeouts.Search)
 		if pi != nil {
 			// Set up LLM enhancement if enabled
 			if cfg.Pattern.LLMEnhancementEnabled {
@@ -711,7 +711,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// 1. executor.intelligent_agent_selection is true in config, OR
 	// 2. quality_control.agents.mode is "intelligent" (backward compatibility)
 	if agentRegistry != nil && (cfg.Executor.IntelligentAgentSelection || plan.QualityControl.Agents.Mode == "intelligent") {
-		taskExec.TaskAgentSelector = executor.NewTaskAgentSelector(agentRegistry)
+		taskExec.TaskAgentSelector = executor.NewTaskAgentSelector(agentRegistry, cfg.Timeouts.LLM)
 		taskExec.IntelligentAgentSelection = true
 	}
 

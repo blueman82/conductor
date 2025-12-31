@@ -324,7 +324,7 @@ func TestSTOPSearcher_searchHistory_WithStore(t *testing.T) {
 		t.Fatalf("failed to add pattern: %v", err)
 	}
 
-	s := NewSTOPSearcher(store)
+	s := NewSTOPSearcher(store, testSearchTimeout)
 
 	// Search with similar hash prefix
 	hashResult := HashResult{
@@ -616,11 +616,6 @@ func TestHistoryMatch_Fields(t *testing.T) {
 	}
 }
 
-func TestSearchTimeout_Constant(t *testing.T) {
-	if SearchTimeout != 5*time.Second {
-		t.Errorf("SearchTimeout = %v, want 5s", SearchTimeout)
-	}
-}
 
 // sliceContainsString checks if a slice contains a specific string.
 func sliceContainsString(slice []string, item string) bool {
@@ -634,8 +629,7 @@ func sliceContainsString(slice []string, item string) bool {
 
 // Benchmark tests
 func BenchmarkSTOPSearcher_Search(b *testing.B) {
-	s := NewSTOPSearcher(nil)
-	s.timeout = 100 * time.Millisecond // Short timeout for benchmark
+	s := NewSTOPSearcher(nil, 100*time.Millisecond) // Short timeout for benchmark
 	ctx := context.Background()
 
 	b.ResetTimer()

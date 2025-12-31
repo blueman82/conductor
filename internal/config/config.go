@@ -1303,7 +1303,7 @@ func LoadConfig(path string) (*Config, error) {
 
 		// Handle TTS timeout fallback to timeouts.http
 		// This must be done AFTER timeouts parsing so cfg.Timeouts.HTTP has the correct value
-		handleTTSTimeoutFallback(rawMap, cfg, ttsTimeoutExplicitlySet)
+		handleTTSTimeoutFallback(cfg, ttsTimeoutExplicitlySet)
 	}
 
 	// Apply environment variable overrides (highest priority)
@@ -1397,7 +1397,7 @@ func handleDeprecatedTimeoutFields(rawMap map[string]interface{}, cfg *Config, t
 //
 // Migration path:
 //   - tts.timeout → timeouts.http (for external HTTP services)
-func handleTTSTimeoutFallback(rawMap map[string]interface{}, cfg *Config, ttsTimeoutExplicitlySet bool) {
+func handleTTSTimeoutFallback(cfg *Config, ttsTimeoutExplicitlySet bool) {
 	if ttsTimeoutExplicitlySet {
 		// Log deprecation warning when tts.timeout is explicitly set
 		log.Printf("[DEPRECATED] tts.timeout is deprecated. "+
