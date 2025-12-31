@@ -251,19 +251,19 @@ func TestDocEnforcerIntegration_FormatOutput(t *testing.T) {
 		t.Fatal("Expected non-empty formatted output")
 	}
 
-	// Should contain section header
-	if !strings.Contains(formatted, "DOCUMENTATION TARGET VERIFICATION") {
-		t.Error("Expected formatted output to contain section header")
+	// Should contain XML documentation_verification wrapper
+	if !strings.Contains(formatted, "<documentation_verification>") {
+		t.Error("Expected formatted output to contain <documentation_verification> tag")
 	}
 
-	// Should show file paths
-	if !strings.Contains(formatted, "docs/CLI.md") {
-		t.Error("Expected formatted output to show file paths")
+	// Should show file paths in doc_target attributes
+	if !strings.Contains(formatted, `file="docs/CLI.md"`) {
+		t.Error("Expected formatted output to show file paths in XML attributes")
 	}
 
-	// Should show PASS/FAIL status
-	if !strings.Contains(formatted, "PASS") || !strings.Contains(formatted, "FAIL") {
-		t.Error("Expected formatted output to show PASS/FAIL status")
+	// Should show found/missing status in XML attributes
+	if !strings.Contains(formatted, `status="found"`) || !strings.Contains(formatted, `status="missing"`) {
+		t.Error("Expected formatted output to show found/missing status in XML attributes")
 	}
 
 	// Should show summary
@@ -404,14 +404,19 @@ func TestDocEnforcerIntegration_FormatWithLineNumbers(t *testing.T) {
 
 	formatted := executor.FormatDocTargetResults(results)
 
-	// Should contain file:line format for passing result
-	if !strings.Contains(formatted, "docs/CLI.md:42") {
-		t.Errorf("Expected file:line format (docs/CLI.md:42) in output, got:\n%s", formatted)
+	// Should contain line number in XML attribute for passing result
+	if !strings.Contains(formatted, `line="42"`) {
+		t.Errorf("Expected line=\"42\" attribute in output, got:\n%s", formatted)
 	}
 
-	// Should NOT contain :0 for failed result
-	if strings.Contains(formatted, ":0") {
-		t.Errorf("Should not include :0 for failed result, got:\n%s", formatted)
+	// Should contain file in XML attribute
+	if !strings.Contains(formatted, `file="docs/CLI.md"`) {
+		t.Errorf("Expected file=\"docs/CLI.md\" attribute in output, got:\n%s", formatted)
+	}
+
+	// For failed result, should not have line attribute (no line="0")
+	if strings.Contains(formatted, `line="0"`) {
+		t.Errorf("Should not include line=\"0\" for failed result, got:\n%s", formatted)
 	}
 }
 
