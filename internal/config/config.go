@@ -785,6 +785,12 @@ func LoadConfig(path string) (*Config, error) {
 		Voice   string `yaml:"voice"`
 		Timeout string `yaml:"timeout"`
 	}
+	type yamlTimeoutsConfig struct {
+		Task   string `yaml:"task"`
+		LLM    string `yaml:"llm"`
+		HTTP   string `yaml:"http"`
+		Search string `yaml:"search"`
+	}
 	type yamlBudgetConfig struct {
 		Enabled          bool    `yaml:"enabled"`
 		MaxCostPerRun    float64 `yaml:"max_cost_per_run"`
@@ -815,6 +821,7 @@ func LoadConfig(path string) (*Config, error) {
 		Budget         yamlBudgetConfig     `yaml:"budget"`
 		Pattern        PatternConfig        `yaml:"pattern"`
 		Architecture   ArchitectureConfig   `yaml:"architecture"`
+		Timeouts       yamlTimeoutsConfig   `yaml:"timeouts"`
 	}
 
 	var yamlCfg yamlConfig
@@ -1244,6 +1251,41 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := archMap["confidence_threshold"]; exists {
 				cfg.Architecture.ConfidenceThreshold = arch.ConfidenceThreshold
+			}
+		}
+
+		// Merge Timeouts config
+		if timeoutsSection, exists := rawMap["timeouts"]; exists && timeoutsSection != nil {
+			timeouts := yamlCfg.Timeouts
+			timeoutsMap, _ := timeoutsSection.(map[string]interface{})
+
+			if _, exists := timeoutsMap["task"]; exists && timeouts.Task != "" {
+				d, err := time.ParseDuration(timeouts.Task)
+				if err != nil {
+					return nil, fmt.Errorf("invalid timeouts.task format %q: %w", timeouts.Task, err)
+				}
+				cfg.Timeouts.Task = d
+			}
+			if _, exists := timeoutsMap["llm"]; exists && timeouts.LLM != "" {
+				d, err := time.ParseDuration(timeouts.LLM)
+				if err != nil {
+					return nil, fmt.Errorf("invalid timeouts.llm format %q: %w", timeouts.LLM, err)
+				}
+				cfg.Timeouts.LLM = d
+			}
+			if _, exists := timeoutsMap["http"]; exists && timeouts.HTTP != "" {
+				d, err := time.ParseDuration(timeouts.HTTP)
+				if err != nil {
+					return nil, fmt.Errorf("invalid timeouts.http format %q: %w", timeouts.HTTP, err)
+				}
+				cfg.Timeouts.HTTP = d
+			}
+			if _, exists := timeoutsMap["search"]; exists && timeouts.Search != "" {
+				d, err := time.ParseDuration(timeouts.Search)
+				if err != nil {
+					return nil, fmt.Errorf("invalid timeouts.search format %q: %w", timeouts.Search, err)
+				}
+				cfg.Timeouts.Search = d
 			}
 		}
 	}

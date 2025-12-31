@@ -3290,3 +3290,226 @@ func TestLoadTTSConfigTimeoutFormats(t *testing.T) {
 		})
 	}
 }
+
+// TestTimeoutsConfigParsing tests YAML parsing for the timeouts configuration section
+func TestTimeoutsConfigParsing(t *testing.T) {
+	tests := []struct {
+		name          string
+		configYAML    string
+		expectedTask  time.Duration
+		expectedLLM   time.Duration
+		expectedHTTP  time.Duration
+		expectedSearch time.Duration
+		wantErr       bool
+		errContains   string
+	}{
+		{
+			name: "all timeouts specified",
+			configYAML: `timeouts:
+  task: 6h
+  llm: 60s
+  http: 15s
+  search: 10s
+`,
+			expectedTask:  6 * time.Hour,
+			expectedLLM:   60 * time.Second,
+			expectedHTTP:  15 * time.Second,
+			expectedSearch: 10 * time.Second,
+			wantErr:       false,
+		},
+		{
+			name:          "missing timeouts section uses defaults",
+			configYAML:   `max_concurrency: 4`,
+			expectedTask:  12 * time.Hour,
+			expectedLLM:   90 * time.Second,
+			expectedHTTP:  30 * time.Second,
+			expectedSearch: 30 * time.Second,
+			wantErr:       false,
+		},
+		{
+			name: "partial timeouts - only task specified",
+			configYAML: `timeouts:
+  task: 8h
+`,
+			expectedTask:  8 * time.Hour,
+			expectedLLM:   90 * time.Second,  // default
+			expectedHTTP:  30 * time.Second,  // default
+			expectedSearch: 30 * time.Second, // default
+			wantErr:       false,
+		},
+		{
+			name: "partial timeouts - only llm specified",
+			configYAML: `timeouts:
+  llm: 45s
+`,
+			expectedTask:  12 * time.Hour,    // default
+			expectedLLM:   45 * time.Second,
+			expectedHTTP:  30 * time.Second,  // default
+			expectedSearch: 30 * time.Second, // default
+			wantErr:       false,
+		},
+		{
+			name: "complex duration formats",
+			configYAML: `timeouts:
+  task: 2h30m
+  llm: 1m30s
+  http: 500ms
+  search: 2m
+`,
+			expectedTask:  2*time.Hour + 30*time.Minute,
+			expectedLLM:   90 * time.Second,
+			expectedHTTP:  500 * time.Millisecond,
+			expectedSearch: 2 * time.Minute,
+			wantErr:       false,
+		},
+		{
+			name: "invalid task duration format",
+			configYAML: `timeouts:
+  task: invalid
+`,
+			wantErr:     true,
+			errContains: "invalid timeouts.task format",
+		},
+		{
+			name: "invalid llm duration format",
+			configYAML: `timeouts:
+  llm: 5minutes
+`,
+			wantErr:     true,
+			errContains: "invalid timeouts.llm format",
+		},
+		{
+			name: "invalid http duration format",
+			configYAML: `timeouts:
+  http: ten-seconds
+`,
+			wantErr:     true,
+			errContains: "invalid timeouts.http format",
+		},
+		{
+			name: "invalid search duration format",
+			configYAML: `timeouts:
+  search: 1 hour
+`,
+			wantErr:     true,
+			errContains: "invalid timeouts.search format",
+		},
+		{
+			name: "zero values are valid",
+			configYAML: `timeouts:
+  task: 0s
+  llm: 0s
+  http: 0s
+  search: 0s
+`,
+			expectedTask:  0,
+			expectedLLM:   0,
+			expectedHTTP:  0,
+			expectedSearch: 0,
+			wantErr:       false,
+		},
+		{
+			name: "very long task timeout",
+			configYAML: `timeouts:
+  task: 168h
+`,
+			expectedTask:  168 * time.Hour, // 1 week
+			expectedLLM:   90 * time.Second,
+			expectedHTTP:  30 * time.Second,
+			expectedSearch: 30 * time.Second,
+			wantErr:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			if err := os.WriteFile(configPath, []byte(tt.configYAML), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("LoadConfig() expected error, got nil")
+				}
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error = %q, want it to contain %q", err.Error(), tt.errContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadConfig() unexpected error = %v", err)
+			}
+
+			if cfg.Timeouts.Task != tt.expectedTask {
+				t.Errorf("Timeouts.Task = %v, want %v", cfg.Timeouts.Task, tt.expectedTask)
+			}
+			if cfg.Timeouts.LLM != tt.expectedLLM {
+				t.Errorf("Timeouts.LLM = %v, want %v", cfg.Timeouts.LLM, tt.expectedLLM)
+			}
+			if cfg.Timeouts.HTTP != tt.expectedHTTP {
+				t.Errorf("Timeouts.HTTP = %v, want %v", cfg.Timeouts.HTTP, tt.expectedHTTP)
+			}
+			if cfg.Timeouts.Search != tt.expectedSearch {
+				t.Errorf("Timeouts.Search = %v, want %v", cfg.Timeouts.Search, tt.expectedSearch)
+			}
+		})
+	}
+}
+
+// TestTimeoutsConfigDefaults verifies DefaultTimeoutsConfig returns expected values
+func TestTimeoutsConfigDefaults(t *testing.T) {
+	defaults := DefaultTimeoutsConfig()
+
+	if defaults.Task != 12*time.Hour {
+		t.Errorf("DefaultTimeoutsConfig().Task = %v, want %v", defaults.Task, 12*time.Hour)
+	}
+	if defaults.LLM != 90*time.Second {
+		t.Errorf("DefaultTimeoutsConfig().LLM = %v, want %v", defaults.LLM, 90*time.Second)
+	}
+	if defaults.HTTP != 30*time.Second {
+		t.Errorf("DefaultTimeoutsConfig().HTTP = %v, want %v", defaults.HTTP, 30*time.Second)
+	}
+	if defaults.Search != 30*time.Second {
+		t.Errorf("DefaultTimeoutsConfig().Search = %v, want %v", defaults.Search, 30*time.Second)
+	}
+}
+
+// TestTimeoutsConfigMerge verifies partial config merges correctly with defaults
+func TestTimeoutsConfigMerge(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Only specify some timeout values, others should use defaults
+	configYAML := `timeouts:
+  task: 24h
+  http: 45s
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Explicitly set values
+	if cfg.Timeouts.Task != 24*time.Hour {
+		t.Errorf("Timeouts.Task = %v, want %v", cfg.Timeouts.Task, 24*time.Hour)
+	}
+	if cfg.Timeouts.HTTP != 45*time.Second {
+		t.Errorf("Timeouts.HTTP = %v, want %v", cfg.Timeouts.HTTP, 45*time.Second)
+	}
+
+	// Defaults should be preserved for unset values
+	if cfg.Timeouts.LLM != 90*time.Second {
+		t.Errorf("Timeouts.LLM = %v, want default %v", cfg.Timeouts.LLM, 90*time.Second)
+	}
+	if cfg.Timeouts.Search != 30*time.Second {
+		t.Errorf("Timeouts.Search = %v, want default %v", cfg.Timeouts.Search, 30*time.Second)
+	}
+}
