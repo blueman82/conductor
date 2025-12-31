@@ -54,14 +54,15 @@ plan:
 	}
 
 	// Verify files appear in prompt (critical for agent compliance)
-	if !strings.Contains(task.Prompt, "Target Files (REQUIRED)") {
-		t.Error("Prompt should contain 'Target Files (REQUIRED)' section")
+	// XML format: <target_files required="true">
+	if !strings.Contains(task.Prompt, "<target_files required=\"true\">") {
+		t.Error("Prompt should contain '<target_files required=\"true\">' section")
 	}
-	if !strings.Contains(task.Prompt, "file1.go") {
-		t.Error("Prompt should contain file1.go")
+	if !strings.Contains(task.Prompt, "<file>file1.go</file>") {
+		t.Error("Prompt should contain file1.go as XML element")
 	}
-	if !strings.Contains(task.Prompt, "file2.go") {
-		t.Error("Prompt should contain file2.go")
+	if !strings.Contains(task.Prompt, "<file>file2.go</file>") {
+		t.Error("Prompt should contain file2.go as XML element")
 	}
 	if !strings.Contains(task.Prompt, "MUST create/modify these exact files") {
 		t.Error("Prompt should contain instruction about exact file paths")
@@ -207,8 +208,12 @@ plan:
 	}
 
 	prompt := plan.Tasks[0].Prompt
+	// XML format: <description> section wraps description content
+	if !strings.Contains(prompt, "<description>") {
+		t.Error("Prompt should contain '<description>' XML tag")
+	}
 	if !strings.Contains(prompt, "Main task description") {
-		t.Error("Prompt should contain description")
+		t.Error("Prompt should contain description content")
 	}
 	if !strings.Contains(prompt, "Example test code") {
 		t.Error("Prompt should contain test example")
@@ -1737,17 +1742,18 @@ plan:
 	}
 
 	task := plan.Tasks[0]
-	if !strings.Contains(task.Prompt, "## Commit") {
-		t.Error("expected prompt to contain '## Commit' section")
+	// XML format: <commit> section
+	if !strings.Contains(task.Prompt, "<commit>") {
+		t.Error("expected prompt to contain '<commit>' section")
 	}
-	if !strings.Contains(task.Prompt, "fix") {
-		t.Error("expected prompt to contain commit type 'fix'")
+	if !strings.Contains(task.Prompt, "<type>fix</type>") {
+		t.Error("expected prompt to contain commit type 'fix' as XML element")
 	}
 	if !strings.Contains(task.Prompt, "resolve memory leak") {
 		t.Error("expected prompt to contain commit message")
 	}
-	if !strings.Contains(task.Prompt, "internal/cache.go") {
-		t.Error("expected prompt to contain commit file")
+	if !strings.Contains(task.Prompt, "<file>internal/cache.go</file>") {
+		t.Error("expected prompt to contain commit file as XML element")
 	}
 }
 
@@ -1779,9 +1785,9 @@ plan:
 	task := plan.Tasks[0]
 	prompt := task.Prompt
 
-	// Verify MANDATORY COMMIT section exists
-	if !strings.Contains(prompt, "## MANDATORY COMMIT (REQUIRED)") {
-		t.Error("expected prompt to contain '## MANDATORY COMMIT (REQUIRED)' section")
+	// Verify MANDATORY COMMIT section exists (XML format)
+	if !strings.Contains(prompt, "<mandatory_commit required=\"true\">") {
+		t.Error("expected prompt to contain '<mandatory_commit required=\"true\">' section")
 	}
 
 	// Verify imperative instruction
@@ -1794,15 +1800,15 @@ plan:
 		t.Error("expected prompt to contain formatted commit message 'feat: add CommitExecutor interface'")
 	}
 
-	// Verify files are listed for staging
-	if !strings.Contains(prompt, "internal/executor/commit.go") {
-		t.Error("expected prompt to contain first commit file")
+	// Verify files are listed for staging (XML format)
+	if !strings.Contains(prompt, "<file>internal/executor/commit.go</file>") {
+		t.Error("expected prompt to contain first commit file as XML element")
 	}
-	if !strings.Contains(prompt, "internal/executor/commit_test.go") {
-		t.Error("expected prompt to contain second commit file")
+	if !strings.Contains(prompt, "<file>internal/executor/commit_test.go</file>") {
+		t.Error("expected prompt to contain second commit file as XML element")
 	}
 
-	// Verify git add command example
+	// Verify git add command example (in XML code block)
 	if !strings.Contains(prompt, "git add") {
 		t.Error("expected prompt to contain 'git add' command")
 	}
@@ -1812,9 +1818,9 @@ plan:
 		t.Error("expected prompt to contain 'git commit -m' command")
 	}
 
-	// Verify warning about task completion
-	if !strings.Contains(prompt, "Your task is NOT complete until changes are committed") {
-		t.Error("expected prompt to contain task completion warning")
+	// Verify warning about task completion (XML warning element)
+	if !strings.Contains(prompt, "<warning>Your task is NOT complete until changes are committed.</warning>") {
+		t.Error("expected prompt to contain task completion warning as XML element")
 	}
 }
 
@@ -1872,9 +1878,9 @@ plan:
 
 	prompt := plan.Tasks[0].Prompt
 
-	// Should have MANDATORY COMMIT section
-	if !strings.Contains(prompt, "## MANDATORY COMMIT (REQUIRED)") {
-		t.Error("expected MANDATORY COMMIT section even without files")
+	// Should have MANDATORY COMMIT section (XML format)
+	if !strings.Contains(prompt, "<mandatory_commit required=\"true\">") {
+		t.Error("expected '<mandatory_commit required=\"true\">' section even without files")
 	}
 
 	// Should have generic file staging instruction

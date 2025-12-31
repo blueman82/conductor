@@ -6,7 +6,7 @@ allowed-tools: Read, Bash, Glob, Grep, Write, TodoWrite
 
 # Implementation Planner Skill
 
-**Version:** 3.1.0
+**Version:** 3.2.0
 **Purpose:** Generate conductor-compatible YAML implementation plans with built-in validation.
 
 ## Activation
@@ -454,13 +454,15 @@ plan:
         prompt_blocks: []          # Optional: extra agent context
 
       description: |
-        ## PHASE 0: DEPENDENCY VERIFICATION (EXECUTE FIRST)
-        ```bash
-        # Verify dependencies exist
-        ```
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify dependencies exist
+          </commands>
+        </dependency_verification>
 
-        ## TASK DESCRIPTION
-        What to implement.
+        <task_description>
+          What to implement.
+        </task_description>
 
       implementation:
         approach: |
@@ -573,6 +575,10 @@ Run: conductor run docs/plans/<slug>.yaml
 ---
 
 ## Version History
+
+### v3.2.0 (2025-12-31)
+- **Converted description template from markdown to XML format**
+- Uses `<dependency_verification>` and `<task_description>` tags
 
 ### v3.1.0 (2025-12-31)
 - **Clarified data_flow_registry: comment block + YAML field (section 2.3)**

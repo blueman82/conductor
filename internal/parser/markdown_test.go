@@ -341,15 +341,15 @@ Write tests first
 		t.Error("Prompt should contain 'Test First' section")
 	}
 
-	// Verify file injection is present
-	if !strings.Contains(task.Prompt, "Target Files (REQUIRED)") {
-		t.Error("Prompt should contain 'Target Files (REQUIRED)' section")
+	// Verify file injection is present (XML format)
+	if !strings.Contains(task.Prompt, `<target_files required="true">`) {
+		t.Error("Prompt should contain '<target_files required=\"true\">' section")
 	}
-	if !strings.Contains(task.Prompt, "test.go") {
-		t.Error("Prompt should contain the file 'test.go'")
+	if !strings.Contains(task.Prompt, "<file>test.go</file>") {
+		t.Error("Prompt should contain the file '<file>test.go</file>'")
 	}
-	if !strings.Contains(task.Prompt, "MUST create/modify these exact files") {
-		t.Error("Prompt should contain file injection instructions")
+	if !strings.Contains(task.Prompt, "<instruction>You MUST create/modify these exact files</instruction>") {
+		t.Error("Prompt should contain file injection instructions in XML format")
 	}
 }
 
@@ -1276,37 +1276,38 @@ func TestInjectFilesIntoPrompt(t *testing.T) {
 			content: "Original content",
 			files:   nil,
 			wantHas: []string{"Original content"},
-			wantNot: []string{"Target Files", "MUST create"},
+			wantNot: []string{"target_files", "MUST create"},
 		},
 		{
 			name:    "empty files - no injection",
 			content: "Original content",
 			files:   []string{},
 			wantHas: []string{"Original content"},
-			wantNot: []string{"Target Files", "MUST create"},
+			wantNot: []string{"target_files", "MUST create"},
 		},
 		{
-			name:    "single file - injection",
+			name:    "single file - XML injection",
 			content: "Original content",
 			files:   []string{"src/main.go"},
 			wantHas: []string{
-				"Target Files (REQUIRED)",
-				"MUST create/modify these exact files",
-				"`src/main.go`",
-				"Do NOT create files with different names",
+				`<target_files required="true">`,
+				"<instruction>You MUST create/modify these exact files</instruction>",
+				"<file>src/main.go</file>",
+				"<warning>Do NOT create files with different names",
+				"</target_files>",
 				"Original content",
 			},
 			wantNot: nil,
 		},
 		{
-			name:    "multiple files - injection",
+			name:    "multiple files - XML injection",
 			content: "Task description here",
 			files:   []string{"file1.go", "file2.go", "pkg/util.go"},
 			wantHas: []string{
-				"Target Files (REQUIRED)",
-				"`file1.go`",
-				"`file2.go`",
-				"`pkg/util.go`",
+				`<target_files required="true">`,
+				"<file>file1.go</file>",
+				"<file>file2.go</file>",
+				"<file>pkg/util.go</file>",
 				"Task description here",
 			},
 			wantNot: nil,

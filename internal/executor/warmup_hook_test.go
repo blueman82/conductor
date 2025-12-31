@@ -106,8 +106,8 @@ func TestWarmUpHookInjectContext(t *testing.T) {
 		result, err := hook.InjectContext(ctx, task)
 
 		require.NoError(t, err)
-		assert.Contains(t, result.Prompt, "--- WARM-UP CONTEXT ---")
-		assert.Contains(t, result.Prompt, "--- END WARM-UP ---")
+		assert.Contains(t, result.Prompt, "<warmup_context>")
+		assert.Contains(t, result.Prompt, "</warmup_context>")
 		assert.Contains(t, result.Prompt, "Use the existing pattern")
 		assert.Contains(t, result.Prompt, "Original prompt")
 		assert.True(t, len(logger.infoMessages) > 0)
@@ -131,7 +131,7 @@ func TestWarmUpHookInjectContext(t *testing.T) {
 		result, err := hook.InjectContext(ctx, task)
 
 		require.NoError(t, err)
-		assert.Contains(t, result.Prompt, "Patterns from Similar Tasks")
+		assert.Contains(t, result.Prompt, "<similar_task_patterns>")
 		assert.Contains(t, result.Prompt, "Always validate input")
 		assert.Contains(t, result.Prompt, "Use context for cancellation")
 	})
@@ -195,9 +195,9 @@ func TestFormatWarmUpContext(t *testing.T) {
 
 		result := FormatWarmUpContext(ctx)
 
-		assert.Contains(t, result, "--- WARM-UP CONTEXT ---")
-		assert.Contains(t, result, "--- END WARM-UP ---")
-		assert.Contains(t, result, "Recommended Approach")
+		assert.Contains(t, result, "<warmup_context>")
+		assert.Contains(t, result, "</warmup_context>")
+		assert.Contains(t, result, "<recommended_approach>")
 		assert.Contains(t, result, "Use pattern X")
 		assert.Contains(t, result, "80%")
 	})
@@ -213,7 +213,7 @@ func TestFormatWarmUpContext(t *testing.T) {
 
 		result := FormatWarmUpContext(ctx)
 
-		assert.Contains(t, result, "Patterns from Similar Tasks")
+		assert.Contains(t, result, "<similar_task_patterns>")
 		assert.Contains(t, result, "Pattern 1")
 		assert.Contains(t, result, "Pattern 2")
 	})
@@ -246,7 +246,7 @@ func TestFormatWarmUpContext(t *testing.T) {
 
 		result := FormatWarmUpContext(ctx)
 
-		assert.Contains(t, result, "Similar Historical Tasks")
+		assert.Contains(t, result, "<historical_tasks>")
 		assert.Contains(t, result, "3 similar tasks (2 successful, 1 failed)")
 		assert.Contains(t, result, "Task A")
 		assert.Contains(t, result, "golang-pro")
@@ -360,7 +360,7 @@ func TestWarmUpHookIntegrationWithPreTaskHook(t *testing.T) {
 			modifiedTask, err := te.WarmUpHook.InjectContext(ctx, task)
 			require.NoError(t, err)
 			assert.True(t, called)
-			assert.Contains(t, modifiedTask.Prompt, "WARM-UP CONTEXT")
+			assert.Contains(t, modifiedTask.Prompt, "<warmup_context>")
 		}
 	})
 }

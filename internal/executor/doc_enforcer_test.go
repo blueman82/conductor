@@ -345,17 +345,20 @@ func TestFormatDocTargetResults_AllPassed(t *testing.T) {
 		t.Error("Expected non-empty formatted output")
 	}
 
-	// Should contain success indicators
-	if !strings.Contains(formatted, "PASS") {
-		t.Error("Expected PASS indicators in output")
+	// Should contain success indicators (XML format uses status="found")
+	if !strings.Contains(formatted, `status="found"`) {
+		t.Error("Expected status=\"found\" indicators in output")
 	}
 
-	// Criterion #1: Should contain file:line format (e.g., docs/CLI.md:56)
-	if !strings.Contains(formatted, "docs/CLI.md:56") {
-		t.Errorf("Expected file:line format in output (docs/CLI.md:56), got:\n%s", formatted)
+	// Should contain file attributes in XML format
+	if !strings.Contains(formatted, `file="docs/CLI.md"`) {
+		t.Errorf("Expected file attribute in output, got:\n%s", formatted)
 	}
-	if !strings.Contains(formatted, "docs/API.md:23") {
-		t.Errorf("Expected file:line format in output (docs/API.md:23), got:\n%s", formatted)
+	if !strings.Contains(formatted, `line="56"`) {
+		t.Errorf("Expected line attribute in output, got:\n%s", formatted)
+	}
+	if !strings.Contains(formatted, `file="docs/API.md"`) {
+		t.Errorf("Expected file attribute for API.md in output, got:\n%s", formatted)
 	}
 
 	// Should indicate all passed
@@ -386,9 +389,9 @@ func TestFormatDocTargetResults_SomeFailed(t *testing.T) {
 		t.Error("Expected non-empty formatted output")
 	}
 
-	// Should contain both PASS and FAIL
-	if !strings.Contains(formatted, "PASS") || !strings.Contains(formatted, "FAIL") {
-		t.Error("Expected both PASS and FAIL indicators")
+	// Should contain both found and missing statuses (XML format)
+	if !strings.Contains(formatted, `status="found"`) || !strings.Contains(formatted, `status="missing"`) {
+		t.Error("Expected both found and missing status indicators")
 	}
 }
 

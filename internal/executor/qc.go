@@ -1069,49 +1069,52 @@ func BuildSTOPSummaryFromSTOPResult(stopResult *pattern.STOPResult) string {
 	// Check for similar patterns
 	if len(stopResult.Search.SimilarPatterns) > 0 {
 		hasPriorArt = true
-		sb.WriteString("**Similar Patterns Found:**\n")
+		sb.WriteString("<similar_patterns>\n")
 		for i, p := range stopResult.Search.SimilarPatterns {
 			if i >= 3 { // Limit to top 3
 				break
 			}
-			sb.WriteString(fmt.Sprintf("- %s (%s): %.0f%% similar - %s\n",
+			sb.WriteString(fmt.Sprintf("<pattern name=\"%s\" path=\"%s\" similarity=\"%.0f%%\">%s</pattern>\n",
 				p.Name, p.FilePath, p.Similarity*100, p.Description))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</similar_patterns>\n")
 	}
 
 	// Check for existing implementations
 	if len(stopResult.Search.ExistingImplementations) > 0 {
 		hasPriorArt = true
-		sb.WriteString("**Existing Implementations:**\n")
+		sb.WriteString("<implementations>\n")
 		for i, impl := range stopResult.Search.ExistingImplementations {
 			if i >= 3 { // Limit to top 3
 				break
 			}
-			sb.WriteString(fmt.Sprintf("- %s (%s) in %s: %.0f%% relevant\n",
+			sb.WriteString(fmt.Sprintf("<impl name=\"%s\" type=\"%s\" path=\"%s\" relevance=\"%.0f%%\"/>\n",
 				impl.Name, impl.Type, impl.FilePath, impl.Relevance*100))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</implementations>\n")
 	}
 
 	// Check for related files
 	if len(stopResult.Search.RelatedFiles) > 0 {
 		hasPriorArt = true
-		sb.WriteString("**Related Files:** ")
+		sb.WriteString("<related_files>\n")
 		maxFiles := 5
 		if maxFiles > len(stopResult.Search.RelatedFiles) {
 			maxFiles = len(stopResult.Search.RelatedFiles)
 		}
-		sb.WriteString(strings.Join(stopResult.Search.RelatedFiles[:maxFiles], ", "))
-		sb.WriteString("\n\n")
+		for _, f := range stopResult.Search.RelatedFiles[:maxFiles] {
+			sb.WriteString(fmt.Sprintf("<file>%s</file>\n", f))
+		}
+		sb.WriteString("</related_files>\n")
 	}
 
 	// Add recommendations if any
 	if len(stopResult.Recommendations) > 0 {
-		sb.WriteString("**Recommendations:**\n")
+		sb.WriteString("<recommendations>\n")
 		for _, rec := range stopResult.Recommendations {
-			sb.WriteString(fmt.Sprintf("- %s\n", rec))
+			sb.WriteString(fmt.Sprintf("<item>%s</item>\n", rec))
 		}
+		sb.WriteString("</recommendations>\n")
 	}
 
 	if !hasPriorArt {
@@ -1199,35 +1202,35 @@ func BuildArchitectureSummary(result *architecture.CheckpointResult) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**Summary**: %s\n\n", result.Assessment.Summary))
+	sb.WriteString(fmt.Sprintf("<summary>%s</summary>\n\n", result.Assessment.Summary))
 
 	flagged := result.Assessment.FlaggedQuestions()
 	if len(flagged) > 0 {
-		sb.WriteString("**Flagged Concerns:**\n")
+		sb.WriteString("<flagged_concerns>\n")
 		for _, q := range flagged {
-			sb.WriteString(fmt.Sprintf("- %s\n", q))
+			sb.WriteString(fmt.Sprintf("<concern>%s</concern>\n", q))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</flagged_concerns>\n\n")
 	}
 
 	// Add reasoning for flagged questions
 	if result.Assessment.CoreInfrastructure.Answer {
-		sb.WriteString(fmt.Sprintf("**Core Infrastructure**: %s\n", result.Assessment.CoreInfrastructure.Reasoning))
+		sb.WriteString(fmt.Sprintf("<core_infrastructure>%s</core_infrastructure>\n", result.Assessment.CoreInfrastructure.Reasoning))
 	}
 	if result.Assessment.ReuseConcerns.Answer {
-		sb.WriteString(fmt.Sprintf("**Reuse Concerns**: %s\n", result.Assessment.ReuseConcerns.Reasoning))
+		sb.WriteString(fmt.Sprintf("<reuse_concerns>%s</reuse_concerns>\n", result.Assessment.ReuseConcerns.Reasoning))
 	}
 	if result.Assessment.NewAbstractions.Answer {
-		sb.WriteString(fmt.Sprintf("**New Abstractions**: %s\n", result.Assessment.NewAbstractions.Reasoning))
+		sb.WriteString(fmt.Sprintf("<new_abstractions>%s</new_abstractions>\n", result.Assessment.NewAbstractions.Reasoning))
 	}
 	if result.Assessment.APIContracts.Answer {
-		sb.WriteString(fmt.Sprintf("**API Contracts**: %s\n", result.Assessment.APIContracts.Reasoning))
+		sb.WriteString(fmt.Sprintf("<api_contracts>%s</api_contracts>\n", result.Assessment.APIContracts.Reasoning))
 	}
 	if result.Assessment.FrameworkLifecycle.Answer {
-		sb.WriteString(fmt.Sprintf("**Framework Lifecycle**: %s\n", result.Assessment.FrameworkLifecycle.Reasoning))
+		sb.WriteString(fmt.Sprintf("<framework_lifecycle>%s</framework_lifecycle>\n", result.Assessment.FrameworkLifecycle.Reasoning))
 	}
 	if result.Assessment.CrossCuttingConcerns.Answer {
-		sb.WriteString(fmt.Sprintf("**Cross-Cutting Concerns**: %s\n", result.Assessment.CrossCuttingConcerns.Reasoning))
+		sb.WriteString(fmt.Sprintf("<cross_cutting_concerns>%s</cross_cutting_concerns>\n", result.Assessment.CrossCuttingConcerns.Reasoning))
 	}
 
 	return sb.String()

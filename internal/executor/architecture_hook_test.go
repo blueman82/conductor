@@ -109,10 +109,10 @@ func TestArchitectureCheckpointHook_BuildPromptInjection(t *testing.T) {
 			},
 			wantEmpty: false,
 			contains: []string{
-				"ARCHITECTURE CHECKPOINT CONTEXT",
+				"<architecture_checkpoint>",
 				"This task introduces new patterns",
-				"Core Infrastructure",
-				"New Abstractions",
+				"<core_infrastructure>",
+				"<new_abstractions>",
 				"Touches shared auth service",
 				"Introduces new error handling pattern",
 				"justify any architectural decisions",
