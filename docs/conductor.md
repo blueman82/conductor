@@ -525,6 +525,55 @@ Execution:
 - Wave 2: Task 2, Task 3 (parallel)
 - Wave 3: Task 4
 
+### XML Format for Descriptions (v2.31+)
+
+Starting in v2.31.0, task descriptions should use XML format instead of markdown for structured content. This provides better parsing by Claude and more consistent prompt formatting.
+
+#### Before (Markdown)
+
+```yaml
+description: |
+  ## PHASE 0: DEPENDENCY VERIFICATION
+  ```bash
+  # Verify dependencies exist
+  ```
+
+  ## TASK DESCRIPTION
+  Implement the feature.
+```
+
+#### After (XML)
+
+```yaml
+description: |
+  <dependency_verification priority="execute_first">
+    <commands>
+      # Verify dependencies exist
+    </commands>
+  </dependency_verification>
+
+  <task_description>
+    Implement the feature.
+  </task_description>
+```
+
+#### Common XML Tags
+
+| Tag | Purpose |
+|-----|---------|
+| `<dependency_verification>` | Pre-task verification commands |
+| `<task_description>` | Main task instructions |
+| `<requirements>` | List of requirements |
+| `<key_changes>` | List of changes to make |
+| `<commands>` | Shell commands to run |
+
+#### Benefits
+
+- **Consistent parsing**: Claude handles XML tags more reliably than markdown headers
+- **Structured data**: Attributes like `priority="execute_first"` add metadata
+- **Nesting**: XML naturally supports nested structures
+- **Validation**: XML structure can be validated
+
 ### Validation Rules
 
 Conductor validates plans before execution:
