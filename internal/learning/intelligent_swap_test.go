@@ -139,8 +139,9 @@ func TestNewIntelligentAgentSwapper(t *testing.T) {
 	kg := NewMockKnowledgeGraph()
 	lip := NewMockLIPCollector()
 	logger := &MockWaiterLogger{}
+	timeout := 90 * time.Second
 
-	swapper := NewIntelligentAgentSwapper(registry, kg, lip, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, timeout, logger)
 
 	if swapper == nil {
 		t.Fatal("expected non-nil swapper")
@@ -162,19 +163,19 @@ func TestNewIntelligentAgentSwapper(t *testing.T) {
 		t.Errorf("expected ClaudePath 'claude', got '%s'", swapper.ClaudePath)
 	}
 
-	if swapper.Timeout != 90*time.Second {
-		t.Errorf("expected timeout 90s, got %v", swapper.Timeout)
+	if swapper.Timeout != timeout {
+		t.Errorf("expected timeout %v, got %v", timeout, swapper.Timeout)
 	}
 }
 
-func TestNewIntelligentAgentSwapperWithTimeout(t *testing.T) {
+func TestNewIntelligentAgentSwapper_CustomTimeout(t *testing.T) {
 	registry := agent.NewRegistry("")
 	kg := NewMockKnowledgeGraph()
 	lip := NewMockLIPCollector()
 	logger := &MockWaiterLogger{}
 
 	customTimeout := 120 * time.Second
-	swapper := NewIntelligentAgentSwapperWithTimeout(registry, kg, lip, customTimeout, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, customTimeout, logger)
 
 	if swapper.Timeout != customTimeout {
 		t.Errorf("expected timeout %v, got %v", customTimeout, swapper.Timeout)
@@ -187,7 +188,7 @@ func TestSelectAgent_NilContext(t *testing.T) {
 	lip := NewMockLIPCollector()
 	logger := &MockWaiterLogger{}
 
-	swapper := NewIntelligentAgentSwapper(registry, kg, lip, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, 90*time.Second, logger)
 
 	_, err := swapper.SelectAgent(context.Background(), nil)
 	if err == nil {
@@ -322,7 +323,7 @@ func TestApplyGuardrails_NilRecommendation(t *testing.T) {
 	lip := NewMockLIPCollector()
 	logger := &MockWaiterLogger{}
 
-	swapper := NewIntelligentAgentSwapper(registry, kg, lip, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, 90*time.Second, logger)
 
 	result := swapper.applyGuardrails(nil)
 
@@ -345,7 +346,7 @@ func TestApplyGuardrails_ConfidenceClamping(t *testing.T) {
 	lip := NewMockLIPCollector()
 	logger := &MockWaiterLogger{}
 
-	swapper := NewIntelligentAgentSwapper(registry, kg, lip, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, 90*time.Second, logger)
 
 	tests := []struct {
 		input    float64
@@ -391,7 +392,7 @@ func TestBuildSwapPrompt_MinimalContext(t *testing.T) {
 	lip := NewMockLIPCollector()
 	logger := &MockWaiterLogger{}
 
-	swapper := NewIntelligentAgentSwapper(registry, kg, lip, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, 90*time.Second, logger)
 
 	swapCtx := &SwapContext{
 		TaskNumber:   "1",
@@ -441,7 +442,7 @@ func TestBuildSwapPrompt_FullContext(t *testing.T) {
 	lip := NewMockLIPCollector()
 	logger := &MockWaiterLogger{}
 
-	swapper := NewIntelligentAgentSwapper(registry, kg, lip, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, 90*time.Second, logger)
 
 	swapCtx := &SwapContext{
 		TaskNumber:      "5",
@@ -490,7 +491,7 @@ func TestBuildSwapPrompt_TruncatesLongContent(t *testing.T) {
 	lip := NewMockLIPCollector()
 	logger := &MockWaiterLogger{}
 
-	swapper := NewIntelligentAgentSwapper(registry, kg, lip, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, 90*time.Second, logger)
 
 	// Create very long error context
 	longError := ""
@@ -541,7 +542,7 @@ func TestGetKnowledgeGraphContext_WithRelatedAgents(t *testing.T) {
 		},
 	}
 
-	swapper := NewIntelligentAgentSwapper(registry, kg, lip, logger)
+	swapper := NewIntelligentAgentSwapper(registry, kg, lip, 90*time.Second, logger)
 
 	files := []string{"internal/executor/task.go"}
 	context := swapper.getKnowledgeGraphContext(context.Background(), files)
