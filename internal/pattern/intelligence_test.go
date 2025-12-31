@@ -1002,7 +1002,6 @@ func TestCheckDuplicatesDisabled(t *testing.T) {
 	hashResult := HashResult{
 		FullHash:       "abc123",
 		NormalizedHash: "def456",
-		Keywords:       []string{"test", "auth"},
 	}
 
 	result := pi.checkDuplicates(context.Background(), "test description", []string{"test.go"}, hashResult)
@@ -1033,7 +1032,6 @@ func TestCheckDuplicatesNilLibrary(t *testing.T) {
 	hashResult := HashResult{
 		FullHash:       "abc123",
 		NormalizedHash: "def456",
-		Keywords:       []string{"test"},
 	}
 
 	result := pi.checkDuplicates(context.Background(), "test", []string{}, hashResult)
@@ -1360,7 +1358,6 @@ func TestRunSTOPAnalysisWithNilSearcher(t *testing.T) {
 	hashResult := HashResult{
 		FullHash:       "test",
 		NormalizedHash: "test",
-		Keywords:       []string{"test"},
 	}
 
 	result := pi.runSTOPAnalysis(context.Background(), "test", []string{}, hashResult)

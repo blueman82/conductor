@@ -142,8 +142,7 @@ func (pi *PatternIntelligenceImpl) CheckTask(ctx context.Context, task models.Ta
 }
 
 // checkDuplicates checks for task duplicates using the pattern library.
-// When ClaudeSimilarity is available, uses semantic comparison for accurate matching.
-// Falls back to Jaccard similarity when ClaudeSimilarity is nil.
+// Uses ClaudeSimilarity for semantic comparison. ClaudeSimilarity must be provided.
 func (pi *PatternIntelligenceImpl) checkDuplicates(ctx context.Context, description string, files []string, hashResult HashResult) *DuplicateResult {
 	if !pi.config.EnableDuplicateDetection {
 		return NewEmptyDuplicateResult()
@@ -179,31 +178,17 @@ func (pi *PatternIntelligenceImpl) checkDuplicates(ctx context.Context, descript
 		return result
 	}
 
-	// Check for similar patterns (initial retrieval uses Jaccard for candidate selection)
-	similarPatterns, err := pi.library.Retrieve(ctx, description, files, 5)
+	// Check for similar patterns using Claude semantic comparison
+	similarPatterns, err := pi.library.RetrieveWithSimilarity(ctx, description, files, 5, pi.similarity)
 	if err != nil || len(similarPatterns) == 0 {
 		return result
 	}
 
-	// Find highest similarity match using Claude semantic comparison when available
+	// Find highest similarity match using Claude semantic comparison
 	var highestSimilarity float64
 	var bestMatch *StoredPattern
 	for i, p := range similarPatterns {
-		var patternSimilarity float64
-
-		// Use ClaudeSimilarity for semantic comparison if available
-		if pi.similarity != nil {
-			simResult, err := pi.similarity.Compare(ctx, description, p.Description)
-			if err == nil && simResult != nil {
-				patternSimilarity = simResult.Score
-			} else {
-				// Fallback to Jaccard on Claude error
-				patternSimilarity = p.Similarity
-			}
-		} else {
-			// Fallback to Jaccard similarity from library
-			patternSimilarity = p.Similarity
-		}
+		patternSimilarity := p.Similarity // Already computed with ClaudeSimilarity
 
 		if patternSimilarity > highestSimilarity {
 			highestSimilarity = patternSimilarity
@@ -212,15 +197,11 @@ func (pi *PatternIntelligenceImpl) checkDuplicates(ctx context.Context, descript
 
 		// Add to duplicate references if above threshold
 		if patternSimilarity >= pi.config.SimilarityThreshold {
-			overlapReason := "High keyword similarity"
-			if pi.similarity != nil {
-				overlapReason = "High semantic similarity"
-			}
 			result.DuplicateOf = append(result.DuplicateOf, DuplicateRef{
 				TaskNumber:      p.TaskHash,
 				TaskName:        p.Description,
 				SimilarityScore: patternSimilarity,
-				OverlapReason:   overlapReason,
+				OverlapReason:   "High semantic similarity",
 			})
 		}
 	}
@@ -241,11 +222,7 @@ func (pi *PatternIntelligenceImpl) checkDuplicates(ctx context.Context, descript
 	} else if highestSimilarity >= pi.config.SimilarityThreshold {
 		// Similar but not duplicate - add to overlap areas
 		result.SimilarityScore = highestSimilarity
-		overlapMsg := "Partial keyword overlap with existing patterns"
-		if pi.similarity != nil {
-			overlapMsg = "Partial semantic overlap with existing patterns"
-		}
-		result.OverlapAreas = append(result.OverlapAreas, overlapMsg)
+		result.OverlapAreas = append(result.OverlapAreas, "Partial semantic overlap with existing patterns")
 		result.Recommendation = "proceed"
 	}
 
@@ -692,8 +669,7 @@ func (pi *PatternIntelligenceImpl) SetEnhancer(enhancer *ClaudeEnhancer) {
 }
 
 // SetSimilarity sets the semantic similarity implementation.
-// When set, duplicate detection uses Claude-based semantic comparison.
-// If nil, falls back to Jaccard keyword similarity.
+// Deprecated: Pass similarity via NewPatternIntelligence constructor instead.
 func (pi *PatternIntelligenceImpl) SetSimilarity(sim similarity.Similarity) {
 	if pi == nil {
 		return

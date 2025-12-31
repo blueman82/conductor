@@ -8,7 +8,7 @@ import (
 	"github.com/harrison/conductor/internal/similarity"
 )
 
-// mockSim implements similarity.Similarity for testing CompareTasksWithSimilarity
+// mockSim implements similarity.Similarity for testing CompareTasks
 type mockSim struct {
 	score float64
 	err   error
@@ -56,9 +56,6 @@ func TestTaskHasher_Hash_Basic(t *testing.T) {
 	}
 	if result.NormalizedHash == "" {
 		t.Error("NormalizedHash should not be empty")
-	}
-	if len(result.Keywords) == 0 {
-		t.Error("Keywords should not be empty")
 	}
 
 	// Verify hash format (SHA256 produces 64 hex characters)
@@ -156,96 +153,6 @@ func TestTaskHasher_Hash_PunctuationNormalization(t *testing.T) {
 	}
 }
 
-func TestTaskHasher_extractKeywords(t *testing.T) {
-	h := NewTaskHasher()
-
-	tests := []struct {
-		name        string
-		description string
-		wantLen     int
-		wantContain []string
-		wantExclude []string
-	}{
-		{
-			name:        "basic description",
-			description: "Create a user authentication service",
-			wantContain: []string{"create", "user", "authentication", "service"},
-			wantExclude: []string{"a"},
-		},
-		{
-			name:        "with stopwords",
-			description: "The quick brown fox jumps over the lazy dog",
-			wantContain: []string{"quick", "brown", "fox", "jumps", "lazy", "dog"},
-			wantExclude: []string{"the", "over"},
-		},
-		{
-			name:        "with punctuation",
-			description: "Implement login, logout, and password-reset features!",
-			wantContain: []string{"implement", "login", "logout", "password", "reset", "features"},
-			wantExclude: []string{"and"},
-		},
-		{
-			name:        "single letter words excluded",
-			description: "Create a B tree",
-			wantContain: []string{"create", "tree"},
-			wantExclude: []string{"a", "b"},
-		},
-		{
-			name:        "empty description",
-			description: "",
-			wantLen:     0,
-		},
-		{
-			name:        "only stopwords",
-			description: "the a an is are",
-			wantLen:     0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			keywords := h.extractKeywords(tt.description)
-
-			if tt.wantLen >= 0 && len(keywords) != tt.wantLen && tt.wantLen != 0 {
-				// Only check exact length if wantLen is specified and non-zero
-			}
-
-			keywordSet := make(map[string]bool)
-			for _, k := range keywords {
-				keywordSet[k] = true
-			}
-
-			for _, want := range tt.wantContain {
-				if !keywordSet[want] {
-					t.Errorf("expected keyword %q not found in %v", want, keywords)
-				}
-			}
-
-			for _, exclude := range tt.wantExclude {
-				if keywordSet[exclude] {
-					t.Errorf("unexpected keyword %q found in %v", exclude, keywords)
-				}
-			}
-
-			// Verify keywords are sorted
-			for i := 1; i < len(keywords); i++ {
-				if keywords[i-1] > keywords[i] {
-					t.Errorf("keywords should be sorted, but %q > %q", keywords[i-1], keywords[i])
-				}
-			}
-
-			// Verify uniqueness
-			seen := make(map[string]bool)
-			for _, k := range keywords {
-				if seen[k] {
-					t.Errorf("duplicate keyword found: %q", k)
-				}
-				seen[k] = true
-			}
-		})
-	}
-}
-
 func TestTaskHasher_normalize(t *testing.T) {
 	h := NewTaskHasher()
 
@@ -301,257 +208,129 @@ func TestTaskHasher_normalize(t *testing.T) {
 	}
 }
 
-func TestJaccardSimilarity(t *testing.T) {
-	tests := []struct {
-		name      string
-		keywords1 []string
-		keywords2 []string
-		want      float64
-	}{
-		{
-			name:      "identical sets",
-			keywords1: []string{"a", "b", "c"},
-			keywords2: []string{"a", "b", "c"},
-			want:      1.0,
-		},
-		{
-			name:      "no overlap",
-			keywords1: []string{"a", "b", "c"},
-			keywords2: []string{"d", "e", "f"},
-			want:      0.0,
-		},
-		{
-			name:      "partial overlap",
-			keywords1: []string{"a", "b", "c"},
-			keywords2: []string{"b", "c", "d"},
-			want:      0.5, // intersection=2, union=4
-		},
-		{
-			name:      "both empty",
-			keywords1: []string{},
-			keywords2: []string{},
-			want:      1.0,
-		},
-		{
-			name:      "first empty",
-			keywords1: []string{},
-			keywords2: []string{"a", "b"},
-			want:      0.0,
-		},
-		{
-			name:      "second empty",
-			keywords1: []string{"a", "b"},
-			keywords2: []string{},
-			want:      0.0,
-		},
-		{
-			name:      "subset relationship",
-			keywords1: []string{"a", "b"},
-			keywords2: []string{"a", "b", "c", "d"},
-			want:      0.5, // intersection=2, union=4
-		},
-		{
-			name:      "single element match",
-			keywords1: []string{"a"},
-			keywords2: []string{"a"},
-			want:      1.0,
-		},
-		{
-			name:      "single element no match",
-			keywords1: []string{"a"},
-			keywords2: []string{"b"},
-			want:      0.0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := JaccardSimilarity(tt.keywords1, tt.keywords2)
-			if got != tt.want {
-				t.Errorf("JaccardSimilarity(%v, %v) = %v, want %v",
-					tt.keywords1, tt.keywords2, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestJaccardSimilarity_Commutative(t *testing.T) {
-	keywords1 := []string{"create", "user", "service"}
-	keywords2 := []string{"user", "authentication", "service"}
-
-	sim1 := JaccardSimilarity(keywords1, keywords2)
-	sim2 := JaccardSimilarity(keywords2, keywords1)
-
-	if sim1 != sim2 {
-		t.Errorf("Jaccard similarity should be commutative: %v != %v", sim1, sim2)
-	}
-}
-
 func TestCompareTasks(t *testing.T) {
 	h := NewTaskHasher()
+	ctx := context.Background()
 
-	tests := []struct {
-		name      string
-		desc1     string
-		desc2     string
-		files1    []string
-		files2    []string
-		wantExact bool // true if similarity should be 1.0
-		wantHigh  bool // true if similarity should be > 0.5
-		wantLow   bool // true if similarity should be < 0.3
-	}{
-		{
-			name:      "identical tasks",
-			desc1:     "Create user authentication service",
-			desc2:     "Create user authentication service",
-			wantExact: true,
-		},
-		{
-			name:     "identical meaning different case",
-			desc1:    "Create User Service",
-			desc2:    "create user service",
-			wantHigh: true,
-		},
-		{
-			name:  "similar tasks moderate overlap",
-			desc1: "Implement user authentication",
-			desc2: "Create user authentication service",
-			// Jaccard = intersection/union = 2/5 = 0.4 (authentication, user)
-			// This represents moderate similarity which is correct
-			wantHigh: false,
-		},
-		{
-			name:     "similar tasks high overlap",
-			desc1:    "Create user authentication service",
-			desc2:    "Create user login authentication service",
-			wantHigh: true,
-		},
-		{
-			name:    "completely different tasks",
-			desc1:   "Create user authentication",
-			desc2:   "Delete database records",
-			wantLow: true,
-		},
-		{
-			name:      "same description different files",
-			desc1:     "Create service",
-			desc2:     "Create service",
-			files1:    []string{"a.go"},
-			files2:    []string{"b.go"},
-			wantExact: false,
-		},
-	}
+	t.Run("identical full hash returns 1.0", func(t *testing.T) {
+		desc := "Create user service"
+		files := []string{"user.go"}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			hash1 := h.Hash(tt.desc1, tt.files1)
-			hash2 := h.Hash(tt.desc2, tt.files2)
+		hash1 := h.Hash(desc, files)
+		hash2 := h.Hash(desc, files)
 
-			sim := CompareTasks(hash1, hash2)
+		sim := CompareTasks(ctx, desc, desc, hash1, hash2, nil)
+		if sim != 1.0 {
+			t.Errorf("identical full hash should return 1.0, got %v", sim)
+		}
+	})
 
-			if tt.wantExact && sim != 1.0 {
-				t.Errorf("expected exact match (1.0), got %v", sim)
-			}
-			if tt.wantHigh && sim <= 0.5 {
-				t.Errorf("expected high similarity (>0.5), got %v", sim)
-			}
-			if tt.wantLow && sim >= 0.3 {
-				t.Errorf("expected low similarity (<0.3), got %v", sim)
-			}
-		})
-	}
-}
+	t.Run("identical normalized hash returns 1.0", func(t *testing.T) {
+		hash1 := h.Hash("Create User Service", nil)
+		hash2 := h.Hash("create user service", nil)
 
-func TestCompareTasks_IdenticalFullHash(t *testing.T) {
-	h := NewTaskHasher()
+		// Full hashes differ but normalized hashes match
+		if hash1.FullHash == hash2.FullHash {
+			t.Error("FullHash should differ for different case")
+		}
 
-	desc := "Create a user service"
-	files := []string{"user.go"}
+		sim := CompareTasks(ctx, "Create User Service", "create user service", hash1, hash2, nil)
+		if sim != 1.0 {
+			t.Errorf("identical normalized hash should return 1.0, got %v", sim)
+		}
+	})
 
-	hash1 := h.Hash(desc, files)
-	hash2 := h.Hash(desc, files)
+	t.Run("uses Claude similarity when provided", func(t *testing.T) {
+		desc1 := "Create user authentication service"
+		desc2 := "Implement user login functionality"
+		hash1 := h.Hash(desc1, nil)
+		hash2 := h.Hash(desc2, nil)
 
-	sim := CompareTasks(hash1, hash2)
-	if sim != 1.0 {
-		t.Errorf("identical full hash should return 1.0, got %v", sim)
-	}
-}
+		mock := &mockSim{score: 0.85}
+		result := CompareTasks(ctx, desc1, desc2, hash1, hash2, mock)
+		if result != 0.85 {
+			t.Errorf("expected 0.85 from Claude, got %v", result)
+		}
+	})
 
-func TestCompareTasks_IdenticalNormalizedHash(t *testing.T) {
-	h := NewTaskHasher()
+	t.Run("returns 0 when no similarity provided", func(t *testing.T) {
+		desc1 := "Create user authentication"
+		desc2 := "Delete database records"
+		hash1 := h.Hash(desc1, nil)
+		hash2 := h.Hash(desc2, nil)
 
-	hash1 := h.Hash("Create User Service", nil)
-	hash2 := h.Hash("create user service", nil)
+		result := CompareTasks(ctx, desc1, desc2, hash1, hash2, nil)
+		if result != 0.0 {
+			t.Errorf("expected 0.0 without similarity, got %v", result)
+		}
+	})
 
-	// Full hashes differ but normalized hashes match
-	if hash1.FullHash == hash2.FullHash {
-		t.Error("FullHash should differ for different case")
-	}
+	t.Run("returns 0 when Claude errors", func(t *testing.T) {
+		desc1 := "Create user service"
+		desc2 := "Create login service"
+		hash1 := h.Hash(desc1, nil)
+		hash2 := h.Hash(desc2, nil)
 
-	sim := CompareTasks(hash1, hash2)
-	if sim != 1.0 {
-		t.Errorf("identical normalized hash should return 1.0, got %v", sim)
-	}
+		mock := &mockSim{err: errors.New("claude unavailable")}
+		result := CompareTasks(ctx, desc1, desc2, hash1, hash2, mock)
+		if result != 0.0 {
+			t.Errorf("expected 0.0 on Claude error, got %v", result)
+		}
+	})
 }
 
 func TestIsDuplicate(t *testing.T) {
 	h := NewTaskHasher()
+	ctx := context.Background()
 
-	tests := []struct {
-		name      string
-		desc1     string
-		desc2     string
-		threshold float64
-		want      bool
-	}{
-		{
-			name:      "identical is duplicate",
-			desc1:     "Create user service",
-			desc2:     "Create user service",
-			threshold: 0.9,
-			want:      true,
-		},
-		{
-			name:      "very similar is duplicate with low threshold",
-			desc1:     "Create user authentication",
-			desc2:     "Create user authentication service",
-			threshold: 0.5,
-			want:      true,
-		},
-		{
-			name:      "different is not duplicate",
-			desc1:     "Create user service",
-			desc2:     "Delete database records",
-			threshold: 0.5,
-			want:      false,
-		},
-		{
-			name:      "exact threshold boundary",
-			desc1:     "Create user service",
-			desc2:     "Create user service",
-			threshold: 1.0,
-			want:      true,
-		},
-		{
-			name:      "zero threshold always matches",
-			desc1:     "Create user service",
-			desc2:     "Delete database records",
-			threshold: 0.0,
-			want:      true,
-		},
-	}
+	t.Run("identical is duplicate", func(t *testing.T) {
+		desc := "Create user service"
+		hash1 := h.Hash(desc, nil)
+		hash2 := h.Hash(desc, nil)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			hash1 := h.Hash(tt.desc1, nil)
-			hash2 := h.Hash(tt.desc2, nil)
+		result := IsDuplicate(ctx, desc, desc, hash1, hash2, 0.9, nil)
+		if !result {
+			t.Error("identical tasks should be duplicates")
+		}
+	})
 
-			got := IsDuplicate(hash1, hash2, tt.threshold)
-			if got != tt.want {
-				t.Errorf("IsDuplicate() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	t.Run("high similarity is duplicate", func(t *testing.T) {
+		desc1 := "Create user authentication"
+		desc2 := "Implement user authentication"
+		hash1 := h.Hash(desc1, nil)
+		hash2 := h.Hash(desc2, nil)
+
+		mock := &mockSim{score: 0.95}
+		result := IsDuplicate(ctx, desc1, desc2, hash1, hash2, 0.9, mock)
+		if !result {
+			t.Error("expected true for score 0.95 with threshold 0.9")
+		}
+	})
+
+	t.Run("low similarity is not duplicate", func(t *testing.T) {
+		desc1 := "Create user service"
+		desc2 := "Delete database records"
+		hash1 := h.Hash(desc1, nil)
+		hash2 := h.Hash(desc2, nil)
+
+		mock := &mockSim{score: 0.3}
+		result := IsDuplicate(ctx, desc1, desc2, hash1, hash2, 0.9, mock)
+		if result {
+			t.Error("expected false for score 0.3 with threshold 0.9")
+		}
+	})
+
+	t.Run("without similarity returns false for different tasks", func(t *testing.T) {
+		desc1 := "Create user service"
+		desc2 := "Delete database records"
+		hash1 := h.Hash(desc1, nil)
+		hash2 := h.Hash(desc2, nil)
+
+		result := IsDuplicate(ctx, desc1, desc2, hash1, hash2, 0.9, nil)
+		if result {
+			t.Error("expected false when no similarity available for different tasks")
+		}
+	})
 }
 
 func TestHashResult_Fields(t *testing.T) {
@@ -565,22 +344,6 @@ func TestHashResult_Fields(t *testing.T) {
 	}
 	if result.NormalizedHash == "" {
 		t.Error("NormalizedHash should not be empty")
-	}
-	if result.Keywords == nil {
-		t.Error("Keywords should not be nil")
-	}
-
-	// Keywords should contain expected words
-	keywordSet := make(map[string]bool)
-	for _, k := range result.Keywords {
-		keywordSet[k] = true
-	}
-
-	expected := []string{"create", "authentication", "service"}
-	for _, e := range expected {
-		if !keywordSet[e] {
-			t.Errorf("expected keyword %q not found", e)
-		}
 	}
 }
 
@@ -621,11 +384,6 @@ func TestTaskHasher_Hash_EmptyInput(t *testing.T) {
 	if len(result.FullHash) != 64 {
 		t.Errorf("FullHash should be 64 characters, got %d", len(result.FullHash))
 	}
-
-	// Keywords should be empty
-	if len(result.Keywords) != 0 {
-		t.Errorf("Keywords should be empty for empty input, got %v", result.Keywords)
-	}
 }
 
 func TestTaskHasher_Hash_SpecialCharacters(t *testing.T) {
@@ -651,16 +409,6 @@ func TestTaskHasher_Hash_SpecialCharacters(t *testing.T) {
 		}
 		if result.NormalizedHash == "" {
 			t.Errorf("NormalizedHash should not be empty for %q", desc)
-		}
-
-		// Keywords should contain "create", "user", "service"
-		keywordSet := make(map[string]bool)
-		for _, k := range result.Keywords {
-			keywordSet[k] = true
-		}
-
-		if !keywordSet["create"] || !keywordSet["user"] || !keywordSet["service"] {
-			t.Errorf("keywords should contain 'create', 'user', 'service' for %q, got %v", desc, result.Keywords)
 		}
 	}
 }
@@ -690,112 +438,17 @@ func BenchmarkTaskHasher_Hash(b *testing.B) {
 	}
 }
 
-func BenchmarkJaccardSimilarity(b *testing.B) {
-	keywords1 := []string{"create", "user", "authentication", "service", "password", "hashing"}
-	keywords2 := []string{"implement", "user", "login", "service", "session", "management"}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		JaccardSimilarity(keywords1, keywords2)
-	}
-}
-
 func BenchmarkCompareTasks(b *testing.B) {
 	h := NewTaskHasher()
-	hash1 := h.Hash("Create user authentication service", []string{"auth.go"})
-	hash2 := h.Hash("Implement user login functionality", []string{"login.go"})
+	ctx := context.Background()
+	desc1 := "Create user authentication service"
+	desc2 := "Implement user login functionality"
+	hash1 := h.Hash(desc1, []string{"auth.go"})
+	hash2 := h.Hash(desc2, []string{"login.go"})
+	mock := &mockSim{score: 0.75}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		CompareTasks(hash1, hash2)
+		CompareTasks(ctx, desc1, desc2, hash1, hash2, mock)
 	}
-}
-
-func TestCompareTasksWithSimilarity(t *testing.T) {
-	h := NewTaskHasher()
-	ctx := context.Background()
-
-	desc1 := "Create user authentication service"
-	desc2 := "Implement user login functionality"
-	hash1 := h.Hash(desc1, nil)
-	hash2 := h.Hash(desc2, nil)
-
-	t.Run("uses Claude similarity when available", func(t *testing.T) {
-		mock := &mockSim{score: 0.85}
-		result := CompareTasksWithSimilarity(ctx, desc1, desc2, hash1, hash2, mock)
-		if result != 0.85 {
-			t.Errorf("expected 0.85 from Claude, got %v", result)
-		}
-	})
-
-	t.Run("falls back to Jaccard on nil similarity", func(t *testing.T) {
-		result := CompareTasksWithSimilarity(ctx, desc1, desc2, hash1, hash2, nil)
-		// Should return Jaccard result
-		expected := JaccardSimilarity(hash1.Keywords, hash2.Keywords)
-		if result != expected {
-			t.Errorf("expected Jaccard %v, got %v", expected, result)
-		}
-	})
-
-	t.Run("falls back to Jaccard on Claude error", func(t *testing.T) {
-		mock := &mockSim{err: errors.New("claude unavailable")}
-		result := CompareTasksWithSimilarity(ctx, desc1, desc2, hash1, hash2, mock)
-		expected := JaccardSimilarity(hash1.Keywords, hash2.Keywords)
-		if result != expected {
-			t.Errorf("expected Jaccard %v, got %v", expected, result)
-		}
-	})
-
-	t.Run("returns 1.0 for identical full hash", func(t *testing.T) {
-		sameHash := h.Hash(desc1, nil)
-		mock := &mockSim{score: 0.5}
-		result := CompareTasksWithSimilarity(ctx, desc1, desc1, hash1, sameHash, mock)
-		if result != 1.0 {
-			t.Errorf("expected 1.0 for identical hash, got %v", result)
-		}
-	})
-
-	t.Run("returns 1.0 for identical normalized hash", func(t *testing.T) {
-		hash1 := h.Hash("Create User Service", nil)
-		hash2 := h.Hash("create user service", nil)
-		mock := &mockSim{score: 0.5}
-		result := CompareTasksWithSimilarity(ctx, "Create User Service", "create user service", hash1, hash2, mock)
-		if result != 1.0 {
-			t.Errorf("expected 1.0 for identical normalized hash, got %v", result)
-		}
-	})
-}
-
-func TestIsDuplicateWithSimilarity(t *testing.T) {
-	h := NewTaskHasher()
-	ctx := context.Background()
-
-	desc1 := "Create user authentication"
-	desc2 := "Create user authentication service"
-	hash1 := h.Hash(desc1, nil)
-	hash2 := h.Hash(desc2, nil)
-
-	t.Run("returns true when above threshold", func(t *testing.T) {
-		mock := &mockSim{score: 0.95}
-		result := IsDuplicateWithSimilarity(ctx, desc1, desc2, hash1, hash2, 0.9, mock)
-		if !result {
-			t.Error("expected true for score 0.95 with threshold 0.9")
-		}
-	})
-
-	t.Run("returns false when below threshold", func(t *testing.T) {
-		mock := &mockSim{score: 0.7}
-		result := IsDuplicateWithSimilarity(ctx, desc1, desc2, hash1, hash2, 0.9, mock)
-		if result {
-			t.Error("expected false for score 0.7 with threshold 0.9")
-		}
-	})
-
-	t.Run("works with nil similarity (Jaccard fallback)", func(t *testing.T) {
-		// Should use Jaccard and still work
-		result := IsDuplicateWithSimilarity(ctx, desc1, desc2, hash1, hash2, 0.0, nil)
-		if !result {
-			t.Error("expected true with threshold 0.0")
-		}
-	})
 }

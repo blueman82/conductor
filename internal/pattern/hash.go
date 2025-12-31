@@ -20,9 +20,6 @@ type HashResult struct {
 
 	// NormalizedHash is the SHA256 hash of the normalized input (for fuzzy matching)
 	NormalizedHash string `json:"normalized_hash"`
-
-	// Keywords extracted from the description for similarity comparison
-	Keywords []string `json:"keywords"`
 }
 
 // TaskHasher provides hashing functionality for task descriptions to enable duplicate detection.
@@ -75,13 +72,9 @@ func (h *TaskHasher) Hash(description string, files []string) HashResult {
 	normalized := h.normalize(input)
 	normalizedHash := h.sha256Hash(normalized)
 
-	// Extract keywords
-	keywords := h.extractKeywords(description)
-
 	return HashResult{
 		FullHash:       fullHash,
 		NormalizedHash: normalizedHash,
-		Keywords:       keywords,
 	}
 }
 
@@ -151,89 +144,11 @@ func (h *TaskHasher) normalize(input string) string {
 	return strings.Join(filtered, " ")
 }
 
-// extractKeywords extracts meaningful keywords from a description.
-// Returns a unique, sorted list of words after filtering stopwords.
-func (h *TaskHasher) extractKeywords(description string) []string {
-	// Convert to lowercase
-	lower := strings.ToLower(description)
 
-	// Remove punctuation
-	var cleaned strings.Builder
-	for _, r := range lower {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) {
-			cleaned.WriteRune(r)
-		} else {
-			cleaned.WriteRune(' ')
-		}
-	}
-
-	// Split into words
-	words := strings.Fields(cleaned.String())
-
-	// Filter stopwords and collect unique words
-	seen := make(map[string]bool)
-	keywords := make([]string, 0)
-
-	for _, w := range words {
-		if len(w) > 1 && !h.stopwords[w] && !seen[w] {
-			seen[w] = true
-			keywords = append(keywords, w)
-		}
-	}
-
-	// Sort for consistent ordering
-	sort.Strings(keywords)
-
-	return keywords
-}
-
-// JaccardSimilarity calculates the Jaccard similarity coefficient between two keyword sets.
-// Jaccard(A,B) = |A ∩ B| / |A ∪ B|
-// Returns a value between 0.0 (no overlap) and 1.0 (identical sets).
-func JaccardSimilarity(keywords1, keywords2 []string) float64 {
-	if len(keywords1) == 0 && len(keywords2) == 0 {
-		return 1.0 // Both empty sets are considered identical
-	}
-
-	if len(keywords1) == 0 || len(keywords2) == 0 {
-		return 0.0 // One empty set means no similarity
-	}
-
-	// Build sets
-	set1 := make(map[string]bool, len(keywords1))
-	for _, k := range keywords1 {
-		set1[k] = true
-	}
-
-	set2 := make(map[string]bool, len(keywords2))
-	for _, k := range keywords2 {
-		set2[k] = true
-	}
-
-	// Calculate intersection size
-	intersection := 0
-	for k := range set1 {
-		if set2[k] {
-			intersection++
-		}
-	}
-
-	// Calculate union size
-	// Note: union is guaranteed to be >= 1 since we already handled both-empty
-	// and one-empty cases above, so at least one keyword exists
-	union := len(set1)
-	for k := range set2 {
-		if !set1[k] {
-			union++
-		}
-	}
-
-	return float64(intersection) / float64(union)
-}
-
-// CompareTasks compares two HashResults and returns their similarity score.
-// Uses Jaccard similarity on the extracted keywords.
-func CompareTasks(hash1, hash2 HashResult) float64 {
+// CompareTasks compares two HashResults using ClaudeSimilarity for semantic matching.
+// Returns 1.0 for exact hash matches, otherwise uses Claude for semantic comparison.
+// Requires a ClaudeSimilarity instance for semantic comparison.
+func CompareTasks(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, sim similarity.Similarity) float64 {
 	// If full hashes match, tasks are identical
 	if hash1.FullHash == hash2.FullHash {
 		return 1.0
@@ -244,44 +159,20 @@ func CompareTasks(hash1, hash2 HashResult) float64 {
 		return 1.0
 	}
 
-	// Use Jaccard similarity on keywords for fuzzy matching
-	return JaccardSimilarity(hash1.Keywords, hash2.Keywords)
-}
-
-// IsDuplicate checks if two tasks are duplicates based on similarity threshold.
-func IsDuplicate(hash1, hash2 HashResult, threshold float64) bool {
-	return CompareTasks(hash1, hash2) >= threshold
-}
-
-// CompareTasksWithSimilarity compares two task descriptions using Claude-based semantic similarity.
-// Returns the Claude similarity score, or falls back to Jaccard if similarity is nil or errors.
-// This function uses ClaudeSimilarity.Compare for semantic matching.
-func CompareTasksWithSimilarity(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, sim similarity.Similarity) float64 {
-	// Fast path: exact hash match
-	if hash1.FullHash == hash2.FullHash {
-		return 1.0
-	}
-
-	// Fast path: normalized hash match
-	if hash1.NormalizedHash == hash2.NormalizedHash {
-		return 1.0
-	}
-
-	// Use ClaudeSimilarity for semantic comparison if available
+	// Use ClaudeSimilarity for semantic comparison
 	if sim != nil {
 		result, err := sim.Compare(ctx, desc1, desc2)
 		if err == nil && result != nil {
 			return result.Score
 		}
-		// Fall back to Jaccard on error
 	}
 
-	// Fallback: Jaccard similarity on keywords
-	return JaccardSimilarity(hash1.Keywords, hash2.Keywords)
+	// No similarity available - return 0 (cannot determine similarity without Claude)
+	return 0.0
 }
 
-// IsDuplicateWithSimilarity checks if two tasks are duplicates using Claude-based semantic similarity.
-// Falls back to Jaccard similarity when ClaudeSimilarity is nil or errors.
-func IsDuplicateWithSimilarity(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, threshold float64, sim similarity.Similarity) bool {
-	return CompareTasksWithSimilarity(ctx, desc1, desc2, hash1, hash2, sim) >= threshold
+// IsDuplicate checks if two tasks are duplicates based on similarity threshold.
+// Requires ClaudeSimilarity for semantic comparison.
+func IsDuplicate(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, threshold float64, sim similarity.Similarity) bool {
+	return CompareTasks(ctx, desc1, desc2, hash1, hash2, sim) >= threshold
 }

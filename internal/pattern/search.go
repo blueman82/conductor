@@ -106,9 +106,9 @@ func (s *STOPSearcher) Search(ctx context.Context, taskDescription string, files
 		Errors:         []string{},
 	}
 
-	// Extract keywords for searching
+	// Extract keywords for searching (simple word extraction)
 	hashResult := s.hasher.Hash(taskDescription, files)
-	keywords := hashResult.Keywords
+	keywords := extractSearchKeywords(taskDescription)
 
 	if len(keywords) == 0 {
 		results.Errors = append(results.Errors, "no keywords extracted from task description")
@@ -423,6 +423,7 @@ func (s *STOPSearcher) searchDocs(ctx context.Context, keywords []string) ([]Doc
 }
 
 // searchHistory searches execution history for similar patterns.
+// Note: Uses hash prefix matching only. For semantic similarity, use searchHistoryWithSimilarity.
 func (s *STOPSearcher) searchHistory(ctx context.Context, hashResult HashResult) ([]HistoryMatch, error) {
 	if s.store == nil {
 		return []HistoryMatch{}, nil // No store available, graceful fallback
@@ -443,22 +444,15 @@ func (s *STOPSearcher) searchHistory(ctx context.Context, hashResult HashResult)
 
 	matches := []HistoryMatch{}
 	for _, p := range patterns {
-		// Calculate actual similarity using Jaccard
-		// We need to extract keywords from the pattern description
-		patternHash := s.hasher.Hash(p.PatternDescription, nil)
-		similarity := JaccardSimilarity(hashResult.Keywords, patternHash.Keywords)
-
-		// Only include if reasonably similar
-		if similarity >= 0.3 {
-			matches = append(matches, HistoryMatch{
-				TaskHash:           p.TaskHash,
-				PatternDescription: p.PatternDescription,
-				SuccessCount:       p.SuccessCount,
-				LastAgent:          p.LastAgent,
-				LastUsed:           p.LastUsed,
-				Similarity:         similarity,
-			})
-		}
+		// Include all hash-matched patterns (similarity scoring requires ClaudeSimilarity)
+		matches = append(matches, HistoryMatch{
+			TaskHash:           p.TaskHash,
+			PatternDescription: p.PatternDescription,
+			SuccessCount:       p.SuccessCount,
+			LastAgent:          p.LastAgent,
+			LastUsed:           p.LastUsed,
+			Similarity:         0.5, // Default moderate similarity for hash matches
+		})
 	}
 
 	return matches, nil
@@ -547,4 +541,40 @@ func (r *RealCommandRunner) Run(ctx context.Context, name string, args ...string
 		return nil, fmt.Errorf("%w: %s", err, stderr.String())
 	}
 	return stdout.Bytes(), nil
+}
+
+// extractSearchKeywords extracts meaningful keywords from a description for search queries.
+// This is a simple extraction for git/doc searching, not for similarity comparison.
+func extractSearchKeywords(description string) []string {
+	// Common stopwords to filter out
+	stopwords := map[string]bool{
+		"the": true, "a": true, "an": true, "is": true, "are": true,
+		"was": true, "were": true, "be": true, "been": true, "being": true,
+		"have": true, "has": true, "had": true, "do": true, "does": true,
+		"did": true, "will": true, "would": true, "could": true, "should": true,
+		"to": true, "of": true, "in": true, "for": true, "on": true,
+		"with": true, "at": true, "by": true, "from": true, "as": true,
+		"and": true, "but": true, "or": true, "nor": true, "so": true,
+		"this": true, "that": true, "these": true, "those": true, "it": true,
+		"i": true, "me": true, "my": true, "we": true, "us": true, "our": true,
+		"you": true, "your": true, "he": true, "she": true, "him": true, "her": true,
+	}
+
+	// Convert to lowercase and split
+	lower := strings.ToLower(description)
+	words := strings.FieldsFunc(lower, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+	})
+
+	// Filter stopwords and collect unique keywords
+	seen := make(map[string]bool)
+	keywords := make([]string, 0)
+	for _, w := range words {
+		if len(w) > 1 && !stopwords[w] && !seen[w] {
+			seen[w] = true
+			keywords = append(keywords, w)
+		}
+	}
+
+	return keywords
 }

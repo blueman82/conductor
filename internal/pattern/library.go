@@ -8,6 +8,7 @@ import (
 
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
+	"github.com/harrison/conductor/internal/similarity"
 )
 
 // PatternLibrary provides methods for storing and retrieving successful task execution patterns.
@@ -91,8 +92,7 @@ func (l *PatternLibrary) Store(ctx context.Context, description string, files []
 
 	// Prepare metadata
 	metadata := map[string]interface{}{
-		"files":    files,
-		"keywords": hashResult.Keywords,
+		"files": files,
 	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
@@ -116,8 +116,9 @@ func (l *PatternLibrary) Store(ctx context.Context, description string, files []
 }
 
 // Retrieve finds patterns similar to the given description.
-// Uses both hash prefix matching and keyword similarity to find relevant patterns.
-// Returns patterns sorted by similarity (highest first).
+// Uses hash prefix matching to find candidate patterns.
+// Returns patterns sorted by hash match quality (highest first).
+// For semantic similarity scoring, use RetrieveWithSimilarity instead.
 func (l *PatternLibrary) Retrieve(ctx context.Context, description string, files []string, limit int) ([]StoredPattern, error) {
 	if l.store == nil {
 		return []StoredPattern{}, nil // Graceful fallback when no store
@@ -172,19 +173,112 @@ func (l *PatternLibrary) Retrieve(ctx context.Context, description string, files
 		}
 	}
 
-	// Calculate actual similarity for each pattern
+	// Convert to StoredPattern (no similarity score without ClaudeSimilarity)
 	results := make([]StoredPattern, 0, len(allPatterns))
 	for _, p := range allPatterns {
-		// Calculate similarity using keywords
-		patternHash := l.hasher.Hash(p.PatternDescription, nil)
-		similarity := JaccardSimilarity(hashResult.Keywords, patternHash.Keywords)
+		// Parse metadata
+		var metadata map[string]interface{}
+		if p.Metadata != "" {
+			json.Unmarshal([]byte(p.Metadata), &metadata)
+		}
+
+		results = append(results, StoredPattern{
+			TaskHash:     p.TaskHash,
+			Description:  p.PatternDescription,
+			LastAgent:    p.LastAgent,
+			SuccessCount: p.SuccessCount,
+			LastUsed:     p.LastUsed,
+			CreatedAt:    p.CreatedAt,
+			Similarity:   0.0, // Cannot compute without ClaudeSimilarity
+			Metadata:     metadata,
+		})
+	}
+
+	// Limit results
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
+	return results, nil
+}
+
+// RetrieveWithSimilarity finds patterns similar to the given description using Claude semantic matching.
+// Uses hash prefix matching to find candidate patterns, then scores each with ClaudeSimilarity.
+// Returns patterns sorted by similarity (highest first).
+func (l *PatternLibrary) RetrieveWithSimilarity(ctx context.Context, description string, files []string, limit int, sim similarity.Similarity) ([]StoredPattern, error) {
+	if l.store == nil {
+		return []StoredPattern{}, nil // Graceful fallback when no store
+	}
+
+	if description == "" {
+		return []StoredPattern{}, nil
+	}
+
+	if limit <= 0 {
+		limit = l.config.MaxPatternsPerTask
+		if limit <= 0 {
+			limit = 10
+		}
+	}
+
+	// Calculate hash for the query
+	hashResult := l.hasher.Hash(description, files)
+
+	// Use normalized hash prefix for initial matching (8 characters)
+	hashPrefix := hashResult.NormalizedHash
+	if len(hashPrefix) > 8 {
+		hashPrefix = hashPrefix[:8]
+	}
+
+	// Query similar patterns from store using hash prefix
+	dbPatterns, err := l.store.GetSimilarPatterns(ctx, hashPrefix, limit*3)
+	if err != nil {
+		return nil, fmt.Errorf("query similar patterns: %w", err)
+	}
+
+	// Also get top patterns to ensure we find matches even when hash prefix differs
+	// This provides broader coverage for semantic similarity
+	topPatterns, err := l.store.GetTopPatterns(ctx, limit*3)
+	if err != nil {
+		return nil, fmt.Errorf("query top patterns: %w", err)
+	}
+
+	// Merge pattern lists, avoiding duplicates
+	seen := make(map[string]bool)
+	var allPatterns []*learning.SuccessfulPattern
+	for _, p := range dbPatterns {
+		if !seen[p.TaskHash] {
+			seen[p.TaskHash] = true
+			allPatterns = append(allPatterns, p)
+		}
+	}
+	for _, p := range topPatterns {
+		if !seen[p.TaskHash] {
+			seen[p.TaskHash] = true
+			allPatterns = append(allPatterns, p)
+		}
+	}
+
+	// Calculate semantic similarity for each pattern using ClaudeSimilarity
+	results := make([]StoredPattern, 0, len(allPatterns))
+	threshold := l.config.SimilarityThreshold
+	if threshold <= 0 {
+		threshold = 0.3 // Default threshold
+	}
+
+	for _, p := range allPatterns {
+		var simScore float64
+
+		// Use ClaudeSimilarity for semantic comparison
+		if sim != nil {
+			simResult, err := sim.Compare(ctx, description, p.PatternDescription)
+			if err == nil && simResult != nil {
+				simScore = simResult.Score
+			}
+		}
 
 		// Only include patterns above the similarity threshold
-		threshold := l.config.SimilarityThreshold
-		if threshold <= 0 {
-			threshold = 0.3 // Default threshold
-		}
-		if similarity >= threshold {
+		if simScore >= threshold {
 			// Parse metadata
 			var metadata map[string]interface{}
 			if p.Metadata != "" {
@@ -198,7 +292,7 @@ func (l *PatternLibrary) Retrieve(ctx context.Context, description string, files
 				SuccessCount: p.SuccessCount,
 				LastUsed:     p.LastUsed,
 				CreatedAt:    p.CreatedAt,
-				Similarity:   similarity,
+				Similarity:   simScore,
 				Metadata:     metadata,
 			})
 		}
@@ -239,8 +333,7 @@ func (l *PatternLibrary) IncrementSuccess(ctx context.Context, description strin
 	// Pattern exists - AddPattern handles increment
 	// Update with current agent
 	metadata := map[string]interface{}{
-		"files":    files,
-		"keywords": hashResult.Keywords,
+		"files": files,
 	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {

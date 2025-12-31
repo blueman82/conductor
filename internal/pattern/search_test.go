@@ -293,7 +293,6 @@ func TestSTOPSearcher_searchHistory_NoStore(t *testing.T) {
 	hashResult := HashResult{
 		FullHash:       "abc123",
 		NormalizedHash: "abc123",
-		Keywords:       []string{"test"},
 	}
 
 	matches, err := s.searchHistory(ctx, hashResult)
@@ -331,7 +330,6 @@ func TestSTOPSearcher_searchHistory_WithStore(t *testing.T) {
 	hashResult := HashResult{
 		FullHash:       "abc12345678901234567890123456789012345678901234567890123456789012",
 		NormalizedHash: "abc12345678901234567890123456789012345678901234567890123456789012",
-		Keywords:       []string{"create", "user", "authentication", "service"},
 	}
 
 	matches, err := s.searchHistory(ctx, hashResult)
@@ -340,7 +338,7 @@ func TestSTOPSearcher_searchHistory_WithStore(t *testing.T) {
 		t.Errorf("expected no error, got: %v", err)
 	}
 
-	// Should find the pattern (high similarity since keywords match)
+	// Should find the pattern based on hash prefix match
 	if len(matches) == 0 {
 		t.Error("expected to find matches")
 	}
