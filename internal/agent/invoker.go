@@ -372,19 +372,6 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 	// Build command args
 	args := inv.BuildCommandArgs(task)
 
-	// DEBUG: Log raw command syntax for debugging invocation issues
-	fmt.Fprintf(os.Stderr, "\n\033[33m[DEBUG] Raw Claude CLI command:\033[0m\n")
-	fmt.Fprintf(os.Stderr, "\033[36m%s", inv.ClaudePath)
-	for _, arg := range args {
-		// Quote args containing spaces or special chars
-		if strings.ContainsAny(arg, " \t\n\"'{}[]") {
-			fmt.Fprintf(os.Stderr, " '%s'", strings.ReplaceAll(arg, "'", "'\"'\"'"))
-		} else {
-			fmt.Fprintf(os.Stderr, " %s", arg)
-		}
-	}
-	fmt.Fprintf(os.Stderr, "\033[0m\n\n")
-
 	// Pretty log the agent invocation
 	inv.logInvocation(task, args)
 
