@@ -142,7 +142,4 @@ Consider:
 Respond with JSON only.`, desc1, desc2)
 }
 
-// SimilaritySchema returns the JSON schema for enforcement
-func SimilaritySchema() string {
-	return `{"type":"object","properties":{"score":{"type":"number","minimum":0,"maximum":1},"reasoning":{"type":"string"}},"required":["score","reasoning"]}`
-}
+// Note: SimilaritySchema is defined in schema.go

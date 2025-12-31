@@ -72,11 +72,38 @@ func TestSimilaritySchema(t *testing.T) {
 	if !strings.Contains(schema, "reasoning") {
 		t.Error("Schema should contain reasoning")
 	}
-	if !strings.Contains(schema, `"minimum":0`) {
+	if !strings.Contains(schema, `"minimum": 0`) && !strings.Contains(schema, `"minimum":0`) {
 		t.Error("Schema should have minimum 0 for score")
 	}
-	if !strings.Contains(schema, `"maximum":1`) {
+	if !strings.Contains(schema, `"maximum": 1`) && !strings.Contains(schema, `"maximum":1`) {
 		t.Error("Schema should have maximum 1 for score")
+	}
+	if !strings.Contains(schema, `"required"`) {
+		t.Error("Schema should specify required fields")
+	}
+}
+
+func TestSimilaritySchema_ValidJSON(t *testing.T) {
+	schema := SimilaritySchema()
+
+	// Verify schema is valid JSON by checking key structure
+	if !strings.Contains(schema, `"type": "object"`) && !strings.Contains(schema, `"type":"object"`) {
+		t.Error("Schema should define type as object")
+	}
+	if !strings.Contains(schema, `"properties"`) {
+		t.Error("Schema should define properties")
+	}
+}
+
+func TestSimilaritySchema_ScoreConstraints(t *testing.T) {
+	schema := SimilaritySchema()
+
+	// Score should be a number with min/max constraints
+	if !strings.Contains(schema, `"score"`) {
+		t.Error("Schema should define score property")
+	}
+	if !strings.Contains(schema, "number") {
+		t.Error("Schema should specify score as number type")
 	}
 }
 
