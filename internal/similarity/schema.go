@@ -15,9 +15,13 @@ func SimilaritySchema() string {
 			"reasoning": {
 				"type": "string",
 				"description": "Explanation of the similarity assessment"
+			},
+			"semantic_match": {
+				"type": "boolean",
+				"description": "True if similarity meets threshold for semantic equivalence"
 			}
 		},
-		"required": ["score", "reasoning"],
+		"required": ["score", "reasoning", "semantic_match"],
 		"additionalProperties": false
 	}`
 }

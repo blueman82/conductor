@@ -15,8 +15,9 @@ import (
 
 // SimilarityResult contains Claude's semantic similarity assessment
 type SimilarityResult struct {
-	Score     float64 `json:"score"`      // 0.0 to 1.0 similarity score
-	Reasoning string  `json:"reasoning"`  // Explanation of the similarity assessment
+	Score         float64 `json:"score"`          // 0.0 to 1.0 similarity score
+	Reasoning     string  `json:"reasoning"`      // Explanation of the similarity assessment
+	SemanticMatch bool    `json:"semantic_match"` // True if similarity meets threshold for semantic equivalence
 }
 
 // Similarity interface defines the contract for semantic comparison implementations
