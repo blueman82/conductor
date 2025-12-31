@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/harrison/conductor/internal/similarity"
 )
 
 // WarmUpContext contains historical context for priming agents before task execution.
@@ -68,13 +70,15 @@ type TaskInfo struct {
 type DefaultWarmUpProvider struct {
 	store        *Store
 	lipCollector LIPCollector
+	similarity   similarity.Similarity
 }
 
 // NewWarmUpProvider creates a new DefaultWarmUpProvider.
-func NewWarmUpProvider(store *Store) *DefaultWarmUpProvider {
+func NewWarmUpProvider(store *Store, sim similarity.Similarity) *DefaultWarmUpProvider {
 	return &DefaultWarmUpProvider{
 		store:        store,
 		lipCollector: store, // Store implements LIPCollector
+		similarity:   sim,
 	}
 }
 
@@ -132,21 +136,35 @@ func (p *DefaultWarmUpProvider) BuildContext(ctx context.Context, task *TaskInfo
 }
 
 // findSimilarTasks finds tasks similar to the given task based on file overlap and name similarity.
-// Uses Jaccard similarity for file paths and Levenshtein-based similarity for task names.
+// Uses ClaudeSimilarity for semantic file path comparison and Levenshtein-based similarity for task names.
 // Returns tasks with combined similarity >= 0.6 threshold.
+// Filters by project directory to prevent cross-project pollution.
 func (p *DefaultWarmUpProvider) findSimilarTasks(ctx context.Context, task *TaskInfo) ([]SimilarTask, error) {
 	const similarityThreshold = 0.6
 
-	// Query all recent task executions from the store
-	// We limit to recent history to keep context relevant
+	// Extract project directory from plan file for filtering
+	projectDir := ""
+	if task.PlanFile != "" {
+		projectDir = filepath.Dir(task.PlanFile)
+	}
+
+	// Query recent task executions from the store, filtered by project directory
+	// This fixes the cross-project pollution bug identified in the Jaccard analysis
 	query := `SELECT id, plan_file, run_number, task_number, task_name, agent, prompt,
 		success, output, error_message, duration_seconds, qc_verdict, qc_feedback,
 		failure_patterns, timestamp, context
 		FROM task_executions
+		WHERE plan_file LIKE ?
 		ORDER BY timestamp DESC
 		LIMIT 100`
 
-	rows, err := p.store.db.QueryContext(ctx, query)
+	// Filter pattern: same directory prefix
+	filterPattern := projectDir + "%"
+	if projectDir == "" {
+		filterPattern = "%"
+	}
+
+	rows, err := p.store.db.QueryContext(ctx, query, filterPattern)
 	if err != nil {
 		return nil, err
 	}
@@ -168,6 +186,7 @@ func (p *DefaultWarmUpProvider) findSimilarTasks(ctx context.Context, task *Task
 	// Calculate similarity for each task
 	var similarTasks []SimilarTask
 	taskFilePaths := normalizeFilePaths(task.FilePaths)
+	taskFilePathsStr := strings.Join(taskFilePaths, ", ")
 
 	for _, exec := range allTasks {
 		// Skip the exact same task number (we want similar, not identical)
@@ -178,9 +197,17 @@ func (p *DefaultWarmUpProvider) findSimilarTasks(ctx context.Context, task *Task
 		// Get file paths for this execution
 		execFilePaths := extractFilePathsFromExecution(ctx, p.store, exec)
 		execFilePaths = normalizeFilePaths(execFilePaths)
+		execFilePathsStr := strings.Join(execFilePaths, ", ")
 
-		// Calculate Jaccard similarity for file paths
-		filePathSimilarity := jaccardSimilarity(taskFilePaths, execFilePaths)
+		// Calculate semantic similarity for file paths using ClaudeSimilarity
+		var filePathSimilarity float64
+		if p.similarity != nil && len(taskFilePaths) > 0 && len(execFilePaths) > 0 {
+			result, err := p.similarity.Compare(ctx, taskFilePathsStr, execFilePathsStr)
+			if err == nil && result != nil {
+				filePathSimilarity = result.Score
+			}
+			// On error, fall back to 0.0 (no match)
+		}
 
 		// Calculate name similarity using normalized Levenshtein
 		nameSimilarity := normalizedLevenshteinSimilarity(task.TaskName, exec.TaskName)
@@ -321,42 +348,6 @@ func (p *DefaultWarmUpProvider) calculateConfidence(similarTasks []SimilarTask, 
 	}
 
 	return confidence
-}
-
-// jaccardSimilarity calculates the Jaccard similarity coefficient between two sets.
-// Returns a value between 0.0 (no overlap) and 1.0 (identical sets).
-func jaccardSimilarity(set1, set2 []string) float64 {
-	if len(set1) == 0 && len(set2) == 0 {
-		return 0.0
-	}
-
-	// Build maps for O(n) lookup
-	map1 := make(map[string]bool)
-	for _, s := range set1 {
-		map1[s] = true
-	}
-
-	map2 := make(map[string]bool)
-	for _, s := range set2 {
-		map2[s] = true
-	}
-
-	// Calculate intersection and union
-	intersection := 0
-	for s := range map1 {
-		if map2[s] {
-			intersection++
-		}
-	}
-
-	// Union = |A| + |B| - |A ∩ B|
-	union := len(map1) + len(map2) - intersection
-
-	if union == 0 {
-		return 0.0
-	}
-
-	return float64(intersection) / float64(union)
 }
 
 // normalizedLevenshteinSimilarity calculates similarity based on Levenshtein distance.

@@ -6,9 +6,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/harrison/conductor/internal/similarity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// mockSimilarity implements similarity.Similarity for testing
+type mockSimilarity struct {
+	returnScore float64
+}
+
+func (m *mockSimilarity) Compare(ctx context.Context, desc1, desc2 string) (*similarity.SimilarityResult, error) {
+	return &similarity.SimilarityResult{
+		Score:         m.returnScore,
+		Reasoning:     "test mock similarity",
+		SemanticMatch: m.returnScore >= 0.7,
+	}, nil
+}
 
 func TestWarmUpProviderBuildContext(t *testing.T) {
 	ctx := context.Background()
@@ -17,7 +31,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		store, cleanup := setupWarmUpTestStore(t)
 		defer cleanup()
 
-		provider := NewWarmUpProvider(store)
+		provider := NewWarmUpProvider(store, nil)
 		warmUp, err := provider.BuildContext(ctx, nil)
 
 		require.NoError(t, err)
@@ -30,7 +44,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		store, cleanup := setupWarmUpTestStore(t)
 		defer cleanup()
 
-		provider := NewWarmUpProvider(store)
+		provider := NewWarmUpProvider(store, nil)
 		task := &TaskInfo{
 			TaskNumber: "1",
 			TaskName:   "Implement feature X",
@@ -78,8 +92,9 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		require.NoError(t, err)
 		require.Greater(t, sessionID, int64(0))
 
-		// Now search for similar tasks
-		provider := NewWarmUpProvider(store)
+		// Now search for similar tasks using mock similarity with high score
+		mockSim := &mockSimilarity{returnScore: 0.9}
+		provider := NewWarmUpProvider(store, mockSim)
 		task := &TaskInfo{
 			TaskNumber: "2", // Different task number
 			TaskName:   "Implement feature X",
@@ -90,7 +105,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, warmUp)
 
-		// Should find the historical task due to file path overlap
+		// Should find the historical task due to file path overlap (via mock similarity)
 		assert.Len(t, warmUp.RelevantHistory, 1)
 		assert.Equal(t, "Implement feature Y", warmUp.RelevantHistory[0].TaskName)
 		assert.Greater(t, warmUp.Confidence, 0.0)
@@ -113,7 +128,8 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		err := store.RecordExecution(ctx, exec)
 		require.NoError(t, err)
 
-		provider := NewWarmUpProvider(store)
+		// Use nil similarity - name similarity alone can trigger matching
+		provider := NewWarmUpProvider(store, nil)
 		task := &TaskInfo{
 			TaskNumber: "2",
 			TaskName:   "Add user authorization", // Similar name
@@ -176,7 +192,9 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		provider := NewWarmUpProvider(store)
+		// Use mock similarity with high score to find similar tasks
+		mockSim := &mockSimilarity{returnScore: 0.9}
+		provider := NewWarmUpProvider(store, mockSim)
 		task := &TaskInfo{
 			TaskNumber: "2",
 			TaskName:   "Build another module",
@@ -228,7 +246,9 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		provider := NewWarmUpProvider(store)
+		// Use mock similarity with high score
+		mockSim := &mockSimilarity{returnScore: 0.9}
+		provider := NewWarmUpProvider(store, mockSim)
 		task := &TaskInfo{
 			TaskNumber: "2",
 			TaskName:   "Implement another endpoint",
@@ -259,7 +279,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		err := store.RecordExecution(ctx, exec)
 		require.NoError(t, err)
 
-		provider := NewWarmUpProvider(store)
+		provider := NewWarmUpProvider(store, nil)
 		task := &TaskInfo{
 			TaskNumber: "1",                // Same task number
 			PlanFile:   "/plans/test.yaml", // Same plan file
@@ -277,59 +297,6 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestJaccardSimilarity(t *testing.T) {
-	tests := []struct {
-		name     string
-		set1     []string
-		set2     []string
-		expected float64
-	}{
-		{
-			name:     "identical sets",
-			set1:     []string{"a", "b", "c"},
-			set2:     []string{"a", "b", "c"},
-			expected: 1.0,
-		},
-		{
-			name:     "no overlap",
-			set1:     []string{"a", "b", "c"},
-			set2:     []string{"d", "e", "f"},
-			expected: 0.0,
-		},
-		{
-			name:     "partial overlap",
-			set1:     []string{"a", "b", "c"},
-			set2:     []string{"b", "c", "d"},
-			expected: 0.5, // 2 intersection / 4 union
-		},
-		{
-			name:     "one element overlap",
-			set1:     []string{"a", "b"},
-			set2:     []string{"b", "c"},
-			expected: 1.0 / 3.0, // 1 intersection / 3 union
-		},
-		{
-			name:     "empty sets",
-			set1:     []string{},
-			set2:     []string{},
-			expected: 0.0,
-		},
-		{
-			name:     "one empty set",
-			set1:     []string{"a", "b"},
-			set2:     []string{},
-			expected: 0.0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := jaccardSimilarity(tt.set1, tt.set2)
-			assert.InDelta(t, tt.expected, result, 0.001)
-		})
-	}
 }
 
 func TestNormalizedLevenshteinSimilarity(t *testing.T) {
@@ -529,7 +496,7 @@ func TestCalculateConfidence(t *testing.T) {
 	store, cleanup := setupWarmUpTestStore(t)
 	defer cleanup()
 
-	provider := NewWarmUpProvider(store)
+	provider := NewWarmUpProvider(store, nil)
 
 	tests := []struct {
 		name           string
@@ -684,7 +651,9 @@ func TestMultipleSimilarTasksWithDifferentSuccessRates(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now search for similar tasks with a new task targeting the same files
-	provider := NewWarmUpProvider(store)
+	// Use mock similarity with high score to find the database-related tasks
+	mockSim := &mockSimilarity{returnScore: 0.9}
+	provider := NewWarmUpProvider(store, mockSim)
 	task := &TaskInfo{
 		TaskNumber: "4",
 		TaskName:   "Implement database migration",
@@ -734,7 +703,7 @@ func TestExtractRecommendedApproach(t *testing.T) {
 	store, cleanup := setupWarmUpTestStore(t)
 	defer cleanup()
 
-	provider := NewWarmUpProvider(store)
+	provider := NewWarmUpProvider(store, nil)
 
 	tests := []struct {
 		name     string
