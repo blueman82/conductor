@@ -1069,49 +1069,52 @@ func BuildSTOPSummaryFromSTOPResult(stopResult *pattern.STOPResult) string {
 	// Check for similar patterns
 	if len(stopResult.Search.SimilarPatterns) > 0 {
 		hasPriorArt = true
-		sb.WriteString("**Similar Patterns Found:**\n")
+		sb.WriteString("<similar_patterns>\n")
 		for i, p := range stopResult.Search.SimilarPatterns {
 			if i >= 3 { // Limit to top 3
 				break
 			}
-			sb.WriteString(fmt.Sprintf("- %s (%s): %.0f%% similar - %s\n",
+			sb.WriteString(fmt.Sprintf("<pattern name=\"%s\" path=\"%s\" similarity=\"%.0f%%\">%s</pattern>\n",
 				p.Name, p.FilePath, p.Similarity*100, p.Description))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</similar_patterns>\n")
 	}
 
 	// Check for existing implementations
 	if len(stopResult.Search.ExistingImplementations) > 0 {
 		hasPriorArt = true
-		sb.WriteString("**Existing Implementations:**\n")
+		sb.WriteString("<implementations>\n")
 		for i, impl := range stopResult.Search.ExistingImplementations {
 			if i >= 3 { // Limit to top 3
 				break
 			}
-			sb.WriteString(fmt.Sprintf("- %s (%s) in %s: %.0f%% relevant\n",
+			sb.WriteString(fmt.Sprintf("<impl name=\"%s\" type=\"%s\" path=\"%s\" relevance=\"%.0f%%\"/>\n",
 				impl.Name, impl.Type, impl.FilePath, impl.Relevance*100))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</implementations>\n")
 	}
 
 	// Check for related files
 	if len(stopResult.Search.RelatedFiles) > 0 {
 		hasPriorArt = true
-		sb.WriteString("**Related Files:** ")
+		sb.WriteString("<related_files>\n")
 		maxFiles := 5
 		if maxFiles > len(stopResult.Search.RelatedFiles) {
 			maxFiles = len(stopResult.Search.RelatedFiles)
 		}
-		sb.WriteString(strings.Join(stopResult.Search.RelatedFiles[:maxFiles], ", "))
-		sb.WriteString("\n\n")
+		for _, f := range stopResult.Search.RelatedFiles[:maxFiles] {
+			sb.WriteString(fmt.Sprintf("<file>%s</file>\n", f))
+		}
+		sb.WriteString("</related_files>\n")
 	}
 
 	// Add recommendations if any
 	if len(stopResult.Recommendations) > 0 {
-		sb.WriteString("**Recommendations:**\n")
+		sb.WriteString("<recommendations>\n")
 		for _, rec := range stopResult.Recommendations {
-			sb.WriteString(fmt.Sprintf("- %s\n", rec))
+			sb.WriteString(fmt.Sprintf("<item>%s</item>\n", rec))
 		}
+		sb.WriteString("</recommendations>\n")
 	}
 
 	if !hasPriorArt {

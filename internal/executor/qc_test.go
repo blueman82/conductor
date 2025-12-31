@@ -3510,8 +3510,11 @@ func TestQCSTOP(t *testing.T) {
 		}
 
 		result := BuildSTOPSummaryFromSTOPResult(stopResult)
-		if !strings.Contains(result, "Similar Patterns Found") {
-			t.Error("expected Similar Patterns Found header")
+		if !strings.Contains(result, "<similar_patterns>") {
+			t.Error("expected <similar_patterns> XML tag")
+		}
+		if !strings.Contains(result, "</similar_patterns>") {
+			t.Error("expected </similar_patterns> closing tag")
 		}
 		if !strings.Contains(result, "TestPattern") {
 			t.Error("expected pattern name in output")
@@ -3528,8 +3531,11 @@ func TestQCSTOP(t *testing.T) {
 		}
 
 		result := BuildSTOPSummaryFromSTOPResult(stopResult)
-		if !strings.Contains(result, "Existing Implementations") {
-			t.Error("expected Existing Implementations header")
+		if !strings.Contains(result, "<implementations>") {
+			t.Error("expected <implementations> XML tag")
+		}
+		if !strings.Contains(result, "</implementations>") {
+			t.Error("expected </implementations> closing tag")
 		}
 		if !strings.Contains(result, "ExistingFunc") {
 			t.Error("expected implementation name in output")
@@ -3544,11 +3550,14 @@ func TestQCSTOP(t *testing.T) {
 		stopResult.Search.RelatedFiles = []string{"file1.go", "file2.go", "file3.go"}
 
 		result := BuildSTOPSummaryFromSTOPResult(stopResult)
-		if !strings.Contains(result, "Related Files") {
-			t.Error("expected Related Files header")
+		if !strings.Contains(result, "<related_files>") {
+			t.Error("expected <related_files> XML tag")
 		}
-		if !strings.Contains(result, "file1.go") {
-			t.Error("expected related file in output")
+		if !strings.Contains(result, "</related_files>") {
+			t.Error("expected </related_files> closing tag")
+		}
+		if !strings.Contains(result, "<file>file1.go</file>") {
+			t.Error("expected related file in XML format")
 		}
 	})
 }
