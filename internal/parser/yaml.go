@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -543,26 +544,29 @@ func parseConductorConfigYAML(cfg *yamlConductorConfig, plan *models.Plan) error
 }
 
 // buildPromptFromYAML constructs a comprehensive prompt from all YAML task sections
+// Output format: XML (for Claude 4 enhanced parsing)
 func buildPromptFromYAML(yt *yamlTask) string {
 	var prompt strings.Builder
 
-	// Task header
+	// Task header as XML wrapper with attributes
 	taskNum, _ := convertToString(yt.TaskNumber)
-	fmt.Fprintf(&prompt, "# Task %s: %s\n\n", taskNum, yt.Name)
+	fmt.Fprintf(&prompt, "<task id=\"%s\" name=\"%s\">\n\n", taskNum, yt.Name)
 
 	// Target files - CRITICAL: tells agent exactly which files to create/modify
 	if len(yt.Files) > 0 {
-		fmt.Fprintf(&prompt, "## Target Files (REQUIRED)\n\n")
-		fmt.Fprintf(&prompt, "**You MUST create/modify these exact files:**\n")
+		prompt.WriteString("<target_files required=\"true\">\n")
+		prompt.WriteString("<instruction>You MUST create/modify these exact files:</instruction>\n")
 		for _, file := range yt.Files {
-			fmt.Fprintf(&prompt, "- `%s`\n", file)
+			fmt.Fprintf(&prompt, "<file>%s</file>\n", file)
 		}
-		fmt.Fprintf(&prompt, "\n⚠️ Do NOT create files with different names or paths. Use the exact paths listed above.\n\n")
+		prompt.WriteString("<warning>Do NOT create files with different names or paths. Use the exact paths listed above.</warning>\n")
+		prompt.WriteString("</target_files>\n\n")
 	}
 
 	// Description
 	if yt.Description != "" {
-		fmt.Fprintf(&prompt, "## Description\n\n%s\n\n", strings.TrimSpace(yt.Description))
+		prompt.WriteString(agent.XMLSection("description", yt.Description))
+		prompt.WriteString("\n\n")
 	}
 
 	// Test First section
@@ -571,62 +575,54 @@ func buildPromptFromYAML(yt *yamlTask) string {
 		len(yt.TestFirst.Mocks) > 0 || len(yt.TestFirst.Fixtures) > 0 ||
 		len(yt.TestFirst.Assertions) > 0 || len(yt.TestFirst.EdgeCases) > 0 ||
 		yt.TestFirst.ExampleSkeleton != "" {
-		fmt.Fprintf(&prompt, "## Test First (TDD)\n\n")
+		prompt.WriteString("<test_first>\n")
 
 		if yt.TestFirst.TestFile != "" {
-			fmt.Fprintf(&prompt, "**Test file**: `%s`\n\n", yt.TestFirst.TestFile)
+			prompt.WriteString(agent.XMLTag("test_file", yt.TestFirst.TestFile))
+			prompt.WriteString("\n")
 		}
 
 		// Handle both structure array and test_structure string
 		if len(yt.TestFirst.Structure) > 0 {
-			fmt.Fprintf(&prompt, "**Test structure**:\n")
-			for _, item := range yt.TestFirst.Structure {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(item))
-			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString(agent.XMLList("test_structure", yt.TestFirst.Structure))
+			prompt.WriteString("\n")
 		} else if yt.TestFirst.TestStructure != "" {
-			fmt.Fprintf(&prompt, "**Test structure**:\n%s\n\n", strings.TrimSpace(yt.TestFirst.TestStructure))
+			prompt.WriteString(agent.XMLSection("test_structure", yt.TestFirst.TestStructure))
+			prompt.WriteString("\n")
 		}
 
 		if len(yt.TestFirst.Mocks) > 0 {
-			fmt.Fprintf(&prompt, "**Mocks**:\n")
-			for _, mock := range yt.TestFirst.Mocks {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(mock))
-			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString(agent.XMLList("mocks", yt.TestFirst.Mocks))
+			prompt.WriteString("\n")
 		}
 
 		if len(yt.TestFirst.Fixtures) > 0 {
-			fmt.Fprintf(&prompt, "**Fixtures**:\n")
-			for _, fixture := range yt.TestFirst.Fixtures {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(fixture))
-			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString(agent.XMLList("fixtures", yt.TestFirst.Fixtures))
+			prompt.WriteString("\n")
 		}
 
 		if len(yt.TestFirst.Assertions) > 0 {
-			fmt.Fprintf(&prompt, "**Assertions**:\n")
-			for _, assertion := range yt.TestFirst.Assertions {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(assertion))
-			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString(agent.XMLList("assertions", yt.TestFirst.Assertions))
+			prompt.WriteString("\n")
 		}
 
 		if len(yt.TestFirst.EdgeCases) > 0 {
-			fmt.Fprintf(&prompt, "**Edge cases**:\n")
-			for _, edgeCase := range yt.TestFirst.EdgeCases {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(edgeCase))
-			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString(agent.XMLList("edge_cases", yt.TestFirst.EdgeCases))
+			prompt.WriteString("\n")
 		}
 
 		if yt.TestFirst.TestSpecifics != "" {
-			fmt.Fprintf(&prompt, "**Test specifics**:\n%s\n\n", strings.TrimSpace(yt.TestFirst.TestSpecifics))
+			prompt.WriteString(agent.XMLSection("test_specifics", yt.TestFirst.TestSpecifics))
+			prompt.WriteString("\n")
 		}
 
 		if yt.TestFirst.ExampleSkeleton != "" {
-			fmt.Fprintf(&prompt, "**Example test skeleton**:\n```\n%s\n```\n\n", strings.TrimSpace(yt.TestFirst.ExampleSkeleton))
+			prompt.WriteString("<example_skeleton>\n<code>")
+			prompt.WriteString(strings.TrimSpace(yt.TestFirst.ExampleSkeleton))
+			prompt.WriteString("</code>\n</example_skeleton>\n")
 		}
+
+		prompt.WriteString("</test_first>\n\n")
 	}
 
 	// Implementation section
@@ -637,32 +633,37 @@ func buildPromptFromYAML(yt *yamlTask) string {
 		len(yt.Implementation.IntegrationPoints) > 0
 
 	if hasImplementation {
-		fmt.Fprintf(&prompt, "## Implementation\n\n")
+		prompt.WriteString("<implementation>\n")
 
 		if yt.Implementation.Approach != "" {
-			fmt.Fprintf(&prompt, "**Approach**:\n%s\n\n", strings.TrimSpace(yt.Implementation.Approach))
+			prompt.WriteString(agent.XMLSection("approach", yt.Implementation.Approach))
+			prompt.WriteString("\n")
 		}
 
 		if yt.Implementation.CodeStructure != "" {
-			fmt.Fprintf(&prompt, "**Code structure**:\n```\n%s\n```\n\n", strings.TrimSpace(yt.Implementation.CodeStructure))
+			prompt.WriteString("<code_structure>\n<code>")
+			prompt.WriteString(strings.TrimSpace(yt.Implementation.CodeStructure))
+			prompt.WriteString("</code>\n</code_structure>\n")
 		}
 
 		// Handle key_points as array of objects
 		if len(yt.Implementation.KeyPoints) > 0 {
-			fmt.Fprintf(&prompt, "**Key points**:\n")
+			prompt.WriteString("<key_points>\n")
 			for _, kp := range yt.Implementation.KeyPoints {
 				if kp.Point != "" {
-					fmt.Fprintf(&prompt, "- %s", strings.TrimSpace(kp.Point))
+					prompt.WriteString("<point")
+					if kp.Reference != "" {
+						fmt.Fprintf(&prompt, " ref=\"%s\"", strings.TrimSpace(kp.Reference))
+					}
+					prompt.WriteString(">")
+					prompt.WriteString(strings.TrimSpace(kp.Point))
 					if kp.Details != "" {
 						fmt.Fprintf(&prompt, ": %s", strings.TrimSpace(kp.Details))
 					}
-					if kp.Reference != "" {
-						fmt.Fprintf(&prompt, " (ref: %s)", strings.TrimSpace(kp.Reference))
-					}
-					fmt.Fprintf(&prompt, "\n")
+					prompt.WriteString("</point>\n")
 				}
 			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString("</key_points>\n")
 		}
 
 		// Handle integration object
@@ -672,34 +673,34 @@ func buildPromptFromYAML(yt *yamlTask) string {
 			len(yt.Implementation.Integration.ErrorHandling) > 0
 
 		if hasIntegration {
-			fmt.Fprintf(&prompt, "**Integration**:\n")
+			prompt.WriteString("<integration>\n")
 
 			if len(yt.Implementation.Integration.Imports) > 0 {
-				fmt.Fprintf(&prompt, "- Imports: %s\n", strings.Join(yt.Implementation.Integration.Imports, ", "))
+				prompt.WriteString(agent.XMLTag("imports", strings.Join(yt.Implementation.Integration.Imports, ", ")))
+				prompt.WriteString("\n")
 			}
 			if len(yt.Implementation.Integration.ServicesToInject) > 0 {
-				fmt.Fprintf(&prompt, "- Services to inject: %s\n", strings.Join(yt.Implementation.Integration.ServicesToInject, ", "))
+				prompt.WriteString(agent.XMLTag("services_to_inject", strings.Join(yt.Implementation.Integration.ServicesToInject, ", ")))
+				prompt.WriteString("\n")
 			}
 			if len(yt.Implementation.Integration.ConfigValues) > 0 {
-				fmt.Fprintf(&prompt, "- Config values: %s\n", strings.Join(yt.Implementation.Integration.ConfigValues, ", "))
+				prompt.WriteString(agent.XMLTag("config_values", strings.Join(yt.Implementation.Integration.ConfigValues, ", ")))
+				prompt.WriteString("\n")
 			}
 			if len(yt.Implementation.Integration.ErrorHandling) > 0 {
-				fmt.Fprintf(&prompt, "- Error handling:\n")
-				for _, eh := range yt.Implementation.Integration.ErrorHandling {
-					fmt.Fprintf(&prompt, "  - %s\n", strings.TrimSpace(eh))
-				}
+				prompt.WriteString(agent.XMLList("error_handling", yt.Implementation.Integration.ErrorHandling))
+				prompt.WriteString("\n")
 			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString("</integration>\n")
 		}
 
 		// Legacy integration_points field
 		if len(yt.Implementation.IntegrationPoints) > 0 {
-			fmt.Fprintf(&prompt, "**Integration points**:\n")
-			for _, point := range yt.Implementation.IntegrationPoints {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(point))
-			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString(agent.XMLList("integration_points", yt.Implementation.IntegrationPoints))
+			prompt.WriteString("\n")
 		}
+
+		prompt.WriteString("</implementation>\n\n")
 	}
 
 	// Verification section
@@ -709,72 +710,79 @@ func buildPromptFromYAML(yt *yamlTask) string {
 		yt.Verification.ExpectedOutput != ""
 
 	if hasVerification {
-		fmt.Fprintf(&prompt, "## Verification\n\n")
+		prompt.WriteString("<verification>\n")
 
 		// Handle manual_testing as array of objects
 		if len(yt.Verification.ManualTesting) > 0 {
-			fmt.Fprintf(&prompt, "**Manual testing**:\n")
+			prompt.WriteString("<manual_testing>\n")
 			for i, mt := range yt.Verification.ManualTesting {
 				if mt.Step != "" {
-					fmt.Fprintf(&prompt, "%d. %s", i+1, strings.TrimSpace(mt.Step))
+					fmt.Fprintf(&prompt, "<step order=\"%d\">\n", i+1)
+					prompt.WriteString(agent.XMLTag("action", strings.TrimSpace(mt.Step)))
+					prompt.WriteString("\n")
 					if mt.Command != "" {
-						fmt.Fprintf(&prompt, "\n   Command: `%s`", strings.TrimSpace(mt.Command))
+						prompt.WriteString(agent.XMLTag("command", strings.TrimSpace(mt.Command)))
+						prompt.WriteString("\n")
 					}
 					if mt.Expected != "" {
-						fmt.Fprintf(&prompt, "\n   Expected: %s", strings.TrimSpace(mt.Expected))
+						prompt.WriteString(agent.XMLTag("expected", strings.TrimSpace(mt.Expected)))
+						prompt.WriteString("\n")
 					}
-					fmt.Fprintf(&prompt, "\n")
+					prompt.WriteString("</step>\n")
 				}
 			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString("</manual_testing>\n")
 		}
 
 		// Handle automated_tests as object
 		if yt.Verification.AutomatedTests.Command != "" {
-			fmt.Fprintf(&prompt, "**Automated tests**:\n```bash\n%s\n```\n", strings.TrimSpace(yt.Verification.AutomatedTests.Command))
+			prompt.WriteString("<automated_tests>\n")
+			prompt.WriteString("<code lang=\"bash\">")
+			prompt.WriteString(strings.TrimSpace(yt.Verification.AutomatedTests.Command))
+			prompt.WriteString("</code>\n")
 			if yt.Verification.AutomatedTests.ExpectedOutput != "" {
-				fmt.Fprintf(&prompt, "\n**Expected output**:\n```\n%s\n```\n", strings.TrimSpace(yt.Verification.AutomatedTests.ExpectedOutput))
+				prompt.WriteString("<expected_output>\n<code>")
+				prompt.WriteString(strings.TrimSpace(yt.Verification.AutomatedTests.ExpectedOutput))
+				prompt.WriteString("</code>\n</expected_output>\n")
 			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString("</automated_tests>\n")
 		}
 
 		if len(yt.Verification.SuccessCriteria) > 0 {
-			fmt.Fprintf(&prompt, "**Success criteria**:\n")
-			for _, criterion := range yt.Verification.SuccessCriteria {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(criterion))
-			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString(agent.XMLList("success_criteria", yt.Verification.SuccessCriteria))
+			prompt.WriteString("\n")
 		}
 
 		// Legacy expected_output field
 		if yt.Verification.ExpectedOutput != "" && yt.Verification.AutomatedTests.ExpectedOutput == "" {
-			fmt.Fprintf(&prompt, "**Expected output**:\n```\n%s\n```\n\n", strings.TrimSpace(yt.Verification.ExpectedOutput))
+			prompt.WriteString("<expected_output>\n<code>")
+			prompt.WriteString(strings.TrimSpace(yt.Verification.ExpectedOutput))
+			prompt.WriteString("</code>\n</expected_output>\n")
 		}
+
+		prompt.WriteString("</verification>\n\n")
 	}
 
 	// Commit section - informational reference
 	if yt.Commit.Message != "" {
-		fmt.Fprintf(&prompt, "## Commit\n\n")
+		prompt.WriteString("<commit>\n")
 		if yt.Commit.Type != "" {
-			fmt.Fprintf(&prompt, "**Type**: %s\n", yt.Commit.Type)
+			prompt.WriteString(agent.XMLTag("type", yt.Commit.Type))
+			prompt.WriteString("\n")
 		}
-		fmt.Fprintf(&prompt, "**Message**: %s\n", strings.TrimSpace(yt.Commit.Message))
+		prompt.WriteString(agent.XMLTag("message", strings.TrimSpace(yt.Commit.Message)))
+		prompt.WriteString("\n")
 		if yt.Commit.Body != "" {
-			fmt.Fprintf(&prompt, "\n**Body**:\n%s\n", strings.TrimSpace(yt.Commit.Body))
+			prompt.WriteString(agent.XMLSection("body", yt.Commit.Body))
+			prompt.WriteString("\n")
 		}
 		if len(yt.Commit.Files) > 0 {
-			fmt.Fprintf(&prompt, "\n**Files**:\n")
-			for _, file := range yt.Commit.Files {
-				fmt.Fprintf(&prompt, "- %s\n", strings.TrimSpace(file))
-			}
+			prompt.WriteString(agent.XMLList("files", yt.Commit.Files))
+			prompt.WriteString("\n")
 		}
-		fmt.Fprintf(&prompt, "\n")
+		prompt.WriteString("</commit>\n\n")
 
 		// MANDATORY COMMIT section - imperative instructions for the agent
-		fmt.Fprintf(&prompt, "---\n\n")
-		fmt.Fprintf(&prompt, "## MANDATORY COMMIT (REQUIRED)\n\n")
-		fmt.Fprintf(&prompt, "After completing your changes, you MUST commit them to git:\n\n")
-
 		// Build the commit message using CommitSpec logic
 		commitSpec := &models.CommitSpec{
 			Type:    yt.Commit.Type,
@@ -784,33 +792,47 @@ func buildPromptFromYAML(yt *yamlTask) string {
 		}
 		commitMessage := commitSpec.BuildCommitMessage()
 
+		prompt.WriteString("<mandatory_commit required=\"true\">\n")
+		prompt.WriteString("<instruction>After completing your changes, you MUST commit them to git:</instruction>\n")
+
+		prompt.WriteString("<steps>\n")
 		// Step 1: Stage files
 		if len(yt.Commit.Files) > 0 {
-			fmt.Fprintf(&prompt, "1. Stage the following files:\n")
+			prompt.WriteString("<step order=\"1\">\n")
+			prompt.WriteString("<action>Stage the following files:</action>\n")
 			for _, file := range yt.Commit.Files {
-				fmt.Fprintf(&prompt, "   - %s\n", strings.TrimSpace(file))
+				fmt.Fprintf(&prompt, "<file>%s</file>\n", strings.TrimSpace(file))
 			}
-			fmt.Fprintf(&prompt, "\n")
+			prompt.WriteString("</step>\n")
 		} else {
-			fmt.Fprintf(&prompt, "1. Stage your modified files.\n\n")
+			prompt.WriteString("<step order=\"1\">\n")
+			prompt.WriteString("<action>Stage your modified files.</action>\n")
+			prompt.WriteString("</step>\n")
 		}
 
 		// Step 2: Create commit with exact message
-		fmt.Fprintf(&prompt, "2. Create commit with this EXACT message:\n")
-		fmt.Fprintf(&prompt, "   %s\n\n", commitMessage)
+		prompt.WriteString("<step order=\"2\">\n")
+		prompt.WriteString("<action>Create commit with this EXACT message:</action>\n")
+		prompt.WriteString(agent.XMLTag("commit_message", commitMessage))
+		prompt.WriteString("\n</step>\n")
 
 		// Step 3: Example git commands
-		fmt.Fprintf(&prompt, "3. Use these commands:\n")
+		prompt.WriteString("<step order=\"3\">\n")
+		prompt.WriteString("<action>Use these commands:</action>\n")
 		if len(yt.Commit.Files) > 0 {
-			fmt.Fprintf(&prompt, "   git add %s\n", strings.Join(yt.Commit.Files, " "))
+			fmt.Fprintf(&prompt, "<code lang=\"bash\">git add %s\ngit commit -m \"%s\"</code>\n", strings.Join(yt.Commit.Files, " "), commitMessage)
 		} else {
-			fmt.Fprintf(&prompt, "   git add <your-modified-files>\n")
+			fmt.Fprintf(&prompt, "<code lang=\"bash\">git add &lt;your-modified-files&gt;\ngit commit -m \"%s\"</code>\n", commitMessage)
 		}
-		fmt.Fprintf(&prompt, "   git commit -m \"%s\"\n\n", commitMessage)
+		prompt.WriteString("</step>\n")
+		prompt.WriteString("</steps>\n")
 
-		// Warning about task completion
-		fmt.Fprintf(&prompt, "⚠️ Your task is NOT complete until changes are committed.\n\n")
+		prompt.WriteString("<warning>Your task is NOT complete until changes are committed.</warning>\n")
+		prompt.WriteString("</mandatory_commit>\n\n")
 	}
+
+	// Close task wrapper
+	prompt.WriteString("</task>")
 
 	return prompt.String()
 }
