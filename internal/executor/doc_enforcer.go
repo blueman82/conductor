@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -122,51 +123,49 @@ func FormatDocTargetResults(results []DocTargetResult) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("## DOCUMENTATION TARGET VERIFICATION\n\n")
+	sb.WriteString("<documentation_verification>\n")
 
 	allPassed := true
+	passCount := 0
 	for _, r := range results {
 		if !r.Passed {
 			allPassed = false
-		}
-
-		status := "PASS"
-		if !r.Passed {
-			status = "FAIL"
-		}
-
-		if r.LineNumber > 0 {
-			sb.WriteString(fmt.Sprintf("### %s:%d `%s` [%s]\n", r.Location, r.LineNumber, r.Section, status))
 		} else {
-			sb.WriteString(fmt.Sprintf("### %s `%s` [%s]\n", r.Location, r.Section, status))
+			passCount++
+		}
+
+		status := "found"
+		if !r.Passed {
+			status = "missing"
+		}
+
+		// Build doc_target element with attributes
+		if r.LineNumber > 0 {
+			sb.WriteString(fmt.Sprintf("<doc_target file=\"%s\" section=\"%s\" line=\"%d\" status=\"%s\">\n", r.Location, r.Section, r.LineNumber, status))
+		} else {
+			sb.WriteString(fmt.Sprintf("<doc_target file=\"%s\" section=\"%s\" status=\"%s\">\n", r.Location, r.Section, status))
 		}
 
 		if r.Content != "" {
-			sb.WriteString("**Content found:**\n```\n")
-			sb.WriteString(r.Content)
-			sb.WriteString("\n```\n")
+			sb.WriteString(agent.XMLSection("content", r.Content))
+			sb.WriteString("\n")
 		}
 
 		if r.Error != nil {
-			sb.WriteString(fmt.Sprintf("**Error:** %v\n", r.Error))
+			sb.WriteString(agent.XMLTag("error", fmt.Sprintf("%v", r.Error)))
+			sb.WriteString("\n")
 		}
 
-		sb.WriteString("\n")
-	}
-
-	passCount := 0
-	for _, r := range results {
-		if r.Passed {
-			passCount++
-		}
+		sb.WriteString("</doc_target>\n")
 	}
 
 	if allPassed {
-		sb.WriteString(fmt.Sprintf("**Summary:** All %d documentation targets verified\n", len(results)))
+		sb.WriteString(fmt.Sprintf("<summary>All %d documentation targets verified</summary>\n", len(results)))
 	} else {
-		sb.WriteString(fmt.Sprintf("**Summary:** %d/%d documentation targets passed\n", passCount, len(results)))
+		sb.WriteString(fmt.Sprintf("<summary>%d/%d documentation targets passed</summary>\n", passCount, len(results)))
 	}
 
+	sb.WriteString("</documentation_verification>\n")
 	return sb.String()
 }
 
