@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
@@ -32,13 +33,14 @@ const (
 // PatternIntelligenceImpl implements the PatternIntelligence interface.
 // It orchestrates the hasher, searcher, and library to provide full STOP protocol analysis.
 type PatternIntelligenceImpl struct {
-	config     *config.PatternConfig
-	hasher     *TaskHasher
-	searcher   *STOPSearcher
-	library    *PatternLibrary
-	store      *learning.Store
-	enhancer   *ClaudeEnhancer              // nil if LLM enhancement disabled
-	similarity *similarity.ClaudeSimilarity // Claude-based semantic similarity
+	config        *config.PatternConfig
+	searchTimeout time.Duration            // Timeout for search operations
+	hasher        *TaskHasher
+	searcher      *STOPSearcher
+	library       *PatternLibrary
+	store         *learning.Store
+	enhancer      *ClaudeEnhancer              // nil if LLM enhancement disabled
+	similarity    *similarity.ClaudeSimilarity // Claude-based semantic similarity
 
 	mu          sync.RWMutex
 	initialized bool
@@ -48,17 +50,20 @@ type PatternIntelligenceImpl struct {
 // Returns nil if Pattern Intelligence is disabled or store is nil (graceful degradation).
 // Components are lazily initialized on first CheckTask call.
 // The similarity parameter provides Claude-based semantic similarity (required for non-hash similarity detection).
-func NewPatternIntelligence(cfg *config.PatternConfig, store *learning.Store, sim *similarity.ClaudeSimilarity) PatternIntelligence {
+// The searchTimeout parameter controls how long to wait for each search operation.
+// Use config.DefaultTimeoutsConfig().Search for the standard timeout value (30s).
+func NewPatternIntelligence(cfg *config.PatternConfig, store *learning.Store, sim *similarity.ClaudeSimilarity, searchTimeout time.Duration) PatternIntelligence {
 	if cfg == nil || !cfg.Enabled {
 		return nil
 	}
 
 	// Store can be nil - graceful degradation will be handled in Initialize
 	return &PatternIntelligenceImpl{
-		config:      cfg,
-		store:       store,
-		similarity:  sim,
-		initialized: false,
+		config:        cfg,
+		searchTimeout: searchTimeout,
+		store:         store,
+		similarity:    sim,
+		initialized:   false,
 	}
 }
 
@@ -80,7 +85,7 @@ func (pi *PatternIntelligenceImpl) Initialize(ctx context.Context) error {
 	pi.hasher = NewTaskHasher()
 
 	// Create searcher (uses store for history search, nil store is handled gracefully)
-	pi.searcher = NewSTOPSearcher(pi.store)
+	pi.searcher = NewSTOPSearcher(pi.store, pi.searchTimeout)
 
 	// Create library (uses store and config)
 	pi.library = NewPatternLibrary(pi.store, pi.config)

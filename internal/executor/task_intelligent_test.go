@@ -48,7 +48,7 @@ func TestNewTaskAgentSelector(t *testing.T) {
 	registry, cleanup := createTestRegistryForTaskSelection(t, []string{"golang-pro", "frontend-developer"})
 	defer cleanup()
 
-	selector := NewTaskAgentSelector(registry)
+	selector := NewTaskAgentSelector(registry, 90*time.Second)
 
 	if selector == nil {
 		t.Fatal("expected non-nil selector")
@@ -59,8 +59,19 @@ func TestNewTaskAgentSelector(t *testing.T) {
 	if selector.ClaudePath != "claude" {
 		t.Errorf("expected ClaudePath='claude', got %q", selector.ClaudePath)
 	}
-	if selector.Timeout != 30*time.Second {
-		t.Errorf("expected Timeout=30s, got %v", selector.Timeout)
+	if selector.Timeout != 90*time.Second {
+		t.Errorf("expected Timeout=90s, got %v", selector.Timeout)
+	}
+}
+
+func TestNewTaskAgentSelector_CustomTimeout(t *testing.T) {
+	registry, cleanup := createTestRegistryForTaskSelection(t, []string{"golang-pro"})
+	defer cleanup()
+
+	selector := NewTaskAgentSelector(registry, 45*time.Second)
+
+	if selector.Timeout != 45*time.Second {
+		t.Errorf("expected Timeout=45s, got %v", selector.Timeout)
 	}
 }
 
@@ -69,7 +80,7 @@ func TestTaskAgentSelector_GetAvailableAgents(t *testing.T) {
 		registry, cleanup := createTestRegistryForTaskSelection(t, []string{"golang-pro", "frontend-developer", "code-reviewer"})
 		defer cleanup()
 
-		selector := NewTaskAgentSelector(registry)
+		selector := NewTaskAgentSelector(registry, 90*time.Second)
 		agents := selector.getAvailableAgents()
 
 		if len(agents) != 3 {
@@ -102,7 +113,7 @@ func TestTaskAgentSelector_AgentExists(t *testing.T) {
 	registry, cleanup := createTestRegistryForTaskSelection(t, []string{"golang-pro", "frontend-developer"})
 	defer cleanup()
 
-	selector := NewTaskAgentSelector(registry)
+	selector := NewTaskAgentSelector(registry, 90*time.Second)
 
 	t.Run("existing agent", func(t *testing.T) {
 		if !selector.agentExists("golang-pro") {
@@ -131,7 +142,7 @@ func TestTaskAgentSelector_BuildSelectionPrompt(t *testing.T) {
 	registry, cleanup := createTestRegistryForTaskSelection(t, []string{"golang-pro", "frontend-developer"})
 	defer cleanup()
 
-	selector := NewTaskAgentSelector(registry)
+	selector := NewTaskAgentSelector(registry, 90*time.Second)
 
 	t.Run("basic task", func(t *testing.T) {
 		task := models.Task{
@@ -231,7 +242,7 @@ func TestTaskAgentSelector_SelectAgent_EmptyRegistry(t *testing.T) {
 
 	// Create registry with no agents
 	registry := agent.NewRegistry(tmpDir)
-	selector := NewTaskAgentSelector(registry)
+	selector := NewTaskAgentSelector(registry, 90*time.Second)
 
 	task := models.Task{
 		Number: "1",
@@ -292,7 +303,7 @@ func TestTaskAgentSelector_FallbackValidation(t *testing.T) {
 	registry, cleanup := createTestRegistryForTaskSelection(t, []string{"general-purpose", "golang-pro"})
 	defer cleanup()
 
-	selector := NewTaskAgentSelector(registry)
+	selector := NewTaskAgentSelector(registry, 90*time.Second)
 
 	// Simulate result from Claude with non-existent agent
 	result := &TaskAgentSelectionResult{

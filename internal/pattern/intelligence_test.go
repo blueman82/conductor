@@ -12,6 +12,9 @@ import (
 	"github.com/harrison/conductor/internal/similarity"
 )
 
+// testIntelligenceSearchTimeout is the timeout value used in tests for search operations.
+const testIntelligenceSearchTimeout = 5 * time.Second
+
 func TestIntelligence_New(t *testing.T) {
 	// This is an alias test for go test -run TestIntelligence
 	// Actual testing is done in TestNewPatternIntelligence
@@ -19,7 +22,7 @@ func TestIntelligence_New(t *testing.T) {
 		Enabled: true,
 		Mode:    config.PatternModeWarn,
 	}
-	pi := NewPatternIntelligence(cfg, nil, nil)
+	pi := NewPatternIntelligence(cfg, nil, nil, testIntelligenceSearchTimeout)
 	if pi == nil {
 		t.Error("expected non-nil PatternIntelligence")
 	}
@@ -74,14 +77,14 @@ func TestNewPatternIntelligence(t *testing.T) {
 				EnableDuplicateDetection: true,
 			},
 			store:   nil,
-			sim:     similarity.NewClaudeSimilarity(nil),
+			sim:     similarity.NewClaudeSimilarity(90*time.Second, nil),
 			wantNil: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pi := NewPatternIntelligence(tt.cfg, tt.store, tt.sim)
+			pi := NewPatternIntelligence(tt.cfg, tt.store, tt.sim, testIntelligenceSearchTimeout)
 			if (pi == nil) != tt.wantNil {
 				t.Errorf("NewPatternIntelligence() = nil: %v, want nil: %v", pi == nil, tt.wantNil)
 			}
@@ -101,7 +104,7 @@ func TestPatternIntelligence_Initialize(t *testing.T) {
 	}
 
 	t.Run("initialize sets up all components", func(t *testing.T) {
-		pi := NewPatternIntelligence(cfg, nil, nil)
+		pi := NewPatternIntelligence(cfg, nil, nil, testIntelligenceSearchTimeout)
 		if pi == nil {
 			t.Fatal("NewPatternIntelligence returned nil for enabled config")
 		}
@@ -148,7 +151,7 @@ func TestPatternIntelligence_IsInitialized(t *testing.T) {
 
 	t.Run("uninitialized returns false", func(t *testing.T) {
 		cfg := &config.PatternConfig{Enabled: true}
-		pi := NewPatternIntelligence(cfg, nil, nil)
+		pi := NewPatternIntelligence(cfg, nil, nil, testIntelligenceSearchTimeout)
 		if pi.IsInitialized() {
 			t.Error("expected false before initialization")
 		}
@@ -186,7 +189,7 @@ func TestPatternIntelligence_CheckTask(t *testing.T) {
 	})
 
 	t.Run("returns results for valid task", func(t *testing.T) {
-		pi := NewPatternIntelligence(cfg, nil, nil)
+		pi := NewPatternIntelligence(cfg, nil, nil, testIntelligenceSearchTimeout)
 		if pi == nil {
 			t.Fatal("NewPatternIntelligence returned nil")
 		}
@@ -231,7 +234,7 @@ func TestPatternIntelligence_CheckTask(t *testing.T) {
 			EnableDuplicateDetection: true,
 		}
 
-		pi := NewPatternIntelligence(cfgNoSTOP, nil, nil)
+		pi := NewPatternIntelligence(cfgNoSTOP, nil, nil, testIntelligenceSearchTimeout)
 		stop, dup, err := pi.CheckTask(context.Background(), task)
 
 		if err != nil {
@@ -253,7 +256,7 @@ func TestPatternIntelligence_CheckTask(t *testing.T) {
 			EnableDuplicateDetection: false,
 		}
 
-		pi := NewPatternIntelligence(cfgNoDup, nil, nil)
+		pi := NewPatternIntelligence(cfgNoDup, nil, nil, testIntelligenceSearchTimeout)
 		stop, dup, err := pi.CheckTask(context.Background(), task)
 
 		if err != nil {
@@ -291,7 +294,7 @@ func TestPatternIntelligence_CheckTaskWithStore(t *testing.T) {
 		MinConfidence:            0.7,
 	}
 
-	pi := NewPatternIntelligence(cfg, store, nil)
+	pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout)
 	if pi == nil {
 		t.Fatal("NewPatternIntelligence returned nil")
 	}
@@ -499,7 +502,7 @@ func TestPatternIntelligence_RecordSuccess(t *testing.T) {
 			MaxPatternsPerTask:  5,
 		}
 
-		pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
+		pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 		if err := pi.Initialize(context.Background()); err != nil {
 			t.Fatalf("Initialize() error = %v", err)
 		}
@@ -859,7 +862,7 @@ func TestCheckDuplicatesWithSimilarPatterns(t *testing.T) {
 		MaxPatternsPerTask:       5,
 	}
 
-	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
+	pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -933,7 +936,7 @@ func TestCheckDuplicatesBlockMode(t *testing.T) {
 		MaxPatternsPerTask:       5,
 	}
 
-	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
+	pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -974,7 +977,7 @@ func TestCheckDuplicatesDisabled(t *testing.T) {
 		EnableDuplicateDetection: false,
 	}
 
-	pi := NewPatternIntelligence(cfg, nil, nil).(*PatternIntelligenceImpl)
+	pi := NewPatternIntelligence(cfg, nil, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -1196,7 +1199,7 @@ func TestCheckDuplicatesExactMatch(t *testing.T) {
 		MaxPatternsPerTask:       5,
 	}
 
-	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
+	pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -1250,7 +1253,7 @@ func TestCheckDuplicatesSimilarButNotDuplicate(t *testing.T) {
 		MaxPatternsPerTask:       5,
 	}
 
-	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
+	pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -1294,7 +1297,7 @@ func TestCheckDuplicatesHighSimilarityDuplicate(t *testing.T) {
 		MaxPatternsPerTask:       5,
 	}
 
-	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
+	pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -1485,7 +1488,7 @@ func TestGenerateRecommendationsAgentNotEnoughSuccesses(t *testing.T) {
 func TestSetSimilarity(t *testing.T) {
 	t.Run("nil receiver returns without panic", func(t *testing.T) {
 		var pi *PatternIntelligenceImpl
-		pi.SetSimilarity(similarity.NewClaudeSimilarity(nil))
+		pi.SetSimilarity(similarity.NewClaudeSimilarity(90*time.Second, nil))
 		// Should not panic
 	})
 
@@ -1494,8 +1497,8 @@ func TestSetSimilarity(t *testing.T) {
 			Enabled: true,
 			Mode:    config.PatternModeWarn,
 		}
-		pi := NewPatternIntelligence(cfg, nil, nil).(*PatternIntelligenceImpl)
-		sim := similarity.NewClaudeSimilarity(nil)
+		pi := NewPatternIntelligence(cfg, nil, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
+		sim := similarity.NewClaudeSimilarity(90*time.Second, nil)
 		pi.SetSimilarity(sim)
 		if pi.similarity != sim {
 			t.Error("expected similarity to be set")
@@ -1521,7 +1524,7 @@ func TestCheckDuplicatesWithClaudeSimilarity(t *testing.T) {
 	}
 
 	// Test with nil similarity - should return 0 for non-hash matches
-	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
+	pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -1597,7 +1600,7 @@ func TestCheckDuplicatesWithNilSimilarity(t *testing.T) {
 	}
 
 	// Nil similarity - semantic matching returns 0
-	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
+	pi := NewPatternIntelligence(cfg, store, nil, testIntelligenceSearchTimeout).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -1635,8 +1638,8 @@ func TestNewPatternIntelligenceWithSimilarity(t *testing.T) {
 		Enabled: true,
 		Mode:    config.PatternModeWarn,
 	}
-	sim := similarity.NewClaudeSimilarity(nil)
-	pi := NewPatternIntelligence(cfg, nil, sim)
+	sim := similarity.NewClaudeSimilarity(90*time.Second, nil)
+	pi := NewPatternIntelligence(cfg, nil, sim, testIntelligenceSearchTimeout)
 	if pi == nil {
 		t.Error("expected non-nil PatternIntelligence")
 	}

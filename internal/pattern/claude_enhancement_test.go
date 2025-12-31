@@ -7,7 +7,7 @@ import (
 )
 
 func TestShouldEnhance(t *testing.T) {
-	enhancer := NewClaudeEnhancer(nil)
+	enhancer := NewClaudeEnhancer(90*time.Second, nil)
 
 	tests := []struct {
 		name       string
@@ -65,10 +65,10 @@ func TestShouldEnhance(t *testing.T) {
 }
 
 func TestNewClaudeEnhancer(t *testing.T) {
-	enhancer := NewClaudeEnhancer(nil)
+	enhancer := NewClaudeEnhancer(90*time.Second, nil)
 
-	if enhancer.Timeout != 30*time.Second {
-		t.Errorf("Default Timeout = %v, want 30s", enhancer.Timeout)
+	if enhancer.Timeout != 90*time.Second {
+		t.Errorf("Timeout = %v, want 90s", enhancer.Timeout)
 	}
 	if enhancer.ClaudePath != "claude" {
 		t.Errorf("Default ClaudePath = %s, want claude", enhancer.ClaudePath)
@@ -78,8 +78,8 @@ func TestNewClaudeEnhancer(t *testing.T) {
 	}
 }
 
-func TestNewClaudeEnhancerWithConfig(t *testing.T) {
-	enhancer := NewClaudeEnhancerWithConfig(45*time.Second, nil)
+func TestNewClaudeEnhancer_CustomTimeout(t *testing.T) {
+	enhancer := NewClaudeEnhancer(45*time.Second, nil)
 
 	if enhancer.Timeout != 45*time.Second {
 		t.Errorf("Timeout = %v, want 45s", enhancer.Timeout)
@@ -87,7 +87,7 @@ func TestNewClaudeEnhancerWithConfig(t *testing.T) {
 }
 
 func TestBuildPrompt(t *testing.T) {
-	enhancer := NewClaudeEnhancer(nil)
+	enhancer := NewClaudeEnhancer(30*time.Second, nil)
 
 	prompt := enhancer.buildPrompt("Test task description", "Pattern: similar task found", 0.5)
 

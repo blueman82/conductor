@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -324,6 +325,27 @@ type PatternConfig struct {
 	RequireJustification bool `yaml:"require_justification"`
 }
 
+// TimeoutsConfig controls timeout durations for different operation types
+type TimeoutsConfig struct {
+	// Task is the timeout for main agent task execution (default: 12h)
+	// This is the maximum time allowed for an agent to complete a task.
+	Task time.Duration `yaml:"task"`
+
+	// LLM is the timeout for internal Claude CLI calls (default: 90s)
+	// Used for agent swapping, QC selection, similarity checks, etc.
+	// 90s provides headroom for complex operations while still working for simple ones.
+	// Users can decrease to 60s or 30s for faster failure on simple operations.
+	LLM time.Duration `yaml:"llm"`
+
+	// HTTP is the timeout for external HTTP services (default: 30s)
+	// Used for TTS, webhooks, and other external HTTP calls.
+	HTTP time.Duration `yaml:"http"`
+
+	// Search is the timeout for fast local CLI operations (default: 30s)
+	// Used for git, grep, and other local search operations.
+	Search time.Duration `yaml:"search"`
+}
+
 // TTSConfig controls text-to-speech functionality
 type TTSConfig struct {
 	// Enabled enables TTS functionality (default: false for zero behavior change)
@@ -338,7 +360,10 @@ type TTSConfig struct {
 	// Voice is the TTS voice to use
 	Voice string `yaml:"voice"`
 
-	// Timeout is the maximum time to wait for TTS response
+	// Timeout is the maximum time to wait for TTS response.
+	// DEPRECATED: Use timeouts.http instead. When tts.timeout is not explicitly set,
+	// the value from timeouts.http will be used as a fallback.
+	// This field will be removed in a future version.
 	Timeout time.Duration `yaml:"timeout"`
 }
 
@@ -453,6 +478,9 @@ type Config struct {
 
 	// Architecture contains Architecture Checkpoint configuration (v2.27+)
 	Architecture ArchitectureConfig `yaml:"architecture"`
+
+	// Timeouts contains timeout configuration for different operation types
+	Timeouts TimeoutsConfig `yaml:"timeouts"`
 }
 
 // ArchitectureMode specifies the Architecture Checkpoint operating mode
@@ -521,6 +549,17 @@ func DefaultCostModelConfig() CostModelConfig {
 		HaikuOutput:  4.0,
 		OpusInput:    15.0,
 		OpusOutput:   75.0,
+	}
+}
+
+// DefaultTimeoutsConfig returns TimeoutsConfig with sensible default values.
+// These defaults provide generous timeouts while still allowing timely failure detection.
+func DefaultTimeoutsConfig() TimeoutsConfig {
+	return TimeoutsConfig{
+		Task:   12 * time.Hour,   // Main agent task execution
+		LLM:    90 * time.Second, // Internal Claude CLI calls (agent swap, QC, similarity)
+		HTTP:   30 * time.Second, // External HTTP services (TTS, webhooks)
+		Search: 30 * time.Second, // Fast local CLI operations (git, grep)
 	}
 }
 
@@ -666,6 +705,7 @@ func DefaultConfig() *Config {
 		Budget:       DefaultBudgetConfig(),
 		Pattern:      DefaultPatternConfig(),
 		Architecture: DefaultArchitectureConfig(),
+		Timeouts:     DefaultTimeoutsConfig(),
 	}
 }
 
@@ -749,6 +789,12 @@ func LoadConfig(path string) (*Config, error) {
 		Voice   string `yaml:"voice"`
 		Timeout string `yaml:"timeout"`
 	}
+	type yamlTimeoutsConfig struct {
+		Task   string `yaml:"task"`
+		LLM    string `yaml:"llm"`
+		HTTP   string `yaml:"http"`
+		Search string `yaml:"search"`
+	}
 	type yamlBudgetConfig struct {
 		Enabled          bool    `yaml:"enabled"`
 		MaxCostPerRun    float64 `yaml:"max_cost_per_run"`
@@ -779,6 +825,7 @@ func LoadConfig(path string) (*Config, error) {
 		Budget         yamlBudgetConfig     `yaml:"budget"`
 		Pattern        PatternConfig        `yaml:"pattern"`
 		Architecture   ArchitectureConfig   `yaml:"architecture"`
+		Timeouts       yamlTimeoutsConfig   `yaml:"timeouts"`
 	}
 
 	var yamlCfg yamlConfig
@@ -1074,7 +1121,8 @@ func LoadConfig(path string) (*Config, error) {
 			}
 		}
 
-		// Merge TTS config
+		// Merge TTS config (note: TTS timeout fallback is applied AFTER timeouts parsing)
+		ttsTimeoutExplicitlySet := false
 		if ttsSection, exists := rawMap["tts"]; exists && ttsSection != nil {
 			tts := yamlCfg.TTS
 			ttsMap, _ := ttsSection.(map[string]interface{})
@@ -1097,6 +1145,7 @@ func LoadConfig(path string) (*Config, error) {
 					return nil, fmt.Errorf("invalid tts.timeout format %q: %w", tts.Timeout, err)
 				}
 				cfg.TTS.Timeout = timeout
+				ttsTimeoutExplicitlySet = true
 			}
 		}
 
@@ -1210,12 +1259,154 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.Architecture.ConfidenceThreshold = arch.ConfidenceThreshold
 			}
 		}
+
+		// Merge Timeouts config
+		timeoutsLLMExplicitlySet := false
+		if timeoutsSection, exists := rawMap["timeouts"]; exists && timeoutsSection != nil {
+			timeouts := yamlCfg.Timeouts
+			timeoutsMap, _ := timeoutsSection.(map[string]interface{})
+
+			if _, exists := timeoutsMap["task"]; exists && timeouts.Task != "" {
+				d, err := time.ParseDuration(timeouts.Task)
+				if err != nil {
+					return nil, fmt.Errorf("invalid timeouts.task format %q: %w", timeouts.Task, err)
+				}
+				cfg.Timeouts.Task = d
+			}
+			if _, exists := timeoutsMap["llm"]; exists && timeouts.LLM != "" {
+				d, err := time.ParseDuration(timeouts.LLM)
+				if err != nil {
+					return nil, fmt.Errorf("invalid timeouts.llm format %q: %w", timeouts.LLM, err)
+				}
+				cfg.Timeouts.LLM = d
+				timeoutsLLMExplicitlySet = true
+			}
+			if _, exists := timeoutsMap["http"]; exists && timeouts.HTTP != "" {
+				d, err := time.ParseDuration(timeouts.HTTP)
+				if err != nil {
+					return nil, fmt.Errorf("invalid timeouts.http format %q: %w", timeouts.HTTP, err)
+				}
+				cfg.Timeouts.HTTP = d
+			}
+			if _, exists := timeoutsMap["search"]; exists && timeouts.Search != "" {
+				d, err := time.ParseDuration(timeouts.Search)
+				if err != nil {
+					return nil, fmt.Errorf("invalid timeouts.search format %q: %w", timeouts.Search, err)
+				}
+				cfg.Timeouts.Search = d
+			}
+		}
+
+		// Handle deprecated timeout fields with migration to timeouts.llm
+		// Only migrate if timeouts.llm was NOT explicitly set
+		handleDeprecatedTimeoutFields(rawMap, cfg, timeoutsLLMExplicitlySet)
+
+		// Handle TTS timeout fallback to timeouts.http
+		// This must be done AFTER timeouts parsing so cfg.Timeouts.HTTP has the correct value
+		handleTTSTimeoutFallback(cfg, ttsTimeoutExplicitlySet)
 	}
 
 	// Apply environment variable overrides (highest priority)
 	applyConsoleEnvOverrides(&cfg.Console)
 
 	return cfg, nil
+}
+
+// handleDeprecatedTimeoutFields checks for deprecated timeout fields and migrates
+// their values to the new timeouts.llm field if it was not explicitly set.
+// Logs deprecation warnings for each deprecated field found.
+//
+// Deprecated fields:
+//   - pattern.llm_timeout_seconds → timeouts.llm
+//   - architecture.timeout_seconds → timeouts.llm
+//   - quality_control.agents.selection_timeout_seconds → timeouts.llm
+func handleDeprecatedTimeoutFields(rawMap map[string]interface{}, cfg *Config, timeoutsLLMExplicitlySet bool) {
+	// Track the highest deprecated value to use for migration
+	var deprecatedValue time.Duration
+	var deprecatedSource string
+
+	// Check pattern.llm_timeout_seconds
+	if patternSection, exists := rawMap["pattern"]; exists && patternSection != nil {
+		patternMap, _ := patternSection.(map[string]interface{})
+		if llmTimeout, exists := patternMap["llm_timeout_seconds"]; exists {
+			log.Printf("[DEPRECATED] pattern.llm_timeout_seconds is deprecated. "+
+				"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
+				"This field will be removed in a future version.", cfg.Pattern.LLMTimeoutSeconds)
+
+			if seconds, ok := llmTimeout.(int); ok && seconds > 0 {
+				d := time.Duration(seconds) * time.Second
+				if d > deprecatedValue {
+					deprecatedValue = d
+					deprecatedSource = "pattern.llm_timeout_seconds"
+				}
+			}
+		}
+	}
+
+	// Check architecture.timeout_seconds
+	if archSection, exists := rawMap["architecture"]; exists && archSection != nil {
+		archMap, _ := archSection.(map[string]interface{})
+		if timeout, exists := archMap["timeout_seconds"]; exists {
+			log.Printf("[DEPRECATED] architecture.timeout_seconds is deprecated. "+
+				"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
+				"This field will be removed in a future version.", cfg.Architecture.TimeoutSeconds)
+
+			if seconds, ok := timeout.(int); ok && seconds > 0 {
+				d := time.Duration(seconds) * time.Second
+				if d > deprecatedValue {
+					deprecatedValue = d
+					deprecatedSource = "architecture.timeout_seconds"
+				}
+			}
+		}
+	}
+
+	// Check quality_control.agents.selection_timeout_seconds
+	if qcSection, exists := rawMap["quality_control"]; exists && qcSection != nil {
+		qcMap, _ := qcSection.(map[string]interface{})
+		if agentsSection, exists := qcMap["agents"]; exists && agentsSection != nil {
+			agentsMap, _ := agentsSection.(map[string]interface{})
+			if timeout, exists := agentsMap["selection_timeout_seconds"]; exists {
+				log.Printf("[DEPRECATED] quality_control.agents.selection_timeout_seconds is deprecated. "+
+					"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
+					"This field will be removed in a future version.", cfg.QualityControl.Agents.SelectionTimeoutSeconds)
+
+				if seconds, ok := timeout.(int); ok && seconds > 0 {
+					d := time.Duration(seconds) * time.Second
+					if d > deprecatedValue {
+						deprecatedValue = d
+						deprecatedSource = "quality_control.agents.selection_timeout_seconds"
+					}
+				}
+			}
+		}
+	}
+
+	// Migrate deprecated value to timeouts.llm if not explicitly set
+	if !timeoutsLLMExplicitlySet && deprecatedValue > 0 {
+		cfg.Timeouts.LLM = deprecatedValue
+		log.Printf("[DEPRECATED] Migrating %s value (%v) to timeouts.llm. "+
+			"Please update your configuration to use timeouts.llm directly.",
+			deprecatedSource, deprecatedValue)
+	}
+}
+
+// handleTTSTimeoutFallback handles the migration of tts.timeout to timeouts.http.
+// When tts.timeout is explicitly set, logs a deprecation warning.
+// When tts.timeout is not set, uses timeouts.http as the fallback value.
+//
+// Migration path:
+//   - tts.timeout → timeouts.http (for external HTTP services)
+func handleTTSTimeoutFallback(cfg *Config, ttsTimeoutExplicitlySet bool) {
+	if ttsTimeoutExplicitlySet {
+		// Log deprecation warning when tts.timeout is explicitly set
+		log.Printf("[DEPRECATED] tts.timeout is deprecated. "+
+			"Please migrate to timeouts.http (e.g., 'timeouts:\\n  http: %v'). "+
+			"This field will be removed in a future version.", cfg.TTS.Timeout)
+	} else {
+		// Use timeouts.http as fallback when tts.timeout not explicitly set
+		cfg.TTS.Timeout = cfg.Timeouts.HTTP
+	}
 }
 
 // LoadConfigFromRootWithBuildTime loads configuration from conductor repo root
@@ -1276,6 +1467,7 @@ func (c *Config) MergeWithFlags(maxConcurrency *int, timeout *time.Duration, log
 	}
 	if timeout != nil {
 		c.Timeout = *timeout
+		c.Timeouts.Task = *timeout // Also update centralized timeout (v2.33+)
 	}
 	if logDir != nil {
 		c.LogDir = *logDir

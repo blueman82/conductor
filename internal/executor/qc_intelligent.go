@@ -28,12 +28,9 @@ type IntelligentSelector struct {
 	Timeout    time.Duration
 }
 
-// NewIntelligentSelector creates a new intelligent selector with configurable timeout
-func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int, timeoutSeconds int) *IntelligentSelector {
-	timeout := 90 * time.Second // default
-	if timeoutSeconds > 0 {
-		timeout = time.Duration(timeoutSeconds) * time.Second
-	}
+// NewIntelligentSelector creates a new intelligent selector with configurable timeout.
+// The timeout parameter controls how long to wait for Claude's agent selection response.
+func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int, timeout time.Duration) *IntelligentSelector {
 	return &IntelligentSelector{
 		Registry:   registry,
 		Cache:      NewQCSelectionCache(cacheTTLSeconds),
@@ -294,7 +291,7 @@ func IntelligentSelectQCAgents(
 ) ([]string, string, error) {
 	// Use provided selector or create new one
 	if selector == nil {
-		selector = NewIntelligentSelector(registry, config.CacheTTLSeconds, config.SelectionTimeoutSeconds)
+		selector = NewIntelligentSelector(registry, config.CacheTTLSeconds, time.Duration(config.SelectionTimeoutSeconds)*time.Second)
 	}
 
 	// Ensure registry is set

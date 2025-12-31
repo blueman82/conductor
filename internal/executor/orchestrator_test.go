@@ -431,7 +431,7 @@ func TestOrchestratorFromConfigWithSimilarity(t *testing.T) {
 		}
 
 		// Create ClaudeSimilarity instance (normally created in run.go)
-		claudeSim := similarity.NewClaudeSimilarity(nil)
+		claudeSim := similarity.NewClaudeSimilarity(90*time.Second, nil)
 
 		config := OrchestratorConfig{
 			WaveExecutor:  mockWE,
@@ -492,7 +492,7 @@ func TestOrchestratorFromConfigWithSimilarity(t *testing.T) {
 			},
 		}
 
-		claudeSim := similarity.NewClaudeSimilarity(nil)
+		claudeSim := similarity.NewClaudeSimilarity(90*time.Second, nil)
 
 		config := OrchestratorConfig{
 			WaveExecutor: mockWE,

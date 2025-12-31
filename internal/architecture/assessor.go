@@ -21,17 +21,9 @@ type Assessor struct {
 	Logger     budget.WaiterLogger
 }
 
-// NewAssessor creates an assessor with defaults
-func NewAssessor(logger budget.WaiterLogger) *Assessor {
-	return &Assessor{
-		Timeout:    30 * time.Second,
-		ClaudePath: "claude",
-		Logger:     logger,
-	}
-}
-
-// NewAssessorWithConfig creates an assessor from config values
-func NewAssessorWithConfig(timeout time.Duration, logger budget.WaiterLogger) *Assessor {
+// NewAssessor creates an assessor with the specified timeout.
+// The timeout parameter controls how long to wait for Claude CLI responses.
+func NewAssessor(timeout time.Duration, logger budget.WaiterLogger) *Assessor {
 	return &Assessor{
 		Timeout:    timeout,
 		ClaudePath: "claude",

@@ -74,23 +74,18 @@ type IntelligentAgentSwapper struct {
 	Logger budget.WaiterLogger
 }
 
-// NewIntelligentAgentSwapper creates a new IntelligentAgentSwapper with defaults
-func NewIntelligentAgentSwapper(registry *agent.Registry, kg KnowledgeGraph, lipStore LIPCollector, logger budget.WaiterLogger) *IntelligentAgentSwapper {
+// NewIntelligentAgentSwapper creates a new IntelligentAgentSwapper with the specified timeout.
+// The timeout parameter controls how long to wait for Claude CLI responses.
+// Use config.Timeouts.LLM from configuration for consistent timeout values.
+func NewIntelligentAgentSwapper(registry *agent.Registry, kg KnowledgeGraph, lipStore LIPCollector, timeout time.Duration, logger budget.WaiterLogger) *IntelligentAgentSwapper {
 	return &IntelligentAgentSwapper{
 		Registry:       registry,
 		KnowledgeGraph: kg,
 		LIPStore:       lipStore,
 		ClaudePath:     "claude",
-		Timeout:        90 * time.Second,
+		Timeout:        timeout,
 		Logger:         logger,
 	}
-}
-
-// NewIntelligentAgentSwapperWithTimeout creates a swapper with custom timeout
-func NewIntelligentAgentSwapperWithTimeout(registry *agent.Registry, kg KnowledgeGraph, lipStore LIPCollector, timeout time.Duration, logger budget.WaiterLogger) *IntelligentAgentSwapper {
-	swapper := NewIntelligentAgentSwapper(registry, kg, lipStore, logger)
-	swapper.Timeout = timeout
-	return swapper
 }
 
 // SelectAgent uses Claude to recommend the best agent for a task retry

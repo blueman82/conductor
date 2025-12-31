@@ -314,7 +314,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Use merged config values
 	dryRun := cfg.DryRun
 	maxConcurrency := cfg.MaxConcurrency
-	timeout := cfg.Timeout
+	timeout := cfg.Timeouts.Task // Use new centralized timeout (v2.33+)
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	logDir := cfg.LogDir
 
@@ -447,13 +447,14 @@ func runCommand(cmd *cobra.Command, args []string) error {
 			Enabled:     cfg.QualityControl.Enabled,
 			ReviewAgent: cfg.QualityControl.ReviewAgent,
 			Agents: models.QCAgentConfig{
-				Mode:              cfg.QualityControl.Agents.Mode,
-				ExplicitList:      cfg.QualityControl.Agents.ExplicitList,
-				AdditionalAgents:  cfg.QualityControl.Agents.AdditionalAgents,
-				BlockedAgents:     cfg.QualityControl.Agents.BlockedAgents,
-				MaxAgents:         cfg.QualityControl.Agents.MaxAgents,
-				CacheTTLSeconds:   cfg.QualityControl.Agents.CacheTTLSeconds,
-				RequireCodeReview: cfg.QualityControl.Agents.RequireCodeReview,
+				Mode:                    cfg.QualityControl.Agents.Mode,
+				ExplicitList:            cfg.QualityControl.Agents.ExplicitList,
+				AdditionalAgents:        cfg.QualityControl.Agents.AdditionalAgents,
+				BlockedAgents:           cfg.QualityControl.Agents.BlockedAgents,
+				MaxAgents:               cfg.QualityControl.Agents.MaxAgents,
+				CacheTTLSeconds:         cfg.QualityControl.Agents.CacheTTLSeconds,
+				SelectionTimeoutSeconds: int(cfg.Timeouts.LLM.Seconds()), // Wire cfg.Timeouts.LLM to QC IntelligentSelector (v2.33+)
+				RequireCodeReview:       cfg.QualityControl.Agents.RequireCodeReview,
 			},
 			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
@@ -666,20 +667,20 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// for consistent configuration and rate limit handling across both systems.
 	var claudeSim *similarity.ClaudeSimilarity
 	if cfg.Pattern.Enabled || cfg.Learning.Enabled {
-		claudeSim = similarity.NewClaudeSimilarityWithConfig(
-			time.Duration(cfg.Pattern.LLMTimeoutSeconds)*time.Second,
+		claudeSim = similarity.NewClaudeSimilarity(
+			cfg.Timeouts.LLM,
 			multiLog,
 		)
 	}
 
 	// Wire Pattern Intelligence (v2.24+) with shared ClaudeSimilarity
 	if cfg.Pattern.Enabled && claudeSim != nil {
-		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore, claudeSim)
+		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore, claudeSim, cfg.Timeouts.Search)
 		if pi != nil {
 			// Set up LLM enhancement if enabled
 			if cfg.Pattern.LLMEnhancementEnabled {
-				enhancer := pattern.NewClaudeEnhancerWithConfig(
-					time.Duration(cfg.Pattern.LLMTimeoutSeconds)*time.Second,
+				enhancer := pattern.NewClaudeEnhancer(
+					cfg.Timeouts.LLM,
 					multiLog,
 				)
 				if impl, ok := pi.(*pattern.PatternIntelligenceImpl); ok {
@@ -699,8 +700,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Wire Architecture Checkpoint (v2.27+)
 	if cfg.Architecture.Enabled {
-		assessor := architecture.NewAssessorWithConfig(
-			time.Duration(cfg.Architecture.TimeoutSeconds)*time.Second,
+		assessor := architecture.NewAssessor(
+			cfg.Timeouts.LLM,
 			multiLog,
 		)
 		taskExec.ArchitectureHook = executor.NewArchitectureCheckpointHook(assessor, &cfg.Architecture, consoleLog)
@@ -711,8 +712,20 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// 1. executor.intelligent_agent_selection is true in config, OR
 	// 2. quality_control.agents.mode is "intelligent" (backward compatibility)
 	if agentRegistry != nil && (cfg.Executor.IntelligentAgentSelection || plan.QualityControl.Agents.Mode == "intelligent") {
-		taskExec.TaskAgentSelector = executor.NewTaskAgentSelector(agentRegistry)
+		taskExec.TaskAgentSelector = executor.NewTaskAgentSelector(agentRegistry, cfg.Timeouts.LLM)
 		taskExec.IntelligentAgentSelection = true
+	}
+
+	// Wire intelligent agent swapper for retry loops (v2.29+)
+	// Uses Claude to analyze context and select better agents during retries
+	if cfg.Learning.SwapDuringRetries && agentRegistry != nil {
+		taskExec.IntelligentAgentSwapper = learning.NewIntelligentAgentSwapper(
+			agentRegistry,
+			nil, // Knowledge graph not yet implemented
+			nil, // LIP store not yet implemented
+			cfg.Timeouts.LLM,
+			multiLog,
+		)
 	}
 
 	// Create wave executor with task executor and config

@@ -4,602 +4,258 @@ description: Generate comprehensive implementation plans for features. Use when 
 allowed-tools: Read, Bash, Glob, Grep, Write, TodoWrite
 ---
 
-# Implementation Planner Skill
+# Implementation Planner v4.0
 
-**Version:** 3.2.0
-**Purpose:** Generate conductor-compatible YAML implementation plans with built-in validation.
+Generate conductor-compatible YAML plans. **Do NOT activate for:** questions, debugging, code reviews.
 
-## Activation
+## Workflow
 
-**Activate for:**
-- "Help me implement [feature]"
-- "Create a plan for [feature]"
-- "Break down [feature] into tasks"
-
-**Do NOT activate for:** Questions, debugging, code reviews, exploratory discussions.
-
----
-
-## Phase 1: Discovery
-
-### 1.1 Discover Agents
-```bash
-fd '\.md$' ~/.claude/agents --type f
-```
-Extract names (remove path/extension). Default: `general-purpose`.
-
-### 1.2 Analyze Codebase
-```bash
-ls -la                           # Structure
-cat go.mod || cat package.json   # Stack
-```
-
-**Document:** Framework, test framework, architecture pattern, existing patterns for similar features.
-
-**CRITICAL:** Verify file organization before specifying paths:
-```bash
-ls internal/learning/migrations/ 2>/dev/null  # Does dir exist?
-grep -r "CREATE TABLE" internal/learning/     # Where does SQL live?
-```
+1. **Discover** → Agents (`fd '\.md$' ~/.claude/agents`), codebase stack, existing patterns
+2. **Design** → Break into tasks, map dependencies, build data flow registry
+3. **Implement** → Write `implementation.key_points` FIRST for each task
+4. **Criteria** → Derive `success_criteria` FROM key_points (same terminology)
+5. **Classify** → CAPABILITY (unit) vs INTEGRATION (cross-component)
+6. **Generate** → Output YAML with all required fields
+7. **Validate** → `conductor validate <plan>.yaml`
 
 ---
 
-## Phase 2: Task Design
+## Critical Rules
 
-### 2.1 Break Feature into Tasks
-- Each task = one focused unit of work
-- Identify dependencies between tasks
-- Assign appropriate agent per task
+| Rule | Rationale |
+|------|-----------|
+| **Key points → Criteria** | Every `success_criteria` item MUST trace to a `key_point` using IDENTICAL terms |
+| **Data flow deps** | If task B uses function from task A, B must `depends_on: [A]` |
+| **Package serialization** | Go: tasks modifying same package need sequential deps |
+| **Verify before claiming** | `grep` to confirm existing behavior before writing key_points |
+| **Code reuse first** | Search for existing implementations before creating new code |
+| **No wrappers without value** | Direct usage preferred over unnecessary abstraction |
 
-### 2.2 Build Dependency Graph
-- Map `depends_on` relationships
-- Detect package conflicts (Go: tasks modifying same package need serialization)
-- Create worktree groups (organizational only, NOT execution control)
+**Auto-append to ALL tasks' success_criteria:**
+- No TODO comments in production code
+- No placeholder structs (Type{})
+- No unused variables (_ = x)
+- All imports from deps resolve
 
-### 2.3 Data Flow Analysis (CRITICAL)
+---
 
-**Problem:** Feature-chain thinking produces wrong dependencies.
+## Phase 1-2: Discovery & Design
 
-**Process:**
-1. Extract function/type references from task descriptions
-2. Build producer registry: `{function: task_that_creates_it}`
-3. For each task, identify what it consumes
-4. Validate `depends_on` includes ALL producers
+```bash
+fd '\.md$' ~/.claude/agents --type f     # Available agents
+ls -la && cat go.mod                      # Codebase structure
+ls <expected/path> 2>/dev/null            # Verify paths exist
+grep -r "pattern" internal/               # Find existing implementations
+```
 
-**TWO REQUIRED OUTPUTS:**
+### Data Flow Registry (CRITICAL)
 
-1. **Comment block** (for human readability at top of plan):
+Build producer/consumer map to ensure correct dependencies:
+
 ```yaml
-# ═══════════════════════════════════════════════════════════════
-# DATA FLOW REGISTRY
-# ═══════════════════════════════════════════════════════════════
+# Comment block at top of plan:
 # PRODUCERS: Task 4 → ExtractMetrics, Task 5 → LoadSession
 # CONSUMERS: Task 16 → [4, 5, 15]
-# VALIDATION: All consumers depend_on their producers ✓
-```
+# VALIDATION: All consumers depend_on producers ✓
 
-2. **YAML field** (Conductor validates this when `data_flow_registry` is in `required_features`):
-```yaml
+# YAML field (validated by Conductor):
 data_flow_registry:
   producers:
-    ExtractMetrics:
+    FunctionName:
       - task: 4
-        description: "Creates ExtractMetrics function"
-    LoadSession:
-      - task: 5
-        description: "Creates LoadSession function"
+        description: "Creates this function"
   consumers:
-    ExtractMetrics:
+    FunctionName:
       - task: 16
-        description: "Uses ExtractMetrics for analysis"
-    LoadSession:
-      - task: 16
-        description: "Uses LoadSession to load data"
-  documentation_targets: {}  # Optional: maps task numbers to doc locations
+        description: "Uses this function"
 ```
-
-**IMPORTANT:** The comment block is for human planning. The YAML field is what Conductor validates.
 
 ---
 
-## Phase 3: Write Implementation Section
+## Phase 3-4: Implementation → Criteria
 
-For each task, write `implementation:` FIRST, then derive criteria.
-
-### 3.1 Implementation Structure
+**Write key_points FIRST, then derive criteria:**
 
 ```yaml
 implementation:
   approach: |
     Strategy and architectural decisions.
   key_points:
-    - point: "Descriptive name"
-      details: "What this accomplishes and why"
-      reference: "path/to/file.go"
-    - point: "Another key point"
-      details: "Details here"
-      reference: "path/to/other.go"
-  integration:  # Only for tasks with depends_on
-    imports: ["package/from/dep"]
-    config_values: ["setting.name"]
+    - point: "EnforcePackageIsolation with git diff"
+      details: "Compare modified files against task.Files"
+      reference: "internal/executor/package_guard.go"
+
+# Derived using SAME terminology:
+success_criteria:
+  - "EnforcePackageIsolation runs git diff, compares against task.Files"
 ```
 
-### 3.2 Key Points Rules
-
-Each key_point must be:
-- **Specific**: Names exact function, type, or behavior
-- **Verifiable**: Can be checked with grep/test
-- **Complete**: Covers ALL requirements for the task
+**Key point requirements:** Specific (names exact function/type), Verifiable (grep/test), Complete (all requirements).
 
 ---
 
-## Phase 4: Derive Success Criteria (CRITICAL)
+## Phase 5: Classification
 
-**RULE:** Success criteria MUST be derived directly from key_points using SAME terminology.
+| Type | Scope | Criteria Field |
+|------|-------|----------------|
+| CAPABILITY | What component does alone | `success_criteria` |
+| INTEGRATION | How components work together | `integration_criteria` |
 
-### 4.1 Derivation Process
+**Route by keyword:**
+- CLI flags, UI rendering, cross-component calls → `integration_criteria`
+- Internal logic, data structures, algorithms → `success_criteria`
 
-```
-For each key_point:
-  → Write criterion that verifies THIS specific point
-  → Use EXACT same terms as the key_point
-  → Criterion = testable assertion of key_point
-```
-
-### 4.2 Example
-
-```yaml
-# WRITE key_points FIRST:
-key_points:
-  - point: "EnforcePackageIsolation with git diff"
-    details: "Run git diff --name-only, compare against task.Files, fail if outside scope"
-    reference: "internal/executor/package_guard.go"
-
-# THEN derive success_criteria using same words:
-success_criteria:
-  - "EnforcePackageIsolation runs git diff --name-only before test commands, compares against task.Files, fails with remediation message if files modified outside declared scope."
-```
-
-### 4.3 Anti-Pattern: Misaligned Criteria
-
-```yaml
-# BAD - criteria uses different terms than key_points:
-key_points:
-  - point: "Runtime package locks"
-    details: "Mutex prevents concurrent modifications"
-
-success_criteria:
-  - "EnforcePackageIsolation validates file scope with git diff"  # WRONG - not in key_points!
-
-# GOOD - criteria matches key_points:
-key_points:
-  - point: "Runtime package locks"
-    details: "Mutex prevents concurrent modifications"
-  - point: "EnforcePackageIsolation with git diff"
-    details: "Validate file scope before tests"
-
-success_criteria:
-  - "Runtime package locks via mutex prevent concurrent modifications to same Go package."
-  - "EnforcePackageIsolation runs git diff --name-only, validates against task.Files."
-```
-
-### 4.4 Auto-Append Anti-Pattern Criteria
-
-Add to ALL tasks:
-```yaml
-success_criteria:
-  # Task-specific (derived from key_points)
-  - "..."
-  # Auto-appended:
-  - "No TODO comments in production code paths."
-  - "No placeholder empty structs (e.g., Type{})."
-  - "No unused variables (_ = x pattern)."
-  - "All imports from dependency tasks resolve."
-```
-
----
-
-## Phase 5: Criteria Classification
-
-### 5.1 CAPABILITY vs INTEGRATION
-
-| Type | Definition | Test Method |
-|------|------------|-------------|
-| CAPABILITY | What component CAN do | Unit test with task's files only |
-| INTEGRATION | How components WORK TOGETHER | E2E across components |
-
-### 5.2 Rules
-
-- **Component tasks** (`type: component` or no type): ONLY capability criteria
-- **Integration tasks** (`type: integration`): BOTH `success_criteria` AND `integration_criteria`
-
-### 5.3 Integration Indicator Keywords
-
-Move criterion to integration task if it contains:
-- CLI: "flag", "--", "command", "argument"
-- UI: "displays", "shows", "renders"
-- Cross-component: "when X then Y", "triggers", "calls [other component]"
-
-```yaml
-# BAD - CLI criterion in cache component task:
-success_criteria:
-  - "Cache can be bypassed with --no-cache flag"  # Requires CLI!
-
-# GOOD - Split:
-# Cache task:
-success_criteria:
-  - "CacheManager accepts enabled: boolean option"
-  - "When enabled=false, get() returns null"
-
-# CLI task or integration task:
-integration_criteria:
-  - "CLI --no-cache flag passes enabled=false to CacheManager"
-```
-
-### 5.4 RFC 2119 Requirement Levels
-
-Conductor's plan structure maps to RFC 2119 requirement levels. Route criteria to the appropriate field:
+**RFC 2119 Routing:**
 
 | Level | Route To | Behavior |
 |-------|----------|----------|
-| **MUST** | `test_commands` | Hard gate - task fails if not met |
-| **MUST** | `dependency_checks` | Preflight gate - blocks task start |
-| **SHOULD** | `success_criteria` | Soft signal - QC reviews and judges |
-| **MAY** | `documentation_targets` | Informational - YELLOW max |
-
-**Routing Rules:**
-- Absolute requirements with verifiable commands → `test_commands`
-- Subjective quality criteria → `success_criteria`
-- Nice-to-have enhancements → `documentation_targets` or omit
-
-**Embedding Levels in Criterion Text:**
-
-When criteria need explicit severity signaling to QC agents, prefix with RFC 2119 keywords:
-
-```yaml
-success_criteria:
-  # MUST-level in success_criteria (QC treats as hard fail)
-  - "MUST: Function validates all input before processing"
-  - "MUST NOT: Function must not expose internal errors to users"
-
-  # SHOULD-level (QC may issue YELLOW)
-  - "SHOULD: Error messages include file paths for debugging"
-  - "SHOULD NOT: Avoid blocking the main thread"
-
-  # MAY-level (informational)
-  - "MAY: Support custom exclusion patterns via environment variable"
-```
-
-**Classification Heuristics:**
-
-| Pattern in Criterion | Level | Route |
-|---------------------|-------|-------|
-| "validates", "rejects invalid", "prevents", "fails if" | MUST | `test_commands` if verifiable |
-| "returns error when", "must not expose" | MUST | `success_criteria` with prefix |
-| "handles gracefully", "includes", "logs" | SHOULD | `success_criteria` |
-| "supports optional", "can be configured" | MAY | `documentation_targets` |
+| MUST | `test_commands` | Hard gate |
+| SHOULD | `success_criteria` | QC reviews |
+| MAY | `documentation_targets` | Informational |
 
 ---
 
-## Phase 6: Validation (MANDATORY)
+## YAML Schema
 
-### 6.1 Key Points ↔ Success Criteria Alignment
-
-**For EACH task, verify:**
-
-```
-□ Every key_point has a corresponding success criterion
-□ Every success criterion traces to a key_point
-□ Same terminology used in both
-□ No orphan criteria (criteria without key_point source)
-```
-
-### 6.2 Behavioral Fact Verification
-
-Before writing key_points that claim existing behavior:
-```bash
-# Verify defaults
-grep -n "??" <file> | grep <option>
-
-# Verify option existence
-grep -n "option\|flag\|--" <file>
-
-# Verify function behavior
-grep -A5 "func <name>" <file>
-```
-
-### 6.3 Dependency Completeness
-
-```
-□ All numeric deps exist (same file)
-□ All cross-file references point to real files/tasks
-□ No circular dependencies
-□ Data flow producers included in depends_on
-```
-
-### 6.4 Structure Completeness
-
-```
-□ Every task has implementation section with approach + key_points
-□ Every task has success_criteria (derived from key_points)
-□ Every task has test_commands
-□ Every task has code_quality pipeline
-□ Integration tasks have BOTH success_criteria AND integration_criteria
-□ Files are flat lists (not nested)
-```
-
-### 6.5 Runtime Enforcement (v2.9+)
-
-Conductor enforces quality gates at runtime:
-
-| Field | Type | Behavior |
-|-------|------|----------|
-| `test_commands` | **Hard gate** | Must pass or task fails |
-| `key_points` | **Soft signal** | Verified, results sent to QC |
-| `documentation_targets` | **Soft signal** | Checked, results sent to QC |
+### Root Structure
 
 ```yaml
-# Hard gate - blocks task if fails:
-test_commands:
-  - "go test ./internal/executor -run TestFoo"
-  - "go build ./..."
-
-# Soft signal - verified before QC:
-implementation:
-  key_points:
-    - point: "Function name"
-      details: "What it does"
-      reference: "path/to/file.go"  # Verified to exist
-
-# Soft signal - for doc tasks:
-documentation_targets:
-  - file: "docs/README.md"
-    section: "## Installation"
-    action: "update"
-```
-
----
-
-## Phase 7: YAML Generation
-
-### 7.1 Root Structure
-
-```yaml
-# ═══════════════════════════════════════════════════════════════
-# DATA FLOW REGISTRY
-# ═══════════════════════════════════════════════════════════════
-# PRODUCERS: Task N → Function/Type
-# CONSUMERS: Task M → [deps]
-# VALIDATION: All consumers depend_on producers ✓
-# ═══════════════════════════════════════════════════════════════
-# SUCCESS CRITERIA VALIDATION
-# ═══════════════════════════════════════════════════════════════
-# All criteria derived from key_points ✓
-# Same terminology in key_points and criteria ✓
-# Component tasks have CAPABILITY-only criteria ✓
-# Integration tasks have dual criteria ✓
-# ═══════════════════════════════════════════════════════════════
-
 conductor:
   default_agent: general-purpose
-  # quality_control: Omit to inherit from .conductor/config.yaml
   worktree_groups:
-    - group_id: "group-name"
-      description: "Purpose"
+    - group_id: "name"
       tasks: [1, 2, 3]
       rationale: "Why grouped"
 
-# Enables strict validation when strict_rubric: true in .conductor/config.yaml
-# NOTE: runtime_metadata is ALWAYS included on every task, so strict_enforcement defaults to true
 planner_compliance:
-  planner_version: "3.0.0"
-  strict_enforcement: true  # Default: true (all tasks have runtime_metadata)
-  required_features:
-    - dependency_checks
-    - test_commands
-    - documentation_targets
-    - success_criteria
-    - data_flow_registry  # Requires data_flow_registry YAML field (see section 2.3)
-    - package_guard       # Go projects: validates tasks only modify declared files
+  planner_version: "4.0.0"
+  strict_enforcement: true
+  required_features: [dependency_checks, test_commands, success_criteria, data_flow_registry, package_guard]
 
-# Required when data_flow_registry is in required_features:
 data_flow_registry:
-  producers:
-    FunctionOrTypeName:
-      - task: 1
-        description: "Creates this function/type"
-  consumers:
-    FunctionOrTypeName:
-      - task: 5
-        description: "Uses this function/type"
-  documentation_targets: {}  # Optional
+  producers: {}
+  consumers: {}
 
 plan:
   metadata:
-    feature_name: "Feature Name"
+    feature_name: "Name"
     created: "YYYY-MM-DD"
-    target: "What this achieves"
-
+    target: "Goal"
   context:
-    framework: "Framework"
-    architecture: "Pattern"
-    test_framework: "Test framework"
-
-  tasks:
-    - task_number: "1"
-      name: "Task name"
-      agent: "agent-name"
-      files:
-        - "path/to/file.go"
-      depends_on: []
-      estimated_time: "30m"
-
-      success_criteria:
-        - "Criterion derived from key_point 1"
-        - "Criterion derived from key_point 2"
-        - "No TODO comments in production code paths."
-        - "No placeholder empty structs."
-        - "No unused variables."
-        - "All imports from dependency tasks resolve."
-
-      test_commands:
-        - "go test ./path -run TestName"
-
-      # Always include runtime_metadata (required for strict_enforcement: true)
-      runtime_metadata:
-        dependency_checks:
-          - command: "go build ./..."
-            description: "Verify build succeeds"
-        documentation_targets: []  # Optional: doc sections to verify
-        prompt_blocks: []          # Optional: extra agent context
-
-      description: |
-        <dependency_verification priority="execute_first">
-          <commands>
-            # Verify dependencies exist
-          </commands>
-        </dependency_verification>
-
-        <task_description>
-          What to implement.
-        </task_description>
-
-      implementation:
-        approach: |
-          Strategy here.
-        key_points:
-          - point: "Key point 1"
-            details: "Details"
-            reference: "file.go"
-          - point: "Key point 2"
-            details: "Details"
-            reference: "file.go"
-        integration: {}
-
-      verification:
-        automated_tests:
-          command: "go test ./..."
-          expected_output: "Tests pass"
-
-      code_quality:
-        go:
-          full_quality_pipeline:
-            command: |
-              gofmt -w . && golangci-lint run ./... && go test ./...
-            exit_on_failure: true
-
-      commit:
-        type: "feat"
-        message: "description"
-        files:
-          - "path/**"
+    framework: "Go"
+    test_framework: "go test"
+  tasks: []
 ```
 
-### 7.2 Cross-File Dependencies
+### Task Structure
+
+```yaml
+- task_number: "1"
+  name: "Task name"
+  agent: "agent-name"
+  files: ["path/to/file.go"]
+  depends_on: []
+
+  success_criteria:
+    - "Criterion from key_point 1"
+    - "No TODO/placeholder/unused patterns"
+
+  test_commands:
+    - "go test ./path -run TestName"
+
+  runtime_metadata:
+    dependency_checks:
+      - command: "go build ./..."
+        description: "Verify build"
+    documentation_targets: []
+
+  description: |
+    <dependency_verification priority="execute_first">
+      <commands># verify deps</commands>
+    </dependency_verification>
+    <task_description>What to implement.</task_description>
+
+  implementation:
+    approach: |
+      Strategy.
+    key_points:
+      - point: "Name"
+        details: "What and why"
+        reference: "file.go"
+
+  code_quality:
+    go:
+      full_quality_pipeline:
+        command: "gofmt -w . && go test ./..."
+        exit_on_failure: true
+
+  commit:
+    type: "feat"
+    message: "description"
+    files: ["path/**"]
+```
+
+### Cross-File Dependencies
 
 ```yaml
 depends_on:
-  - 4                              # Same file
-  - file: "plan-01-foundation.yaml"  # Different file
+  - 4                                    # Same file
+  - file: "plan-01-foundation.yaml"      # Different file
     task: 2
 ```
 
-### 7.3 Integration Task Structure
+### Integration Tasks
 
 ```yaml
 - task_number: "N"
-  name: "Wire X to Y"
   type: integration
-  files:
-    - "component1/file.go"
-    - "component2/file.go"
-  depends_on: [component1_task, component2_task]
-
-  success_criteria:      # Component-level
-    - "Function signatures correct"
-
-  integration_criteria:  # Cross-component
-    - "X calls Y in correct sequence"
-    - "Error propagates end-to-end"
-```
-
-### 7.4 Multi-File Plans
-
-Split at ~2000 lines at worktree group boundaries:
-```
-docs/plans/feature-name/
-├── plan-01-foundation.yaml
-├── plan-02-execution.yaml
-└── plan-03-integration.yaml
+  success_criteria: [...]      # Component-level
+  integration_criteria: [...]  # Cross-component
 ```
 
 ---
 
-## Phase 8: Final Validation
+## TDD Guidance
 
-Run before outputting:
+TDD is RECOMMENDED for component tasks (new logic). Not required for wiring/config/docs.
+
+| Task Type | Testing Approach |
+|-----------|------------------|
+| New component with logic | TDD preferred - test in same task |
+| Wiring/integration | Test-after or integration tests |
+| Config/types only | Validation tests if applicable |
+| Documentation | None |
+
+When using TDD, include test file in task's `files[]` and test command in `test_commands[]`.
+
+---
+
+## Validation Checklist
+
+```
+□ Every key_point has corresponding success criterion (same terms)
+□ Every success criterion traces to a key_point
+□ Data flow: consumers depend_on all producers
+□ Package conflicts serialized via depends_on
+□ All file paths verified to exist (or will be created)
+□ Integration tasks have both success_criteria AND integration_criteria
+□ Every task has: implementation, success_criteria, test_commands, runtime_metadata
+```
+
+**Final step:**
 ```bash
 conductor validate docs/plans/<plan>.yaml
 ```
 
-**Output confirmation:**
-```
-YAML plan: docs/plans/<slug>.yaml
-- Total tasks: N
-- Validation: PASSED
-- Key points ↔ Criteria: ALIGNED ✓
-
-Run: conductor run docs/plans/<slug>.yaml
-```
-
 ---
 
-## Golden Rules (NON-NEGOTIABLE)
+## Common Failures
 
-1. **Code Reuse First**: Before creating new code, search for existing implementations (`grep -r "pattern" internal/`). Use directly, extend, or implement existing interfaces. New utilities require justification in `implementation.approach`.
-
-2. **No Wrappers Without Value**: Only create adapter layers when they add real functionality (interface adaptation, lifecycle management). Direct usage preferred over unnecessary abstraction.
-
----
-
-## Quick Reference: Common Failures
-
-| Failure | Cause | Prevention |
-|---------|-------|------------|
-| Agent implements wrong thing | key_points incomplete | Write ALL requirements in key_points |
-| QC fails despite working code | Criteria not in key_points | Derive criteria FROM key_points |
-| Missing dependency | Data flow not traced | Build producer registry |
-| Scope leak | Integration criterion in component | Classify criteria by type |
-| Assumed behavior wrong | Didn't verify codebase | grep before claiming defaults |
-
----
-
-## Version History
-
-### v3.2.0 (2025-12-31)
-- **Converted description template from markdown to XML format**
-- Uses `<dependency_verification>` and `<task_description>` tags
-
-### v3.1.0 (2025-12-31)
-- **Clarified data_flow_registry: comment block + YAML field (section 2.3)**
-- Added actual YAML structure for data_flow_registry
-- Made package_guard explicit (not commented) in required_features
-
-### v3.0.0 (2025-12-01)
-- **Consolidated from 5500 lines to ~450 lines**
-- **Added mandatory key_points ↔ success_criteria validation**
-- Removed templates (LLMs understand structure)
-- Removed reference files (inlined critical rules only)
-- Streamlined phases with clear validation checkpoints
-
-### v2.6.0 (2025-11-27)
-- Added criteria derivation from key_points requirement
-- Added behavioral fact verification
-
-### v2.5.0 (2025-11-26)
-- Added success criteria classification (CAPABILITY vs INTEGRATION)
-
-### v2.3.0 (2025-11-24)
-- Added data flow analysis phase
-- Added prompt templates with dependency verification
-- Added anti-pattern criteria auto-append
+| Failure | Prevention |
+|---------|------------|
+| Agent implements wrong thing | Write ALL requirements in key_points |
+| QC fails despite working code | Derive criteria FROM key_points |
+| Missing dependency | Build producer registry |
+| Scope leak | Classify criteria by type |
+| Assumed behavior wrong | grep before claiming defaults |
+| Multi-file plan: ~2000 lines max | Split at worktree group boundaries |

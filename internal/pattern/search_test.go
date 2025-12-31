@@ -11,9 +11,12 @@ import (
 	"github.com/harrison/conductor/internal/learning"
 )
 
+// testSearchTimeout is the timeout value used in tests for individual search operations.
+const testSearchTimeout = 5 * time.Second
+
 func TestNewSTOPSearcher(t *testing.T) {
 	t.Run("with nil store", func(t *testing.T) {
-		s := NewSTOPSearcher(nil)
+		s := NewSTOPSearcher(nil, testSearchTimeout)
 		if s == nil {
 			t.Fatal("NewSTOPSearcher returned nil")
 		}
@@ -23,8 +26,8 @@ func TestNewSTOPSearcher(t *testing.T) {
 		if s.hasher == nil {
 			t.Error("hasher should not be nil")
 		}
-		if s.timeout != SearchTimeout {
-			t.Errorf("timeout should be %v, got %v", SearchTimeout, s.timeout)
+		if s.timeout != testSearchTimeout {
+			t.Errorf("timeout should be %v, got %v", testSearchTimeout, s.timeout)
 		}
 	})
 
@@ -35,7 +38,7 @@ func TestNewSTOPSearcher(t *testing.T) {
 		}
 		defer store.Close()
 
-		s := NewSTOPSearcher(store)
+		s := NewSTOPSearcher(store, testSearchTimeout)
 		if s == nil {
 			t.Fatal("NewSTOPSearcher returned nil")
 		}
@@ -43,24 +46,22 @@ func TestNewSTOPSearcher(t *testing.T) {
 			t.Error("store should be set")
 		}
 	})
+
+	t.Run("with custom timeout", func(t *testing.T) {
+		customTimeout := 10 * time.Second
+		s := NewSTOPSearcher(nil, customTimeout)
+		if s == nil {
+			t.Fatal("NewSTOPSearcher returned nil")
+		}
+		if s.timeout != customTimeout {
+			t.Errorf("timeout should be %v, got %v", customTimeout, s.timeout)
+		}
+	})
 }
 
-func TestSTOPSearcher_WithTimeout(t *testing.T) {
-	s := NewSTOPSearcher(nil)
-	customTimeout := 10 * time.Second
-
-	result := s.WithTimeout(customTimeout)
-
-	if result != s {
-		t.Error("WithTimeout should return same instance")
-	}
-	if s.timeout != customTimeout {
-		t.Errorf("timeout should be %v, got %v", customTimeout, s.timeout)
-	}
-}
 
 func TestSTOPSearcher_Search_EmptyDescription(t *testing.T) {
-	s := NewSTOPSearcher(nil)
+	s := NewSTOPSearcher(nil, testSearchTimeout)
 	ctx := context.Background()
 
 	results := s.Search(ctx, "", nil)
@@ -75,8 +76,7 @@ func TestSTOPSearcher_Search_EmptyDescription(t *testing.T) {
 }
 
 func TestSTOPSearcher_Search_WithValidDescription(t *testing.T) {
-	s := NewSTOPSearcher(nil)
-	s.timeout = 1 * time.Second // Short timeout for tests
+	s := NewSTOPSearcher(nil, 1*time.Second) // Short timeout for tests
 	ctx := context.Background()
 
 	results := s.Search(ctx, "Create user authentication service", nil)
@@ -102,7 +102,7 @@ func TestSTOPSearcher_Search_WithValidDescription(t *testing.T) {
 }
 
 func TestSTOPSearcher_Search_ContextCancellation(t *testing.T) {
-	s := NewSTOPSearcher(nil)
+	s := NewSTOPSearcher(nil, testSearchTimeout)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -115,7 +115,7 @@ func TestSTOPSearcher_Search_ContextCancellation(t *testing.T) {
 }
 
 func TestSTOPSearcher_searchGit_EmptyKeywords(t *testing.T) {
-	s := NewSTOPSearcher(nil)
+	s := NewSTOPSearcher(nil, testSearchTimeout)
 	ctx := context.Background()
 
 	commits, err := s.searchGit(ctx, []string{})
@@ -139,8 +139,8 @@ func TestSTOPSearcher_searchGit_InGitRepo(t *testing.T) {
 		t.Skip("not in a git repository")
 	}
 
-	s := NewSTOPSearcher(nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	s := NewSTOPSearcher(nil, testSearchTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), testSearchTimeout)
 	defer cancel()
 
 	// Search for common git keywords that should exist in most repos
@@ -166,7 +166,7 @@ func TestSTOPSearcher_searchIssues_GHNotAvailable(t *testing.T) {
 	// This test checks graceful fallback when gh is not available
 	// We don't mock the path lookup, just verify behavior
 
-	s := NewSTOPSearcher(nil)
+	s := NewSTOPSearcher(nil, testSearchTimeout)
 	ctx := context.Background()
 
 	issues, err := s.searchIssues(ctx, "test query")
@@ -199,7 +199,7 @@ func TestSTOPSearcher_searchDocs_NoDocsDir(t *testing.T) {
 	os.Chdir(tmpDir)
 	defer os.Chdir(origDir)
 
-	s := NewSTOPSearcher(nil)
+	s := NewSTOPSearcher(nil, testSearchTimeout)
 	ctx := context.Background()
 
 	matches, err := s.searchDocs(ctx, []string{"test", "keyword"})
@@ -247,7 +247,7 @@ func TestSTOPSearcher_searchDocs_WithDocsDir(t *testing.T) {
 	os.Chdir(tmpDir)
 	defer os.Chdir(origDir)
 
-	s := NewSTOPSearcher(nil)
+	s := NewSTOPSearcher(nil, testSearchTimeout)
 	ctx := context.Background()
 
 	matches, err := s.searchDocs(ctx, []string{"authentication"})
@@ -273,7 +273,7 @@ func TestSTOPSearcher_searchDocs_WithDocsDir(t *testing.T) {
 }
 
 func TestSTOPSearcher_searchDocs_EmptyKeywords(t *testing.T) {
-	s := NewSTOPSearcher(nil)
+	s := NewSTOPSearcher(nil, testSearchTimeout)
 	ctx := context.Background()
 
 	matches, err := s.searchDocs(ctx, []string{})
@@ -287,7 +287,7 @@ func TestSTOPSearcher_searchDocs_EmptyKeywords(t *testing.T) {
 }
 
 func TestSTOPSearcher_searchHistory_NoStore(t *testing.T) {
-	s := NewSTOPSearcher(nil) // nil store
+	s := NewSTOPSearcher(nil, testSearchTimeout) // nil store
 	ctx := context.Background()
 
 	hashResult := HashResult{
@@ -324,7 +324,7 @@ func TestSTOPSearcher_searchHistory_WithStore(t *testing.T) {
 		t.Fatalf("failed to add pattern: %v", err)
 	}
 
-	s := NewSTOPSearcher(store)
+	s := NewSTOPSearcher(store, testSearchTimeout)
 
 	// Search with similar hash prefix
 	hashResult := HashResult{
@@ -616,11 +616,6 @@ func TestHistoryMatch_Fields(t *testing.T) {
 	}
 }
 
-func TestSearchTimeout_Constant(t *testing.T) {
-	if SearchTimeout != 5*time.Second {
-		t.Errorf("SearchTimeout = %v, want 5s", SearchTimeout)
-	}
-}
 
 // sliceContainsString checks if a slice contains a specific string.
 func sliceContainsString(slice []string, item string) bool {
@@ -634,8 +629,7 @@ func sliceContainsString(slice []string, item string) bool {
 
 // Benchmark tests
 func BenchmarkSTOPSearcher_Search(b *testing.B) {
-	s := NewSTOPSearcher(nil)
-	s.timeout = 100 * time.Millisecond // Short timeout for benchmark
+	s := NewSTOPSearcher(nil, 100*time.Millisecond) // Short timeout for benchmark
 	ctx := context.Background()
 
 	b.ResetTimer()
