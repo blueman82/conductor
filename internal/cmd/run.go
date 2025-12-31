@@ -729,6 +729,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		SkipCompleted: cfg.SkipCompleted,
 		RetryFailed:   cfg.RetryFailed,
 		TargetTask:    singleTask,
+		Similarity:    claudeSim,
 	})
 
 	// Create context with timeout
