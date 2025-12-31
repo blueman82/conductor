@@ -27,15 +27,17 @@ func buildIntegrationPrompt(task models.Task, plan *models.Plan) string {
 			continue
 		}
 
-		// Dependency section
-		builder.WriteString(fmt.Sprintf("## Dependency: Task %s - %s\n\n", depTask.Number, depTask.Name))
-		builder.WriteString("**Files to read**:\n")
+		// Dependency section using XML format
+		builder.WriteString(fmt.Sprintf("<dependency task=\"%s\" name=\"%s\">\n", depTask.Number, depTask.Name))
+		builder.WriteString("<files_to_read>\n")
 		for _, file := range depTask.Files {
-			builder.WriteString(fmt.Sprintf("- %s\n", file))
+			builder.WriteString(fmt.Sprintf("<file>%s</file>\n", file))
 		}
-		builder.WriteString("\n**WHY YOU MUST READ THESE**:\n")
+		builder.WriteString("</files_to_read>\n")
+		builder.WriteString("<justification>\n")
 		builder.WriteString(generateReadJustification(depTask))
-		builder.WriteString("\n\n")
+		builder.WriteString("\n</justification>\n")
+		builder.WriteString("</dependency>\n\n")
 	}
 
 	// Append original task prompt
