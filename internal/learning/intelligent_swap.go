@@ -117,61 +117,73 @@ func (ias *IntelligentAgentSwapper) SelectAgent(ctx context.Context, swapCtx *Sw
 }
 
 // buildSwapPrompt creates a comprehensive prompt for Claude with all available context
+// Uses XML format for Claude 4 optimization
 func (ias *IntelligentAgentSwapper) buildSwapPrompt(ctx context.Context, swapCtx *SwapContext) (string, error) {
 	var sb strings.Builder
 
-	sb.WriteString("You are selecting a replacement agent for a failed task retry.\n\n")
+	sb.WriteString("<agent_swap_context>\n")
+	sb.WriteString("<role>You are selecting a replacement agent for a failed task retry.</role>\n\n")
 
-	// Task context
-	sb.WriteString("## TASK CONTEXT\n")
-	sb.WriteString(fmt.Sprintf("- Task Number: %s\n", swapCtx.TaskNumber))
-	sb.WriteString(fmt.Sprintf("- Task Name: %s\n", swapCtx.TaskName))
-	sb.WriteString(fmt.Sprintf("- Current Agent (failed): %s\n", swapCtx.CurrentAgent))
-	sb.WriteString(fmt.Sprintf("- Retry Attempt: %d\n", swapCtx.AttemptNumber))
+	// Task context with nested elements
+	sb.WriteString("<task_context>\n")
+	sb.WriteString(fmt.Sprintf("<number>%s</number>\n", swapCtx.TaskNumber))
+	sb.WriteString(fmt.Sprintf("<name>%s</name>\n", swapCtx.TaskName))
+	sb.WriteString(fmt.Sprintf("<current_agent status=\"failed\">%s</current_agent>\n", swapCtx.CurrentAgent))
+	sb.WriteString(fmt.Sprintf("<retry_attempt>%d</retry_attempt>\n", swapCtx.AttemptNumber))
+	sb.WriteString("</task_context>\n")
 
 	// File extensions analysis
 	if len(swapCtx.Files) > 0 {
-		sb.WriteString("\n## FILE CONTEXT\n")
-		sb.WriteString(fmt.Sprintf("Files to modify: %s\n", strings.Join(swapCtx.Files, ", ")))
+		sb.WriteString("\n<file_context>\n")
+		sb.WriteString("<files>\n")
+		for _, file := range swapCtx.Files {
+			sb.WriteString(fmt.Sprintf("<file>%s</file>\n", file))
+		}
+		sb.WriteString("</files>\n")
 
 		// Extract and list file extensions
 		extensions := extractFileExtensions(swapCtx.Files)
 		if len(extensions) > 0 {
-			sb.WriteString(fmt.Sprintf("File extensions: %s\n", strings.Join(extensions, ", ")))
+			sb.WriteString("<extensions>\n")
+			for _, ext := range extensions {
+				sb.WriteString(fmt.Sprintf("<ext>%s</ext>\n", ext))
+			}
+			sb.WriteString("</extensions>\n")
 		}
+		sb.WriteString("</file_context>\n")
 	}
 
 	// Error context from failed attempt
 	if swapCtx.ErrorContext != "" {
-		sb.WriteString("\n## ERROR CONTEXT (from failed attempt)\n")
+		sb.WriteString("\n<error_context source=\"failed_attempt\">\n")
 		// Truncate if too long
 		errorContext := swapCtx.ErrorContext
 		if len(errorContext) > 2000 {
 			errorContext = errorContext[:2000] + "... (truncated)"
 		}
 		sb.WriteString(errorContext)
-		sb.WriteString("\n")
+		sb.WriteString("\n</error_context>\n")
 	}
 
 	// Task description
 	if swapCtx.TaskDescription != "" {
-		sb.WriteString("\n## TASK DESCRIPTION\n")
+		sb.WriteString("\n<task_description>\n")
 		// Truncate if too long
 		taskDesc := swapCtx.TaskDescription
 		if len(taskDesc) > 1500 {
 			taskDesc = taskDesc[:1500] + "... (truncated)"
 		}
 		sb.WriteString(taskDesc)
-		sb.WriteString("\n")
+		sb.WriteString("\n</task_description>\n")
 	}
 
 	// Knowledge graph context - agents that succeeded with similar files
 	if ias.KnowledgeGraph != nil && len(swapCtx.Files) > 0 {
 		graphContext := ias.getKnowledgeGraphContext(ctx, swapCtx.Files)
 		if graphContext != "" {
-			sb.WriteString("\n## HISTORICAL CONTEXT (from knowledge graph)\n")
+			sb.WriteString("\n<historical_context source=\"knowledge_graph\">\n")
 			sb.WriteString(graphContext)
-			sb.WriteString("\n")
+			sb.WriteString("</historical_context>\n")
 		}
 	}
 
@@ -179,53 +191,58 @@ func (ias *IntelligentAgentSwapper) buildSwapPrompt(ctx context.Context, swapCtx
 	if ias.LIPStore != nil {
 		lipContext := ias.getLIPContext(ctx, swapCtx)
 		if lipContext != "" {
-			sb.WriteString("\n## PROGRESS CONTEXT (from LIP)\n")
+			sb.WriteString("\n<progress_context source=\"lip\">\n")
 			sb.WriteString(lipContext)
-			sb.WriteString("\n")
+			sb.WriteString("\n</progress_context>\n")
 		}
 	}
 
-	// Available agents
-	sb.WriteString("\n## AVAILABLE AGENTS\n")
+	// Available agents with name attributes
+	sb.WriteString("\n<available_agents>\n")
 	availableAgents := ias.getAvailableAgents()
 	if len(availableAgents) > 0 {
 		for _, agentName := range availableAgents {
 			if a, exists := ias.Registry.Get(agentName); exists && a.Description != "" {
-				sb.WriteString(fmt.Sprintf("- %s: %s\n", agentName, a.Description))
+				sb.WriteString(fmt.Sprintf("<agent name=\"%s\">%s</agent>\n", agentName, a.Description))
 			} else {
-				sb.WriteString(fmt.Sprintf("- %s\n", agentName))
+				sb.WriteString(fmt.Sprintf("<agent name=\"%s\"/>\n", agentName))
 			}
 		}
 	} else {
-		sb.WriteString("(no agents available in registry)\n")
+		sb.WriteString("<none>No agents available in registry</none>\n")
 	}
+	sb.WriteString("</available_agents>\n")
 
 	// Instructions
 	sb.WriteString(`
-## INSTRUCTIONS
-Analyze the task context, error patterns, and file types to recommend the best agent.
+<instructions>
+<objective>Analyze the task context, error patterns, and file types to recommend the best agent.</objective>
 
-Consider:
-1. File extensions - match agent expertise to the language/framework
-2. Error patterns - what went wrong and which agent can fix it
-3. Historical success - agents that succeeded with similar files
-4. Current agent weaknesses - don't recommend the same agent unless no alternative
-5. Progress made - if significant progress, maybe same approach with different agent
+<considerations>
+<item priority="1">File extensions - match agent expertise to the language/framework</item>
+<item priority="2">Error patterns - what went wrong and which agent can fix it</item>
+<item priority="3">Historical success - agents that succeeded with similar files</item>
+<item priority="4">Current agent weaknesses - don't recommend the same agent unless no alternative</item>
+<item priority="5">Progress made - if significant progress, maybe same approach with different agent</item>
+</considerations>
 
-IMPORTANT:
-- Only select agents from the AVAILABLE AGENTS list
-- Prioritize language/framework specialists for the file types involved
-- Consider the error context to understand what expertise is needed
-- If the current agent is specialized for these files, consider if the error suggests a different approach
+<constraints>
+<constraint>Only select agents from the available_agents list</constraint>
+<constraint>Prioritize language/framework specialists for the file types involved</constraint>
+<constraint>Consider the error context to understand what expertise is needed</constraint>
+<constraint>If the current agent is specialized for these files, consider if the error suggests a different approach</constraint>
+</constraints>
 
-Return a JSON object with:
-- "recommended_agent": the single best agent name
-- "rationale": brief explanation of why this agent was selected
-- "confidence": how certain you are (0.0-1.0)
-- "alternatives": array of 1-2 alternative agent names (optional)
+<response_format type="json">
+<field name="recommended_agent" required="true">The single best agent name</field>
+<field name="rationale" required="true">Brief explanation of why this agent was selected</field>
+<field name="confidence" required="true">How certain you are (0.0-1.0)</field>
+<field name="alternatives" required="false">Array of 1-2 alternative agent names</field>
+<example>{"recommended_agent":"agent-name","rationale":"Selected because...","confidence":0.85,"alternatives":["alt-agent"]}</example>
+</response_format>
+</instructions>
 
-RESPONSE FORMAT (JSON only):
-{"recommended_agent":"agent-name","rationale":"Selected because...","confidence":0.85,"alternatives":["alt-agent"]}
+</agent_swap_context>
 `)
 
 	return sb.String(), nil

@@ -409,21 +409,29 @@ func TestBuildSwapPrompt_MinimalContext(t *testing.T) {
 		t.Error("expected non-empty prompt")
 	}
 
-	// Check for key sections
-	if !contains(prompt, "TASK CONTEXT") {
-		t.Error("prompt should contain TASK CONTEXT section")
+	// Check for XML root wrapper
+	if !contains(prompt, "<agent_swap_context>") {
+		t.Error("prompt should contain <agent_swap_context> root wrapper")
 	}
-	if !contains(prompt, "Task Number: 1") {
-		t.Error("prompt should contain task number")
+	if !contains(prompt, "</agent_swap_context>") {
+		t.Error("prompt should contain closing </agent_swap_context> tag")
 	}
-	if !contains(prompt, "Current Agent (failed): golang-pro") {
-		t.Error("prompt should contain current agent")
+
+	// Check for key XML sections
+	if !contains(prompt, "<task_context>") {
+		t.Error("prompt should contain <task_context> section")
 	}
-	if !contains(prompt, "AVAILABLE AGENTS") {
-		t.Error("prompt should contain AVAILABLE AGENTS section")
+	if !contains(prompt, "<number>1</number>") {
+		t.Error("prompt should contain task number in XML format")
 	}
-	if !contains(prompt, "INSTRUCTIONS") {
-		t.Error("prompt should contain INSTRUCTIONS section")
+	if !contains(prompt, "<current_agent status=\"failed\">golang-pro</current_agent>") {
+		t.Error("prompt should contain current agent with status attribute")
+	}
+	if !contains(prompt, "<available_agents>") {
+		t.Error("prompt should contain <available_agents> section")
+	}
+	if !contains(prompt, "<instructions>") {
+		t.Error("prompt should contain <instructions> section")
 	}
 }
 
@@ -451,28 +459,28 @@ func TestBuildSwapPrompt_FullContext(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Check for file context
-	if !contains(prompt, "FILE CONTEXT") {
-		t.Error("prompt should contain FILE CONTEXT section")
+	// Check for file context in XML format
+	if !contains(prompt, "<file_context>") {
+		t.Error("prompt should contain <file_context> section")
 	}
-	if !contains(prompt, "x.go") {
-		t.Error("prompt should contain file names")
+	if !contains(prompt, "<file>internal/feature/x.go</file>") {
+		t.Error("prompt should contain file names in XML format")
 	}
-	if !contains(prompt, "go") {
-		t.Error("prompt should contain file extensions")
+	if !contains(prompt, "<ext>go</ext>") {
+		t.Error("prompt should contain file extensions in XML format")
 	}
 
-	// Check for error context
-	if !contains(prompt, "ERROR CONTEXT") {
-		t.Error("prompt should contain ERROR CONTEXT section")
+	// Check for error context in XML format
+	if !contains(prompt, "<error_context source=\"failed_attempt\">") {
+		t.Error("prompt should contain <error_context> section with source attribute")
 	}
 	if !contains(prompt, "compilation error") {
 		t.Error("prompt should contain error message")
 	}
 
-	// Check for task description
-	if !contains(prompt, "TASK DESCRIPTION") {
-		t.Error("prompt should contain TASK DESCRIPTION section")
+	// Check for task description in XML format
+	if !contains(prompt, "<task_description>") {
+		t.Error("prompt should contain <task_description> section")
 	}
 }
 
