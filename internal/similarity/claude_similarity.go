@@ -33,17 +33,10 @@ type ClaudeSimilarity struct {
 	Logger     budget.WaiterLogger // For TTS + visual during rate limit wait
 }
 
-// NewClaudeSimilarity creates a similarity instance with defaults
-func NewClaudeSimilarity(logger budget.WaiterLogger) *ClaudeSimilarity {
-	return &ClaudeSimilarity{
-		Timeout:    30 * time.Second,
-		ClaudePath: "claude",
-		Logger:     logger,
-	}
-}
-
-// NewClaudeSimilarityWithConfig creates a similarity instance with custom timeout
-func NewClaudeSimilarityWithConfig(timeout time.Duration, logger budget.WaiterLogger) *ClaudeSimilarity {
+// NewClaudeSimilarity creates a similarity instance with the specified timeout.
+// The timeout parameter controls how long to wait for Claude CLI responses.
+// Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
+func NewClaudeSimilarity(timeout time.Duration, logger budget.WaiterLogger) *ClaudeSimilarity {
 	return &ClaudeSimilarity{
 		Timeout:    timeout,
 		ClaudePath: "claude",

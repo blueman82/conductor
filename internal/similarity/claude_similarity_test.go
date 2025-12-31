@@ -8,10 +8,10 @@ import (
 )
 
 func TestNewClaudeSimilarity(t *testing.T) {
-	cs := NewClaudeSimilarity(nil)
+	cs := NewClaudeSimilarity(90*time.Second, nil)
 
-	if cs.Timeout != 30*time.Second {
-		t.Errorf("Default Timeout = %v, want 30s", cs.Timeout)
+	if cs.Timeout != 90*time.Second {
+		t.Errorf("Timeout = %v, want 90s", cs.Timeout)
 	}
 	if cs.ClaudePath != "claude" {
 		t.Errorf("Default ClaudePath = %s, want claude", cs.ClaudePath)
@@ -21,8 +21,8 @@ func TestNewClaudeSimilarity(t *testing.T) {
 	}
 }
 
-func TestNewClaudeSimilarityWithConfig(t *testing.T) {
-	cs := NewClaudeSimilarityWithConfig(45*time.Second, nil)
+func TestNewClaudeSimilarity_CustomTimeout(t *testing.T) {
+	cs := NewClaudeSimilarity(45*time.Second, nil)
 
 	if cs.Timeout != 45*time.Second {
 		t.Errorf("Timeout = %v, want 45s", cs.Timeout)
@@ -36,7 +36,7 @@ func TestNewClaudeSimilarityWithConfig(t *testing.T) {
 }
 
 func TestBuildPrompt(t *testing.T) {
-	cs := NewClaudeSimilarity(nil)
+	cs := NewClaudeSimilarity(30*time.Second, nil)
 
 	prompt := cs.buildPrompt("First description of a task", "Second description of a task")
 
@@ -147,7 +147,7 @@ func (m *mockWaiterLogger) LogRateLimitAnnounce(remaining, total time.Duration) 
 
 func TestNewClaudeSimilarityWithLogger(t *testing.T) {
 	logger := &mockWaiterLogger{}
-	cs := NewClaudeSimilarity(logger)
+	cs := NewClaudeSimilarity(90*time.Second, logger)
 
 	if cs.Logger == nil {
 		t.Error("Logger should not be nil when provided")
@@ -155,17 +155,8 @@ func TestNewClaudeSimilarityWithLogger(t *testing.T) {
 	if cs.Logger != logger {
 		t.Error("Logger should be the one provided")
 	}
-}
-
-func TestNewClaudeSimilarityWithConfigAndLogger(t *testing.T) {
-	logger := &mockWaiterLogger{}
-	cs := NewClaudeSimilarityWithConfig(60*time.Second, logger)
-
-	if cs.Timeout != 60*time.Second {
-		t.Errorf("Timeout = %v, want 60s", cs.Timeout)
-	}
-	if cs.Logger != logger {
-		t.Error("Logger should be the one provided")
+	if cs.Timeout != 90*time.Second {
+		t.Errorf("Timeout = %v, want 90s", cs.Timeout)
 	}
 }
 
