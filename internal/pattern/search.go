@@ -12,9 +12,6 @@ import (
 	"github.com/harrison/conductor/internal/learning"
 )
 
-// SearchTimeout is the default timeout for each individual search operation.
-const SearchTimeout = 5 * time.Second
-
 // STOPSearcher orchestrates parallel searches across multiple sources
 // as part of the STOP (Search/Think/Outline/Prove) protocol.
 type STOPSearcher struct {
@@ -23,20 +20,16 @@ type STOPSearcher struct {
 	timeout time.Duration
 }
 
-// NewSTOPSearcher creates a new STOPSearcher with the given learning store.
+// NewSTOPSearcher creates a new STOPSearcher with the given learning store and timeout.
+// The timeout parameter controls how long to wait for each individual search operation.
+// Use config.DefaultTimeoutsConfig().Search for the standard timeout value (30s).
 // If store is nil, history search will be skipped gracefully.
-func NewSTOPSearcher(store *learning.Store) *STOPSearcher {
+func NewSTOPSearcher(store *learning.Store, timeout time.Duration) *STOPSearcher {
 	return &STOPSearcher{
 		store:   store,
 		hasher:  NewTaskHasher(),
-		timeout: SearchTimeout,
+		timeout: timeout,
 	}
-}
-
-// WithTimeout sets a custom timeout for individual search operations.
-func (s *STOPSearcher) WithTimeout(timeout time.Duration) *STOPSearcher {
-	s.timeout = timeout
-	return s
 }
 
 // GitCommit represents a matching git commit.
