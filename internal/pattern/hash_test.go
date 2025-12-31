@@ -1,8 +1,29 @@
 package pattern
 
 import (
+	"context"
+	"errors"
 	"testing"
+
+	"github.com/harrison/conductor/internal/similarity"
 )
+
+// mockSim implements similarity.Similarity for testing CompareTasksWithSimilarity
+type mockSim struct {
+	score float64
+	err   error
+}
+
+func (m *mockSim) Compare(ctx context.Context, desc1, desc2 string) (*similarity.SimilarityResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &similarity.SimilarityResult{
+		Score:         m.score,
+		Reasoning:     "Mock result",
+		SemanticMatch: m.score >= 0.8,
+	}, nil
+}
 
 func TestNewTaskHasher(t *testing.T) {
 	h := NewTaskHasher()
@@ -688,4 +709,93 @@ func BenchmarkCompareTasks(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		CompareTasks(hash1, hash2)
 	}
+}
+
+func TestCompareTasksWithSimilarity(t *testing.T) {
+	h := NewTaskHasher()
+	ctx := context.Background()
+
+	desc1 := "Create user authentication service"
+	desc2 := "Implement user login functionality"
+	hash1 := h.Hash(desc1, nil)
+	hash2 := h.Hash(desc2, nil)
+
+	t.Run("uses Claude similarity when available", func(t *testing.T) {
+		mock := &mockSim{score: 0.85}
+		result := CompareTasksWithSimilarity(ctx, desc1, desc2, hash1, hash2, mock)
+		if result != 0.85 {
+			t.Errorf("expected 0.85 from Claude, got %v", result)
+		}
+	})
+
+	t.Run("falls back to Jaccard on nil similarity", func(t *testing.T) {
+		result := CompareTasksWithSimilarity(ctx, desc1, desc2, hash1, hash2, nil)
+		// Should return Jaccard result
+		expected := JaccardSimilarity(hash1.Keywords, hash2.Keywords)
+		if result != expected {
+			t.Errorf("expected Jaccard %v, got %v", expected, result)
+		}
+	})
+
+	t.Run("falls back to Jaccard on Claude error", func(t *testing.T) {
+		mock := &mockSim{err: errors.New("claude unavailable")}
+		result := CompareTasksWithSimilarity(ctx, desc1, desc2, hash1, hash2, mock)
+		expected := JaccardSimilarity(hash1.Keywords, hash2.Keywords)
+		if result != expected {
+			t.Errorf("expected Jaccard %v, got %v", expected, result)
+		}
+	})
+
+	t.Run("returns 1.0 for identical full hash", func(t *testing.T) {
+		sameHash := h.Hash(desc1, nil)
+		mock := &mockSim{score: 0.5}
+		result := CompareTasksWithSimilarity(ctx, desc1, desc1, hash1, sameHash, mock)
+		if result != 1.0 {
+			t.Errorf("expected 1.0 for identical hash, got %v", result)
+		}
+	})
+
+	t.Run("returns 1.0 for identical normalized hash", func(t *testing.T) {
+		hash1 := h.Hash("Create User Service", nil)
+		hash2 := h.Hash("create user service", nil)
+		mock := &mockSim{score: 0.5}
+		result := CompareTasksWithSimilarity(ctx, "Create User Service", "create user service", hash1, hash2, mock)
+		if result != 1.0 {
+			t.Errorf("expected 1.0 for identical normalized hash, got %v", result)
+		}
+	})
+}
+
+func TestIsDuplicateWithSimilarity(t *testing.T) {
+	h := NewTaskHasher()
+	ctx := context.Background()
+
+	desc1 := "Create user authentication"
+	desc2 := "Create user authentication service"
+	hash1 := h.Hash(desc1, nil)
+	hash2 := h.Hash(desc2, nil)
+
+	t.Run("returns true when above threshold", func(t *testing.T) {
+		mock := &mockSim{score: 0.95}
+		result := IsDuplicateWithSimilarity(ctx, desc1, desc2, hash1, hash2, 0.9, mock)
+		if !result {
+			t.Error("expected true for score 0.95 with threshold 0.9")
+		}
+	})
+
+	t.Run("returns false when below threshold", func(t *testing.T) {
+		mock := &mockSim{score: 0.7}
+		result := IsDuplicateWithSimilarity(ctx, desc1, desc2, hash1, hash2, 0.9, mock)
+		if result {
+			t.Error("expected false for score 0.7 with threshold 0.9")
+		}
+	})
+
+	t.Run("works with nil similarity (Jaccard fallback)", func(t *testing.T) {
+		// Should use Jaccard and still work
+		result := IsDuplicateWithSimilarity(ctx, desc1, desc2, hash1, hash2, 0.0, nil)
+		if !result {
+			t.Error("expected true with threshold 0.0")
+		}
+	})
 }

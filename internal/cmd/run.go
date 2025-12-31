@@ -21,6 +21,7 @@ import (
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/parser"
 	"github.com/harrison/conductor/internal/pattern"
+	"github.com/harrison/conductor/internal/similarity"
 	"github.com/harrison/conductor/internal/tts"
 	"github.com/spf13/cobra"
 )
@@ -660,9 +661,14 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Wire Pattern Intelligence (v2.24+)
+	// Wire Pattern Intelligence (v2.24+) with ClaudeSimilarity (v2.32+)
 	if cfg.Pattern.Enabled {
-		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore)
+		// Create ClaudeSimilarity for semantic matching
+		claudeSim := similarity.NewClaudeSimilarityWithConfig(
+			time.Duration(cfg.Pattern.LLMTimeoutSeconds)*time.Second,
+			multiLog,
+		)
+		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore, claudeSim)
 		if pi != nil {
 			// Set up LLM enhancement if enabled
 			if cfg.Pattern.LLMEnhancementEnabled {
