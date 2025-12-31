@@ -22,12 +22,13 @@ type TaskAgentSelector struct {
 	Timeout    time.Duration
 }
 
-// NewTaskAgentSelector creates a new task agent selector with defaults.
-func NewTaskAgentSelector(registry *agent.Registry) *TaskAgentSelector {
+// NewTaskAgentSelector creates a new task agent selector with the specified timeout.
+// The timeout controls how long to wait for Claude's agent selection response.
+func NewTaskAgentSelector(registry *agent.Registry, timeout time.Duration) *TaskAgentSelector {
 	return &TaskAgentSelector{
 		Registry:   registry,
 		ClaudePath: "claude",
-		Timeout:    30 * time.Second,
+		Timeout:    timeout,
 	}
 }
 
