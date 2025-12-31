@@ -1121,7 +1121,7 @@ func LoadConfig(path string) (*Config, error) {
 			}
 		}
 
-		// Merge TTS config
+		// Merge TTS config (note: TTS timeout fallback is applied AFTER timeouts parsing)
 		ttsTimeoutExplicitlySet := false
 		if ttsSection, exists := rawMap["tts"]; exists && ttsSection != nil {
 			tts := yamlCfg.TTS
@@ -1148,9 +1148,6 @@ func LoadConfig(path string) (*Config, error) {
 				ttsTimeoutExplicitlySet = true
 			}
 		}
-
-		// Handle TTS timeout fallback to timeouts.http
-		handleTTSTimeoutFallback(rawMap, cfg, ttsTimeoutExplicitlySet)
 
 		// Merge Budget config
 		if budgetSection, exists := rawMap["budget"]; exists && budgetSection != nil {
@@ -1303,6 +1300,10 @@ func LoadConfig(path string) (*Config, error) {
 		// Handle deprecated timeout fields with migration to timeouts.llm
 		// Only migrate if timeouts.llm was NOT explicitly set
 		handleDeprecatedTimeoutFields(rawMap, cfg, timeoutsLLMExplicitlySet)
+
+		// Handle TTS timeout fallback to timeouts.http
+		// This must be done AFTER timeouts parsing so cfg.Timeouts.HTTP has the correct value
+		handleTTSTimeoutFallback(rawMap, cfg, ttsTimeoutExplicitlySet)
 	}
 
 	// Apply environment variable overrides (highest priority)
