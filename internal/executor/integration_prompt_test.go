@@ -32,8 +32,8 @@ func TestBuildIntegrationPrompt_SingleDependency(t *testing.T) {
 	// Should list dependency files
 	assert.Contains(t, result, "internal/auth/jwt.go")
 	assert.Contains(t, result, "internal/auth/types.go")
-	// Should contain WHY justification
-	assert.Contains(t, result, "WHY")
+	// Should contain justification section (XML format)
+	assert.Contains(t, result, "<justification>")
 	// Should contain original prompt
 	assert.Contains(t, result, "Wire the auth module to the router")
 }

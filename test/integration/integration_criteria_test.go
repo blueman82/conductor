@@ -41,14 +41,14 @@ func TestIntegrationTask_DualCriteriaQC(t *testing.T) {
 	// Build structured review prompt using BuildStructuredReviewPrompt
 	prompt := qc.BuildStructuredReviewPrompt(context.Background(), integrationTask, "dummy output")
 
-	// Verify prompt contains success criteria section
-	if !strings.Contains(prompt, "## SUCCESS CRITERIA") {
-		t.Error("prompt missing ## SUCCESS CRITERIA header")
+	// Verify prompt contains success criteria section (XML format)
+	if !strings.Contains(prompt, "<success_criteria>") {
+		t.Error("prompt missing <success_criteria> section")
 	}
 
-	// Verify prompt contains integration criteria section
-	if !strings.Contains(prompt, "## INTEGRATION CRITERIA") {
-		t.Error("prompt missing ## INTEGRATION CRITERIA header")
+	// Verify prompt contains integration criteria section (XML format)
+	if !strings.Contains(prompt, "<integration_criteria>") {
+		t.Error("prompt missing <integration_criteria> section")
 	}
 
 	// Verify criterion numbering: success criteria (0-1), then integration criteria (2-4)
@@ -275,7 +275,7 @@ func TestIntegrationTask_DependencyContext(t *testing.T) {
 		t.Error("prompt missing instruction about reading dependency files")
 	}
 
-	if !strings.Contains(prompt, "## Dependency:") {
+	if !strings.Contains(prompt, "<dependency") {
 		t.Error("prompt missing dependency section")
 	}
 
@@ -295,18 +295,18 @@ func TestIntegrationTask_PromptBuilding(t *testing.T) {
 
 	prompt := qc.BuildStructuredReviewPrompt(context.Background(), integrationTask, "test output")
 
-	// Verify basic structure
-	if !strings.Contains(prompt, "# Quality Control Review:") {
-		t.Error("prompt missing title")
+	// Verify basic structure (XML format)
+	if !strings.Contains(prompt, "<qc_review") {
+		t.Error("prompt missing QC review wrapper")
 	}
 
-	if !strings.Contains(prompt, "## Task Requirements") {
+	if !strings.Contains(prompt, "<task_requirements>") {
 		t.Error("prompt missing task requirements section")
 	}
 
-	// Verify criteria sections are separated
-	successIdx := strings.Index(prompt, "## SUCCESS CRITERIA")
-	integrationIdx := strings.Index(prompt, "## INTEGRATION CRITERIA")
+	// Verify criteria sections are separated (XML format)
+	successIdx := strings.Index(prompt, "<success_criteria>")
+	integrationIdx := strings.Index(prompt, "<integration_criteria>")
 
 	if successIdx == -1 {
 		t.Error("prompt missing SUCCESS CRITERIA section")
@@ -323,17 +323,10 @@ func TestIntegrationTask_PromptBuilding(t *testing.T) {
 	// Verify each criterion is numbered
 	allLines := strings.Split(prompt, "\n")
 	criteriaStarted := false
-	for i, line := range allLines {
-		if strings.Contains(line, "## SUCCESS CRITERIA") {
+	for _, line := range allLines {
+		if strings.Contains(line, "<success_criteria>") {
 			criteriaStarted = true
-		}
-		if strings.Contains(line, "## INTEGRATION CRITERIA") {
-			// After this point, verify integration criteria are numbered
-			for j := i + 1; j < len(allLines) && strings.TrimSpace(allLines[j]) != ""; j++ {
-				if strings.HasPrefix(strings.TrimSpace(allLines[j]), "[") || strings.HasPrefix(strings.TrimSpace(allLines[j]), "-") {
-					break
-				}
-			}
+			break
 		}
 	}
 

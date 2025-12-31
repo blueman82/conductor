@@ -310,13 +310,13 @@ func TestPatternIntelligenceHook_BuildPromptInjection(t *testing.T) {
 		if result == "" {
 			t.Error("expected non-empty result for valid STOP result")
 		}
-		if !strings.Contains(result, "PATTERN INTELLIGENCE CONTEXT") {
+		if !strings.Contains(result, "<pattern_intelligence>") {
 			t.Error("expected header in injection")
 		}
 		if !strings.Contains(result, "Pattern1") {
 			t.Error("expected similar pattern in injection")
 		}
-		if !strings.Contains(result, "Complexity: 7") {
+		if !strings.Contains(result, `complexity="7"`) {
 			t.Error("expected complexity in injection")
 		}
 	})
@@ -335,7 +335,7 @@ func TestPatternIntelligenceHook_BuildPromptInjection(t *testing.T) {
 		if result == "" {
 			t.Error("expected non-empty result for duplicate result")
 		}
-		if !strings.Contains(result, "Potential Duplicate Detected") {
+		if !strings.Contains(result, "<duplicate_warning") {
 			t.Error("expected duplicate warning in injection")
 		}
 		if !strings.Contains(result, "Similar task") {

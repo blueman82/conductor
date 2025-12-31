@@ -43,7 +43,7 @@ func TestIntegrationTask_BuildsPromptWithDependencyContext(t *testing.T) {
 	if !strings.Contains(prompt, "Before implementing, you MUST read these dependency files") {
 		t.Error("prompt missing file read instruction")
 	}
-	if !strings.Contains(prompt, "## Dependency:") {
+	if !strings.Contains(prompt, "<dependency") {
 		t.Error("prompt missing dependency section")
 	}
 }
