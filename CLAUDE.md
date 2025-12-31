@@ -9,9 +9,11 @@ Conductor is a Go CLI for autonomous multi-agent orchestration. It parses plan f
 
 ## Quick Reference
 
+**Note:** `conductor` is in PATH. Use `conductor` directly, not `./conductor`.
+
 ```bash
 # Build & Run
-go build ./cmd/conductor && ./conductor run plan.md
+go build ./cmd/conductor && conductor run plan.md
 make build-patch  # Auto-increment version
 
 # Testing
