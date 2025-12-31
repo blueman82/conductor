@@ -6,7 +6,7 @@ allowed-tools: Read, Bash, Glob, Grep, Write, TodoWrite
 
 # Implementation Planner Skill
 
-**Version:** 3.0.0
+**Version:** 3.1.0
 **Purpose:** Generate conductor-compatible YAML implementation plans with built-in validation.
 
 ## Activation
@@ -66,13 +66,39 @@ grep -r "CREATE TABLE" internal/learning/     # Where does SQL live?
 3. For each task, identify what it consumes
 4. Validate `depends_on` includes ALL producers
 
+**TWO REQUIRED OUTPUTS:**
+
+1. **Comment block** (for human readability at top of plan):
 ```yaml
-# Add to plan header:
+# ═══════════════════════════════════════════════════════════════
 # DATA FLOW REGISTRY
+# ═══════════════════════════════════════════════════════════════
 # PRODUCERS: Task 4 → ExtractMetrics, Task 5 → LoadSession
 # CONSUMERS: Task 16 → [4, 5, 15]
 # VALIDATION: All consumers depend_on their producers ✓
 ```
+
+2. **YAML field** (Conductor validates this when `data_flow_registry` is in `required_features`):
+```yaml
+data_flow_registry:
+  producers:
+    ExtractMetrics:
+      - task: 4
+        description: "Creates ExtractMetrics function"
+    LoadSession:
+      - task: 5
+        description: "Creates LoadSession function"
+  consumers:
+    ExtractMetrics:
+      - task: 16
+        description: "Uses ExtractMetrics for analysis"
+    LoadSession:
+      - task: 16
+        description: "Uses LoadSession to load data"
+  documentation_targets: {}  # Optional: maps task numbers to doc locations
+```
+
+**IMPORTANT:** The comment block is for human planning. The YAML field is what Conductor validates.
 
 ---
 
@@ -373,9 +399,20 @@ planner_compliance:
     - test_commands
     - documentation_targets
     - success_criteria
-    - data_flow_registry
-    # Go projects only:
-    # - package_guard
+    - data_flow_registry  # Requires data_flow_registry YAML field (see section 2.3)
+    - package_guard       # Go projects: validates tasks only modify declared files
+
+# Required when data_flow_registry is in required_features:
+data_flow_registry:
+  producers:
+    FunctionOrTypeName:
+      - task: 1
+        description: "Creates this function/type"
+  consumers:
+    FunctionOrTypeName:
+      - task: 5
+        description: "Uses this function/type"
+  documentation_targets: {}  # Optional
 
 plan:
   metadata:
@@ -536,6 +573,11 @@ Run: conductor run docs/plans/<slug>.yaml
 ---
 
 ## Version History
+
+### v3.1.0 (2025-12-31)
+- **Clarified data_flow_registry: comment block + YAML field (section 2.3)**
+- Added actual YAML structure for data_flow_registry
+- Made package_guard explicit (not commented) in required_features
 
 ### v3.0.0 (2025-12-01)
 - **Consolidated from 5500 lines to ~450 lines**

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/architecture"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/models"
@@ -90,50 +91,56 @@ func (h *ArchitectureCheckpointHook) CheckTask(ctx context.Context, task models.
 	return result, nil
 }
 
-// buildPromptInjection creates architecture context for injection into agent prompt
+// buildPromptInjection creates architecture context for injection into agent prompt.
+// Uses XML format for structured content per Claude 4 best practices.
 func (h *ArchitectureCheckpointHook) buildPromptInjection(assessment *architecture.AssessmentResult) string {
 	if assessment == nil || !assessment.RequiresReview {
 		return ""
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n---\n## ARCHITECTURE CHECKPOINT CONTEXT\n\n")
-	sb.WriteString(fmt.Sprintf("**Assessment**: %s\n\n", assessment.Summary))
+	sb.WriteString("\n<architecture_checkpoint>\n")
+	sb.WriteString(agent.XMLTag("assessment", assessment.Summary))
+	sb.WriteString("\n")
 
 	flagged := assessment.FlaggedQuestions()
 	if len(flagged) > 0 {
-		sb.WriteString("### Architectural Concerns Flagged\n")
+		sb.WriteString("<architectural_concerns>\n")
 		for _, q := range flagged {
-			sb.WriteString(fmt.Sprintf("- %s\n", q))
+			sb.WriteString(agent.XMLTag("concern", q))
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</architectural_concerns>\n")
 	}
 
 	// Add specific reasoning for flagged questions
+	sb.WriteString("<reasoning>\n")
 	if assessment.CoreInfrastructure.Answer {
-		sb.WriteString(fmt.Sprintf("**Core Infrastructure**: %s\n", assessment.CoreInfrastructure.Reasoning))
+		sb.WriteString(fmt.Sprintf("<core_infrastructure>%s</core_infrastructure>\n", assessment.CoreInfrastructure.Reasoning))
 	}
 	if assessment.ReuseConcerns.Answer {
-		sb.WriteString(fmt.Sprintf("**Reuse Concerns**: %s\n", assessment.ReuseConcerns.Reasoning))
+		sb.WriteString(fmt.Sprintf("<reuse_concerns>%s</reuse_concerns>\n", assessment.ReuseConcerns.Reasoning))
 	}
 	if assessment.NewAbstractions.Answer {
-		sb.WriteString(fmt.Sprintf("**New Abstractions**: %s\n", assessment.NewAbstractions.Reasoning))
+		sb.WriteString(fmt.Sprintf("<new_abstractions>%s</new_abstractions>\n", assessment.NewAbstractions.Reasoning))
 	}
 	if assessment.APIContracts.Answer {
-		sb.WriteString(fmt.Sprintf("**API Contracts**: %s\n", assessment.APIContracts.Reasoning))
+		sb.WriteString(fmt.Sprintf("<api_contracts>%s</api_contracts>\n", assessment.APIContracts.Reasoning))
 	}
 	if assessment.FrameworkLifecycle.Answer {
-		sb.WriteString(fmt.Sprintf("**Framework Lifecycle**: %s\n", assessment.FrameworkLifecycle.Reasoning))
+		sb.WriteString(fmt.Sprintf("<framework_lifecycle>%s</framework_lifecycle>\n", assessment.FrameworkLifecycle.Reasoning))
 	}
 	if assessment.CrossCuttingConcerns.Answer {
-		sb.WriteString(fmt.Sprintf("**Cross-Cutting Concerns**: %s\n", assessment.CrossCuttingConcerns.Reasoning))
+		sb.WriteString(fmt.Sprintf("<cross_cutting_concerns>%s</cross_cutting_concerns>\n", assessment.CrossCuttingConcerns.Reasoning))
 	}
+	sb.WriteString("</reasoning>\n")
 
 	if h.config.RequireJustification {
-		sb.WriteString("\n**IMPORTANT**: You must justify any architectural decisions in your output.\n")
+		sb.WriteString(agent.XMLTag("important", "You must justify any architectural decisions in your output."))
+		sb.WriteString("\n")
 	}
 
-	sb.WriteString("\n---\n")
+	sb.WriteString("</architecture_checkpoint>\n")
 	return sb.String()
 }
 

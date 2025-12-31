@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -71,7 +72,7 @@ func FormatTestResults(results []TestCommandResult) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("## TEST COMMAND RESULTS\n\n")
+	sb.WriteString("<test_command_results>\n")
 
 	allPassed := true
 	for _, r := range results {
@@ -79,30 +80,32 @@ func FormatTestResults(results []TestCommandResult) string {
 			allPassed = false
 		}
 
-		status := "✅ PASS"
+		status := "passed"
 		if !r.Passed {
-			status = "❌ FAIL"
+			status = "failed"
 		}
 
-		sb.WriteString(fmt.Sprintf("### `%s` [%s] (%v)\n", r.Command, status, r.Duration.Round(time.Millisecond)))
+		sb.WriteString(fmt.Sprintf("<test_result status=\"%s\" command=\"%s\" duration=\"%v\">\n",
+			status, r.Command, r.Duration.Round(time.Millisecond)))
 
 		if r.Output != "" {
-			sb.WriteString("```\n")
-			sb.WriteString(strings.TrimSpace(r.Output))
-			sb.WriteString("\n```\n")
+			sb.WriteString(agent.XMLSection("output", strings.TrimSpace(r.Output)))
+			sb.WriteString("\n")
 		}
 
 		if r.Error != nil {
-			sb.WriteString(fmt.Sprintf("**Error:** %v\n", r.Error))
+			sb.WriteString(agent.XMLTag("error", fmt.Sprintf("%v", r.Error)))
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</test_result>\n")
 	}
 
 	if allPassed {
-		sb.WriteString("**Summary:** All test commands passed ✅\n")
+		sb.WriteString("<summary>All test commands passed</summary>\n")
 	} else {
-		sb.WriteString("**Summary:** One or more test commands failed ❌\n")
+		sb.WriteString("<summary>One or more test commands failed</summary>\n")
 	}
 
+	sb.WriteString("</test_command_results>\n")
 	return sb.String()
 }

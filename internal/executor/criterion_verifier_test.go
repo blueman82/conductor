@@ -297,8 +297,8 @@ func TestFormatCriterionResults_AllPass(t *testing.T) {
 		t.Error("expected non-empty formatted string")
 	}
 
-	// Should contain pass markers
-	if !containsString(formatted, "✅") && !containsString(formatted, "PASS") {
+	// Should contain XML pass markers
+	if !containsString(formatted, `status="passed"`) {
 		t.Error("expected pass indicators in output")
 	}
 }
@@ -315,8 +315,8 @@ func TestFormatCriterionResults_WithFailure(t *testing.T) {
 		t.Error("expected non-empty formatted string")
 	}
 
-	// Should contain failure markers
-	if !containsString(formatted, "❌") && !containsString(formatted, "FAIL") {
+	// Should contain XML failure markers
+	if !containsString(formatted, `status="failed"`) {
 		t.Error("expected failure indicators in output")
 	}
 }

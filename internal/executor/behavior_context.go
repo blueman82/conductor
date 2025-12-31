@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/behavioral"
 )
 
@@ -17,10 +18,10 @@ func FormatBehaviorContext(metrics *behavioral.BehavioralMetrics) string {
 
 	var sb strings.Builder
 
-	sb.WriteString("## BEHAVIORAL ANALYSIS CONTEXT\n\n")
+	sb.WriteString("<behavioral_analysis>\n")
 
 	// Session summary
-	sb.WriteString(fmt.Sprintf("**Sessions**: %d | **Success Rate**: %.1f%% | **Avg Duration**: %s\n\n",
+	sb.WriteString(fmt.Sprintf("<session_summary sessions=\"%d\" success_rate=\"%.1f%%\" avg_duration=\"%s\"/>\n",
 		metrics.TotalSessions,
 		metrics.SuccessRate*100,
 		formatDuration(metrics.AverageDuration)))
@@ -28,24 +29,26 @@ func FormatBehaviorContext(metrics *behavioral.BehavioralMetrics) string {
 	// Cost summary
 	if costSummary := SummarizeCost(metrics); costSummary != "" {
 		sb.WriteString(costSummary)
-		sb.WriteString("\n\n")
+		sb.WriteString("\n")
 	}
 
 	// Tool usage summary
 	if toolSummary := SummarizeToolUsage(metrics); toolSummary != "" {
 		sb.WriteString(toolSummary)
-		sb.WriteString("\n\n")
+		sb.WriteString("\n")
 	}
 
 	// Anomalies
 	if anomalies := IdentifyAnomalies(metrics); len(anomalies) > 0 {
-		sb.WriteString("### Anomalies Detected\n")
+		sb.WriteString("<anomalies>\n")
 		for _, anomaly := range anomalies {
-			sb.WriteString(fmt.Sprintf("- %s\n", anomaly))
+			sb.WriteString(agent.XMLTag("item", anomaly))
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
+		sb.WriteString("</anomalies>\n")
 	}
 
+	sb.WriteString("</behavioral_analysis>\n")
 	return sb.String()
 }
 
@@ -123,26 +126,28 @@ func SummarizeCost(metrics *behavioral.BehavioralMetrics) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("### Cost Summary\n")
+	sb.WriteString("<cost_summary>\n")
 
 	totalTokens := metrics.TokenUsage.TotalTokens()
 	if totalTokens > 0 {
-		sb.WriteString(fmt.Sprintf("- **Tokens**: %s input / %s output (%s total)\n",
+		sb.WriteString(fmt.Sprintf("<tokens input=\"%s\" output=\"%s\" total=\"%s\"/>\n",
 			formatTokenCount(metrics.TokenUsage.InputTokens),
 			formatTokenCount(metrics.TokenUsage.OutputTokens),
 			formatTokenCount(totalTokens)))
 	}
 
 	if metrics.TokenUsage.CostUSD > 0 {
-		sb.WriteString(fmt.Sprintf("- **Cost**: $%.4f\n", metrics.TokenUsage.CostUSD))
+		sb.WriteString(fmt.Sprintf("<cost>$%.4f</cost>\n", metrics.TokenUsage.CostUSD))
 	} else if metrics.TotalCost > 0 {
-		sb.WriteString(fmt.Sprintf("- **Cost**: $%.4f\n", metrics.TotalCost))
+		sb.WriteString(fmt.Sprintf("<cost>$%.4f</cost>\n", metrics.TotalCost))
 	}
 
 	if metrics.TokenUsage.ModelName != "" {
-		sb.WriteString(fmt.Sprintf("- **Model**: %s\n", metrics.TokenUsage.ModelName))
+		sb.WriteString(agent.XMLTag("model", metrics.TokenUsage.ModelName))
+		sb.WriteString("\n")
 	}
 
+	sb.WriteString("</cost_summary>")
 	return sb.String()
 }
 
@@ -153,7 +158,7 @@ func SummarizeToolUsage(metrics *behavioral.BehavioralMetrics) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("### Tool Usage\n")
+	sb.WriteString("<tool_usage>\n")
 
 	// Sort tools by usage count (descending)
 	tools := make([]behavioral.ToolExecution, len(metrics.ToolExecutions))
@@ -170,22 +175,23 @@ func SummarizeToolUsage(metrics *behavioral.BehavioralMetrics) string {
 
 	for i := 0; i < maxTools; i++ {
 		tool := tools[i]
-		successIndicator := ""
+		status := "ok"
 		if tool.Count > 0 {
 			if tool.SuccessRate >= 0.9 {
-				successIndicator = " [OK]"
+				status = "ok"
 			} else if tool.SuccessRate < 0.7 {
-				successIndicator = " [ISSUES]"
+				status = "issues"
 			}
 		}
-		sb.WriteString(fmt.Sprintf("- **%s**: %d calls (%.0f%% success, avg %s)%s\n",
-			tool.Name, tool.Count, tool.SuccessRate*100, formatDuration(tool.AvgDuration), successIndicator))
+		sb.WriteString(fmt.Sprintf("<tool name=\"%s\" calls=\"%d\" success_rate=\"%.0f%%\" avg_duration=\"%s\" status=\"%s\"/>\n",
+			tool.Name, tool.Count, tool.SuccessRate*100, formatDuration(tool.AvgDuration), status))
 	}
 
 	if len(tools) > maxTools {
-		sb.WriteString(fmt.Sprintf("- ... and %d more tools\n", len(tools)-maxTools))
+		sb.WriteString(fmt.Sprintf("<more_tools count=\"%d\"/>\n", len(tools)-maxTools))
 	}
 
+	sb.WriteString("</tool_usage>")
 	return sb.String()
 }
 

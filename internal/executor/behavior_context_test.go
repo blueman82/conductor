@@ -29,9 +29,10 @@ func TestFormatBehaviorContext(t *testing.T) {
 				AverageDuration: 30 * time.Second,
 			},
 			contains: []string{
-				"BEHAVIORAL ANALYSIS CONTEXT",
-				"Sessions**: 5",
-				"Success Rate**: 80.0%",
+				"<behavioral_analysis>",
+				"</behavioral_analysis>",
+				`sessions="5"`,
+				`success_rate="80.0%"`,
 			},
 		},
 		{
@@ -46,9 +47,9 @@ func TestFormatBehaviorContext(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"Tool Usage",
-				"Read",
-				"Write",
+				"<tool_usage>",
+				`name="Read"`,
+				`name="Write"`,
 			},
 		},
 		{
@@ -66,8 +67,8 @@ func TestFormatBehaviorContext(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"Cost Summary",
-				"Tokens",
+				"<cost_summary>",
+				"<tokens",
 				"claude-sonnet-4-5",
 			},
 		},
@@ -225,7 +226,7 @@ func TestSummarizeCost(t *testing.T) {
 					ModelName:    "claude-sonnet-4-5",
 				},
 			},
-			contains: []string{"Cost Summary", "5.0K input", "2.0K output", "$0.1000", "claude-sonnet-4-5"},
+			contains: []string{"<cost_summary>", `input="5.0K"`, `output="2.0K"`, "$0.1000", "claude-sonnet-4-5"},
 		},
 		{
 			name: "large token counts formatted with M suffix",
@@ -235,7 +236,7 @@ func TestSummarizeCost(t *testing.T) {
 					OutputTokens: 500000,
 				},
 			},
-			contains: []string{"1.50M input", "500.0K output"},
+			contains: []string{`input="1.50M"`, `output="500.0K"`},
 		},
 	}
 
@@ -281,7 +282,7 @@ func TestSummarizeToolUsage(t *testing.T) {
 					{Name: "Read", Count: 10, SuccessRate: 0.9, AvgDuration: 50 * time.Millisecond},
 				},
 			},
-			contains: []string{"Tool Usage", "Read**: 10 calls", "Write**: 3 calls"},
+			contains: []string{"<tool_usage>", `name="Read" calls="10"`, `name="Write" calls="3"`},
 		},
 		{
 			name: "success indicators shown",
@@ -291,7 +292,7 @@ func TestSummarizeToolUsage(t *testing.T) {
 					{Name: "Bash", Count: 5, SuccessRate: 0.5, AvgDuration: 200 * time.Millisecond},
 				},
 			},
-			contains: []string{"[OK]", "[ISSUES]"},
+			contains: []string{`status="ok"`, `status="issues"`},
 		},
 		{
 			name: "max 5 tools shown with overflow indicator",
@@ -305,7 +306,7 @@ func TestSummarizeToolUsage(t *testing.T) {
 					{Name: "Tool6", Count: 1, SuccessRate: 1.0, AvgDuration: 10 * time.Millisecond},
 				},
 			},
-			contains: []string{"and 1 more tools"},
+			contains: []string{`<more_tools count="1"/>`},
 		},
 	}
 

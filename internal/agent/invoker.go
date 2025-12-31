@@ -101,32 +101,49 @@ func serializeAgentToJSON(agent *Agent) (string, error) {
 }
 
 // PrepareAgentPrompt adds formatting instructions to agent prompts for consistent output
-// Includes explicit JSON format instruction at end of prompt for guaranteed valid JSON output
+// Includes Claude 4 enhancements and XML-formatted response instructions for guaranteed valid JSON output
 // Note: --json-schema is not enforced with --agents flag, so explicit format instruction is critical
 func PrepareAgentPrompt(prompt string) string {
-	const instructionSuffix = `
+	// Add Claude 4-specific enhancements
+	enhanced := EnhancePromptForClaude4(prompt)
 
-CRITICAL: Respond with ONLY this exact JSON, nothing else - no prose, no explanation, no markdown, no tags:
-{"status":"success","summary":"...","output":"...","errors":[],"files_modified":[]}`
-	return prompt + instructionSuffix
+	// XML-formatted response instructions
+	responseFormat := XMLSection("response_format",
+		`CRITICAL: Respond with ONLY valid JSON matching the provided schema.
+No markdown, no code fences, no XML tags in output, no prose, no explanations.
+Output raw JSON only.
+
+Required JSON structure:
+{"status":"success","summary":"...","output":"...","errors":[],"files_modified":[]}`)
+
+	return enhanced + "\n\n" + responseFormat
 }
 
 // PrepareQCPrompt adds formatting instructions to QC review prompts
-// Includes explicit JSON format instruction at end of prompt for guaranteed valid QC response
+// Includes Claude 4 enhancements and XML-formatted response instructions for guaranteed valid QC response
 // Note: --json-schema is not enforced with --agents flag, so explicit format instruction is critical
 func PrepareQCPrompt(prompt string) string {
-	const instructionSuffix = `
+	// Add Claude 4-specific enhancements
+	enhanced := EnhancePromptForClaude4(prompt)
 
-## RESPONSE INSTRUCTIONS
+	// Build XML-formatted instructions
+	var sb strings.Builder
 
-CRITICAL CONSISTENCY RULE: Your feedback text MUST be consistent with criteria_results:
+	sb.WriteString(XMLSection("response_instructions", `
+<consistency_rule>
+CRITICAL: Your feedback text MUST be consistent with criteria_results:
 - If ANY criterion has "passed": false, feedback MUST mention which criterion failed and why
 - NEVER say "successfully completed" or similar if any criterion failed
 - If verdict is RED, feedback MUST describe what needs to be fixed
+</consistency_rule>
 
-CRITICAL: Respond with ONLY this exact JSON, nothing else - no prose, no explanation, no markdown, no tags:
-{"verdict":"GREEN","feedback":"...","criteria_results":[{"index":0,"criterion":"...","passed":true,"evidence":"..."}],"should_retry":false}`
-	return prompt + instructionSuffix
+<response_format>
+Respond with ONLY valid JSON matching the QC schema. No prose, no markdown.
+Required structure:
+{"verdict":"GREEN|YELLOW|RED","feedback":"...","criteria_results":[{"index":0,"criterion":"...","passed":true,"evidence":"..."}],"should_retry":false}
+</response_format>`))
+
+	return enhanced + "\n\n" + sb.String()
 }
 
 // parseAgentJSON parses JSON response from agent
@@ -221,6 +238,7 @@ func (inv *Invoker) BuildCommandArgs(task models.Task) []string {
 	}
 
 	// Add -p flag for non-interactive print mode (essential for automation)
+	// Note: -p "prompt" works (prompt as positional arg after -p flag)
 	args = append(args, "-p", prompt)
 
 	// Skip permissions for automation (allow file creation)
@@ -353,6 +371,19 @@ func (inv *Invoker) Invoke(ctx context.Context, task models.Task) (*InvocationRe
 
 	// Build command args
 	args := inv.BuildCommandArgs(task)
+
+	// DEBUG: Log raw command syntax for debugging invocation issues
+	fmt.Fprintf(os.Stderr, "\n\033[33m[DEBUG] Raw Claude CLI command:\033[0m\n")
+	fmt.Fprintf(os.Stderr, "\033[36m%s", inv.ClaudePath)
+	for _, arg := range args {
+		// Quote args containing spaces or special chars
+		if strings.ContainsAny(arg, " \t\n\"'{}[]") {
+			fmt.Fprintf(os.Stderr, " '%s'", strings.ReplaceAll(arg, "'", "'\"'\"'"))
+		} else {
+			fmt.Fprintf(os.Stderr, " %s", arg)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "\033[0m\n\n")
 
 	// Pretty log the agent invocation
 	inv.logInvocation(task, args)

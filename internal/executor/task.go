@@ -819,13 +819,12 @@ func (te *DefaultTaskExecutor) getGitDiffContext() string {
 
 	return fmt.Sprintf(`
 
----
-## RATE LIMIT RECOVERY - PARTIAL PROGRESS DETECTED
-The following files were modified before the rate limit. DO NOT re-apply changes that already exist.
-Review the current state and continue from where you left off.
-
+<rate_limit_recovery>
+<instruction>The following files were modified before the rate limit. DO NOT re-apply changes that already exist. Review the current state and continue from where you left off.</instruction>
+<modified_files>
 %s
----`, diffStr)
+</modified_files>
+</rate_limit_recovery>`, diffStr)
 }
 
 // Execute runs an individual task, handling agent invocation, quality control, and plan updates.
@@ -1305,7 +1304,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 					}
 				}
 
-				task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - TEST COMMANDS FAILED (MUST FIX):\n%s\n%s\n---\n\nFix ALL test failures listed above before completing the task.",
+				task.Prompt = fmt.Sprintf("%s\n\n<previous_attempt_failed reason=\"test_commands\">\n<test_results>\n%s\n</test_results>\n%s\n<action_required>Fix ALL test failures listed above before completing the task.</action_required>\n</previous_attempt_failed>",
 					task.Prompt, testFeedback, classificationContext)
 			}
 
@@ -1538,7 +1537,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 			// Format failed criteria for explicit feedback (v2.16+)
 			failedCriteriaFeedback := formatFailedCriteria(review.CriteriaResults)
 
-			task.Prompt = fmt.Sprintf("%s\n\n---\n## PREVIOUS ATTEMPT FAILED - QC FEEDBACK (MUST ADDRESS):\n%s%s%s\n---\n\nFix ALL issues listed above before completing the task.",
+			task.Prompt = fmt.Sprintf("%s\n\n<previous_attempt_failed reason=\"qc_feedback\">\n<qc_feedback>\n%s\n</qc_feedback>\n%s%s\n<action_required>Fix ALL issues listed above before completing the task.</action_required>\n</previous_attempt_failed>",
 				task.Prompt, review.Feedback, failedCriteriaFeedback, classificationContext)
 		}
 	}
@@ -1635,19 +1634,22 @@ func formatFailedCriteria(results []models.CriterionResult) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n### Failed Success Criteria (MUST FIX)\n\n")
+	sb.WriteString("\n<failed_criteria>\n")
 
 	for _, f := range failed {
 		criterion := f.Criterion
 		if criterion == "" {
 			criterion = fmt.Sprintf("Criterion %d", f.Index+1)
 		}
-		sb.WriteString(fmt.Sprintf("- **[%d]** %s\n", f.Index+1, criterion))
+		sb.WriteString(fmt.Sprintf("<criterion index=\"%d\">\n", f.Index+1))
+		sb.WriteString(fmt.Sprintf("<description>%s</description>\n", criterion))
 		if f.FailReason != "" {
-			sb.WriteString(fmt.Sprintf("  - Reason: %s\n", f.FailReason))
+			sb.WriteString(fmt.Sprintf("<reason>%s</reason>\n", f.FailReason))
 		}
+		sb.WriteString("</criterion>\n")
 	}
 
+	sb.WriteString("</failed_criteria>")
 	return sb.String()
 }
 
@@ -1741,7 +1743,7 @@ func formatClassificationForRetry(errors []*DetectedError) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n### Error Classification Guidance\n\n")
+	sb.WriteString("\n<error_classification>\n")
 
 	for i, err := range errors {
 		if err == nil || err.Pattern == nil {
@@ -1751,13 +1753,15 @@ func formatClassificationForRetry(errors []*DetectedError) string {
 		category := err.Pattern.Category.String()
 		suggestion := err.Pattern.Suggestion
 
-		sb.WriteString(fmt.Sprintf("**Error %d** (%s", i+1, category))
 		if err.Method == "claude" {
-			sb.WriteString(fmt.Sprintf(", %.0f%% confidence", err.Confidence*100))
+			sb.WriteString(fmt.Sprintf("<error index=\"%d\" category=\"%s\" confidence=\"%.0f%%\">\n", i+1, category, err.Confidence*100))
+		} else {
+			sb.WriteString(fmt.Sprintf("<error index=\"%d\" category=\"%s\">\n", i+1, category))
 		}
-		sb.WriteString("):\n")
-		sb.WriteString(fmt.Sprintf("- %s\n\n", suggestion))
+		sb.WriteString(fmt.Sprintf("<suggestion>%s</suggestion>\n", suggestion))
+		sb.WriteString("</error>\n")
 	}
 
+	sb.WriteString("</error_classification>")
 	return sb.String()
 }

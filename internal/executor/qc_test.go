@@ -1532,8 +1532,8 @@ func TestBuildStructuredReviewPrompt_WithIntegrationCriteria(t *testing.T) {
 		t.Error("integration criterion 2 (index 4) not found")
 	}
 
-	// Verify INTEGRATION CRITERIA section header
-	if !contains(prompt, "## INTEGRATION CRITERIA") {
+	// Verify INTEGRATION CRITERIA section header (XML format)
+	if !contains(prompt, "<integration_criteria>") {
 		t.Error("INTEGRATION CRITERIA section header not found")
 	}
 }
@@ -1562,8 +1562,8 @@ func TestBuildStructuredReviewPrompt_IntegrationWithoutSuccessCriteria(t *testin
 		t.Error("integration criterion 1 (index 1) not found")
 	}
 
-	// Verify INTEGRATION CRITERIA section header
-	if !contains(prompt, "## INTEGRATION CRITERIA") {
+	// Verify INTEGRATION CRITERIA section header (XML format)
+	if !contains(prompt, "<integration_criteria>") {
 		t.Error("INTEGRATION CRITERIA section header not found")
 	}
 }
@@ -2003,9 +2003,9 @@ func TestReview_WithStructuredCriteria(t *testing.T) {
 				t.Errorf("Review() Flag = %q, want %q", result.Flag, tt.wantFlag)
 			}
 
-			// Verify structured prompt was used
+			// Verify structured prompt was used (XML format)
 			if tt.wantCriteria {
-				if !contains(capturedPrompt, "SUCCESS CRITERIA") {
+				if !contains(capturedPrompt, "<success_criteria>") {
 					t.Error("should use structured prompt with SUCCESS CRITERIA section")
 				}
 			}
@@ -2405,17 +2405,17 @@ func TestReview_StructuredPromptContainsRequiredSections(t *testing.T) {
 		t.Fatalf("Review() error = %v", err)
 	}
 
-	// Verify structured prompt sections (they are combined with JSON instructions)
-	if !contains(capturedPrompt, "# Quality Control Review: Structured Review") {
+	// Verify structured prompt sections (they are combined with JSON instructions - now XML format)
+	if !contains(capturedPrompt, "<qc_review task=\"Structured Review\">") {
 		t.Errorf("prompt missing task name header, got: %s", capturedPrompt[:min(500, len(capturedPrompt))])
 	}
-	if !contains(capturedPrompt, "SUCCESS CRITERIA - VERIFY EACH ONE") {
+	if !contains(capturedPrompt, "<success_criteria>") {
 		t.Error("prompt missing success criteria section")
 	}
 	if !contains(capturedPrompt, "0. [ ] Feature works correctly") {
 		t.Error("prompt missing numbered criterion")
 	}
-	if !contains(capturedPrompt, "TEST COMMANDS") {
+	if !contains(capturedPrompt, "<test_commands>") {
 		t.Error("prompt missing test commands section")
 	}
 	if !contains(capturedPrompt, "go test ./...") {
@@ -2666,21 +2666,21 @@ func TestBuildStructuredReviewPrompt_DualCriteria(t *testing.T) {
 			ctx := context.Background()
 			prompt := qc.BuildStructuredReviewPrompt(ctx, task, "agent output")
 
-			// Verify SUCCESS CRITERIA section is present if there are any criteria
+			// Verify SUCCESS CRITERIA section is present if there are any criteria (XML format)
 			if (tt.successCriteria != nil && len(tt.successCriteria) > 0) || (tt.integrationCriteria != nil && len(tt.integrationCriteria) > 0) {
-				if !contains(prompt, "## SUCCESS CRITERIA") {
+				if !contains(prompt, "<success_criteria>") {
 					t.Error("SUCCESS CRITERIA section header missing")
 				}
 			}
 
-			// Verify INTEGRATION CRITERIA section presence
+			// Verify INTEGRATION CRITERIA section presence (XML format)
 			if tt.wantIntegrationCriteria && tt.taskType == "integration" && len(tt.integrationCriteria) > 0 {
-				if !contains(prompt, "## INTEGRATION CRITERIA") {
+				if !contains(prompt, "<integration_criteria>") {
 					t.Error("INTEGRATION CRITERIA section header missing")
 				}
 			} else if tt.wantIntegrationCriteria && tt.taskType == "integration" && len(tt.integrationCriteria) == 0 {
 				// Integration type but no integration criteria - should NOT have the header
-				if contains(prompt, "## INTEGRATION CRITERIA - VERIFY EACH ONE") {
+				if contains(prompt, "<integration_criteria>") {
 					t.Error("INTEGRATION CRITERIA section header should not be present when no integration criteria")
 				}
 			}
@@ -2708,8 +2708,8 @@ func TestBuildStructuredReviewPrompt_DualCriteria(t *testing.T) {
 				t.Error("Task name not found in prompt")
 			}
 
-			// Verify agent output section
-			if !contains(prompt, "## AGENT OUTPUT") {
+			// Verify agent output section (XML format)
+			if !contains(prompt, "<agent_output>") {
 				t.Error("AGENT OUTPUT section missing")
 			}
 			if !contains(prompt, "agent output") {
@@ -2749,13 +2749,13 @@ func TestBuildStructuredReviewPrompt_DualCriteria_Ordering(t *testing.T) {
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "implementation output")
 
-	// Verify SUCCESS CRITERIA section
-	if !contains(prompt, "## SUCCESS CRITERIA") {
+	// Verify SUCCESS CRITERIA section (XML format)
+	if !contains(prompt, "<success_criteria>") {
 		t.Error("SUCCESS CRITERIA header missing")
 	}
 
-	// Verify INTEGRATION CRITERIA section
-	if !contains(prompt, "## INTEGRATION CRITERIA") {
+	// Verify INTEGRATION CRITERIA section (XML format)
+	if !contains(prompt, "<integration_criteria>") {
 		t.Error("INTEGRATION CRITERIA header missing")
 	}
 
@@ -2794,9 +2794,9 @@ func TestBuildStructuredReviewPrompt_DualCriteria_Ordering(t *testing.T) {
 		}
 	}
 
-	// Verify SUCCESS CRITERIA comes before INTEGRATION CRITERIA
-	successIdx := strings.Index(prompt, "## SUCCESS CRITERIA")
-	integrationIdx := strings.Index(prompt, "## INTEGRATION CRITERIA")
+	// Verify SUCCESS CRITERIA comes before INTEGRATION CRITERIA (XML format)
+	successIdx := strings.Index(prompt, "<success_criteria>")
+	integrationIdx := strings.Index(prompt, "<integration_criteria>")
 	if successIdx < 0 {
 		t.Fatal("SUCCESS CRITERIA section not found")
 	}
@@ -2831,8 +2831,8 @@ func TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegrati
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-	// Verify SUCCESS CRITERIA is present
-	if !contains(prompt, "## SUCCESS CRITERIA") {
+	// Verify SUCCESS CRITERIA is present (XML format)
+	if !contains(prompt, "<success_criteria>") {
 		t.Error("SUCCESS CRITERIA header should be present")
 	}
 
@@ -2844,8 +2844,8 @@ func TestBuildStructuredReviewPrompt_DualCriteria_NonIntegrationIgnoresIntegrati
 		t.Error("Success criterion 1 not found")
 	}
 
-	// Verify INTEGRATION CRITERIA section is NOT present
-	if contains(prompt, "## INTEGRATION CRITERIA - VERIFY EACH ONE") {
+	// Verify INTEGRATION CRITERIA section is NOT present (XML format)
+	if contains(prompt, "<integration_criteria>") {
 		t.Error("INTEGRATION CRITERIA section should NOT be present for non-integration tasks")
 	}
 
@@ -2895,19 +2895,19 @@ func TestInjectBehaviorContext_WithProvider(t *testing.T) {
 	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
 
 	// Verify behavioral context is injected
-	if !contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
-		t.Error("BuildReviewPrompt() should include BEHAVIORAL ANALYSIS CONTEXT when provider is set")
+	if !contains(prompt, "<behavioral_analysis>") {
+		t.Error("BuildReviewPrompt() should include behavioral_analysis XML when provider is set")
 	}
-	if !contains(prompt, "Sessions**: 3") {
+	if !contains(prompt, `sessions="3"`) {
 		t.Error("BuildReviewPrompt() should include session count")
 	}
-	if !contains(prompt, "Success Rate**: 75.0%") {
+	if !contains(prompt, `success_rate="75.0%"`) {
 		t.Error("BuildReviewPrompt() should include success rate")
 	}
-	if !contains(prompt, "Tool Usage") {
+	if !contains(prompt, "<tool_usage>") {
 		t.Error("BuildReviewPrompt() should include tool usage section")
 	}
-	if !contains(prompt, "Cost Summary") {
+	if !contains(prompt, "<cost_summary>") {
 		t.Error("BuildReviewPrompt() should include cost summary")
 	}
 }
@@ -2927,8 +2927,8 @@ func TestInjectBehaviorContext_WithoutProvider(t *testing.T) {
 	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
 
 	// Verify no behavioral context when provider is not set
-	if contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
-		t.Error("BuildReviewPrompt() should not include BEHAVIORAL ANALYSIS CONTEXT when provider is nil")
+	if contains(prompt, "<behavioral_analysis>") {
+		t.Error("BuildReviewPrompt() should not include behavioral_analysis XML when provider is nil")
 	}
 }
 
@@ -2968,11 +2968,11 @@ func TestInjectBehaviorContext_StructuredPrompt(t *testing.T) {
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Task output")
 
 	// Verify behavioral context is in structured prompt
-	if !contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
-		t.Error("BuildStructuredReviewPrompt() should include BEHAVIORAL ANALYSIS CONTEXT")
+	if !contains(prompt, "<behavioral_analysis>") {
+		t.Error("BuildStructuredReviewPrompt() should include behavioral_analysis XML")
 	}
 	// Verify anomalies are detected and shown
-	if !contains(prompt, "Anomalies Detected") {
+	if !contains(prompt, "<anomalies>") {
 		t.Error("BuildStructuredReviewPrompt() should include anomalies section when there are anomalies")
 	}
 	if !contains(prompt, "High cost") {
@@ -3010,8 +3010,8 @@ func TestInjectBehaviorContext_NilMetrics(t *testing.T) {
 	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
 
 	// Verify no behavioral context when metrics are nil
-	if contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
-		t.Error("BuildReviewPrompt() should not include BEHAVIORAL ANALYSIS CONTEXT when metrics are nil")
+	if contains(prompt, "<behavioral_analysis>") {
+		t.Error("BuildReviewPrompt() should not include behavioral_analysis XML when metrics are nil")
 	}
 }
 
@@ -3047,8 +3047,8 @@ func TestBuildStructuredReviewPrompt_KeyPointsSection(t *testing.T) {
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-	// Verify KEY POINTS section is present
-	if !contains(prompt, "## KEY POINTS (GUIDANCE - NOT SCORED)") {
+	// Verify KEY POINTS section is present (XML format)
+	if !contains(prompt, "<key_points guidance=\"true\">") {
 		t.Error("KEY POINTS section should be present when task has key_points")
 	}
 
@@ -3091,8 +3091,8 @@ func TestBuildStructuredReviewPrompt_KeyPointsWarning(t *testing.T) {
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-	// Verify KEY POINTS section is present
-	if !contains(prompt, "## KEY POINTS (GUIDANCE - NOT SCORED)") {
+	// Verify KEY POINTS section is present (XML format)
+	if !contains(prompt, "<key_points guidance=\"true\">") {
 		t.Error("KEY POINTS section should be present")
 	}
 
@@ -3144,11 +3144,11 @@ func TestBuildStructuredReviewPrompt_NoKeyPoints(t *testing.T) {
 			ctx := context.Background()
 			prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-			// Verify KEY POINTS section is NOT present
-			if contains(prompt, "## KEY POINTS") {
+			// Verify KEY POINTS section is NOT present (XML format)
+			if contains(prompt, "<key_points") {
 				t.Error("KEY POINTS section should NOT be present when task has no key_points")
 			}
-			if contains(prompt, "GUIDANCE - NOT SCORED") {
+			if contains(prompt, "guidance=\"true\"") {
 				t.Error("KEY POINTS header should NOT be present when task has no key_points")
 			}
 		})
@@ -3181,8 +3181,8 @@ func TestBuildStructuredReviewPrompt_KeyPointsWithIntegrationTask(t *testing.T) 
 	ctx := context.Background()
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-	// Verify KEY POINTS section is present
-	if !contains(prompt, "## KEY POINTS (GUIDANCE - NOT SCORED)") {
+	// Verify KEY POINTS section is present (XML format)
+	if !contains(prompt, "<key_points guidance=\"true\">") {
 		t.Error("KEY POINTS section should be present for integration task")
 	}
 
@@ -3234,12 +3234,12 @@ func TestFormatDetectedErrors(t *testing.T) {
 				},
 			},
 			wantContains: []string{
-				"## Error Classification Analysis",
-				"Error 1: CODE_LEVEL",
-				"**Method**: regex",
-				"**Agent Can Fix**: true",
-				"**Requires Human**: false",
-				"**Suggestion**: Fix syntax error",
+				"<error_classification_analysis>",
+				"<error index=\"1\" category=\"CODE_LEVEL\">",
+				"- Method: regex",
+				"- Agent Can Fix: true",
+				"- Requires Human: false",
+				"- Suggestion: Fix syntax error",
 				"Use this context when reviewing code quality",
 			},
 		},
@@ -3258,10 +3258,10 @@ func TestFormatDetectedErrors(t *testing.T) {
 				},
 			},
 			wantContains: []string{
-				"**Method**: claude (confidence: 85%)",
-				"**Agent Can Fix**: false",
-				"**Requires Human**: true",
-				"**Suggestion**: Install missing package",
+				"- Method: claude (confidence: 85%)",
+				"- Agent Can Fix: false",
+				"- Requires Human: true",
+				"- Suggestion: Install missing package",
 			},
 		},
 		{
@@ -3289,8 +3289,8 @@ func TestFormatDetectedErrors(t *testing.T) {
 				},
 			},
 			wantContains: []string{
-				"Error 1: CODE_LEVEL",
-				"Error 2: CODE_LEVEL",
+				"<error index=\"1\" category=\"CODE_LEVEL\">",
+				"<error index=\"2\" category=\"CODE_LEVEL\">",
 				"confidence: 92%",
 			},
 		},
@@ -3348,11 +3348,11 @@ func TestBuildStructuredReviewPrompt_WithErrorClassification(t *testing.T) {
 		ctx := context.Background()
 		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-		// Should include error classification section
-		if !contains(prompt, "## Error Classification Analysis") {
+		// Should include error classification section (XML format)
+		if !contains(prompt, "<error_classification_analysis>") {
 			t.Error("BuildStructuredReviewPrompt() missing error classification section")
 		}
-		if !contains(prompt, "Error 1: CODE_LEVEL") {
+		if !contains(prompt, "<error index=\"1\" category=\"CODE_LEVEL\">") {
 			t.Error("BuildStructuredReviewPrompt() missing error category")
 		}
 		if !contains(prompt, "confidence: 90%") {
@@ -3375,8 +3375,8 @@ func TestBuildStructuredReviewPrompt_WithErrorClassification(t *testing.T) {
 		ctx := context.Background()
 		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-		// Should NOT include error classification section
-		if contains(prompt, "## Error Classification Analysis") {
+		// Should NOT include error classification section (XML format)
+		if contains(prompt, "<error_classification_analysis>") {
 			t.Error("BuildStructuredReviewPrompt() should not include error section when no metadata")
 		}
 	})
@@ -3394,8 +3394,8 @@ func TestBuildStructuredReviewPrompt_WithErrorClassification(t *testing.T) {
 		ctx := context.Background()
 		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "output")
 
-		// Should NOT include error classification section
-		if contains(prompt, "## Error Classification Analysis") {
+		// Should NOT include error classification section (XML format)
+		if contains(prompt, "<error_classification_analysis>") {
 			t.Error("BuildStructuredReviewPrompt() should not include error section when detected_errors empty")
 		}
 	})
@@ -3414,7 +3414,7 @@ func TestQCSTOP(t *testing.T) {
 		summary := "Found 3 similar commits:\n- abc123: Add pattern matching\n- def456: Pattern system refactor"
 		result := FormatSTOPPriorArt(summary, false)
 
-		if !strings.Contains(result, "STOP Protocol: Prior Art Analysis") {
+		if !strings.Contains(result, "<stop_protocol_prior_art>") {
 			t.Error("expected header in output")
 		}
 		if !strings.Contains(result, "Pattern Intelligence discovered existing solutions") {
@@ -3426,7 +3426,7 @@ func TestQCSTOP(t *testing.T) {
 		if !strings.Contains(result, "Context only") {
 			t.Error("expected 'Context only' note when justification not required")
 		}
-		if strings.Contains(result, "JUSTIFICATION REQUIRED") {
+		if strings.Contains(result, "<justification_required>") {
 			t.Error("should not contain justification requirement when disabled")
 		}
 	})
@@ -3435,7 +3435,7 @@ func TestQCSTOP(t *testing.T) {
 		summary := "Found existing implementation in pattern/matcher.go"
 		result := FormatSTOPPriorArt(summary, true)
 
-		if !strings.Contains(result, "JUSTIFICATION REQUIRED") {
+		if !strings.Contains(result, "<justification_required>") {
 			t.Error("expected justification requirement header")
 		}
 		if !strings.Contains(result, "Prior art exists") {
@@ -3483,7 +3483,7 @@ func TestQCSTOP(t *testing.T) {
 		if !strings.Contains(prompt, "Found 2 similar commits") {
 			t.Error("STOP summary not included in prompt")
 		}
-		if !strings.Contains(prompt, "JUSTIFICATION REQUIRED") {
+		if !strings.Contains(prompt, "<justification_required>") {
 			t.Error("justification requirement not in prompt")
 		}
 	})
@@ -3682,10 +3682,10 @@ func TestFormatCommitVerification(t *testing.T) {
 		}
 		result := FormatCommitVerification(cv, true)
 
-		if !strings.Contains(result, "COMMIT VERIFICATION STATUS") {
+		if !strings.Contains(result, "<commit_verification_status>") {
 			t.Error("expected header in output")
 		}
-		if !strings.Contains(result, "✅ **Commit verified**") {
+		if !strings.Contains(result, "<commit_verified status=\"success\">") {
 			t.Error("expected verified indicator")
 		}
 		if !strings.Contains(result, "feat: add new feature") {
@@ -3707,19 +3707,19 @@ func TestFormatCommitVerification(t *testing.T) {
 		}
 		result := FormatCommitVerification(cv, true)
 
-		if !strings.Contains(result, "COMMIT VERIFICATION STATUS") {
+		if !strings.Contains(result, "<commit_verification_status>") {
 			t.Error("expected header in output")
 		}
-		if !strings.Contains(result, "❌ **MISSING COMMIT**") {
+		if !strings.Contains(result, "<commit_missing status=\"failed\">") {
 			t.Error("expected missing commit indicator")
 		}
 		if !strings.Contains(result, "no commit found matching") {
 			t.Error("expected mismatch reason in output")
 		}
-		if !strings.Contains(result, "COMMIT VERIFICATION FAILED") {
+		if !strings.Contains(result, "<quality_concern>") {
 			t.Error("expected failure warning")
 		}
-		if !strings.Contains(result, "**RED** factor") {
+		if !strings.Contains(result, "RED factor") {
 			t.Error("expected RED verdict guidance")
 		}
 	})
@@ -3731,11 +3731,11 @@ func TestFormatCommitVerification(t *testing.T) {
 		}
 		result := FormatCommitVerification(cv, true)
 
-		if !strings.Contains(result, "❌ **MISSING COMMIT**") {
+		if !strings.Contains(result, "<commit_missing status=\"failed\">") {
 			t.Error("expected missing commit indicator")
 		}
 		// Should not contain empty Reason line
-		if strings.Contains(result, "**Reason**:") {
+		if strings.Contains(result, "Reason:") {
 			t.Error("should not show Reason when mismatch is empty")
 		}
 	})
@@ -3765,10 +3765,10 @@ func TestQCCommitVerificationIntegration(t *testing.T) {
 		ctx := context.Background()
 		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Bug fixed")
 
-		if !strings.Contains(prompt, "COMMIT VERIFICATION STATUS") {
+		if !strings.Contains(prompt, "<commit_verification_status>") {
 			t.Error("expected commit verification section in prompt")
 		}
-		if !strings.Contains(prompt, "✅ **Commit verified**") {
+		if !strings.Contains(prompt, "<commit_verified status=\"success\">") {
 			t.Error("expected verified indicator in prompt")
 		}
 		if !strings.Contains(prompt, "fix: resolve bug") {
@@ -3797,13 +3797,13 @@ func TestQCCommitVerificationIntegration(t *testing.T) {
 		ctx := context.Background()
 		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Feature added")
 
-		if !strings.Contains(prompt, "COMMIT VERIFICATION STATUS") {
+		if !strings.Contains(prompt, "<commit_verification_status>") {
 			t.Error("expected commit verification section in prompt")
 		}
-		if !strings.Contains(prompt, "❌ **MISSING COMMIT**") {
+		if !strings.Contains(prompt, "<commit_missing status=\"failed\">") {
 			t.Error("expected missing commit warning in prompt")
 		}
-		if !strings.Contains(prompt, "QUALITY CONCERN") {
+		if !strings.Contains(prompt, "<quality_concern>") {
 			t.Error("expected quality concern in prompt")
 		}
 	})
@@ -3822,7 +3822,7 @@ func TestQCCommitVerificationIntegration(t *testing.T) {
 		ctx := context.Background()
 		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Done")
 
-		if strings.Contains(prompt, "COMMIT VERIFICATION STATUS") {
+		if strings.Contains(prompt, "<commit_verification_status>") {
 			t.Error("should not include commit verification section without CommitSpec")
 		}
 	})
@@ -3844,7 +3844,7 @@ func TestQCCommitVerificationIntegration(t *testing.T) {
 		ctx := context.Background()
 		prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Done")
 
-		if strings.Contains(prompt, "COMMIT VERIFICATION STATUS") {
+		if strings.Contains(prompt, "<commit_verification_status>") {
 			t.Error("should not include commit verification section with empty CommitSpec")
 		}
 	})

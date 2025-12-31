@@ -136,17 +136,18 @@ func TestBuildCommandArgs(t *testing.T) {
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Verify prompt includes JSON instruction suffix and task prompt
+					// Verify prompt includes XML-formatted response instructions and task prompt
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
+						if strings.Contains(arg, "<response_format>") &&
+							strings.Contains(arg, "Respond with ONLY valid JSON") &&
 							strings.Contains(arg, "Do something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Command should include JSON instruction suffix and the task prompt")
+						t.Error("Command should include XML-formatted response instructions and the task prompt")
 					}
 				},
 			},
@@ -181,16 +182,17 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify JSON instruction suffix (formatting instruction removed)
+					// Verify XML-formatted response instructions
 					hasFormatting := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") {
+						if strings.Contains(arg, "<response_format>") &&
+							strings.Contains(arg, "Respond with ONLY valid JSON") {
 							hasFormatting = true
 							break
 						}
 					}
 					if !hasFormatting {
-						t.Error("Prompt should include JSON instruction suffix")
+						t.Error("Prompt should include XML-formatted response instructions")
 					}
 				},
 			},
@@ -211,30 +213,32 @@ Swift agent content
 			},
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes JSON instruction suffix
+					// Verify prompt includes XML-formatted response instructions
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
+						if strings.Contains(arg, "<response_format>") &&
+							strings.Contains(arg, "Respond with ONLY valid JSON") &&
 							strings.Contains(arg, "Do work") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include formatting instructions when agent doesn't exist in registry")
+						t.Error("Prompt should include XML-formatted response instructions when agent doesn't exist in registry")
 					}
 				},
 				func(t *testing.T, args []string) {
-					// Verify new JSON instruction format is present
-					hasNewFormat := false
+					// Verify Claude 4 enhancements are present
+					hasClaude4 := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") {
-							hasNewFormat = true
+						if strings.Contains(arg, "<context_awareness>") &&
+							strings.Contains(arg, "<thinking_guidance>") {
+							hasClaude4 = true
 							break
 						}
 					}
-					if !hasNewFormat {
-						t.Error("Prompt should include new JSON instruction format")
+					if !hasClaude4 {
+						t.Error("Prompt should include Claude 4 enhancements")
 					}
 				},
 			},
@@ -251,17 +255,18 @@ Swift agent content
 			setupRegistry: nil,
 			wantChecks: []func(*testing.T, []string){
 				func(t *testing.T, args []string) {
-					// Verify prompt includes JSON instruction suffix
+					// Verify prompt includes XML-formatted response instructions
 					hasPrompt := false
 					for _, arg := range args {
-						if strings.Contains(arg, "Respond with ONLY this exact JSON") &&
+						if strings.Contains(arg, "<response_format>") &&
+							strings.Contains(arg, "Respond with ONLY valid JSON") &&
 							strings.Contains(arg, "Create something") {
 							hasPrompt = true
 							break
 						}
 					}
 					if !hasPrompt {
-						t.Error("Prompt should include JSON instruction when no registry is available")
+						t.Error("Prompt should include XML-formatted response instructions when no registry is available")
 					}
 				},
 			},
@@ -1209,5 +1214,209 @@ func TestBuildCommandArgsWithResumeSessionID(t *testing.T) {
 				t.Errorf("--resume should be first flag, got %s", args[0])
 			}
 		})
+	}
+}
+
+// TestPrepareAgentPromptXML verifies XML-formatted output with no Markdown headers
+func TestPrepareAgentPromptXML(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt string
+	}{
+		{
+			name:   "simple prompt",
+			prompt: "Write a function to calculate fibonacci",
+		},
+		{
+			name:   "complex prompt with task details",
+			prompt: "Implement user authentication with JWT tokens",
+		},
+		{
+			name:   "multiline prompt",
+			prompt: "Step 1: Create the model\nStep 2: Add validation\nStep 3: Write tests",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PrepareAgentPrompt(tt.prompt)
+
+			// Verify original prompt is preserved
+			if !strings.Contains(result, tt.prompt) {
+				t.Errorf("PrepareAgentPrompt should preserve original prompt")
+			}
+
+			// Verify NO Markdown headers (## or ### etc)
+			if strings.Contains(result, "## ") {
+				t.Error("PrepareAgentPrompt should not contain Markdown ## headers")
+			}
+			if strings.Contains(result, "### ") {
+				t.Error("PrepareAgentPrompt should not contain Markdown ### headers")
+			}
+
+			// Verify XML response_format tag is present
+			if !strings.Contains(result, "<response_format>") {
+				t.Error("PrepareAgentPrompt should contain <response_format> tag")
+			}
+			if !strings.Contains(result, "</response_format>") {
+				t.Error("PrepareAgentPrompt should contain </response_format> closing tag")
+			}
+
+			// Verify Claude 4 enhancements are present
+			if !strings.Contains(result, "<context_awareness>") {
+				t.Error("PrepareAgentPrompt should contain Claude 4 context_awareness")
+			}
+			if !strings.Contains(result, "<thinking_guidance>") {
+				t.Error("PrepareAgentPrompt should contain Claude 4 thinking_guidance")
+			}
+			if !strings.Contains(result, "<anti_hallucination>") {
+				t.Error("PrepareAgentPrompt should contain Claude 4 anti_hallucination")
+			}
+
+			// Verify JSON instructions are present
+			if !strings.Contains(result, "valid JSON") {
+				t.Error("PrepareAgentPrompt should contain JSON output instructions")
+			}
+			if !strings.Contains(result, `"status":"success"`) {
+				t.Error("PrepareAgentPrompt should show expected JSON structure")
+			}
+		})
+	}
+}
+
+// TestPrepareQCPromptXML verifies QC prompt uses XML structure with response_instructions
+func TestPrepareQCPromptXML(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt string
+	}{
+		{
+			name:   "basic QC review prompt",
+			prompt: "Review task output for correctness",
+		},
+		{
+			name:   "structured QC prompt with criteria",
+			prompt: "Verify success criteria: 1. Function exists 2. Tests pass",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PrepareQCPrompt(tt.prompt)
+
+			// Verify original prompt is preserved
+			if !strings.Contains(result, tt.prompt) {
+				t.Errorf("PrepareQCPrompt should preserve original prompt")
+			}
+
+			// Verify NO Markdown headers
+			if strings.Contains(result, "## ") {
+				t.Error("PrepareQCPrompt should not contain Markdown ## headers")
+			}
+
+			// Verify response_instructions XML tag is present
+			if !strings.Contains(result, "<response_instructions>") {
+				t.Error("PrepareQCPrompt should contain <response_instructions> tag")
+			}
+			if !strings.Contains(result, "</response_instructions>") {
+				t.Error("PrepareQCPrompt should contain </response_instructions> closing tag")
+			}
+
+			// Verify consistency_rule is present
+			if !strings.Contains(result, "<consistency_rule>") {
+				t.Error("PrepareQCPrompt should contain <consistency_rule> tag")
+			}
+
+			// Verify response_format is nested inside response_instructions
+			if !strings.Contains(result, "<response_format>") {
+				t.Error("PrepareQCPrompt should contain nested <response_format> tag")
+			}
+
+			// Verify Claude 4 enhancements are present
+			if !strings.Contains(result, "<context_awareness>") {
+				t.Error("PrepareQCPrompt should contain Claude 4 context_awareness")
+			}
+
+			// Verify QC-specific JSON schema reference
+			if !strings.Contains(result, `"verdict"`) {
+				t.Error("PrepareQCPrompt should reference QC verdict field")
+			}
+			if !strings.Contains(result, "GREEN") || !strings.Contains(result, "RED") {
+				t.Error("PrepareQCPrompt should reference verdict values (GREEN/RED)")
+			}
+		})
+	}
+}
+
+// TestBuildCommandArgsNoMarkdownInPrompt verifies built command args don't contain Markdown
+func TestBuildCommandArgsNoMarkdownInPrompt(t *testing.T) {
+	inv := NewInvoker()
+	task := models.Task{
+		Number:        "1",
+		Name:          "Test Task",
+		Prompt:        "Implement a feature",
+		EstimatedTime: 30 * time.Minute,
+	}
+
+	args := inv.BuildCommandArgs(task)
+
+	// Find the prompt argument (follows -p flag)
+	var promptArg string
+	for i, arg := range args {
+		if arg == "-p" && i+1 < len(args) {
+			promptArg = args[i+1]
+			break
+		}
+	}
+
+	if promptArg == "" {
+		t.Fatal("Could not find prompt argument after -p flag")
+	}
+
+	// Verify no Markdown headers in prompt
+	if strings.Contains(promptArg, "## ") {
+		t.Error("Prompt should not contain Markdown ## headers")
+	}
+
+	// Verify XML structure is used instead
+	if !strings.Contains(promptArg, "<response_format>") {
+		t.Error("Prompt should use XML <response_format> instead of Markdown")
+	}
+
+	// Verify Claude 4 XML tags present
+	if !strings.Contains(promptArg, "<context_awareness>") {
+		t.Error("Prompt should contain Claude 4 XML enhancements")
+	}
+}
+
+// TestQCReviewTaskUsesXML verifies QC review tasks use XML structure
+func TestQCReviewTaskUsesXML(t *testing.T) {
+	inv := NewInvoker()
+	task := models.Task{
+		Number:        "1",
+		Name:          "QC Review: Task 5",
+		Prompt:        PrepareQCPrompt("Review the implementation"),
+		EstimatedTime: 30 * time.Minute,
+	}
+
+	args := inv.BuildCommandArgs(task)
+
+	// Find the prompt argument
+	var promptArg string
+	for i, arg := range args {
+		if arg == "-p" && i+1 < len(args) {
+			promptArg = args[i+1]
+			break
+		}
+	}
+
+	// QC tasks should have response_instructions XML tag
+	if !strings.Contains(promptArg, "<response_instructions>") {
+		t.Error("QC task prompt should contain <response_instructions> XML tag")
+	}
+
+	// Should NOT have Markdown formatting
+	if strings.Contains(promptArg, "## Response") {
+		t.Error("QC task prompt should not use Markdown headers for response instructions")
 	}
 }

@@ -20,36 +20,26 @@ import (
 
 // domainSpecificChecks maps file extensions to domain-specific QC review criteria
 var domainSpecificChecks = map[string]string{
-	".go": `## GO-SPECIFIC REVIEW CRITERIA
-- Error handling follows if err != nil pattern
+	".go": agent.XMLSection("go_review_criteria", `- Error handling follows if err != nil pattern
 - No nil pointer dereferences on interfaces/pointers
 - Context cancellation respected (no goroutine leaks)
-- strings.Builder used for string concatenation (not +=)
-`,
-	".sql": `## SQL-SPECIFIC REVIEW CRITERIA
-- No SQL injection vulnerabilities (parameterized queries)
+- strings.Builder used for string concatenation (not +=)`),
+	".sql": agent.XMLSection("sql_review_criteria", `- No SQL injection vulnerabilities (parameterized queries)
 - Indexes exist for WHERE/JOIN columns
 - Foreign keys have explicit ON DELETE behavior
-- Rollback migration reverses all changes safely
-`,
-	".ts": `## TYPESCRIPT-SPECIFIC REVIEW CRITERIA
-- No 'any' types unless explicitly justified
+- Rollback migration reverses all changes safely`),
+	".ts": agent.XMLSection("typescript_review_criteria", `- No 'any' types unless explicitly justified
 - Async/await properly handled (no floating promises)
 - Type narrowing used correctly
-- No unused imports or variables
-`,
-	".tsx": `## REACT-SPECIFIC REVIEW CRITERIA
-- React hooks follow rules (no conditional hooks)
+- No unused imports or variables`),
+	".tsx": agent.XMLSection("react_review_criteria", `- React hooks follow rules (no conditional hooks)
 - useEffect has cleanup functions where needed
 - Props properly typed (no implicit any)
-- Event handlers properly typed
-`,
-	".py": `## PYTHON-SPECIFIC REVIEW CRITERIA
-- Type hints used for function signatures
+- Event handlers properly typed`),
+	".py": agent.XMLSection("python_review_criteria", `- Type hints used for function signatures
 - Exception handling is specific (not bare except)
 - No mutable default arguments
-- Resource cleanup with context managers
-`,
+- Resource cleanup with context managers`),
 }
 
 // inferDomainChecks infers domain-specific review criteria from task file extensions
@@ -192,40 +182,41 @@ func getCombinedCriteria(task models.Task) []string {
 func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, task models.Task, output string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# Quality Control Review: %s\n\n", task.Name))
-	sb.WriteString("## Task Requirements\n")
-	sb.WriteString(task.Prompt)
+	sb.WriteString(fmt.Sprintf("<qc_review task=\"%s\">\n\n", task.Name))
+	sb.WriteString(agent.XMLSection("task_requirements", task.Prompt))
 	sb.WriteString("\n\n")
 
 	// Get combined criteria (success + integration)
 	allCriteria := getCombinedCriteria(task)
 
 	if len(allCriteria) > 0 {
-		sb.WriteString("## SUCCESS CRITERIA - VERIFY EACH ONE\n\n")
+		var criteriaContent strings.Builder
 		for i, criterion := range allCriteria {
-			sb.WriteString(fmt.Sprintf("%d. [ ] %s\n", i, criterion))
+			criteriaContent.WriteString(fmt.Sprintf("%d. [ ] %s\n", i, criterion))
 		}
-		sb.WriteString("\n")
+		sb.WriteString(agent.XMLSection("success_criteria", criteriaContent.String()))
+		sb.WriteString("\n\n")
 
 		// Add integration note if this is an integration task with integration criteria
 		if task.Type == "integration" && len(task.IntegrationCriteria) > 0 {
-			sb.WriteString("## INTEGRATION CRITERIA - VERIFY EACH ONE\n\n")
+			var integrationContent strings.Builder
 			startIdx := len(task.SuccessCriteria)
 			for i, criterion := range task.IntegrationCriteria {
-				sb.WriteString(fmt.Sprintf("%d. [ ] %s\n", startIdx+i, criterion))
+				integrationContent.WriteString(fmt.Sprintf("%d. [ ] %s\n", startIdx+i, criterion))
 			}
-			sb.WriteString("\n")
+			sb.WriteString(agent.XMLSection("integration_criteria", integrationContent.String()))
+			sb.WriteString("\n\n")
 		}
 	}
 
 	if len(task.KeyPoints) > 0 {
-		sb.WriteString("## KEY POINTS (GUIDANCE - NOT SCORED)\n\n")
+		var keyPointsContent strings.Builder
 		keyPointCount := len(task.KeyPoints)
 		criteriaCount := len(allCriteria)
 		if criteriaCount < keyPointCount {
-			sb.WriteString(fmt.Sprintf("⚠️ %d key point(s) do not have explicit success criteria above. Treat these as context while scoring only against listed criteria.\n\n", keyPointCount-criteriaCount))
+			keyPointsContent.WriteString(fmt.Sprintf("⚠️ %d key point(s) do not have explicit success criteria above. Treat these as context while scoring only against listed criteria.\n\n", keyPointCount-criteriaCount))
 		} else {
-			sb.WriteString("These implementation key points are provided for context. Score strictly against the success criteria above.\n\n")
+			keyPointsContent.WriteString("These implementation key points are provided for context. Score strictly against the success criteria above.\n\n")
 		}
 		for _, kp := range task.KeyPoints {
 			line := kp.Point
@@ -235,30 +226,36 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 			if kp.Reference != "" {
 				line += fmt.Sprintf(" (ref: %s)", kp.Reference)
 			}
-			sb.WriteString(fmt.Sprintf("- %s\n", line))
+			keyPointsContent.WriteString(fmt.Sprintf("- %s\n", line))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("<key_points guidance=\"true\">\n")
+		sb.WriteString(keyPointsContent.String())
+		sb.WriteString("</key_points>\n\n")
 	}
 
 	if len(task.TestCommands) > 0 {
-		sb.WriteString("## TEST COMMANDS\n")
+		var testContent strings.Builder
 		for _, cmd := range task.TestCommands {
-			sb.WriteString(fmt.Sprintf("- `%s`\n", cmd))
+			testContent.WriteString(fmt.Sprintf("- `%s`\n", cmd))
 		}
-		sb.WriteString("\n")
+		sb.WriteString(agent.XMLSection("test_commands", testContent.String()))
+		sb.WriteString("\n\n")
 	}
 
 	// Add expected file paths for verification - CRITICAL for agent compliance
 	if len(task.Files) > 0 {
-		sb.WriteString("## EXPECTED FILE PATHS - CRITICAL VERIFICATION\n")
-		sb.WriteString("⚠️ **MANDATORY**: Agent MUST create/modify these EXACT file paths:\n")
+		var filesContent strings.Builder
+		filesContent.WriteString("⚠️ MANDATORY: Agent MUST create/modify these EXACT file paths:\n")
 		for _, file := range task.Files {
-			sb.WriteString(fmt.Sprintf("- [ ] `%s`\n", file))
+			filesContent.WriteString(fmt.Sprintf("- [ ] `%s`\n", file))
 		}
-		sb.WriteString("\n**Verdict Rules:**\n")
-		sb.WriteString("- If agent created files with DIFFERENT paths/names → **RED** (wrong files)\n")
-		sb.WriteString("- If expected files are missing → **RED** (incomplete)\n")
-		sb.WriteString("- Only GREEN if ALL expected files exist at EXACT paths\n\n")
+		filesContent.WriteString("\nVerdict Rules:\n")
+		filesContent.WriteString("- If agent created files with DIFFERENT paths/names → RED (wrong files)\n")
+		filesContent.WriteString("- If expected files are missing → RED (incomplete)\n")
+		filesContent.WriteString("- Only GREEN if ALL expected files exist at EXACT paths")
+		sb.WriteString("<expected_files critical=\"true\">\n")
+		sb.WriteString(filesContent.String())
+		sb.WriteString("\n</expected_files>\n\n")
 	}
 
 	// Add domain-specific review criteria based on file extensions
@@ -267,9 +264,8 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString("## AGENT OUTPUT\n```\n")
-	sb.WriteString(output)
-	sb.WriteString("\n```\n\n")
+	sb.WriteString(agent.XMLSection("agent_output", output))
+	sb.WriteString("\n\n")
 
 	// Inject test command results (v2.9+)
 	if len(qc.TestCommandResults) > 0 {
@@ -328,6 +324,8 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString(behaviorContext)
 		sb.WriteString("\n")
 	}
+
+	sb.WriteString("</qc_review>\n")
 
 	// Add formatting instructions (QC-specific JSON format)
 	return agent.PrepareQCPrompt(sb.String())
@@ -1006,22 +1004,24 @@ func FormatDetectedErrors(errors []*DetectedError) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n## Error Classification Analysis\n\n")
+	sb.WriteString("\n<error_classification_analysis>\n")
 	sb.WriteString("Claude has analyzed test failures and classified them:\n\n")
 
 	for i, err := range errors {
-		sb.WriteString(fmt.Sprintf("### Error %d: %s\n", i+1, err.Pattern.Category))
-		sb.WriteString(fmt.Sprintf("- **Method**: %s", err.Method))
+		sb.WriteString(fmt.Sprintf("<error index=\"%d\" category=\"%s\">\n", i+1, err.Pattern.Category))
+		sb.WriteString(fmt.Sprintf("- Method: %s", err.Method))
 		if err.Method == "claude" {
 			sb.WriteString(fmt.Sprintf(" (confidence: %.0f%%)", err.Confidence*100))
 		}
 		sb.WriteString("\n")
-		sb.WriteString(fmt.Sprintf("- **Agent Can Fix**: %v\n", err.Pattern.AgentCanFix))
-		sb.WriteString(fmt.Sprintf("- **Requires Human**: %v\n", err.Pattern.RequiresHumanIntervention))
-		sb.WriteString(fmt.Sprintf("- **Suggestion**: %s\n\n", err.Pattern.Suggestion))
+		sb.WriteString(fmt.Sprintf("- Agent Can Fix: %v\n", err.Pattern.AgentCanFix))
+		sb.WriteString(fmt.Sprintf("- Requires Human: %v\n", err.Pattern.RequiresHumanIntervention))
+		sb.WriteString(fmt.Sprintf("- Suggestion: %s\n", err.Pattern.Suggestion))
+		sb.WriteString("</error>\n\n")
 	}
 
-	sb.WriteString("**Use this context when reviewing code quality and deciding retry strategy.**\n\n")
+	sb.WriteString("Use this context when reviewing code quality and deciding retry strategy.\n")
+	sb.WriteString("</error_classification_analysis>\n\n")
 	return sb.String()
 }
 
@@ -1034,22 +1034,24 @@ func FormatSTOPPriorArt(stopSummary string, requireJustification bool) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n## STOP Protocol: Prior Art Analysis\n\n")
+	sb.WriteString("\n<stop_protocol_prior_art>\n")
 	sb.WriteString("Pattern Intelligence discovered existing solutions related to this task:\n\n")
 	sb.WriteString(stopSummary)
 	sb.WriteString("\n")
 
 	if requireJustification {
-		sb.WriteString("\n### JUSTIFICATION REQUIRED\n")
-		sb.WriteString("⚠️ **Prior art exists.** The implementing agent MUST justify why a custom implementation was needed.\n")
+		sb.WriteString("\n<justification_required>\n")
+		sb.WriteString("⚠️ Prior art exists. The implementing agent MUST justify why a custom implementation was needed.\n")
 		sb.WriteString("Evaluate the `stop_justification` field in the agent's response:\n")
-		sb.WriteString("- **Strong justification**: Prior solutions are insufficient due to specific technical reasons → Proceed normally\n")
-		sb.WriteString("- **Weak/missing justification**: Agent did not explain why existing solutions don't work → **YELLOW** verdict\n")
-		sb.WriteString("- **No justification when prior art exists**: Consider this a quality concern that should be flagged\n\n")
+		sb.WriteString("- Strong justification: Prior solutions are insufficient due to specific technical reasons → Proceed normally\n")
+		sb.WriteString("- Weak/missing justification: Agent did not explain why existing solutions don't work → YELLOW verdict\n")
+		sb.WriteString("- No justification when prior art exists: Consider this a quality concern that should be flagged\n")
+		sb.WriteString("</justification_required>\n\n")
 	} else {
-		sb.WriteString("\n**Context only**: Prior art is provided for informational purposes. No justification required.\n\n")
+		sb.WriteString("\nContext only: Prior art is provided for informational purposes. No justification required.\n\n")
 	}
 
+	sb.WriteString("</stop_protocol_prior_art>\n\n")
 	return sb.String()
 }
 
@@ -1169,22 +1171,24 @@ func FormatArchitectureContext(archSummary string, requireJustification bool) st
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n## Architecture Checkpoint Context\n\n")
+	sb.WriteString("\n<architecture_checkpoint_context>\n")
 	sb.WriteString("This task was flagged for potential architectural impact:\n\n")
 	sb.WriteString(archSummary)
 	sb.WriteString("\n")
 
 	if requireJustification {
-		sb.WriteString("\n### ARCHITECTURAL JUSTIFICATION REQUIRED\n")
-		sb.WriteString("⚠️ **Architectural concerns flagged.** The implementing agent MUST justify architectural decisions.\n")
+		sb.WriteString("\n<architectural_justification_required>\n")
+		sb.WriteString("⚠️ Architectural concerns flagged. The implementing agent MUST justify architectural decisions.\n")
 		sb.WriteString("Evaluate the output for architectural justification:\n")
-		sb.WriteString("- **Strong justification**: Clear explanation of why architectural changes are necessary → Proceed normally\n")
-		sb.WriteString("- **Weak/missing justification**: No explanation for architectural decisions → **YELLOW** verdict\n")
-		sb.WriteString("- **Architectural changes without justification**: Consider this a quality concern\n\n")
+		sb.WriteString("- Strong justification: Clear explanation of why architectural changes are necessary → Proceed normally\n")
+		sb.WriteString("- Weak/missing justification: No explanation for architectural decisions → YELLOW verdict\n")
+		sb.WriteString("- Architectural changes without justification: Consider this a quality concern\n")
+		sb.WriteString("</architectural_justification_required>\n\n")
 	} else {
-		sb.WriteString("\n**Context only**: Architectural context is provided for awareness. No justification required.\n\n")
+		sb.WriteString("\nContext only: Architectural context is provided for awareness. No justification required.\n\n")
 	}
 
+	sb.WriteString("</architecture_checkpoint_context>\n\n")
 	return sb.String()
 }
 
@@ -1242,31 +1246,36 @@ func FormatCommitVerification(cv *CommitVerification, hasCommitSpec bool) string
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n## COMMIT VERIFICATION STATUS\n\n")
+	sb.WriteString("\n<commit_verification_status>\n")
 
 	if cv.Found {
 		// Commit verified successfully
-		sb.WriteString("✅ **Commit verified**: ")
-		sb.WriteString(fmt.Sprintf("`%s` (%s)\n", cv.Message, cv.CommitHash))
+		sb.WriteString("<commit_verified status=\"success\">\n")
+		sb.WriteString(fmt.Sprintf("Commit: %s (%s)\n", cv.Message, cv.CommitHash))
 		if cv.FullHash != "" {
-			sb.WriteString(fmt.Sprintf("   Full hash: `%s`\n", cv.FullHash))
+			sb.WriteString(fmt.Sprintf("Full hash: %s\n", cv.FullHash))
 		}
-		sb.WriteString(fmt.Sprintf("   Verification time: %v\n\n", cv.Duration.Round(time.Millisecond)))
-		sb.WriteString("**Note**: Agent followed commit instructions correctly.\n\n")
+		sb.WriteString(fmt.Sprintf("Verification time: %v\n", cv.Duration.Round(time.Millisecond)))
+		sb.WriteString("Note: Agent followed commit instructions correctly.\n")
+		sb.WriteString("</commit_verified>\n\n")
 	} else {
 		// Commit NOT found - this is a quality concern
-		sb.WriteString("❌ **MISSING COMMIT**: Agent was instructed to create a commit but none was found.\n\n")
+		sb.WriteString("<commit_missing status=\"failed\">\n")
+		sb.WriteString("MISSING COMMIT: Agent was instructed to create a commit but none was found.\n\n")
 		if cv.Mismatch != "" {
-			sb.WriteString(fmt.Sprintf("**Reason**: %s\n\n", cv.Mismatch))
+			sb.WriteString(fmt.Sprintf("Reason: %s\n\n", cv.Mismatch))
 		}
-		sb.WriteString("### COMMIT VERIFICATION FAILED - QUALITY CONCERN\n")
+		sb.WriteString("<quality_concern>\n")
 		sb.WriteString("⚠️ The task specification required the agent to commit their changes.\n")
 		sb.WriteString("A missing commit indicates the agent did not follow instructions.\n\n")
-		sb.WriteString("**Verdict Guidance**:\n")
-		sb.WriteString("- If task explicitly required a commit → Consider this a **RED** factor\n")
+		sb.WriteString("Verdict Guidance:\n")
+		sb.WriteString("- If task explicitly required a commit → Consider this a RED factor\n")
 		sb.WriteString("- If commit was optional → Note in feedback but may still be GREEN/YELLOW\n")
-		sb.WriteString("- Agent should be retried to create the required commit\n\n")
+		sb.WriteString("- Agent should be retried to create the required commit\n")
+		sb.WriteString("</quality_concern>\n")
+		sb.WriteString("</commit_missing>\n\n")
 	}
 
+	sb.WriteString("</commit_verification_status>\n\n")
 	return sb.String()
 }

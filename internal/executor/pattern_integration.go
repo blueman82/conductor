@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/pattern"
@@ -132,6 +133,7 @@ func (h *PatternIntelligenceHook) CheckTask(ctx context.Context, task models.Tas
 
 // buildPromptInjection creates STOP protocol context for injection into agent prompt.
 // Returns empty string if no relevant context is available.
+// Uses XML format for structured content per Claude 4 best practices.
 func (h *PatternIntelligenceHook) buildPromptInjection(stopResult *pattern.STOPResult, dupResult *pattern.DuplicateResult) string {
 	if !h.config.InjectIntoPrompt {
 		return ""
@@ -141,94 +143,117 @@ func (h *PatternIntelligenceHook) buildPromptInjection(stopResult *pattern.STOPR
 
 	// Add STOP analysis if available
 	if stopResult != nil && stopResult.Confidence >= h.config.MinConfidence {
-		sb.WriteString("\n---\n## PATTERN INTELLIGENCE CONTEXT\n\n")
+		sb.WriteString("\n<pattern_intelligence>\n")
 
 		// Search results - SimilarPatterns uses PatternMatch type
 		if len(stopResult.Search.SimilarPatterns) > 0 || len(stopResult.Search.RelatedFiles) > 0 {
-			sb.WriteString("### Similar Patterns Found\n")
+			sb.WriteString("<similar_patterns>\n")
 			for i, p := range stopResult.Search.SimilarPatterns {
 				if i >= h.config.MaxPatternsPerTask {
 					break
 				}
-				sb.WriteString(fmt.Sprintf("- **%s** (%s): %.0f%% similar - %s\n",
+				sb.WriteString(fmt.Sprintf("<pattern name=\"%s\" path=\"%s\" similarity=\"%.0f%%\">%s</pattern>\n",
 					p.Name, p.FilePath, p.Similarity*100, p.Description))
 			}
 			if len(stopResult.Search.RelatedFiles) > 0 {
-				sb.WriteString("\n**Related Files**: ")
 				maxFiles := h.config.MaxRelatedFiles
 				if maxFiles > len(stopResult.Search.RelatedFiles) {
 					maxFiles = len(stopResult.Search.RelatedFiles)
 				}
-				sb.WriteString(strings.Join(stopResult.Search.RelatedFiles[:maxFiles], ", "))
+				sb.WriteString(agent.XMLTag("related_files", strings.Join(stopResult.Search.RelatedFiles[:maxFiles], ", ")))
 				sb.WriteString("\n")
 			}
-			sb.WriteString("\n")
+			sb.WriteString("</similar_patterns>\n")
 		}
 
 		// Think analysis
 		if stopResult.Think.ComplexityScore > 0 {
-			sb.WriteString(fmt.Sprintf("### Analysis (Complexity: %d/10, Effort: %s)\n",
+			sb.WriteString(fmt.Sprintf("<analysis complexity=\"%d\" effort=\"%s\">\n",
 				stopResult.Think.ComplexityScore, stopResult.Think.EstimatedEffort))
-			for _, suggestion := range stopResult.Think.ApproachSuggestions {
-				sb.WriteString(fmt.Sprintf("- %s\n", suggestion))
+			if len(stopResult.Think.ApproachSuggestions) > 0 {
+				sb.WriteString("<suggestions>\n")
+				for _, suggestion := range stopResult.Think.ApproachSuggestions {
+					sb.WriteString(agent.XMLTag("item", suggestion))
+					sb.WriteString("\n")
+				}
+				sb.WriteString("</suggestions>\n")
 			}
-			for _, rf := range stopResult.Think.RiskFactors {
-				sb.WriteString(fmt.Sprintf("- ⚠️ Risk [%s]: %s - Mitigation: %s\n",
-					rf.Severity, rf.Name, rf.Mitigation))
+			if len(stopResult.Think.RiskFactors) > 0 {
+				sb.WriteString("<risks>\n")
+				for _, rf := range stopResult.Think.RiskFactors {
+					sb.WriteString(fmt.Sprintf("<risk severity=\"%s\" mitigation=\"%s\">%s</risk>\n",
+						rf.Severity, rf.Mitigation, rf.Name))
+				}
+				sb.WriteString("</risks>\n")
 			}
-			sb.WriteString("\n")
+			sb.WriteString("</analysis>\n")
 		}
 
 		// Outline steps - uses OutlineStep type
 		if len(stopResult.Outline.Steps) > 0 {
-			sb.WriteString("### Suggested Implementation Steps\n")
+			sb.WriteString("<implementation_steps>\n")
 			for _, step := range stopResult.Outline.Steps {
-				sb.WriteString(fmt.Sprintf("%d. %s\n", step.Order, step.Description))
 				if step.TestStrategy != "" {
-					sb.WriteString(fmt.Sprintf("   - Test: %s\n", step.TestStrategy))
+					sb.WriteString(fmt.Sprintf("<step order=\"%d\" test=\"%s\">%s</step>\n",
+						step.Order, step.TestStrategy, step.Description))
+				} else {
+					sb.WriteString(fmt.Sprintf("<step order=\"%d\">%s</step>\n",
+						step.Order, step.Description))
 				}
 			}
-			sb.WriteString("\n")
+			sb.WriteString("</implementation_steps>\n")
 		}
 
 		// Prove verification
 		if len(stopResult.Prove.TestCommands) > 0 {
-			sb.WriteString("### Verification Commands\n")
+			sb.WriteString("<verification_commands>\n")
 			for _, cmd := range stopResult.Prove.TestCommands {
-				sb.WriteString(fmt.Sprintf("- `%s`\n", cmd))
+				sb.WriteString(agent.XMLTag("command", cmd))
+				sb.WriteString("\n")
 			}
-			sb.WriteString("\n")
+			sb.WriteString("</verification_commands>\n")
 		}
 
 		// Recommendations
 		if len(stopResult.Recommendations) > 0 {
-			sb.WriteString("### Recommendations\n")
+			sb.WriteString("<recommendations>\n")
 			for _, rec := range stopResult.Recommendations {
-				sb.WriteString(fmt.Sprintf("- %s\n", rec))
+				sb.WriteString(agent.XMLTag("item", rec))
+				sb.WriteString("\n")
 			}
+			sb.WriteString("</recommendations>\n")
 		}
+
+		sb.WriteString("</pattern_intelligence>\n")
 	}
 
 	// Add duplicate warning if applicable
 	if dupResult != nil && dupResult.IsDuplicate {
 		if sb.Len() == 0 {
-			sb.WriteString("\n---\n## PATTERN INTELLIGENCE CONTEXT\n\n")
+			sb.WriteString("\n<pattern_intelligence>\n")
+		} else {
+			// Remove closing tag to add duplicate section inside
+			content := sb.String()
+			content = strings.TrimSuffix(content, "</pattern_intelligence>\n")
+			sb.Reset()
+			sb.WriteString(content)
 		}
-		sb.WriteString("### ⚠️ Potential Duplicate Detected\n")
-		sb.WriteString(fmt.Sprintf("This task has %.0f%% similarity to existing patterns.\n",
+		sb.WriteString(fmt.Sprintf("<duplicate_warning similarity=\"%.0f%%\">\n",
 			dupResult.SimilarityScore*100))
+		sb.WriteString("<similar_tasks>\n")
 		for _, dup := range dupResult.DuplicateOf {
-			sb.WriteString(fmt.Sprintf("- Similar to: %s (%.0f%% match)\n",
+			sb.WriteString(fmt.Sprintf("<task name=\"%s\" similarity=\"%.0f%%\"/>\n",
 				dup.TaskName, dup.SimilarityScore*100))
 		}
+		sb.WriteString("</similar_tasks>\n")
 		if len(dupResult.OverlapAreas) > 0 {
-			sb.WriteString(fmt.Sprintf("Overlap areas: %s\n", strings.Join(dupResult.OverlapAreas, ", ")))
+			sb.WriteString(agent.XMLTag("overlap_areas", strings.Join(dupResult.OverlapAreas, ", ")))
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\n**Action**: Review existing implementations before proceeding.\n")
-	}
-
-	if sb.Len() > 0 {
-		sb.WriteString("\n---\n")
+		sb.WriteString(agent.XMLTag("action", "Review existing implementations before proceeding"))
+		sb.WriteString("\n")
+		sb.WriteString("</duplicate_warning>\n")
+		sb.WriteString("</pattern_intelligence>\n")
 	}
 
 	return sb.String()
