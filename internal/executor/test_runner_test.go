@@ -267,8 +267,8 @@ func TestFormatTestResults_WithFailure(t *testing.T) {
 		t.Error("expected non-empty formatted string")
 	}
 
-	// Should contain failure markers
-	if !containsString(formatted, "❌") && !containsString(formatted, "FAIL") {
+	// Should contain failure indicators in XML format (status="failed")
+	if !containsString(formatted, "status=\"failed\"") {
 		t.Error("expected failure indicators in output")
 	}
 }

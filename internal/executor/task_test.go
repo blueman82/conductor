@@ -1380,9 +1380,9 @@ func TestExecute_TestFailure_InjectsFeedback(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	// Verify feedback was injected into prompt
-	if !strings.Contains(secondPrompt, "PREVIOUS ATTEMPT FAILED - TEST COMMANDS FAILED (MUST FIX)") {
-		t.Error("expected test failure feedback header in retry prompt")
+	// Verify feedback was injected into prompt (XML format)
+	if !strings.Contains(secondPrompt, "<previous_attempt_failed reason=\"test_commands\">") {
+		t.Error("expected test failure feedback section in retry prompt")
 	}
 
 	if !strings.Contains(secondPrompt, "FAIL: TestFoo") {
@@ -2520,10 +2520,10 @@ func TestFormatFailedCriteria(t *testing.T) {
 				{Index: 1, Criterion: "Code should be under 50 lines", Passed: false, FailReason: "File has 75 lines"},
 			},
 			contains: []string{
-				"Failed Success Criteria (MUST FIX)",
-				"[2]",
+				"<failed_criteria>",
+				"<criterion index=\"2\">",
 				"Code should be under 50 lines",
-				"Reason: File has 75 lines",
+				"<reason>File has 75 lines</reason>",
 			},
 		},
 		{
@@ -2534,10 +2534,10 @@ func TestFormatFailedCriteria(t *testing.T) {
 				{Index: 2, Criterion: "Criterion C", Passed: false, FailReason: "Wrong output"},
 			},
 			contains: []string{
-				"[1]",
+				"<criterion index=\"1\">",
 				"Criterion A",
 				"Not implemented",
-				"[3]",
+				"<criterion index=\"3\">",
 				"Criterion C",
 				"Wrong output",
 			},
@@ -2548,7 +2548,7 @@ func TestFormatFailedCriteria(t *testing.T) {
 				{Index: 2, Passed: false, FailReason: "Something wrong"},
 			},
 			contains: []string{
-				"[3]",
+				"<criterion index=\"3\">",
 				"Criterion 3",
 				"Something wrong",
 			},
@@ -2559,7 +2559,7 @@ func TestFormatFailedCriteria(t *testing.T) {
 				{Index: 0, Criterion: "Test must pass", Passed: false},
 			},
 			contains: []string{
-				"[1]",
+				"<criterion index=\"1\">",
 				"Test must pass",
 			},
 		},
@@ -2616,8 +2616,8 @@ func TestFormatClassificationForRetry(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"Error Classification Guidance",
-				"Error 1",
+				"<error_classification>",
+				"<error index=\"1\"",
 				"ENV_LEVEL",
 				"Install missing tool",
 			},
@@ -2636,10 +2636,10 @@ func TestFormatClassificationForRetry(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"Error Classification Guidance",
-				"Error 1",
+				"<error_classification>",
+				"<error index=\"1\"",
 				"CODE_LEVEL",
-				"85% confidence",
+				"confidence=\"85%\"",
 				"Fix type conversion",
 			},
 		},
@@ -2666,12 +2666,12 @@ func TestFormatClassificationForRetry(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"Error Classification Guidance",
-				"Error 1",
-				"Error 2",
+				"<error_classification>",
+				"<error index=\"1\"",
+				"<error index=\"2\"",
 				"ENV_LEVEL",
 				"PLAN_LEVEL",
-				"92% confidence",
+				"confidence=\"92%\"",
 				"Install missing tool",
 				"Update test expectation",
 			},
@@ -2691,8 +2691,8 @@ func TestFormatClassificationForRetry(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"Error Classification Guidance",
-				"Error 2",
+				"<error_classification>",
+				"<error index=\"2\"",
 				"Fix test",
 			},
 		},
