@@ -2895,19 +2895,19 @@ func TestInjectBehaviorContext_WithProvider(t *testing.T) {
 	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
 
 	// Verify behavioral context is injected
-	if !contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
-		t.Error("BuildReviewPrompt() should include BEHAVIORAL ANALYSIS CONTEXT when provider is set")
+	if !contains(prompt, "<behavioral_analysis>") {
+		t.Error("BuildReviewPrompt() should include behavioral_analysis XML when provider is set")
 	}
-	if !contains(prompt, "Sessions**: 3") {
+	if !contains(prompt, `sessions="3"`) {
 		t.Error("BuildReviewPrompt() should include session count")
 	}
-	if !contains(prompt, "Success Rate**: 75.0%") {
+	if !contains(prompt, `success_rate="75.0%"`) {
 		t.Error("BuildReviewPrompt() should include success rate")
 	}
-	if !contains(prompt, "Tool Usage") {
+	if !contains(prompt, "<tool_usage>") {
 		t.Error("BuildReviewPrompt() should include tool usage section")
 	}
-	if !contains(prompt, "Cost Summary") {
+	if !contains(prompt, "<cost_summary>") {
 		t.Error("BuildReviewPrompt() should include cost summary")
 	}
 }
@@ -2927,8 +2927,8 @@ func TestInjectBehaviorContext_WithoutProvider(t *testing.T) {
 	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
 
 	// Verify no behavioral context when provider is not set
-	if contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
-		t.Error("BuildReviewPrompt() should not include BEHAVIORAL ANALYSIS CONTEXT when provider is nil")
+	if contains(prompt, "<behavioral_analysis>") {
+		t.Error("BuildReviewPrompt() should not include behavioral_analysis XML when provider is nil")
 	}
 }
 
@@ -2968,11 +2968,11 @@ func TestInjectBehaviorContext_StructuredPrompt(t *testing.T) {
 	prompt := qc.BuildStructuredReviewPrompt(ctx, task, "Task output")
 
 	// Verify behavioral context is in structured prompt
-	if !contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
-		t.Error("BuildStructuredReviewPrompt() should include BEHAVIORAL ANALYSIS CONTEXT")
+	if !contains(prompt, "<behavioral_analysis>") {
+		t.Error("BuildStructuredReviewPrompt() should include behavioral_analysis XML")
 	}
 	// Verify anomalies are detected and shown
-	if !contains(prompt, "Anomalies Detected") {
+	if !contains(prompt, "<anomalies>") {
 		t.Error("BuildStructuredReviewPrompt() should include anomalies section when there are anomalies")
 	}
 	if !contains(prompt, "High cost") {
@@ -3010,8 +3010,8 @@ func TestInjectBehaviorContext_NilMetrics(t *testing.T) {
 	prompt := qc.BuildReviewPrompt(ctx, task, "Task output")
 
 	// Verify no behavioral context when metrics are nil
-	if contains(prompt, "BEHAVIORAL ANALYSIS CONTEXT") {
-		t.Error("BuildReviewPrompt() should not include BEHAVIORAL ANALYSIS CONTEXT when metrics are nil")
+	if contains(prompt, "<behavioral_analysis>") {
+		t.Error("BuildReviewPrompt() should not include behavioral_analysis XML when metrics are nil")
 	}
 }
 
