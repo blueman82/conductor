@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/models"
+	"github.com/harrison/conductor/internal/similarity"
 )
 
 // Logger interface for orchestrator progress reporting.
@@ -79,6 +80,11 @@ type OrchestratorConfig struct {
 	// TargetTask filters execution to a single task (v2.27+)
 	// Empty string means run all tasks
 	TargetTask string
+	// Similarity provides Claude-based semantic similarity (v2.32+)
+	// Shared instance used by PatternIntelligence and WarmUpProvider.
+	// Created once at startup and injected into both subsystems for
+	// consistent configuration and rate limit handling.
+	Similarity *similarity.ClaudeSimilarity
 }
 
 // Orchestrator coordinates plan execution, handles graceful shutdown, and aggregates results.
@@ -97,6 +103,9 @@ type Orchestrator struct {
 	// targetTask filters execution to a single task (v2.27+)
 	// Empty string means run all tasks
 	targetTask string
+	// similarity provides Claude-based semantic similarity (v2.32+)
+	// Shared instance for PatternIntelligence and WarmUpProvider
+	similarity *similarity.ClaudeSimilarity
 }
 
 // NewOrchestrator creates a new Orchestrator instance.
@@ -177,6 +186,7 @@ func NewOrchestratorFromConfig(config OrchestratorConfig) *Orchestrator {
 		FileToTaskMapping: config.FileToTaskMapping,
 		patternHook:       config.PatternHook,
 		targetTask:        config.TargetTask,
+		similarity:        config.Similarity,
 	}
 
 	// Wire Pattern Intelligence hook to WaveExecutor if provided (v2.23+)
@@ -273,6 +283,13 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (
 	}
 
 	return executionResult, err
+}
+
+// Similarity returns the shared ClaudeSimilarity instance (v2.32+).
+// This can be used to access the similarity service for downstream components.
+// Returns nil if no similarity was configured.
+func (o *Orchestrator) Similarity() *similarity.ClaudeSimilarity {
+	return o.similarity
 }
 
 // aggregateResults processes task results and creates an ExecutionResult summary.

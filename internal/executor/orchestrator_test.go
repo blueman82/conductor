@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/models"
+	"github.com/harrison/conductor/internal/similarity"
 )
 
 // mockWaveExecutor is a test double for WaveExecutor.
@@ -414,4 +415,114 @@ type mockLearningStore struct {
 
 func (m *mockLearningStore) GetRunCount(ctx context.Context, planFile string) (int, error) {
 	return m.runCount, nil
+}
+
+// TestOrchestratorFromConfigWithSimilarity verifies that OrchestratorConfig
+// properly wires ClaudeSimilarity into the orchestrator (v2.32+).
+// This tests the shared similarity instance used by PatternIntelligence and WarmUpProvider.
+func TestOrchestratorFromConfigWithSimilarity(t *testing.T) {
+	t.Run("config with ClaudeSimilarity wired", func(t *testing.T) {
+		mockWE := &mockWaveExecutor{
+			executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+				return []models.TaskResult{
+					{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				}, nil
+			},
+		}
+
+		// Create ClaudeSimilarity instance (normally created in run.go)
+		claudeSim := similarity.NewClaudeSimilarity(nil)
+
+		config := OrchestratorConfig{
+			WaveExecutor:  mockWE,
+			Logger:        &mockLogger{},
+			LearningStore: nil,
+			SessionID:     "test-session-similarity",
+			RunNumber:     1,
+			PlanFile:      "test-plan.md",
+			Similarity:    claudeSim,
+		}
+
+		orchestrator := NewOrchestratorFromConfig(config)
+
+		// Verify orchestrator was created successfully
+		if orchestrator == nil {
+			t.Fatal("expected non-nil orchestrator")
+		}
+
+		// Verify similarity was wired correctly
+		if orchestrator.Similarity() != claudeSim {
+			t.Error("expected Similarity() to return the configured ClaudeSimilarity instance")
+		}
+
+		// Verify other config values were applied
+		if orchestrator.sessionID != "test-session-similarity" {
+			t.Errorf("expected sessionID 'test-session-similarity', got %q", orchestrator.sessionID)
+		}
+	})
+
+	t.Run("config without ClaudeSimilarity (nil)", func(t *testing.T) {
+		mockWE := &mockWaveExecutor{}
+
+		config := OrchestratorConfig{
+			WaveExecutor: mockWE,
+			Logger:       &mockLogger{},
+			Similarity:   nil, // No similarity configured
+		}
+
+		orchestrator := NewOrchestratorFromConfig(config)
+
+		// Verify orchestrator was created successfully
+		if orchestrator == nil {
+			t.Fatal("expected non-nil orchestrator")
+		}
+
+		// Verify Similarity() returns nil when not configured
+		if orchestrator.Similarity() != nil {
+			t.Error("expected Similarity() to return nil when not configured")
+		}
+	})
+
+	t.Run("orchestrator execution with similarity configured", func(t *testing.T) {
+		mockWE := &mockWaveExecutor{
+			executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+				return []models.TaskResult{
+					{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				}, nil
+			},
+		}
+
+		claudeSim := similarity.NewClaudeSimilarity(nil)
+
+		config := OrchestratorConfig{
+			WaveExecutor: mockWE,
+			Logger:       &mockLogger{},
+			Similarity:   claudeSim,
+		}
+
+		orchestrator := NewOrchestratorFromConfig(config)
+
+		plan := &models.Plan{
+			Tasks: []models.Task{
+				{Number: "1", Name: "Task 1"},
+			},
+			Waves: []models.Wave{
+				{Name: "Wave 1", TaskNumbers: []string{"1"}},
+			},
+		}
+
+		result, err := orchestrator.ExecutePlan(context.Background(), plan)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		if result.Completed != 1 {
+			t.Errorf("expected 1 completed task, got %d", result.Completed)
+		}
+
+		// Verify similarity is still accessible after execution
+		if orchestrator.Similarity() != claudeSim {
+			t.Error("similarity should remain accessible after execution")
+		}
+	})
 }
