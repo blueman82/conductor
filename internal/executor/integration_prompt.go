@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -27,17 +28,16 @@ func buildIntegrationPrompt(task models.Task, plan *models.Plan) string {
 			continue
 		}
 
-		// Dependency section using XML format
+		// Dependency section using XML format with agent helpers
 		builder.WriteString(fmt.Sprintf("<dependency task=\"%s\" name=\"%s\">\n", depTask.Number, depTask.Name))
 		builder.WriteString("<files_to_read>\n")
 		for _, file := range depTask.Files {
-			builder.WriteString(fmt.Sprintf("<file>%s</file>\n", file))
+			builder.WriteString(agent.XMLTag("file", file))
+			builder.WriteString("\n")
 		}
 		builder.WriteString("</files_to_read>\n")
-		builder.WriteString("<justification>\n")
-		builder.WriteString(generateReadJustification(depTask))
-		builder.WriteString("\n</justification>\n")
-		builder.WriteString("</dependency>\n\n")
+		builder.WriteString(agent.XMLSection("justification", generateReadJustification(depTask)))
+		builder.WriteString("\n</dependency>\n\n")
 	}
 
 	// Append original task prompt
