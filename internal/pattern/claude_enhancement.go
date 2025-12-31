@@ -27,17 +27,10 @@ type ClaudeEnhancer struct {
 	Logger     budget.WaiterLogger // For TTS + visual during rate limit wait
 }
 
-// NewClaudeEnhancer creates an enhancer with defaults
-func NewClaudeEnhancer(logger budget.WaiterLogger) *ClaudeEnhancer {
-	return &ClaudeEnhancer{
-		Timeout:    30 * time.Second,
-		ClaudePath: "claude",
-		Logger:     logger,
-	}
-}
-
-// NewClaudeEnhancerWithConfig creates an enhancer from config values
-func NewClaudeEnhancerWithConfig(timeout time.Duration, logger budget.WaiterLogger) *ClaudeEnhancer {
+// NewClaudeEnhancer creates an enhancer with the specified timeout.
+// The timeout parameter controls how long to wait for Claude CLI responses.
+// Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
+func NewClaudeEnhancer(timeout time.Duration, logger budget.WaiterLogger) *ClaudeEnhancer {
 	return &ClaudeEnhancer{
 		Timeout:    timeout,
 		ClaudePath: "claude",
