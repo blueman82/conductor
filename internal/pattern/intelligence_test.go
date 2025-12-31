@@ -74,7 +74,7 @@ func TestNewPatternIntelligence(t *testing.T) {
 				EnableDuplicateDetection: true,
 			},
 			store:   nil,
-			sim:     similarity.NewClaudeSimilarity(nil),
+			sim:     similarity.NewClaudeSimilarity(90*time.Second, nil),
 			wantNil: false,
 		},
 	}
@@ -1485,7 +1485,7 @@ func TestGenerateRecommendationsAgentNotEnoughSuccesses(t *testing.T) {
 func TestSetSimilarity(t *testing.T) {
 	t.Run("nil receiver returns without panic", func(t *testing.T) {
 		var pi *PatternIntelligenceImpl
-		pi.SetSimilarity(similarity.NewClaudeSimilarity(nil))
+		pi.SetSimilarity(similarity.NewClaudeSimilarity(90*time.Second, nil))
 		// Should not panic
 	})
 
@@ -1495,7 +1495,7 @@ func TestSetSimilarity(t *testing.T) {
 			Mode:    config.PatternModeWarn,
 		}
 		pi := NewPatternIntelligence(cfg, nil, nil).(*PatternIntelligenceImpl)
-		sim := similarity.NewClaudeSimilarity(nil)
+		sim := similarity.NewClaudeSimilarity(90*time.Second, nil)
 		pi.SetSimilarity(sim)
 		if pi.similarity != sim {
 			t.Error("expected similarity to be set")
@@ -1635,7 +1635,7 @@ func TestNewPatternIntelligenceWithSimilarity(t *testing.T) {
 		Enabled: true,
 		Mode:    config.PatternModeWarn,
 	}
-	sim := similarity.NewClaudeSimilarity(nil)
+	sim := similarity.NewClaudeSimilarity(90*time.Second, nil)
 	pi := NewPatternIntelligence(cfg, nil, sim)
 	if pi == nil {
 		t.Error("expected non-nil PatternIntelligence")

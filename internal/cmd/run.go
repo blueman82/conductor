@@ -666,8 +666,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// for consistent configuration and rate limit handling across both systems.
 	var claudeSim *similarity.ClaudeSimilarity
 	if cfg.Pattern.Enabled || cfg.Learning.Enabled {
-		claudeSim = similarity.NewClaudeSimilarityWithConfig(
-			time.Duration(cfg.Pattern.LLMTimeoutSeconds)*time.Second,
+		claudeSim = similarity.NewClaudeSimilarity(
+			cfg.Timeouts.LLM,
 			multiLog,
 		)
 	}

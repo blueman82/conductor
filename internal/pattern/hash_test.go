@@ -3,6 +3,7 @@ package pattern
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/harrison/conductor/internal/similarity"
 )
@@ -229,7 +230,7 @@ func TestCompareTasks(t *testing.T) {
 		hash2 := h.Hash(desc2, nil)
 
 		// Test with non-nil ClaudeSimilarity (won't make actual calls in unit tests)
-		claudeSim := similarity.NewClaudeSimilarity(nil)
+		claudeSim := similarity.NewClaudeSimilarity(90*time.Second, nil)
 		// This would make a real Claude call, so just verify it compiles and runs
 		// In real usage, Claude would be called for semantic comparison
 		_ = CompareTasks(ctx, desc1, desc2, hash1, hash2, claudeSim)
@@ -270,7 +271,7 @@ func TestIsDuplicate(t *testing.T) {
 		hash2 := h.Hash(desc2, nil)
 
 		// Test that ClaudeSimilarity is accepted as parameter
-		claudeSim := similarity.NewClaudeSimilarity(nil)
+		claudeSim := similarity.NewClaudeSimilarity(90*time.Second, nil)
 		// In real usage, Claude would provide semantic comparison
 		_ = IsDuplicate(ctx, desc1, desc2, hash1, hash2, 0.9, claudeSim)
 	})
