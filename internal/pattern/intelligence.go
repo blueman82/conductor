@@ -37,8 +37,8 @@ type PatternIntelligenceImpl struct {
 	searcher   *STOPSearcher
 	library    *PatternLibrary
 	store      *learning.Store
-	enhancer   *ClaudeEnhancer             // nil if LLM enhancement disabled
-	similarity similarity.Similarity       // Claude-based semantic similarity
+	enhancer   *ClaudeEnhancer                   // nil if LLM enhancement disabled
+	similarity *similarity.ClaudeSimilarity      // Claude-based semantic similarity
 
 	mu          sync.RWMutex
 	initialized bool
@@ -47,8 +47,8 @@ type PatternIntelligenceImpl struct {
 // NewPatternIntelligence creates a new PatternIntelligence orchestrator.
 // Returns nil if Pattern Intelligence is disabled or store is nil (graceful degradation).
 // Components are lazily initialized on first CheckTask call.
-// The similarity parameter provides Claude-based semantic similarity (can be nil for fallback to Jaccard).
-func NewPatternIntelligence(cfg *config.PatternConfig, store *learning.Store, sim similarity.Similarity) PatternIntelligence {
+// The similarity parameter provides Claude-based semantic similarity (required for non-hash similarity detection).
+func NewPatternIntelligence(cfg *config.PatternConfig, store *learning.Store, sim *similarity.ClaudeSimilarity) PatternIntelligence {
 	if cfg == nil || !cfg.Enabled {
 		return nil
 	}
@@ -422,15 +422,11 @@ func (pi *PatternIntelligenceImpl) generateProveResult(description string, files
 	return result
 }
 
-// enhanceWithLLM uses Claude to refine confidence when in uncertain range.
+// enhanceWithLLM uses Claude to refine confidence.
+// Always called when LLM enhancement is enabled (no threshold gating).
 // Graceful degradation: on error, returns original result unchanged.
 func (pi *PatternIntelligenceImpl) enhanceWithLLM(ctx context.Context, description string, searchResults SearchResults, result *STOPResult) *STOPResult {
 	if pi.enhancer == nil || pi.config == nil || !pi.config.LLMEnhancementEnabled {
-		return result
-	}
-
-	// Check if confidence is in uncertain range
-	if !pi.enhancer.ShouldEnhance(result.Confidence, pi.config.LLMMinConfidence, pi.config.LLMMaxConfidence) {
 		return result
 	}
 
@@ -670,7 +666,7 @@ func (pi *PatternIntelligenceImpl) SetEnhancer(enhancer *ClaudeEnhancer) {
 
 // SetSimilarity sets the semantic similarity implementation.
 // Deprecated: Pass similarity via NewPatternIntelligence constructor instead.
-func (pi *PatternIntelligenceImpl) SetSimilarity(sim similarity.Similarity) {
+func (pi *PatternIntelligenceImpl) SetSimilarity(sim *similarity.ClaudeSimilarity) {
 	if pi == nil {
 		return
 	}

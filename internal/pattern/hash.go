@@ -148,7 +148,7 @@ func (h *TaskHasher) normalize(input string) string {
 // CompareTasks compares two HashResults using ClaudeSimilarity for semantic matching.
 // Returns 1.0 for exact hash matches, otherwise uses Claude for semantic comparison.
 // Requires a ClaudeSimilarity instance for semantic comparison.
-func CompareTasks(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, sim similarity.Similarity) float64 {
+func CompareTasks(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, sim *similarity.ClaudeSimilarity) float64 {
 	// If full hashes match, tasks are identical
 	if hash1.FullHash == hash2.FullHash {
 		return 1.0
@@ -173,6 +173,6 @@ func CompareTasks(ctx context.Context, desc1, desc2 string, hash1, hash2 HashRes
 
 // IsDuplicate checks if two tasks are duplicates based on similarity threshold.
 // Requires ClaudeSimilarity for semantic comparison.
-func IsDuplicate(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, threshold float64, sim similarity.Similarity) bool {
+func IsDuplicate(ctx context.Context, desc1, desc2 string, hash1, hash2 HashResult, threshold float64, sim *similarity.ClaudeSimilarity) bool {
 	return CompareTasks(ctx, desc1, desc2, hash1, hash2, sim) >= threshold
 }

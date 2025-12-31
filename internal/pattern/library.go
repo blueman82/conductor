@@ -205,7 +205,7 @@ func (l *PatternLibrary) Retrieve(ctx context.Context, description string, files
 // RetrieveWithSimilarity finds patterns similar to the given description using Claude semantic matching.
 // Uses hash prefix matching to find candidate patterns, then scores each with ClaudeSimilarity.
 // Returns patterns sorted by similarity (highest first).
-func (l *PatternLibrary) RetrieveWithSimilarity(ctx context.Context, description string, files []string, limit int, sim similarity.Similarity) ([]StoredPattern, error) {
+func (l *PatternLibrary) RetrieveWithSimilarity(ctx context.Context, description string, files []string, limit int, sim *similarity.ClaudeSimilarity) ([]StoredPattern, error) {
 	if l.store == nil {
 		return []StoredPattern{}, nil // Graceful fallback when no store
 	}

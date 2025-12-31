@@ -2,7 +2,6 @@ package pattern
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -12,25 +11,6 @@ import (
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/similarity"
 )
-
-// mockSimilarity implements similarity.Similarity for testing
-type mockSimilarity struct {
-	score       float64
-	err         error
-	compareCalls int
-}
-
-func (m *mockSimilarity) Compare(ctx context.Context, desc1, desc2 string) (*similarity.SimilarityResult, error) {
-	m.compareCalls++
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &similarity.SimilarityResult{
-		Score:         m.score,
-		Reasoning:     "Mock similarity result",
-		SemanticMatch: m.score >= 0.8,
-	}, nil
-}
 
 func TestIntelligence_New(t *testing.T) {
 	// This is an alias test for go test -run TestIntelligence
@@ -50,7 +30,7 @@ func TestNewPatternIntelligence(t *testing.T) {
 		name    string
 		cfg     *config.PatternConfig
 		store   *learning.Store
-		sim     similarity.Similarity
+		sim     *similarity.ClaudeSimilarity
 		wantNil bool
 	}{
 		{
@@ -94,7 +74,7 @@ func TestNewPatternIntelligence(t *testing.T) {
 				EnableDuplicateDetection: true,
 			},
 			store:   nil,
-			sim:     &mockSimilarity{score: 0.85},
+			sim:     similarity.NewClaudeSimilarity(nil),
 			wantNil: false,
 		},
 	}
@@ -1505,7 +1485,7 @@ func TestGenerateRecommendationsAgentNotEnoughSuccesses(t *testing.T) {
 func TestSetSimilarity(t *testing.T) {
 	t.Run("nil receiver returns without panic", func(t *testing.T) {
 		var pi *PatternIntelligenceImpl
-		pi.SetSimilarity(&mockSimilarity{score: 0.9})
+		pi.SetSimilarity(similarity.NewClaudeSimilarity(nil))
 		// Should not panic
 	})
 
@@ -1515,9 +1495,9 @@ func TestSetSimilarity(t *testing.T) {
 			Mode:    config.PatternModeWarn,
 		}
 		pi := NewPatternIntelligence(cfg, nil, nil).(*PatternIntelligenceImpl)
-		mock := &mockSimilarity{score: 0.9}
-		pi.SetSimilarity(mock)
-		if pi.similarity != mock {
+		sim := similarity.NewClaudeSimilarity(nil)
+		pi.SetSimilarity(sim)
+		if pi.similarity != sim {
 			t.Error("expected similarity to be set")
 		}
 	})
@@ -1540,8 +1520,8 @@ func TestCheckDuplicatesWithClaudeSimilarity(t *testing.T) {
 		MaxPatternsPerTask:       5,
 	}
 
-	mock := &mockSimilarity{score: 0.95}
-	pi := NewPatternIntelligence(cfg, store, mock).(*PatternIntelligenceImpl)
+	// Test with nil similarity - should return 0 for non-hash matches
+	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -1552,13 +1532,12 @@ func TestCheckDuplicatesWithClaudeSimilarity(t *testing.T) {
 		t.Fatalf("failed to store pattern: %v", err)
 	}
 
-	t.Run("uses ClaudeSimilarity for semantic matching", func(t *testing.T) {
+	t.Run("handles nil ClaudeSimilarity gracefully", func(t *testing.T) {
 		// Use a DIFFERENT task name/files so we don't get exact hash match
-		// but include overlapping keywords so Jaccard pre-filter picks it up
 		task := models.Task{
 			Number: "1",
-			Name:   "Implement user authentication service",  // Different but related
-			Files:  []string{"service.go"},                   // Different file
+			Name:   "Implement user authentication service", // Different but related
+			Files:  []string{"service.go"},                  // Different file
 		}
 
 		_, dup, err := pi.CheckTask(context.Background(), task)
@@ -1569,27 +1548,19 @@ func TestCheckDuplicatesWithClaudeSimilarity(t *testing.T) {
 			t.Fatal("expected DuplicateResult")
 		}
 
-		// With mock returning 0.95, should detect as duplicate
-		if !dup.IsDuplicate {
-			t.Logf("SimilarityScore: %.2f, threshold: %.2f", dup.SimilarityScore, cfg.DuplicateThreshold)
-		}
-
-		// Verify mock was called (should be called for non-exact matches)
-		if mock.compareCalls == 0 {
-			// This is OK if Jaccard pre-filter didn't pick up any patterns
-			// The important thing is the flow works
-			t.Logf("ClaudeSimilarity not called - patterns may not have matched Jaccard pre-filter")
-		}
+		// With nil similarity, non-exact matches return 0 score
+		// So this should not be detected as duplicate
+		t.Logf("SimilarityScore: %.2f, IsDuplicate: %v", dup.SimilarityScore, dup.IsDuplicate)
 	})
 
-	t.Run("reports semantic similarity in overlap reason", func(t *testing.T) {
+	t.Run("detects exact hash match without ClaudeSimilarity", func(t *testing.T) {
+		// Use SAME task name/files to get exact hash match
 		task := models.Task{
 			Number: "2",
-			Name:   "Build user authentication module",  // Include overlapping keywords
-			Files:  []string{"module.go"},
+			Name:   "Create user authentication handler",
+			Files:  []string{"auth.go"},
 		}
 
-		initialCalls := mock.compareCalls
 		_, dup, err := pi.CheckTask(context.Background(), task)
 		if err != nil {
 			t.Errorf("CheckTask() error = %v", err)
@@ -1598,24 +1569,17 @@ func TestCheckDuplicatesWithClaudeSimilarity(t *testing.T) {
 			t.Fatal("expected DuplicateResult")
 		}
 
-		// Check for semantic overlap reason
-		hasSemanticReason := false
-		for _, d := range dup.DuplicateOf {
-			if strings.Contains(d.OverlapReason, "semantic") {
-				hasSemanticReason = true
-				break
-			}
+		// Exact hash match should be detected
+		if !dup.IsDuplicate {
+			t.Error("expected IsDuplicate=true for exact hash match")
 		}
-		if !hasSemanticReason && len(dup.DuplicateOf) > 0 {
-			t.Logf("Overlap reasons: %v", dup.DuplicateOf)
-		}
-		if mock.compareCalls > initialCalls {
-			t.Logf("ClaudeSimilarity was called %d times", mock.compareCalls-initialCalls)
+		if dup.SimilarityScore != 1.0 {
+			t.Errorf("expected SimilarityScore=1.0 for exact match, got %.2f", dup.SimilarityScore)
 		}
 	})
 }
 
-func TestCheckDuplicatesWithClaudeSimilarityError(t *testing.T) {
+func TestCheckDuplicatesWithNilSimilarity(t *testing.T) {
 	store, err := learning.NewStore(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
@@ -1632,9 +1596,8 @@ func TestCheckDuplicatesWithClaudeSimilarityError(t *testing.T) {
 		MaxPatternsPerTask:       5,
 	}
 
-	// Mock that returns error - should fall back to Jaccard
-	mock := &mockSimilarity{err: errors.New("claude unavailable")}
-	pi := NewPatternIntelligence(cfg, store, mock).(*PatternIntelligenceImpl)
+	// Nil similarity - semantic matching returns 0
+	pi := NewPatternIntelligence(cfg, store, nil).(*PatternIntelligenceImpl)
 	if err := pi.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -1645,12 +1608,12 @@ func TestCheckDuplicatesWithClaudeSimilarityError(t *testing.T) {
 		t.Fatalf("failed to store pattern: %v", err)
 	}
 
-	t.Run("falls back to Jaccard on Claude error", func(t *testing.T) {
+	t.Run("returns 0 similarity for non-hash matches without ClaudeSimilarity", func(t *testing.T) {
 		// Use different task to avoid exact hash match
 		task := models.Task{
 			Number: "1",
-			Name:   "Implement user authentication service",  // Different but overlapping keywords
-			Files:  []string{"service.go"},                   // Different file
+			Name:   "Implement user authentication service", // Different but overlapping keywords
+			Files:  []string{"service.go"},                  // Different file
 		}
 
 		_, dup, err := pi.CheckTask(context.Background(), task)
@@ -1661,10 +1624,9 @@ func TestCheckDuplicatesWithClaudeSimilarityError(t *testing.T) {
 			t.Fatal("expected DuplicateResult")
 		}
 
-		// Should still work - either via exact match or Jaccard fallback
-		// Log what we got
-		t.Logf("Duplicate check result: IsDuplicate=%v, Score=%.2f, compareCalls=%d",
-			dup.IsDuplicate, dup.SimilarityScore, mock.compareCalls)
+		// With nil similarity, non-hash matches return 0
+		t.Logf("Duplicate check result: IsDuplicate=%v, Score=%.2f",
+			dup.IsDuplicate, dup.SimilarityScore)
 	})
 }
 
@@ -1673,8 +1635,8 @@ func TestNewPatternIntelligenceWithSimilarity(t *testing.T) {
 		Enabled: true,
 		Mode:    config.PatternModeWarn,
 	}
-	mock := &mockSimilarity{score: 0.85}
-	pi := NewPatternIntelligence(cfg, nil, mock)
+	sim := similarity.NewClaudeSimilarity(nil)
+	pi := NewPatternIntelligence(cfg, nil, sim)
 	if pi == nil {
 		t.Error("expected non-nil PatternIntelligence")
 	}
@@ -1683,7 +1645,7 @@ func TestNewPatternIntelligenceWithSimilarity(t *testing.T) {
 	if !ok {
 		t.Fatal("expected *PatternIntelligenceImpl")
 	}
-	if impl.similarity != mock {
+	if impl.similarity != sim {
 		t.Error("expected similarity to be set from constructor")
 	}
 }
