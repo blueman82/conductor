@@ -341,15 +341,15 @@ Write tests first
 		t.Error("Prompt should contain 'Test First' section")
 	}
 
-	// Verify file injection is present
-	if !strings.Contains(task.Prompt, "Target Files (REQUIRED)") {
-		t.Error("Prompt should contain 'Target Files (REQUIRED)' section")
+	// Verify file injection is present (XML format)
+	if !strings.Contains(task.Prompt, `<target_files required="true">`) {
+		t.Error("Prompt should contain '<target_files required=\"true\">' section")
 	}
-	if !strings.Contains(task.Prompt, "test.go") {
-		t.Error("Prompt should contain the file 'test.go'")
+	if !strings.Contains(task.Prompt, "<file>test.go</file>") {
+		t.Error("Prompt should contain the file '<file>test.go</file>'")
 	}
-	if !strings.Contains(task.Prompt, "MUST create/modify these exact files") {
-		t.Error("Prompt should contain file injection instructions")
+	if !strings.Contains(task.Prompt, "<instruction>You MUST create/modify these exact files</instruction>") {
+		t.Error("Prompt should contain file injection instructions in XML format")
 	}
 }
 
