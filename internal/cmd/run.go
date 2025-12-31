@@ -661,13 +661,19 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Wire Pattern Intelligence (v2.24+) with ClaudeSimilarity (v2.32+)
-	if cfg.Pattern.Enabled {
-		// Create ClaudeSimilarity for semantic matching
-		claudeSim := similarity.NewClaudeSimilarityWithConfig(
+	// Create shared ClaudeSimilarity for semantic matching (v2.32+)
+	// This instance is shared by Pattern Intelligence and Warm-Up Provider
+	// for consistent configuration and rate limit handling across both systems.
+	var claudeSim *similarity.ClaudeSimilarity
+	if cfg.Pattern.Enabled || cfg.Learning.Enabled {
+		claudeSim = similarity.NewClaudeSimilarityWithConfig(
 			time.Duration(cfg.Pattern.LLMTimeoutSeconds)*time.Second,
 			multiLog,
 		)
+	}
+
+	// Wire Pattern Intelligence (v2.24+) with shared ClaudeSimilarity
+	if cfg.Pattern.Enabled && claudeSim != nil {
 		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore, claudeSim)
 		if pi != nil {
 			// Set up LLM enhancement if enabled
@@ -682,6 +688,13 @@ func runCommand(cmd *cobra.Command, args []string) error {
 			}
 			taskExec.PatternHook = executor.NewPatternIntelligenceHook(pi, &cfg.Pattern, consoleLog)
 		}
+	}
+
+	// Wire Warm-Up Provider (v2.32+) with shared ClaudeSimilarity
+	// WarmUpProvider primes agents with historical context from similar tasks
+	if cfg.Learning.Enabled && learningStore != nil {
+		warmUpProvider := learning.NewWarmUpProvider(learningStore, claudeSim)
+		taskExec.WarmUpHook = executor.NewWarmUpHook(warmUpProvider, consoleLog)
 	}
 
 	// Wire Architecture Checkpoint (v2.27+)

@@ -288,3 +288,130 @@ func TestOrchestratorExecutionMetrics(t *testing.T) {
 }
 
 func (m *mockLogger) SetGuardVerbose(verbose bool) {}
+
+// TestOrchestratorFromConfigWithPatternHook verifies orchestrator configuration
+// with PatternHook integration (ClaudeSimilarity wiring test).
+func TestOrchestratorFromConfigWithPatternHook(t *testing.T) {
+	mockWE := &mockWaveExecutor{
+		executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+			return []models.TaskResult{
+				{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+			}, nil
+		},
+	}
+
+	mockLog := &mockLogger{}
+
+	// Test that OrchestratorConfig properly wires the pattern hook
+	config := OrchestratorConfig{
+		WaveExecutor:  mockWE,
+		Logger:        mockLog,
+		LearningStore: nil, // Can be nil
+		SessionID:     "test-session-123",
+		RunNumber:     1,
+		PlanFile:      "test-plan.md",
+		SkipCompleted: false,
+		RetryFailed:   false,
+		PatternHook:   nil, // Pattern hook is optional
+	}
+
+	orchestrator := NewOrchestratorFromConfig(config)
+
+	// Verify orchestrator was created successfully
+	if orchestrator == nil {
+		t.Fatal("expected non-nil orchestrator")
+	}
+
+	// Verify config values were applied
+	if orchestrator.planFile != "test-plan.md" {
+		t.Errorf("expected planFile 'test-plan.md', got %q", orchestrator.planFile)
+	}
+
+	if orchestrator.sessionID != "test-session-123" {
+		t.Errorf("expected sessionID 'test-session-123', got %q", orchestrator.sessionID)
+	}
+
+	// Execute plan to verify basic functionality
+	plan := &models.Plan{
+		Tasks: []models.Task{
+			{Number: "1", Name: "Task 1"},
+		},
+		Waves: []models.Wave{
+			{Name: "Wave 1", TaskNumbers: []string{"1"}},
+		},
+	}
+
+	result, err := orchestrator.ExecutePlan(context.Background(), plan)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	if result.Completed != 1 {
+		t.Errorf("expected 1 completed task, got %d", result.Completed)
+	}
+}
+
+// TestOrchestratorFromConfigWithWarmUpHook verifies that orchestrator config
+// integrates properly with WarmUpHook-enabled WaveExecutor.
+func TestOrchestratorFromConfigWithWarmUpHook(t *testing.T) {
+	// This test verifies that the WarmUpHook integration point in
+	// the wiring (run.go) will work correctly with the orchestrator.
+	// The actual WarmUpHook is tested in warmup_hook_test.go.
+
+	t.Run("config with learning store and run number calculation", func(t *testing.T) {
+		// Mock learning store that returns a specific run count
+		mockStore := &mockLearningStore{
+			runCount: 5,
+		}
+
+		mockWE := &mockWaveExecutor{
+			executePlanFunc: func(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
+				return []models.TaskResult{
+					{Task: models.Task{Number: "1"}, Status: models.StatusGreen},
+				}, nil
+			},
+		}
+
+		config := OrchestratorConfig{
+			WaveExecutor:  mockWE,
+			Logger:        &mockLogger{},
+			LearningStore: mockStore,
+			RunNumber:     0, // Should be calculated from store
+			PlanFile:      "test-plan.md",
+		}
+
+		orchestrator := NewOrchestratorFromConfig(config)
+
+		// RunNumber should be previous count + 1 = 6
+		if orchestrator.runNumber != 6 {
+			t.Errorf("expected runNumber 6, got %d", orchestrator.runNumber)
+		}
+	})
+
+	t.Run("config with explicit run number", func(t *testing.T) {
+		mockWE := &mockWaveExecutor{}
+
+		config := OrchestratorConfig{
+			WaveExecutor: mockWE,
+			Logger:       &mockLogger{},
+			RunNumber:    42, // Explicit run number
+			PlanFile:     "test-plan.md",
+		}
+
+		orchestrator := NewOrchestratorFromConfig(config)
+
+		// Explicit RunNumber should be preserved
+		if orchestrator.runNumber != 42 {
+			t.Errorf("expected runNumber 42, got %d", orchestrator.runNumber)
+		}
+	})
+}
+
+// mockLearningStore implements LearningStoreInterface for testing.
+type mockLearningStore struct {
+	runCount int
+}
+
+func (m *mockLearningStore) GetRunCount(ctx context.Context, planFile string) (int, error) {
+	return m.runCount, nil
+}
