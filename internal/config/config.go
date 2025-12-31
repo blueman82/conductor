@@ -324,6 +324,27 @@ type PatternConfig struct {
 	RequireJustification bool `yaml:"require_justification"`
 }
 
+// TimeoutsConfig controls timeout durations for different operation types
+type TimeoutsConfig struct {
+	// Task is the timeout for main agent task execution (default: 12h)
+	// This is the maximum time allowed for an agent to complete a task.
+	Task time.Duration `yaml:"task"`
+
+	// LLM is the timeout for internal Claude CLI calls (default: 90s)
+	// Used for agent swapping, QC selection, similarity checks, etc.
+	// 90s provides headroom for complex operations while still working for simple ones.
+	// Users can decrease to 60s or 30s for faster failure on simple operations.
+	LLM time.Duration `yaml:"llm"`
+
+	// HTTP is the timeout for external HTTP services (default: 30s)
+	// Used for TTS, webhooks, and other external HTTP calls.
+	HTTP time.Duration `yaml:"http"`
+
+	// Search is the timeout for fast local CLI operations (default: 30s)
+	// Used for git, grep, and other local search operations.
+	Search time.Duration `yaml:"search"`
+}
+
 // TTSConfig controls text-to-speech functionality
 type TTSConfig struct {
 	// Enabled enables TTS functionality (default: false for zero behavior change)
@@ -453,6 +474,9 @@ type Config struct {
 
 	// Architecture contains Architecture Checkpoint configuration (v2.27+)
 	Architecture ArchitectureConfig `yaml:"architecture"`
+
+	// Timeouts contains timeout configuration for different operation types
+	Timeouts TimeoutsConfig `yaml:"timeouts"`
 }
 
 // ArchitectureMode specifies the Architecture Checkpoint operating mode
@@ -521,6 +545,17 @@ func DefaultCostModelConfig() CostModelConfig {
 		HaikuOutput:  4.0,
 		OpusInput:    15.0,
 		OpusOutput:   75.0,
+	}
+}
+
+// DefaultTimeoutsConfig returns TimeoutsConfig with sensible default values.
+// These defaults provide generous timeouts while still allowing timely failure detection.
+func DefaultTimeoutsConfig() TimeoutsConfig {
+	return TimeoutsConfig{
+		Task:   12 * time.Hour,   // Main agent task execution
+		LLM:    90 * time.Second, // Internal Claude CLI calls (agent swap, QC, similarity)
+		HTTP:   30 * time.Second, // External HTTP services (TTS, webhooks)
+		Search: 30 * time.Second, // Fast local CLI operations (git, grep)
 	}
 }
 
@@ -666,6 +701,7 @@ func DefaultConfig() *Config {
 		Budget:       DefaultBudgetConfig(),
 		Pattern:      DefaultPatternConfig(),
 		Architecture: DefaultArchitectureConfig(),
+		Timeouts:     DefaultTimeoutsConfig(),
 	}
 }
 
