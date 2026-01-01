@@ -2,7 +2,10 @@ plan:
   name: "Simple QC Test"
   quality_control:
     enabled: true
-    review_agent: conductor-qc
+    agents:
+      mode: explicit
+      explicit_list:
+        - conductor-qc
     retry_on_red: 2
   tasks:
     - task_number: "1"
