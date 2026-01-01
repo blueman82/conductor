@@ -323,8 +323,8 @@ func testIntelligentSelectQCAgents(
 	registry *agent.Registry,
 	mockSelector *testIntelligentSelector,
 ) ([]string, string, error) {
-	// Create real selector for guardrails
-	selector := NewIntelligentSelector(registry, config.CacheTTLSeconds, time.Duration(config.SelectionTimeoutSeconds)*time.Second)
+	// Create real selector for guardrails (use default 90s timeout for tests)
+	selector := NewIntelligentSelector(registry, config.CacheTTLSeconds, 90*time.Second)
 
 	// Apply guardrails to mock recommendation
 	result := selector.applyGuardrails(mockSelector.mockRecommendation, config)

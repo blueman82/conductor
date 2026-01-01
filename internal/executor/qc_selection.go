@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/models"
@@ -13,6 +14,7 @@ import (
 type SelectionContext struct {
 	ExecutingAgent      string
 	IntelligentSelector *IntelligentSelector
+	LLMTimeout          time.Duration // Timeout for LLM calls (from timeouts.llm)
 	// Output fields (populated after selection)
 	UsedMode        string // Actual mode used (may differ from config if fallback occurred)
 	FallbackOccured bool   // True if intelligent selection fell back to auto
@@ -47,6 +49,7 @@ func SelectQCAgentsWithContext(
 				agentConfig,
 				registry,
 				selCtx.IntelligentSelector,
+				selCtx.LLMTimeout,
 			)
 			if err == nil && len(selectedAgents) > 0 {
 				agents = selectedAgents

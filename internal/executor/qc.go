@@ -69,6 +69,7 @@ type QualityController struct {
 	Logger              QCLogger                   // Logger for QC events (optional, can be nil)
 	IntelligentSelector *IntelligentSelector       // Intelligent selector for mode="intelligent" (v2.4+)
 	BehavioralMetrics   *BehavioralMetricsProvider // Provider for behavioral metrics context (v2.7+)
+	LLMTimeout          time.Duration              // Timeout for LLM calls (from timeouts.llm)
 
 	// Test/verification results for QC prompt injection (v2.9+)
 	TestCommandResults     []TestCommandResult           // Results from RunTestCommands
@@ -528,12 +529,13 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 	if qc.AgentConfig.Mode == "intelligent" {
 		// Ensure intelligent selector is initialized
 		if qc.IntelligentSelector == nil && qc.Registry != nil {
-			qc.IntelligentSelector = NewIntelligentSelector(qc.Registry, qc.AgentConfig.CacheTTLSeconds, time.Duration(qc.AgentConfig.SelectionTimeoutSeconds)*time.Second)
+			qc.IntelligentSelector = NewIntelligentSelector(qc.Registry, qc.AgentConfig.CacheTTLSeconds, qc.LLMTimeout)
 		}
 
 		selCtx = &SelectionContext{
 			ExecutingAgent:      task.Agent,
 			IntelligentSelector: qc.IntelligentSelector,
+			LLMTimeout:          qc.LLMTimeout,
 		}
 		agents = SelectQCAgentsWithContext(ctx, task, qc.AgentConfig, qc.Registry, selCtx)
 	} else {

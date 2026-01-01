@@ -288,10 +288,11 @@ func IntelligentSelectQCAgents(
 	config models.QCAgentConfig,
 	registry *agent.Registry,
 	selector *IntelligentSelector,
+	llmTimeout time.Duration,
 ) ([]string, string, error) {
 	// Use provided selector or create new one
 	if selector == nil {
-		selector = NewIntelligentSelector(registry, config.CacheTTLSeconds, time.Duration(config.SelectionTimeoutSeconds)*time.Second)
+		selector = NewIntelligentSelector(registry, config.CacheTTLSeconds, llmTimeout)
 	}
 
 	// Ensure registry is set

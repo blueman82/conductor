@@ -446,14 +446,13 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		plan.QualityControl = models.QualityControlConfig{
 			Enabled: cfg.QualityControl.Enabled,
 			Agents: models.QCAgentConfig{
-				Mode:                    cfg.QualityControl.Agents.Mode,
-				ExplicitList:            cfg.QualityControl.Agents.ExplicitList,
-				AdditionalAgents:        cfg.QualityControl.Agents.AdditionalAgents,
-				BlockedAgents:           cfg.QualityControl.Agents.BlockedAgents,
-				MaxAgents:               cfg.QualityControl.Agents.MaxAgents,
-				CacheTTLSeconds:         cfg.QualityControl.Agents.CacheTTLSeconds,
-				SelectionTimeoutSeconds: int(cfg.Timeouts.LLM.Seconds()), // Wire cfg.Timeouts.LLM to QC IntelligentSelector (v2.33+)
-				RequireCodeReview:       cfg.QualityControl.Agents.RequireCodeReview,
+				Mode:              cfg.QualityControl.Agents.Mode,
+				ExplicitList:      cfg.QualityControl.Agents.ExplicitList,
+				AdditionalAgents:  cfg.QualityControl.Agents.AdditionalAgents,
+				BlockedAgents:     cfg.QualityControl.Agents.BlockedAgents,
+				MaxAgents:         cfg.QualityControl.Agents.MaxAgents,
+				CacheTTLSeconds:   cfg.QualityControl.Agents.CacheTTLSeconds,
+				RequireCodeReview: cfg.QualityControl.Agents.RequireCodeReview,
 			},
 			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
@@ -617,6 +616,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	qc.LearningStore = learningStore            // Enable historical context loading
 	qc.AgentConfig = plan.QualityControl.Agents // Apply plan-level QC agent configuration
 	qc.Logger = multiLog                        // Wire logger for QC events
+	qc.LLMTimeout = cfg.Timeouts.LLM            // Wire timeouts.llm for intelligent selection
 
 	// Create task executor config
 	taskExecCfg := executor.TaskExecutorConfig{
