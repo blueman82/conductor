@@ -149,10 +149,6 @@ learning:
   # This should be a file path, not a directory
   db_path: .conductor/learning/executions.db
 
-  # Auto-adapt agent selection based on learned patterns (default: false)
-  # When enabled, conductor will automatically suggest or switch agents based on past successes
-  auto_adapt_agent: false
-
   # Enable agent swapping during retry loops (default: true)
   # When a task fails repeatedly, swap to a better-performing agent suggested by QC or history
   swap_during_retries: true
