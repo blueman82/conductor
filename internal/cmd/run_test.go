@@ -2768,12 +2768,16 @@ quality_control:
 default_agent: golang-pro
 quality_control:
   enabled: true
-  review_agent: plan-specific-agent
+  agents:
+    mode: explicit
+    explicit_list: [plan-specific-agent]
   retry_on_red: 5
 ---`,
 			configQC: `quality_control:
   enabled: true
-  review_agent: config-agent
+  agents:
+    mode: explicit
+    explicit_list: [config-agent]
   retry_on_red: 2
 `,
 			expectPlanQCEnabled: true,
