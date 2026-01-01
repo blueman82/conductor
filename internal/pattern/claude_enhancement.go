@@ -38,11 +38,6 @@ func NewClaudeEnhancer(timeout time.Duration, logger budget.WaiterLogger) *Claud
 	}
 }
 
-// ShouldEnhance returns true if confidence is in uncertain range
-func (ce *ClaudeEnhancer) ShouldEnhance(confidence float64, minConf, maxConf float64) bool {
-	return confidence >= minConf && confidence <= maxConf
-}
-
 // Enhance calls Claude for confidence refinement with rate limit retry
 func (ce *ClaudeEnhancer) Enhance(ctx context.Context, taskDesc string, patterns string, baseConfidence float64) (*EnhancementResult, error) {
 	result, err := ce.invoke(ctx, taskDesc, patterns, baseConfidence)

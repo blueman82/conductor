@@ -289,14 +289,6 @@ type PatternConfig struct {
 	// LLMEnhancementEnabled enables Claude-based confidence refinement for uncertain cases
 	LLMEnhancementEnabled bool `yaml:"llm_enhancement_enabled"`
 
-	// LLMMinConfidence is the minimum confidence to trigger LLM enhancement (config-only, no default)
-	// Enhancement only runs when confidence >= this value
-	LLMMinConfidence float64 `yaml:"llm_min_confidence"`
-
-	// LLMMaxConfidence is the maximum confidence to trigger LLM enhancement (config-only, no default)
-	// Enhancement only runs when confidence <= this value
-	LLMMaxConfidence float64 `yaml:"llm_max_confidence"`
-
 	// RequireJustification requires implementing agent to justify custom implementations
 	// when STOP protocol finds prior art (existing solutions, similar commits, related issues).
 	// When true: QC agents will ask for justification; weak/missing justification → YELLOW.
@@ -583,8 +575,6 @@ func DefaultPatternConfig() PatternConfig {
 		MaxRelatedFiles:          10,    // Limit related files
 		CacheTTLSeconds:       3600,  // 1 hour cache
 		LLMEnhancementEnabled: false, // Disabled by default
-		LLMMinConfidence:      0,     // No lower bound by default (0 = no gating)
-		LLMMaxConfidence:      0,     // No upper bound by default (0 = no gating)
 	}
 }
 
@@ -1172,12 +1162,6 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := patternMap["llm_enhancement_enabled"]; exists {
 				cfg.Pattern.LLMEnhancementEnabled = pattern.LLMEnhancementEnabled
-			}
-			if _, exists := patternMap["llm_min_confidence"]; exists {
-				cfg.Pattern.LLMMinConfidence = pattern.LLMMinConfidence
-			}
-			if _, exists := patternMap["llm_max_confidence"]; exists {
-				cfg.Pattern.LLMMaxConfidence = pattern.LLMMaxConfidence
 			}
 			if _, exists := patternMap["require_justification"]; exists {
 				cfg.Pattern.RequireJustification = pattern.RequireJustification

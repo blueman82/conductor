@@ -486,13 +486,6 @@ pattern:
   # Provides TTS + visual countdown during rate limit waits
   llm_enhancement_enabled: false  # Disabled by default
 
-  # LLM confidence thresholds (v2.34+)
-  # Controls when LLM enhancement triggers based on confidence level
-  # Enhancement only runs when: min <= confidence <= max
-  # Both must be set if either is set; min must be < max
-  # llm_min_confidence: 0.3  # Enhance when confidence >= this value
-  # llm_max_confidence: 0.7  # Enhance when confidence <= this value
-
 # Pattern Intelligence Examples
 
 # Example: Enable Pattern Intelligence in warn mode (recommended starting point)
@@ -525,12 +518,10 @@ pattern:
 #   enable_stop: false
 #   enable_duplicate_detection: true
 
-# Example: Enable LLM enhancement for uncertain confidence (v2.26+)
+# Example: Enable LLM enhancement (always runs when enabled, v2.26+)
 # pattern:
 #   enabled: true
 #   llm_enhancement_enabled: true
-#   llm_min_confidence: 0.3   # Only enhance when confidence >= 0.3
-#   llm_max_confidence: 0.7   # Only enhance when confidence <= 0.7
 
 # Validation Examples
 

@@ -54,13 +54,8 @@ type PatternConfig struct {
 
 	// LLM Enhancement (optional, requires Claude CLI)
 	// LLMEnhancementEnabled enables Claude-based confidence refinement
+	// When enabled, always runs enhancement (no confidence thresholds)
 	LLMEnhancementEnabled bool `yaml:"llm_enhancement_enabled"`
-
-	// LLMMinConfidence is the minimum confidence to trigger LLM enhancement
-	LLMMinConfidence float64 `yaml:"llm_min_confidence"`
-
-	// LLMMaxConfidence is the maximum confidence to trigger LLM enhancement
-	LLMMaxConfidence float64 `yaml:"llm_max_confidence"`
 }
 
 // DefaultPatternConfig returns PatternConfig with sensible default values.
@@ -77,9 +72,8 @@ func DefaultPatternConfig() PatternConfig {
 		InjectIntoPrompt:         true,  // Include analysis in prompts by default
 		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
 		MaxRelatedFiles:          10,    // Limit related files
-		CacheTTLSeconds:          3600,  // 1 hour cache
-		LLMEnhancementEnabled:    false, // Disabled by default
-		// LLMMinConfidence and LLMMaxConfidence are config-only, no defaults
+		CacheTTLSeconds:       3600,  // 1 hour cache
+		LLMEnhancementEnabled: false, // Disabled by default
 	}
 }
 
@@ -138,36 +132,6 @@ func (c *PatternConfig) Validate() error {
 			Field:   "cache_ttl_seconds",
 			Message: "must be >= 0",
 			Value:   c.CacheTTLSeconds,
-		}
-	}
-
-	// LLM confidence threshold validation (only if LLM enhancement is enabled)
-	if c.LLMEnhancementEnabled {
-		// If either threshold is set, validate both
-		if c.LLMMinConfidence > 0 || c.LLMMaxConfidence > 0 {
-			if c.LLMMinConfidence < 0 || c.LLMMinConfidence > 1 {
-				return &ConfigError{
-					Field:   "llm_min_confidence",
-					Message: "must be between 0 and 1",
-					Value:   c.LLMMinConfidence,
-				}
-			}
-
-			if c.LLMMaxConfidence < 0 || c.LLMMaxConfidence > 1 {
-				return &ConfigError{
-					Field:   "llm_max_confidence",
-					Message: "must be between 0 and 1",
-					Value:   c.LLMMaxConfidence,
-				}
-			}
-
-			if c.LLMMinConfidence >= c.LLMMaxConfidence {
-				return &ConfigError{
-					Field:   "llm_min_confidence",
-					Message: "must be less than llm_max_confidence",
-					Value:   c.LLMMinConfidence,
-				}
-			}
 		}
 	}
 

@@ -6,64 +6,6 @@ import (
 	"time"
 )
 
-func TestShouldEnhance(t *testing.T) {
-	enhancer := NewClaudeEnhancer(90*time.Second, nil)
-
-	tests := []struct {
-		name       string
-		confidence float64
-		minConf    float64
-		maxConf    float64
-		expected   bool
-	}{
-		{
-			name:       "confidence below min - no enhance",
-			confidence: 0.2,
-			minConf:    0.3,
-			maxConf:    0.7,
-			expected:   false,
-		},
-		{
-			name:       "confidence above max - no enhance",
-			confidence: 0.8,
-			minConf:    0.3,
-			maxConf:    0.7,
-			expected:   false,
-		},
-		{
-			name:       "confidence at min - enhance",
-			confidence: 0.3,
-			minConf:    0.3,
-			maxConf:    0.7,
-			expected:   true,
-		},
-		{
-			name:       "confidence at max - enhance",
-			confidence: 0.7,
-			minConf:    0.3,
-			maxConf:    0.7,
-			expected:   true,
-		},
-		{
-			name:       "confidence in middle - enhance",
-			confidence: 0.5,
-			minConf:    0.3,
-			maxConf:    0.7,
-			expected:   true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := enhancer.ShouldEnhance(tt.confidence, tt.minConf, tt.maxConf)
-			if result != tt.expected {
-				t.Errorf("ShouldEnhance(%f, %f, %f) = %v, want %v",
-					tt.confidence, tt.minConf, tt.maxConf, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestNewClaudeEnhancer(t *testing.T) {
 	enhancer := NewClaudeEnhancer(90*time.Second, nil)
 
