@@ -572,8 +572,9 @@ func TestNewQualityController(t *testing.T) {
 		t.Error("NewQualityController() Invoker is nil")
 	}
 
-	if qc.ReviewAgent != "quality-control" {
-		t.Errorf("NewQualityController() ReviewAgent = %q, want %q", qc.ReviewAgent, "quality-control")
+	// Verify getDefaultAgent() returns expected default
+	if agent := qc.getDefaultAgent(); agent != "quality-control" {
+		t.Errorf("NewQualityController() getDefaultAgent() = %q, want %q", agent, "quality-control")
 	}
 
 	if qc.MaxRetries != 2 {
