@@ -36,15 +36,6 @@ func TestLoadConfig_FullMatrixCoversAllFields(t *testing.T) {
 		assertEqual(t, "ShowDurations", cfg.Console.ShowDurations, false)
 	})
 
-	t.Run("Feedback", func(t *testing.T) {
-		assertEqual(t, "StoreInPlanFile", cfg.Feedback.StoreInPlanFile, false)
-		assertEqual(t, "StoreInDatabase", cfg.Feedback.StoreInDatabase, false)
-		assertEqual(t, "Format", cfg.Feedback.Format, "plain")
-		assertEqual(t, "StoreOnGreen", cfg.Feedback.StoreOnGreen, false)
-		assertEqual(t, "StoreOnRed", cfg.Feedback.StoreOnRed, true)
-		assertEqual(t, "StoreOnYellow", cfg.Feedback.StoreOnYellow, false)
-	})
-
 	t.Run("Learning", func(t *testing.T) {
 		assertEqual(t, "Enabled", cfg.Learning.Enabled, true)
 		assertEqual(t, "DBPath", cfg.Learning.DBPath, "/tmp/learning.db")

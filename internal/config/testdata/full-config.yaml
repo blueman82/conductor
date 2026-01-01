@@ -16,14 +16,6 @@ console:
   show_file_counts: false
   show_durations: false
 
-feedback:
-  store_in_plan_file: false
-  store_in_database: false
-  format: plain
-  store_on_green: false
-  store_on_red: true
-  store_on_yellow: false
-
 learning:
   enabled: true
   db_path: /tmp/learning.db

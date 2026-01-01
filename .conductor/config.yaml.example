@@ -93,27 +93,6 @@ quality_control:
   # If not specified in plan, falls back to config value, then default 2
   retry_on_red: 2
 
-# Feedback storage configuration
-# Controls where and how task execution feedback is stored
-feedback:
-  # Store execution history in plan file (default: true)
-  # Creates "Execution History" sections in Markdown or execution_history arrays in YAML
-  store_in_plan_file: true
-
-  # Store execution history in database (default: true)
-  # Stores structured data in .conductor/learning/executions.db
-  store_in_database: true
-
-  # Format for agent/QC responses (default: json)
-  # Options: json (structured), text (plain text)
-  format: json
-
-  # Control which verdicts trigger feedback storage
-  # All enabled by default for complete execution history
-  store_on_green: true
-  store_on_red: true
-  store_on_yellow: true
-
 # ===== ADVANCED CONFIGURATION =====
 # The settings below are optional and have sensible defaults.
 # Uncomment and modify only if you need to change them.
@@ -203,23 +182,6 @@ learning:
 # Example: Limit context to recent attempts only
 # learning:
 #   max_context_entries: 5
-
-# Feedback Storage Examples
-
-# Example: Store only failures
-# feedback:
-#   store_on_green: false
-#   store_on_red: true
-#   store_on_yellow: true
-
-# Example: Store only in database, skip plan file updates
-# feedback:
-#   store_in_plan_file: false
-#   store_in_database: true
-
-# Example: Use plain text format instead of JSON
-# feedback:
-#   format: text
 
 # Quality Control Examples
 

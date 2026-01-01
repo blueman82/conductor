@@ -1638,30 +1638,6 @@ func TestQualityControlDefaults(t *testing.T) {
 	}
 }
 
-// TestConfig_FeedbackDefaults tests that feedback config has correct defaults
-func TestConfig_FeedbackDefaults(t *testing.T) {
-	cfg := DefaultConfig()
-
-	if !cfg.Feedback.StoreInPlanFile {
-		t.Errorf("Feedback.StoreInPlanFile = %v, want true", cfg.Feedback.StoreInPlanFile)
-	}
-	if !cfg.Feedback.StoreInDatabase {
-		t.Errorf("Feedback.StoreInDatabase = %v, want true", cfg.Feedback.StoreInDatabase)
-	}
-	if cfg.Feedback.Format != "json" {
-		t.Errorf("Feedback.Format = %q, want %q", cfg.Feedback.Format, "json")
-	}
-	if !cfg.Feedback.StoreOnGreen {
-		t.Errorf("Feedback.StoreOnGreen = %v, want true", cfg.Feedback.StoreOnGreen)
-	}
-	if !cfg.Feedback.StoreOnRed {
-		t.Errorf("Feedback.StoreOnRed = %v, want true", cfg.Feedback.StoreOnRed)
-	}
-	if !cfg.Feedback.StoreOnYellow {
-		t.Errorf("Feedback.StoreOnYellow = %v, want true", cfg.Feedback.StoreOnYellow)
-	}
-}
-
 // TestConfig_EnhancedLearningDefaults tests new learning config defaults
 func TestConfig_EnhancedLearningDefaults(t *testing.T) {
 	cfg := DefaultConfig()
@@ -1677,48 +1653,6 @@ func TestConfig_EnhancedLearningDefaults(t *testing.T) {
 	}
 	if cfg.Learning.MaxContextEntries != 10 {
 		t.Errorf("Learning.MaxContextEntries = %d, want 10", cfg.Learning.MaxContextEntries)
-	}
-}
-
-// TestConfig_FeedbackYAMLLoading tests loading feedback config from YAML
-func TestConfig_FeedbackYAMLLoading(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-
-	configContent := `feedback:
-  store_in_plan_file: false
-  store_in_database: false
-  format: plain
-  store_on_green: false
-  store_on_red: true
-  store_on_yellow: true
-`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write test config: %v", err)
-	}
-
-	cfg, err := LoadConfig(configPath)
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
-	}
-
-	if cfg.Feedback.StoreInPlanFile {
-		t.Errorf("Feedback.StoreInPlanFile = %v, want false", cfg.Feedback.StoreInPlanFile)
-	}
-	if cfg.Feedback.StoreInDatabase {
-		t.Errorf("Feedback.StoreInDatabase = %v, want false", cfg.Feedback.StoreInDatabase)
-	}
-	if cfg.Feedback.Format != "plain" {
-		t.Errorf("Feedback.Format = %q, want %q", cfg.Feedback.Format, "plain")
-	}
-	if cfg.Feedback.StoreOnGreen {
-		t.Errorf("Feedback.StoreOnGreen = %v, want false", cfg.Feedback.StoreOnGreen)
-	}
-	if !cfg.Feedback.StoreOnRed {
-		t.Errorf("Feedback.StoreOnRed = %v, want true", cfg.Feedback.StoreOnRed)
-	}
-	if !cfg.Feedback.StoreOnYellow {
-		t.Errorf("Feedback.StoreOnYellow = %v, want true", cfg.Feedback.StoreOnYellow)
 	}
 }
 
@@ -3294,14 +3228,14 @@ func TestLoadTTSConfigTimeoutFormats(t *testing.T) {
 // TestTimeoutsConfigParsing tests YAML parsing for the timeouts configuration section
 func TestTimeoutsConfigParsing(t *testing.T) {
 	tests := []struct {
-		name          string
-		configYAML    string
-		expectedTask  time.Duration
-		expectedLLM   time.Duration
-		expectedHTTP  time.Duration
+		name           string
+		configYAML     string
+		expectedTask   time.Duration
+		expectedLLM    time.Duration
+		expectedHTTP   time.Duration
 		expectedSearch time.Duration
-		wantErr       bool
-		errContains   string
+		wantErr        bool
+		errContains    string
 	}{
 		{
 			name: "all timeouts specified",
@@ -3311,42 +3245,42 @@ func TestTimeoutsConfigParsing(t *testing.T) {
   http: 15s
   search: 10s
 `,
-			expectedTask:  6 * time.Hour,
-			expectedLLM:   60 * time.Second,
-			expectedHTTP:  15 * time.Second,
+			expectedTask:   6 * time.Hour,
+			expectedLLM:    60 * time.Second,
+			expectedHTTP:   15 * time.Second,
 			expectedSearch: 10 * time.Second,
-			wantErr:       false,
+			wantErr:        false,
 		},
 		{
-			name:          "missing timeouts section uses defaults",
-			configYAML:   `max_concurrency: 4`,
-			expectedTask:  12 * time.Hour,
-			expectedLLM:   90 * time.Second,
-			expectedHTTP:  30 * time.Second,
+			name:           "missing timeouts section uses defaults",
+			configYAML:     `max_concurrency: 4`,
+			expectedTask:   12 * time.Hour,
+			expectedLLM:    90 * time.Second,
+			expectedHTTP:   30 * time.Second,
 			expectedSearch: 30 * time.Second,
-			wantErr:       false,
+			wantErr:        false,
 		},
 		{
 			name: "partial timeouts - only task specified",
 			configYAML: `timeouts:
   task: 8h
 `,
-			expectedTask:  8 * time.Hour,
-			expectedLLM:   90 * time.Second,  // default
-			expectedHTTP:  30 * time.Second,  // default
+			expectedTask:   8 * time.Hour,
+			expectedLLM:    90 * time.Second, // default
+			expectedHTTP:   30 * time.Second, // default
 			expectedSearch: 30 * time.Second, // default
-			wantErr:       false,
+			wantErr:        false,
 		},
 		{
 			name: "partial timeouts - only llm specified",
 			configYAML: `timeouts:
   llm: 45s
 `,
-			expectedTask:  12 * time.Hour,    // default
-			expectedLLM:   45 * time.Second,
-			expectedHTTP:  30 * time.Second,  // default
+			expectedTask:   12 * time.Hour, // default
+			expectedLLM:    45 * time.Second,
+			expectedHTTP:   30 * time.Second, // default
 			expectedSearch: 30 * time.Second, // default
-			wantErr:       false,
+			wantErr:        false,
 		},
 		{
 			name: "complex duration formats",
@@ -3356,11 +3290,11 @@ func TestTimeoutsConfigParsing(t *testing.T) {
   http: 500ms
   search: 2m
 `,
-			expectedTask:  2*time.Hour + 30*time.Minute,
-			expectedLLM:   90 * time.Second,
-			expectedHTTP:  500 * time.Millisecond,
+			expectedTask:   2*time.Hour + 30*time.Minute,
+			expectedLLM:    90 * time.Second,
+			expectedHTTP:   500 * time.Millisecond,
 			expectedSearch: 2 * time.Minute,
-			wantErr:       false,
+			wantErr:        false,
 		},
 		{
 			name: "invalid task duration format",
@@ -3402,22 +3336,22 @@ func TestTimeoutsConfigParsing(t *testing.T) {
   http: 0s
   search: 0s
 `,
-			expectedTask:  0,
-			expectedLLM:   0,
-			expectedHTTP:  0,
+			expectedTask:   0,
+			expectedLLM:    0,
+			expectedHTTP:   0,
 			expectedSearch: 0,
-			wantErr:       false,
+			wantErr:        false,
 		},
 		{
 			name: "very long task timeout",
 			configYAML: `timeouts:
   task: 168h
 `,
-			expectedTask:  168 * time.Hour, // 1 week
-			expectedLLM:   90 * time.Second,
-			expectedHTTP:  30 * time.Second,
+			expectedTask:   168 * time.Hour, // 1 week
+			expectedLLM:    90 * time.Second,
+			expectedHTTP:   30 * time.Second,
 			expectedSearch: 30 * time.Second,
-			wantErr:       false,
+			wantErr:        false,
 		},
 	}
 
@@ -3517,10 +3451,10 @@ func TestTimeoutsConfigMerge(t *testing.T) {
 // TestDeprecatedTimeoutFields tests deprecation handling and migration for old timeout fields
 func TestDeprecatedTimeoutFields(t *testing.T) {
 	tests := []struct {
-		name           string
-		configYAML     string
-		expectedLLM    time.Duration
-		description    string
+		name        string
+		configYAML  string
+		expectedLLM time.Duration
+		description string
 	}{
 		{
 			name: "pattern.llm_timeout_seconds migrates to timeouts.llm",

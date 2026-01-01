@@ -67,27 +67,6 @@ type ConsoleConfig struct {
 	ShowDurations bool `yaml:"show_durations"`
 }
 
-// FeedbackConfig represents feedback storage configuration
-type FeedbackConfig struct {
-	// StoreInPlanFile stores feedback in plan file
-	StoreInPlanFile bool `yaml:"store_in_plan_file"`
-
-	// StoreInDatabase stores feedback in database
-	StoreInDatabase bool `yaml:"store_in_database"`
-
-	// Format specifies feedback format (json or plain)
-	Format string `yaml:"format"`
-
-	// StoreOnGreen stores feedback on GREEN verdict
-	StoreOnGreen bool `yaml:"store_on_green"`
-
-	// StoreOnRed stores feedback on RED verdict
-	StoreOnRed bool `yaml:"store_on_red"`
-
-	// StoreOnYellow stores feedback on YELLOW verdict
-	StoreOnYellow bool `yaml:"store_on_yellow"`
-}
-
 // LearningConfig represents learning system configuration
 type LearningConfig struct {
 	// Enabled enables the learning system
@@ -453,9 +432,6 @@ type Config struct {
 	// Console contains console output configuration
 	Console ConsoleConfig `yaml:"console"`
 
-	// Feedback contains feedback storage configuration
-	Feedback FeedbackConfig `yaml:"feedback"`
-
 	// Learning contains learning system configuration
 	Learning LearningConfig `yaml:"learning"`
 
@@ -654,14 +630,6 @@ func DefaultConfig() *Config {
 		SkipCompleted:  false,
 		RetryFailed:    false,
 		Console:        DefaultConsoleConfig(),
-		Feedback: FeedbackConfig{
-			StoreInPlanFile: true,
-			StoreInDatabase: true,
-			Format:          "json",
-			StoreOnGreen:    true,
-			StoreOnRed:      true,
-			StoreOnYellow:   true,
-		},
 		Learning: LearningConfig{
 			Enabled:                true,
 			DBPath:                 ".conductor/learning/executions.db",
@@ -819,7 +787,6 @@ func LoadConfig(path string) (*Config, error) {
 		SkipCompleted  bool                 `yaml:"skip_completed"`
 		RetryFailed    bool                 `yaml:"retry_failed"`
 		Console        ConsoleConfig        `yaml:"console"`
-		Feedback       FeedbackConfig       `yaml:"feedback"`
 		Learning       LearningConfig       `yaml:"learning"`
 		QualityControl QualityControlConfig `yaml:"quality_control"`
 		AgentWatch     AgentWatchConfig     `yaml:"agent_watch"`
@@ -867,7 +834,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.RetryFailed = yamlCfg.RetryFailed
 	}
 
-	// Merge Console, Feedback, and Learning configs - need to check if sections were provided at all
+	// Merge Console and Learning configs - need to check if sections were provided at all
 	// We create a temporary unmarshal to detect if sections exist
 	var rawMap map[string]interface{}
 	if err := yaml.Unmarshal(data, &rawMap); err == nil {
@@ -899,31 +866,6 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := consoleMap["show_durations"]; exists {
 				cfg.Console.ShowDurations = console.ShowDurations
-			}
-		}
-
-		// Merge Feedback config
-		if feedbackSection, exists := rawMap["feedback"]; exists && feedbackSection != nil {
-			feedback := yamlCfg.Feedback
-			feedbackMap, _ := feedbackSection.(map[string]interface{})
-
-			if _, exists := feedbackMap["store_in_plan_file"]; exists {
-				cfg.Feedback.StoreInPlanFile = feedback.StoreInPlanFile
-			}
-			if _, exists := feedbackMap["store_in_database"]; exists {
-				cfg.Feedback.StoreInDatabase = feedback.StoreInDatabase
-			}
-			if _, exists := feedbackMap["format"]; exists {
-				cfg.Feedback.Format = feedback.Format
-			}
-			if _, exists := feedbackMap["store_on_green"]; exists {
-				cfg.Feedback.StoreOnGreen = feedback.StoreOnGreen
-			}
-			if _, exists := feedbackMap["store_on_red"]; exists {
-				cfg.Feedback.StoreOnRed = feedback.StoreOnRed
-			}
-			if _, exists := feedbackMap["store_on_yellow"]; exists {
-				cfg.Feedback.StoreOnYellow = feedback.StoreOnYellow
 			}
 		}
 
