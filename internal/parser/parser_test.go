@@ -1257,9 +1257,12 @@ func TestApplyRetryOnRedFallback_PreservesOtherFields(t *testing.T) {
 		Name:         "Test Plan",
 		DefaultAgent: "godev",
 		QualityControl: models.QualityControlConfig{
-			Enabled:     true,
-			ReviewAgent: "quality-control",
-			RetryOnRed:  0, // Unset, should be filled in
+			Enabled: true,
+			Agents: models.QCAgentConfig{
+				Mode:         "explicit",
+				ExplicitList: []string{"quality-control"},
+			},
+			RetryOnRed: 0, // Unset, should be filled in
 		},
 	}
 
@@ -1280,8 +1283,8 @@ func TestApplyRetryOnRedFallback_PreservesOtherFields(t *testing.T) {
 	if !plan.QualityControl.Enabled {
 		t.Error("QualityControl.Enabled was modified")
 	}
-	if plan.QualityControl.ReviewAgent != "quality-control" {
-		t.Errorf("ReviewAgent was modified: expected 'quality-control', got '%s'", plan.QualityControl.ReviewAgent)
+	if len(plan.QualityControl.Agents.ExplicitList) == 0 || plan.QualityControl.Agents.ExplicitList[0] != "quality-control" {
+		t.Errorf("Agents.ExplicitList was modified: expected [quality-control], got %v", plan.QualityControl.Agents.ExplicitList)
 	}
 }
 
