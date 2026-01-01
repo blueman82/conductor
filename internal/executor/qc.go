@@ -119,8 +119,7 @@ type ReviewResult struct {
 // NewQualityController creates a new QualityController with default settings
 func NewQualityController(invoker InvokerInterface) *QualityController {
 	return &QualityController{
-		Invoker:     invoker,
-		ReviewAgent: "quality-control", // Deprecated, kept for backward compat
+		Invoker: invoker,
 		AgentConfig: models.QCAgentConfig{
 			Mode:              "auto",
 			ExplicitList:      []string{},
