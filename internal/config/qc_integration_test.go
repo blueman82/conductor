@@ -25,7 +25,10 @@ func TestQualityControlConfigIntegration(t *testing.T) {
 timeout: 30m
 quality_control:
   enabled: true
-  review_agent: custom-qa-agent
+  agents:
+    mode: explicit
+    explicit_list:
+      - custom-qa-agent
   retry_on_red: 3
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
@@ -42,8 +45,11 @@ quality_control:
 	if !cfg.QualityControl.Enabled {
 		t.Errorf("Config.QualityControl.Enabled = %v, want true", cfg.QualityControl.Enabled)
 	}
-	if cfg.QualityControl.ReviewAgent != "custom-qa-agent" {
-		t.Errorf("Config.QualityControl.ReviewAgent = %q, want %q", cfg.QualityControl.ReviewAgent, "custom-qa-agent")
+	if cfg.QualityControl.Agents.Mode != "explicit" {
+		t.Errorf("Config.QualityControl.Agents.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "explicit")
+	}
+	if len(cfg.QualityControl.Agents.ExplicitList) != 1 || cfg.QualityControl.Agents.ExplicitList[0] != "custom-qa-agent" {
+		t.Errorf("Config.QualityControl.Agents.ExplicitList = %v, want [custom-qa-agent]", cfg.QualityControl.Agents.ExplicitList)
 	}
 	if cfg.QualityControl.RetryOnRed != 3 {
 		t.Errorf("Config.QualityControl.RetryOnRed = %d, want 3", cfg.QualityControl.RetryOnRed)
