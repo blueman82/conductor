@@ -197,7 +197,8 @@ func TestQualityControlConfigDisabledInConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	configContent := `quality_control:
   enabled: false
-  review_agent: config-agent
+  agents:
+    mode: auto
   retry_on_red: 2
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
