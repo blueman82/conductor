@@ -1060,29 +1060,32 @@ func TestQualityControlParsing(t *testing.T) {
 		name          string
 		configContent string
 		expectEnabled bool
-		expectAgent   string
 		expectRetry   int
 	}{
 		{
 			name: "quality_control section present with all fields",
 			configContent: `quality_control:
   enabled: true
-  review_agent: custom-qa-agent
+  agents:
+    mode: explicit
+    explicit_list:
+      - custom-qa-agent
   retry_on_red: 3
 `,
 			expectEnabled: true,
-			expectAgent:   "custom-qa-agent",
 			expectRetry:   3,
 		},
 		{
 			name: "quality_control section with enabled false",
 			configContent: `quality_control:
   enabled: false
-  review_agent: quality-control
+  agents:
+    mode: explicit
+    explicit_list:
+      - quality-control
   retry_on_red: 2
 `,
 			expectEnabled: false,
-			expectAgent:   "quality-control",
 			expectRetry:   2,
 		},
 		{
@@ -1091,15 +1094,13 @@ func TestQualityControlParsing(t *testing.T) {
   enabled: true
 `,
 			expectEnabled: true,
-			expectAgent:   "quality-control", // should use default
-			expectRetry:   2,                 // should use default
+			expectRetry:   2, // should use default
 		},
 		{
 			name:          "quality_control section absent",
 			configContent: `max_concurrency: 5`,
-			expectEnabled: false,             // should use default
-			expectAgent:   "quality-control", // should use default
-			expectRetry:   2,                 // should use default
+			expectEnabled: false,  // should use default
+			expectRetry:   2,      // should use default
 		},
 	}
 
@@ -1119,9 +1120,6 @@ func TestQualityControlParsing(t *testing.T) {
 
 			if cfg.QualityControl.Enabled != tt.expectEnabled {
 				t.Errorf("QualityControl.Enabled = %v, want %v", cfg.QualityControl.Enabled, tt.expectEnabled)
-			}
-			if cfg.QualityControl.ReviewAgent != tt.expectAgent {
-				t.Errorf("QualityControl.ReviewAgent = %q, want %q", cfg.QualityControl.ReviewAgent, tt.expectAgent)
 			}
 			if cfg.QualityControl.RetryOnRed != tt.expectRetry {
 				t.Errorf("QualityControl.RetryOnRed = %d, want %d", cfg.QualityControl.RetryOnRed, tt.expectRetry)
