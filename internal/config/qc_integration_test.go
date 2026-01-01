@@ -94,8 +94,13 @@ Set up REST API server.
 		plan.QualityControl = models.QualityControlConfig{
 			Enabled: cfg.QualityControl.Enabled,
 			Agents: models.QCAgentConfig{
-				Mode:         cfg.QualityControl.Agents.Mode,
-				ExplicitList: cfg.QualityControl.Agents.ExplicitList,
+				Mode:              cfg.QualityControl.Agents.Mode,
+				ExplicitList:      cfg.QualityControl.Agents.ExplicitList,
+				AdditionalAgents:  cfg.QualityControl.Agents.AdditionalAgents,
+				BlockedAgents:     cfg.QualityControl.Agents.BlockedAgents,
+				MaxAgents:         cfg.QualityControl.Agents.MaxAgents,
+				CacheTTLSeconds:   cfg.QualityControl.Agents.CacheTTLSeconds,
+				RequireCodeReview: cfg.QualityControl.Agents.RequireCodeReview,
 			},
 			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
@@ -179,8 +184,13 @@ plan:
 		plan.QualityControl = models.QualityControlConfig{
 			Enabled: cfg.QualityControl.Enabled,
 			Agents: models.QCAgentConfig{
-				Mode:         cfg.QualityControl.Agents.Mode,
-				ExplicitList: cfg.QualityControl.Agents.ExplicitList,
+				Mode:              cfg.QualityControl.Agents.Mode,
+				ExplicitList:      cfg.QualityControl.Agents.ExplicitList,
+				AdditionalAgents:  cfg.QualityControl.Agents.AdditionalAgents,
+				BlockedAgents:     cfg.QualityControl.Agents.BlockedAgents,
+				MaxAgents:         cfg.QualityControl.Agents.MaxAgents,
+				CacheTTLSeconds:   cfg.QualityControl.Agents.CacheTTLSeconds,
+				RequireCodeReview: cfg.QualityControl.Agents.RequireCodeReview,
 			},
 			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
@@ -239,8 +249,13 @@ Test task.
 		plan.QualityControl = models.QualityControlConfig{
 			Enabled: cfg.QualityControl.Enabled,
 			Agents: models.QCAgentConfig{
-				Mode:         cfg.QualityControl.Agents.Mode,
-				ExplicitList: cfg.QualityControl.Agents.ExplicitList,
+				Mode:              cfg.QualityControl.Agents.Mode,
+				ExplicitList:      cfg.QualityControl.Agents.ExplicitList,
+				AdditionalAgents:  cfg.QualityControl.Agents.AdditionalAgents,
+				BlockedAgents:     cfg.QualityControl.Agents.BlockedAgents,
+				MaxAgents:         cfg.QualityControl.Agents.MaxAgents,
+				CacheTTLSeconds:   cfg.QualityControl.Agents.CacheTTLSeconds,
+				RequireCodeReview: cfg.QualityControl.Agents.RequireCodeReview,
 			},
 			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
