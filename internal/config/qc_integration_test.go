@@ -344,32 +344,38 @@ func TestQualityControlConfigMergeOrder(t *testing.T) {
 		planHasQC     bool
 		planQCConfig  string
 		expectEnabled bool
+		expectMode    string
 		expectAgent   string
 		expectRetry   int
 		description   string
 	}{
 		{
 			name:          "YAML plan with conductor QC overrides config",
-			configContent: "quality_control:\n  enabled: true\n  review_agent: config-agent\n  retry_on_red: 2\n",
+			configContent: "quality_control:\n  enabled: true\n  agents:\n    mode: explicit\n    explicit_list:\n      - config-agent\n  retry_on_red: 2\n",
 			planFormat:    "yaml",
 			planHasQC:     true,
 			planQCConfig: `conductor:
   quality_control:
     enabled: true
-    review_agent: plan-agent
+    agents:
+      mode: explicit
+      explicit_list:
+        - plan-agent
     retry_on_red: 5
 `,
 			expectEnabled: true,
+			expectMode:    "explicit",
 			expectAgent:   "plan-agent",
 			expectRetry:   5,
 			description:   "YAML plan conductor section takes highest precedence",
 		},
 		{
 			name:          "config fills in when plan has no QC",
-			configContent: "quality_control:\n  enabled: true\n  review_agent: config-agent\n  retry_on_red: 3\n",
+			configContent: "quality_control:\n  enabled: true\n  agents:\n    mode: explicit\n    explicit_list:\n      - config-agent\n  retry_on_red: 3\n",
 			planFormat:    "markdown",
 			planHasQC:     false,
 			expectEnabled: true,
+			expectMode:    "explicit",
 			expectAgent:   "config-agent",
 			expectRetry:   3,
 			description:   "config provides defaults when plan has no QC",
@@ -380,6 +386,7 @@ func TestQualityControlConfigMergeOrder(t *testing.T) {
 			planFormat:    "markdown",
 			planHasQC:     false,
 			expectEnabled: false,
+			expectMode:    "auto",
 			expectAgent:   "quality-control",
 			expectRetry:   2,
 			description:   "system defaults used when neither config nor plan specify QC",
