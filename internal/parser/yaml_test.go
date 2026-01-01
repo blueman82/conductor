@@ -149,7 +149,9 @@ conductor:
   max_concurrency: 5
   quality_control:
     enabled: true
-    review_agent: "quality-control"
+    agents:
+      mode: explicit
+      explicit_list: ["quality-control"]
     retry_on_red: 2
 
 plan:
@@ -175,8 +177,12 @@ plan:
 		t.Error("Expected quality control to be enabled")
 	}
 
-	if plan.QualityControl.ReviewAgent != "quality-control" {
-		t.Errorf("Expected review agent 'quality-control', got '%s'", plan.QualityControl.ReviewAgent)
+	if plan.QualityControl.Agents.Mode != "explicit" {
+		t.Errorf("Expected agents mode 'explicit', got '%s'", plan.QualityControl.Agents.Mode)
+	}
+
+	if len(plan.QualityControl.Agents.ExplicitList) != 1 || plan.QualityControl.Agents.ExplicitList[0] != "quality-control" {
+		t.Errorf("Expected explicit_list with 'quality-control', got %v", plan.QualityControl.Agents.ExplicitList)
 	}
 
 	if plan.QualityControl.RetryOnRed != 2 {
