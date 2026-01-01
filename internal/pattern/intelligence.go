@@ -428,11 +428,18 @@ func (pi *PatternIntelligenceImpl) generateProveResult(description string, files
 }
 
 // enhanceWithLLM uses Claude to refine confidence.
-// Always called when LLM enhancement is enabled (no threshold gating).
+// Called when LLM enhancement is enabled and confidence is within configured thresholds.
 // Graceful degradation: on error, returns original result unchanged.
 func (pi *PatternIntelligenceImpl) enhanceWithLLM(ctx context.Context, description string, searchResults SearchResults, result *STOPResult) *STOPResult {
 	if pi.enhancer == nil || pi.config == nil || !pi.config.LLMEnhancementEnabled {
 		return result
+	}
+
+	// Gate on confidence thresholds (if configured)
+	if pi.config.LLMMinConfidence > 0 || pi.config.LLMMaxConfidence > 0 {
+		if !pi.enhancer.ShouldEnhance(result.Confidence, pi.config.LLMMinConfidence, pi.config.LLMMaxConfidence) {
+			return result // Skip - confidence outside configured range
+		}
 	}
 
 	// Format patterns for enhancement prompt
