@@ -518,7 +518,9 @@ func TestValidateCommand_DefaultAndQCAgents(t *testing.T) {
   default_agent: "default-agent"
   quality_control:
     enabled: true
-    review_agent: "qc-agent"
+    agents:
+      mode: explicit
+      explicit_list: ["qc-agent"]
 
 plan:
   tasks:
