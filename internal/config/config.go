@@ -40,33 +40,6 @@ type AnomalyDetectionConfig struct {
 	DurationDeviationThreshold float64 `yaml:"duration_deviation_threshold"`
 }
 
-// ConsoleConfig controls terminal output formatting and features
-type ConsoleConfig struct {
-	// EnableColor enables colored output
-	EnableColor bool `yaml:"enable_color"`
-
-	// EnableProgressBar enables progress bar display
-	EnableProgressBar bool `yaml:"enable_progress_bar"`
-
-	// EnableTaskDetails enables detailed task information
-	EnableTaskDetails bool `yaml:"enable_task_details"`
-
-	// EnableQCFeedback enables quality control feedback display
-	EnableQCFeedback bool `yaml:"enable_qc_feedback"`
-
-	// CompactMode enables compact output format
-	CompactMode bool `yaml:"compact_mode"`
-
-	// ShowAgentNames shows agent names in output
-	ShowAgentNames bool `yaml:"show_agent_names"`
-
-	// ShowFileCounts shows file counts in output
-	ShowFileCounts bool `yaml:"show_file_counts"`
-
-	// ShowDurations shows task durations in output
-	ShowDurations bool `yaml:"show_durations"`
-}
-
 // LearningConfig represents learning system configuration
 type LearningConfig struct {
 	// Enabled enables the learning system
@@ -414,9 +387,6 @@ type Config struct {
 	// RetryFailed retries tasks that failed
 	RetryFailed bool `yaml:"retry_failed"`
 
-	// Console contains console output configuration
-	Console ConsoleConfig `yaml:"console"`
-
 	// Learning contains learning system configuration
 	Learning LearningConfig `yaml:"learning"`
 
@@ -487,20 +457,6 @@ func DefaultAnomalyDetectionConfig() AnomalyDetectionConfig {
 	}
 }
 
-// DefaultConsoleConfig returns ConsoleConfig with sensible default values
-func DefaultConsoleConfig() ConsoleConfig {
-	return ConsoleConfig{
-		EnableColor:       true,
-		EnableProgressBar: true,
-		EnableTaskDetails: true,
-		EnableQCFeedback:  true,
-		CompactMode:       false,
-		ShowAgentNames:    true,
-		ShowFileCounts:    true,
-		ShowDurations:     true,
-	}
-}
-
 // DefaultCostModelConfig returns CostModelConfig with current Claude API pricing
 // Prices are per 1M tokens as of the build date
 func DefaultCostModelConfig() CostModelConfig {
@@ -567,8 +523,8 @@ func DefaultPatternConfig() PatternConfig {
 		InjectIntoPrompt:         true,  // Include analysis in prompts by default
 		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
 		MaxRelatedFiles:          10,    // Limit related files
-		CacheTTLSeconds:       3600,  // 1 hour cache
-		LLMEnhancementEnabled: false, // Disabled by default
+		CacheTTLSeconds:          3600,  // 1 hour cache
+		LLMEnhancementEnabled:    false, // Disabled by default
 	}
 }
 
@@ -607,7 +563,6 @@ func DefaultConfig() *Config {
 		DryRun:         false,
 		SkipCompleted:  false,
 		RetryFailed:    false,
-		Console:        DefaultConsoleConfig(),
 		Learning: LearningConfig{
 			Enabled:                true,
 			DBPath:                 ".conductor/learning/executions.db",
@@ -668,46 +623,6 @@ func interfaceSliceToStringSlice(slice []interface{}) []string {
 	return result
 }
 
-// applyConsoleEnvOverrides applies environment variable overrides to console configuration
-// Environment variables take precedence over config file values
-// Recognized variables:
-//   - CONDUCTOR_CONSOLE_COLOR (enable_color)
-//   - CONDUCTOR_CONSOLE_PROGRESS_BAR (enable_progress_bar)
-//   - CONDUCTOR_CONSOLE_TASK_DETAILS (enable_task_details)
-//   - CONDUCTOR_CONSOLE_QC_FEEDBACK (enable_qc_feedback)
-//   - CONDUCTOR_CONSOLE_COMPACT (compact_mode)
-//   - CONDUCTOR_CONSOLE_AGENT_NAMES (show_agent_names)
-//   - CONDUCTOR_CONSOLE_FILE_COUNTS (show_file_counts)
-//   - CONDUCTOR_CONSOLE_DURATIONS (show_durations)
-//
-// Only "true" (lowercase) or "1" are recognized as true; all other values are false
-func applyConsoleEnvOverrides(cfg *ConsoleConfig) {
-	if val := os.Getenv("CONDUCTOR_CONSOLE_COLOR"); val != "" {
-		cfg.EnableColor = val == "true" || val == "1"
-	}
-	if val := os.Getenv("CONDUCTOR_CONSOLE_PROGRESS_BAR"); val != "" {
-		cfg.EnableProgressBar = val == "true" || val == "1"
-	}
-	if val := os.Getenv("CONDUCTOR_CONSOLE_TASK_DETAILS"); val != "" {
-		cfg.EnableTaskDetails = val == "true" || val == "1"
-	}
-	if val := os.Getenv("CONDUCTOR_CONSOLE_QC_FEEDBACK"); val != "" {
-		cfg.EnableQCFeedback = val == "true" || val == "1"
-	}
-	if val := os.Getenv("CONDUCTOR_CONSOLE_COMPACT"); val != "" {
-		cfg.CompactMode = val == "true" || val == "1"
-	}
-	if val := os.Getenv("CONDUCTOR_CONSOLE_AGENT_NAMES"); val != "" {
-		cfg.ShowAgentNames = val == "true" || val == "1"
-	}
-	if val := os.Getenv("CONDUCTOR_CONSOLE_FILE_COUNTS"); val != "" {
-		cfg.ShowFileCounts = val == "true" || val == "1"
-	}
-	if val := os.Getenv("CONDUCTOR_CONSOLE_DURATIONS"); val != "" {
-		cfg.ShowDurations = val == "true" || val == "1"
-	}
-}
-
 // LoadConfig loads configuration from the specified file path
 // If the file doesn't exist, returns default configuration without error
 // If the file exists but is malformed, returns an error
@@ -717,8 +632,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Check if file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// File doesn't exist, return defaults with env overrides applied
-		applyConsoleEnvOverrides(&cfg.Console)
+		// File doesn't exist, return defaults
 		return cfg, nil
 	}
 
@@ -762,7 +676,6 @@ func LoadConfig(path string) (*Config, error) {
 		DryRun         bool                 `yaml:"dry_run"`
 		SkipCompleted  bool                 `yaml:"skip_completed"`
 		RetryFailed    bool                 `yaml:"retry_failed"`
-		Console        ConsoleConfig        `yaml:"console"`
 		Learning       LearningConfig       `yaml:"learning"`
 		QualityControl QualityControlConfig `yaml:"quality_control"`
 		AgentWatch     AgentWatchConfig     `yaml:"agent_watch"`
@@ -810,41 +723,10 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.RetryFailed = yamlCfg.RetryFailed
 	}
 
-	// Merge Console and Learning configs - need to check if sections were provided at all
+	// Merge nested configs - need to check if sections were provided at all
 	// We create a temporary unmarshal to detect if sections exist
 	var rawMap map[string]interface{}
 	if err := yaml.Unmarshal(data, &rawMap); err == nil {
-		// Merge Console config if section exists
-		if consoleSection, exists := rawMap["console"]; exists && consoleSection != nil {
-			console := yamlCfg.Console
-			consoleMap, _ := consoleSection.(map[string]interface{})
-
-			if _, exists := consoleMap["enable_color"]; exists {
-				cfg.Console.EnableColor = console.EnableColor
-			}
-			if _, exists := consoleMap["enable_progress_bar"]; exists {
-				cfg.Console.EnableProgressBar = console.EnableProgressBar
-			}
-			if _, exists := consoleMap["enable_task_details"]; exists {
-				cfg.Console.EnableTaskDetails = console.EnableTaskDetails
-			}
-			if _, exists := consoleMap["enable_qc_feedback"]; exists {
-				cfg.Console.EnableQCFeedback = console.EnableQCFeedback
-			}
-			if _, exists := consoleMap["compact_mode"]; exists {
-				cfg.Console.CompactMode = console.CompactMode
-			}
-			if _, exists := consoleMap["show_agent_names"]; exists {
-				cfg.Console.ShowAgentNames = console.ShowAgentNames
-			}
-			if _, exists := consoleMap["show_file_counts"]; exists {
-				cfg.Console.ShowFileCounts = console.ShowFileCounts
-			}
-			if _, exists := consoleMap["show_durations"]; exists {
-				cfg.Console.ShowDurations = console.ShowDurations
-			}
-		}
-
 		// Merge Learning config
 		if learningSection, exists := rawMap["learning"]; exists && learningSection != nil {
 			// Learning section exists in YAML, merge it
@@ -1222,9 +1104,6 @@ func LoadConfig(path string) (*Config, error) {
 		handleTTSTimeoutFallback(cfg, ttsTimeoutExplicitlySet)
 	}
 
-	// Apply environment variable overrides (highest priority)
-	applyConsoleEnvOverrides(&cfg.Console)
-
 	return cfg, nil
 }
 
@@ -1345,8 +1224,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("timeout must be >= 0, got %v", c.Timeout)
 	}
 
-	// Console configuration is all boolean flags with sensible defaults,
-	// no additional validation needed
 	// Validate validation settings (supports warn, strict, off)
 	if c.Validation.KeyPointCriteria == "" {
 		c.Validation.KeyPointCriteria = "warn"
