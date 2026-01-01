@@ -150,7 +150,9 @@ conductor:
   default_agent: swiftdev
   quality_control:
     enabled: true
-    review_agent: reviewer
+    agents:
+      mode: explicit
+      explicit_list: [reviewer]
 ---
 
 # Test Plan
