@@ -141,7 +141,10 @@ func TestQualityControlConfigPlanOverridesConfig(t *testing.T) {
 	planContent := `conductor:
   quality_control:
     enabled: true
-    review_agent: plan-agent
+    agents:
+      mode: explicit
+      explicit_list:
+        - plan-agent
     retry_on_red: 5
 plan:
   metadata:
