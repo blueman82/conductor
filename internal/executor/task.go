@@ -258,9 +258,6 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 
 		if te.reviewer == nil {
 			qc := NewQualityController(invoker)
-			if cfg.QualityControl.ReviewAgent != "" {
-				qc.ReviewAgent = cfg.QualityControl.ReviewAgent
-			}
 			// Wire up multi-agent QC configuration (v2.2+)
 			if cfg.QualityControl.Agents.Mode != "" {
 				qc.AgentConfig = cfg.QualityControl.Agents
@@ -268,9 +265,6 @@ func NewTaskExecutor(invoker InvokerInterface, reviewer Reviewer, planUpdater Pl
 			qc.MaxRetries = te.retryLimit
 			te.reviewer = qc
 		} else if qc, ok := te.reviewer.(*QualityController); ok {
-			if cfg.QualityControl.ReviewAgent != "" {
-				qc.ReviewAgent = cfg.QualityControl.ReviewAgent
-			}
 			// Wire up multi-agent QC configuration (v2.2+)
 			if cfg.QualityControl.Agents.Mode != "" {
 				qc.AgentConfig = cfg.QualityControl.Agents
