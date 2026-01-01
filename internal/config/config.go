@@ -98,6 +98,9 @@ type QCAgentConfig struct {
 	// BlockedAgents are agents that should never be used (for auto/mixed modes)
 	BlockedAgents []string `yaml:"blocked"`
 
+	// DefaultAgent is the default QC agent to use when mode is "auto" (configurable via env: CONDUCTOR_QC_DEFAULT_AGENT)
+	DefaultAgent string `yaml:"default_agent" env:"CONDUCTOR_QC_DEFAULT_AGENT"`
+
 	// Intelligent selection settings (v2.4+)
 	// MaxAgents limits the number of agents selected (default: 4)
 	MaxAgents int `yaml:"max_agents"`
