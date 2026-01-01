@@ -554,18 +554,7 @@ func validateAgents(plan *models.Plan, registry *agent.Registry) []string {
 
 	// Check QC agents if specified
 	if plan.QualityControl.Enabled {
-		// Check deprecated ReviewAgent field for backward compatibility
-		if plan.QualityControl.ReviewAgent != "" {
-			agentName := plan.QualityControl.ReviewAgent
-			if !checkedAgents[agentName] {
-				if !registry.Exists(agentName) {
-					errors = append(errors, fmt.Sprintf("QC review agent '%s' not found in registry", agentName))
-				}
-				checkedAgents[agentName] = true
-			}
-		}
-
-		// Check modern agents format (explicit_list)
+		// Check agents format (explicit_list)
 		if plan.QualityControl.Agents.Mode == "explicit" && len(plan.QualityControl.Agents.ExplicitList) > 0 {
 			for _, agentName := range plan.QualityControl.Agents.ExplicitList {
 				if !checkedAgents[agentName] {
