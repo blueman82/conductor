@@ -2746,12 +2746,15 @@ func TestQualityControlMerge(t *testing.T) {
 default_agent: golang-pro
 quality_control:
   enabled: false
-  review_agent: ""
+  agents:
+    mode: auto
   retry_on_red: 0
 ---`,
 			configQC: `quality_control:
   enabled: true
-  review_agent: custom-qa-agent
+  agents:
+    mode: explicit
+    explicit_list: [custom-qa-agent]
   retry_on_red: 3
 `,
 			expectPlanQCEnabled: true,
