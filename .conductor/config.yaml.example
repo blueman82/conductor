@@ -12,10 +12,10 @@
 # Set to 0 for unlimited concurrency (default: 0)
 max_concurrency: 4
 
+# DEPRECATED: Use timeouts.task instead (v2.33+)
 # Task execution timeout
 # Supported formats: 30s, 5m, 1h30m, etc.
-# Empty means no timeout (default: empty)
-timeout: 5m
+# timeout: 5m
 
 # Logging level
 # Levels: trace, debug, info, warn, error (default: info)
@@ -81,8 +81,9 @@ quality_control:
     # Cache TTL in seconds for intelligent selection results (default: 3600)
     cache_ttl_seconds: 3600
 
+    # DEPRECATED: Use timeouts.llm instead (v2.33+)
     # Timeout for Claude intelligent selection calls (default: 90)
-    selection_timeout_seconds: 90
+    # selection_timeout_seconds: 90
 
     # Always include code-reviewer as baseline (default: true)
     require_code_review: true
@@ -532,7 +533,8 @@ pattern:
   llm_enhancement_enabled: false  # Disabled by default
   llm_min_confidence: 0.3         # Enhance when confidence >= this
   llm_max_confidence: 0.7         # Enhance when confidence <= this
-  llm_timeout_seconds: 30         # Timeout for Claude CLI response
+  # DEPRECATED: Use timeouts.llm instead (v2.33+)
+  # llm_timeout_seconds: 30       # Timeout for Claude CLI response
 
 # Pattern Intelligence Examples
 
@@ -599,8 +601,9 @@ architecture:
   # - escalate: Soft signal - log warning and inject context (default)
   mode: escalate
 
+  # DEPRECATED: Use timeouts.llm instead (v2.33+)
   # Timeout for Claude CLI assessment (default: 30)
-  timeout_seconds: 30
+  # timeout_seconds: 30
 
   # Require justification for architectural changes (default: false)
   # When true: QC agents verify architectural decisions are justified
