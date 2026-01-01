@@ -3,7 +3,10 @@ conductor:
   max_concurrency: 10
   quality_control:
     enabled: true
-    review_agent: "quality-control"
+    agents:
+      mode: explicit
+      explicit_list:
+        - quality-control
     retry_on_red: 2
 
 plan:
