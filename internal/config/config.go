@@ -1257,7 +1257,7 @@ func (c *Config) Validate() error {
 
 		// If mode is explicit, must have at least one agent
 		if c.QualityControl.Agents.Mode == "explicit" && len(c.QualityControl.Agents.ExplicitList) == 0 {
-			// No fallback to deprecated ReviewAgent - this is a configuration error
+			// explicit mode requires at least one agent - this is a configuration error
 			return fmt.Errorf("quality_control.agents.explicit_list cannot be empty when mode is 'explicit'. Provide at least one agent name, or switch to mode 'auto'")
 		}
 
