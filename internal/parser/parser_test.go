@@ -1329,9 +1329,8 @@ func TestApplyRetryOnRedFallback_Integration(t *testing.T) {
 	t.Run("plan without retry_on_red, no config - use default", func(t *testing.T) {
 		plan := &models.Plan{
 			QualityControl: models.QualityControlConfig{
-				Enabled:     true,
-				ReviewAgent: "quality-control",
-				RetryOnRed:  0, // Not set
+				Enabled:    true,
+				RetryOnRed: 0, // Not set
 			},
 		}
 
