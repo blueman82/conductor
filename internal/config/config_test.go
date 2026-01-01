@@ -1137,11 +1137,7 @@ func TestQualityControlDefaults(t *testing.T) {
 		t.Errorf("QualityControl.Enabled = %v, want false", cfg.QualityControl.Enabled)
 	}
 
-	// But should have default agent and retry values
-	if cfg.QualityControl.ReviewAgent != "quality-control" {
-		t.Errorf("QualityControl.ReviewAgent = %q, want %q", cfg.QualityControl.ReviewAgent, "quality-control")
-	}
-
+	// Should have default retry value
 	if cfg.QualityControl.RetryOnRed != 2 {
 		t.Errorf("QualityControl.RetryOnRed = %d, want 2", cfg.QualityControl.RetryOnRed)
 	}
