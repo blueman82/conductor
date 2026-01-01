@@ -10,8 +10,6 @@ import (
 // TestLoadConfig_FullMatrixCoversAllFields ensures that every configuration field
 // can be overridden via YAML and that nested sections are respected.
 func TestLoadConfig_FullMatrixCoversAllFields(t *testing.T) {
-	clearConsoleEnv(t)
-
 	cfg, err := LoadConfig(filepath.Join("testdata", "full-config.yaml"))
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
@@ -24,17 +22,6 @@ func TestLoadConfig_FullMatrixCoversAllFields(t *testing.T) {
 	assertEqual(t, "DryRun", cfg.DryRun, true)
 	assertEqual(t, "SkipCompleted", cfg.SkipCompleted, true)
 	assertEqual(t, "RetryFailed", cfg.RetryFailed, true)
-
-	t.Run("Console", func(t *testing.T) {
-		assertEqual(t, "EnableColor", cfg.Console.EnableColor, false)
-		assertEqual(t, "EnableProgressBar", cfg.Console.EnableProgressBar, false)
-		assertEqual(t, "EnableTaskDetails", cfg.Console.EnableTaskDetails, false)
-		assertEqual(t, "EnableQCFeedback", cfg.Console.EnableQCFeedback, false)
-		assertEqual(t, "CompactMode", cfg.Console.CompactMode, true)
-		assertEqual(t, "ShowAgentNames", cfg.Console.ShowAgentNames, false)
-		assertEqual(t, "ShowFileCounts", cfg.Console.ShowFileCounts, false)
-		assertEqual(t, "ShowDurations", cfg.Console.ShowDurations, false)
-	})
 
 	t.Run("Learning", func(t *testing.T) {
 		assertEqual(t, "Enabled", cfg.Learning.Enabled, true)
@@ -57,23 +44,6 @@ func TestLoadConfig_FullMatrixCoversAllFields(t *testing.T) {
 		assertDeepEqual(t, "Agents.Additional", cfg.QualityControl.Agents.AdditionalAgents, []string{"extra-agent"})
 		assertDeepEqual(t, "Agents.Blocked", cfg.QualityControl.Agents.BlockedAgents, []string{"blocked-agent"})
 	})
-}
-
-func clearConsoleEnv(t *testing.T) {
-	t.Helper()
-	envs := []string{
-		"CONDUCTOR_CONSOLE_COLOR",
-		"CONDUCTOR_CONSOLE_PROGRESS_BAR",
-		"CONDUCTOR_CONSOLE_TASK_DETAILS",
-		"CONDUCTOR_CONSOLE_QC_FEEDBACK",
-		"CONDUCTOR_CONSOLE_COMPACT",
-		"CONDUCTOR_CONSOLE_AGENT_NAMES",
-		"CONDUCTOR_CONSOLE_FILE_COUNTS",
-		"CONDUCTOR_CONSOLE_DURATIONS",
-	}
-	for _, key := range envs {
-		t.Setenv(key, "")
-	}
 }
 
 func assertEqual[T comparable](t *testing.T, field string, got, want T) {

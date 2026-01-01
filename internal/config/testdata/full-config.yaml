@@ -6,16 +6,6 @@ dry_run: true
 skip_completed: true
 retry_failed: true
 
-console:
-  enable_color: false
-  enable_progress_bar: false
-  enable_task_details: false
-  enable_qc_feedback: false
-  compact_mode: true
-  show_agent_names: false
-  show_file_counts: false
-  show_durations: false
-
 learning:
   enabled: true
   db_path: /tmp/learning.db

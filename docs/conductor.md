@@ -1292,14 +1292,6 @@ dry_run: false            # Simulate without executing (default: false)
 skip_completed: false     # Skip tasks marked as completed (default: false)
 retry_failed: false       # Retry tasks marked as failed (default: false)
 
-# Console output configuration
-console:
-  # Color output control
-  # - auto: Auto-detect based on TTY (default)
-  # - true: Force colors on
-  # - false: Force colors off
-  colors_enabled: auto
-
 # Quality control settings
 quality_control:
   enabled: true              # Enable QC reviews (default: true)
