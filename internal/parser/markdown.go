@@ -755,7 +755,6 @@ func parseConductorConfig(frontmatter []byte, plan *models.Plan) error {
 
 		if config.Conductor.QualityControl != nil {
 			plan.QualityControl.Enabled = config.Conductor.QualityControl.Enabled
-			plan.QualityControl.ReviewAgent = config.Conductor.QualityControl.ReviewAgent
 			plan.QualityControl.RetryOnRed = config.Conductor.QualityControl.RetryOnRed
 
 			// Parse QC agent configuration if present
