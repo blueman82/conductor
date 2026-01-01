@@ -495,9 +495,8 @@ func parseConductorConfigYAML(cfg *yamlConductorConfig, plan *models.Plan) error
 	plan.DefaultAgent = cfg.DefaultAgent
 
 	plan.QualityControl = models.QualityControlConfig{
-		Enabled:     cfg.QualityControl.Enabled,
-		ReviewAgent: cfg.QualityControl.ReviewAgent,
-		RetryOnRed:  cfg.QualityControl.RetryOnRed,
+		Enabled:    cfg.QualityControl.Enabled,
+		RetryOnRed: cfg.QualityControl.RetryOnRed,
 	}
 
 	// Parse QC agent configuration if present
