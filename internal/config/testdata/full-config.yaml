@@ -18,7 +18,6 @@ learning:
 
 quality_control:
   enabled: true
-  review_agent: custom-qc
   retry_on_red: 3
   agents:
     mode: explicit
