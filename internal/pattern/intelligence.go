@@ -34,7 +34,7 @@ const (
 // It orchestrates the hasher, searcher, and library to provide full STOP protocol analysis.
 type PatternIntelligenceImpl struct {
 	config        *config.PatternConfig
-	searchTimeout time.Duration            // Timeout for search operations
+	searchTimeout time.Duration // Timeout for search operations
 	hasher        *TaskHasher
 	searcher      *STOPSearcher
 	library       *PatternLibrary

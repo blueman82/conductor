@@ -43,9 +43,6 @@ quality_control:
   # Enable or disable quality control reviews (default: true)
   enabled: true
 
-  # DEPRECATED: Single agent for QC (use agents.explicit_list instead)
-  # review_agent: conductor-qc
-
   # Multi-agent QC configuration (v2.2+)
   agents:
     # Selection mode: "auto", "explicit", "mixed", or "intelligent"

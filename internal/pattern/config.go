@@ -72,8 +72,8 @@ func DefaultPatternConfig() PatternConfig {
 		InjectIntoPrompt:         true,  // Include analysis in prompts by default
 		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
 		MaxRelatedFiles:          10,    // Limit related files
-		CacheTTLSeconds:       3600,  // 1 hour cache
-		LLMEnhancementEnabled: false, // Disabled by default
+		CacheTTLSeconds:          3600,  // 1 hour cache
+		LLMEnhancementEnabled:    false, // Disabled by default
 	}
 }
 

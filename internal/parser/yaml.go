@@ -110,9 +110,9 @@ type yamlConductorConfig struct {
 	DefaultAgent   string `yaml:"default_agent"`
 	MaxConcurrency int    `yaml:"max_concurrency"`
 	QualityControl struct {
-		Enabled    bool   `yaml:"enabled"`
-		RetryOnRed int    `yaml:"retry_on_red"`
-		Agents      struct {
+		Enabled    bool `yaml:"enabled"`
+		RetryOnRed int  `yaml:"retry_on_red"`
+		Agents     struct {
 			Mode              string   `yaml:"mode"`
 			ExplicitList      []string `yaml:"explicit_list"`
 			Additional        []string `yaml:"additional"`

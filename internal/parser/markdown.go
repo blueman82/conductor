@@ -60,7 +60,7 @@ type markdownPlannerCompliance struct {
 type qualityControlYAML struct {
 	Enabled    bool        `yaml:"enabled"`
 	RetryOnRed int         `yaml:"retry_on_red"`
-	Agents      *agentsYAML `yaml:"agents"`
+	Agents     *agentsYAML `yaml:"agents"`
 }
 
 type agentsYAML struct {

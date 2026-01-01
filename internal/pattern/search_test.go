@@ -59,7 +59,6 @@ func TestNewSTOPSearcher(t *testing.T) {
 	})
 }
 
-
 func TestSTOPSearcher_Search_EmptyDescription(t *testing.T) {
 	s := NewSTOPSearcher(nil, testSearchTimeout)
 	ctx := context.Background()
@@ -615,7 +614,6 @@ func TestHistoryMatch_Fields(t *testing.T) {
 		t.Errorf("Similarity = %f, want 0.85", match.Similarity)
 	}
 }
-
 
 // sliceContainsString checks if a slice contains a specific string.
 func sliceContainsString(slice []string, item string) bool {
