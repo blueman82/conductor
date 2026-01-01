@@ -828,15 +828,17 @@ plan:
 			expectedBlocked:    []string{"old-agent"},
 		},
 		{
-			name: "QC without agents section (backward compatibility)",
+			name: "QC with modern agents section",
 			yamlContent: `
 conductor:
   quality_control:
     enabled: true
-    review_agent: "quality-control"
+    agents:
+      mode: "explicit"
+      explicit_list: ["quality-control"]
 plan:
   metadata:
-    feature_name: "QC Legacy Test"
+    feature_name: "QC Modern Test"
   tasks:
     - task_number: 1
       name: "Task 1"
@@ -844,8 +846,8 @@ plan:
       estimated_time: "30m"
       description: "Test"
 `,
-			expectedMode:       "",
-			expectedExplicit:   []string{},
+			expectedMode:       "explicit",
+			expectedExplicit:   []string{"quality-control"},
 			expectedAdditional: []string{},
 			expectedBlocked:    []string{},
 		},
