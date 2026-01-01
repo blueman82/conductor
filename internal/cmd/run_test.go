@@ -2792,7 +2792,9 @@ default_agent: golang-pro
 ---`,
 			configQC: `quality_control:
   enabled: true
-  review_agent: config-qa
+  agents:
+    mode: explicit
+    explicit_list: [config-qa]
   retry_on_red: 4
 `,
 			expectPlanQCEnabled: true,
