@@ -1322,7 +1322,6 @@ quality_control:
     # Intelligent selection settings (v2.4+)
     max_agents: 4                    # Max QC agents to select (default: 4)
     cache_ttl_seconds: 3600          # Cache TTL in seconds (default: 3600)
-    selection_timeout_seconds: 90    # Claude selection timeout (default: 90)
     require_code_review: true        # Always include code-reviewer baseline (default: true)
 
 # Intelligent QC Agent Selection Example (v2.4+)
@@ -1647,7 +1646,6 @@ quality_control:
 | `mode` | string | `auto` | Selection mode: auto, explicit, mixed, or intelligent |
 | `max_agents` | int | `4` | Maximum number of QC agents to select |
 | `cache_ttl_seconds` | int | `3600` | Cache TTL in seconds (1 hour default) |
-| `selection_timeout_seconds` | int | `90` | Timeout for Claude intelligent selection calls |
 | `require_code_review` | bool | `true` | Always include code-reviewer as baseline |
 | `blocked` | []string | `[]` | Agents to never use for QC |
 | `explicit_list` | []string | `[]` | Agents for explicit mode |

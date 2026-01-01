@@ -132,9 +132,6 @@ type QCAgentConfig struct {
 	// CacheTTLSeconds is how long to cache intelligent selection results (default: 3600)
 	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
 
-	// SelectionTimeoutSeconds is the timeout for Claude intelligent selection calls (default: 90)
-	SelectionTimeoutSeconds int `yaml:"selection_timeout_seconds"`
-
 	// RequireCodeReview ensures code-reviewer is always included as baseline (default: true)
 	RequireCodeReview bool `yaml:"require_code_review"`
 }
@@ -470,9 +467,6 @@ type ArchitectureConfig struct {
 	// Mode specifies operating mode: "block" or "escalate"
 	Mode ArchitectureMode `yaml:"mode"`
 
-	// TimeoutSeconds for Claude CLI call (default: 30)
-	TimeoutSeconds int `yaml:"timeout_seconds"`
-
 	// RequireJustification requires task to justify architectural changes in output
 	RequireJustification bool `yaml:"require_justification"`
 
@@ -584,7 +578,6 @@ func DefaultArchitectureConfig() ArchitectureConfig {
 	return ArchitectureConfig{
 		Enabled:              false,                    // Disabled by default
 		Mode:                 ArchitectureModeEscalate, // Escalate mode when enabled
-		TimeoutSeconds:       30,                       // 30 second timeout
 		RequireJustification: false,                    // Don't require justification by default
 		EscalateOnUncertain:  false,                    // Don't escalate on low confidence
 		ConfidenceThreshold:  0.7,                      // 70% confidence threshold
@@ -631,14 +624,13 @@ func DefaultConfig() *Config {
 			Enabled:     false,
 			ReviewAgent: "quality-control", // Deprecated, kept for backward compat
 			Agents: QCAgentConfig{
-				Mode:                    "auto",
-				ExplicitList:            []string{},
-				AdditionalAgents:        []string{},
-				BlockedAgents:           []string{},
-				MaxAgents:               4,
-				CacheTTLSeconds:         3600,
-				SelectionTimeoutSeconds: 90,
-				RequireCodeReview:       true,
+				Mode:              "auto",
+				ExplicitList:      []string{},
+				AdditionalAgents:  []string{},
+				BlockedAgents:     []string{},
+				MaxAgents:         4,
+				CacheTTLSeconds:   3600,
+				RequireCodeReview: true,
 			},
 			RetryOnRed: 2,
 		},
@@ -1179,9 +1171,6 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := archMap["mode"]; exists {
 				cfg.Architecture.Mode = arch.Mode
 			}
-			if _, exists := archMap["timeout_seconds"]; exists {
-				cfg.Architecture.TimeoutSeconds = arch.TimeoutSeconds
-			}
 			if _, exists := archMap["require_justification"]; exists {
 				cfg.Architecture.RequireJustification = arch.RequireJustification
 			}
@@ -1194,7 +1183,6 @@ func LoadConfig(path string) (*Config, error) {
 		}
 
 		// Merge Timeouts config
-		timeoutsLLMExplicitlySet := false
 		if timeoutsSection, exists := rawMap["timeouts"]; exists && timeoutsSection != nil {
 			timeouts := yamlCfg.Timeouts
 			timeoutsMap, _ := timeoutsSection.(map[string]interface{})
@@ -1212,7 +1200,6 @@ func LoadConfig(path string) (*Config, error) {
 					return nil, fmt.Errorf("invalid timeouts.llm format %q: %w", timeouts.LLM, err)
 				}
 				cfg.Timeouts.LLM = d
-				timeoutsLLMExplicitlySet = true
 			}
 			if _, exists := timeoutsMap["http"]; exists && timeouts.HTTP != "" {
 				d, err := time.ParseDuration(timeouts.HTTP)
@@ -1230,10 +1217,6 @@ func LoadConfig(path string) (*Config, error) {
 			}
 		}
 
-		// Handle deprecated timeout fields with migration to timeouts.llm
-		// Only migrate if timeouts.llm was NOT explicitly set
-		handleDeprecatedTimeoutFields(rawMap, cfg, timeoutsLLMExplicitlySet)
-
 		// Handle TTS timeout fallback to timeouts.http
 		// This must be done AFTER timeouts parsing so cfg.Timeouts.HTTP has the correct value
 		handleTTSTimeoutFallback(cfg, ttsTimeoutExplicitlySet)
@@ -1243,66 +1226,6 @@ func LoadConfig(path string) (*Config, error) {
 	applyConsoleEnvOverrides(&cfg.Console)
 
 	return cfg, nil
-}
-
-// handleDeprecatedTimeoutFields checks for deprecated timeout fields and migrates
-// their values to the new timeouts.llm field if it was not explicitly set.
-// Logs deprecation warnings for each deprecated field found.
-//
-// Deprecated fields:
-//   - architecture.timeout_seconds → timeouts.llm
-//   - quality_control.agents.selection_timeout_seconds → timeouts.llm
-func handleDeprecatedTimeoutFields(rawMap map[string]interface{}, cfg *Config, timeoutsLLMExplicitlySet bool) {
-	// Track the highest deprecated value to use for migration
-	var deprecatedValue time.Duration
-	var deprecatedSource string
-
-	// Check architecture.timeout_seconds
-	if archSection, exists := rawMap["architecture"]; exists && archSection != nil {
-		archMap, _ := archSection.(map[string]interface{})
-		if timeout, exists := archMap["timeout_seconds"]; exists {
-			log.Printf("[DEPRECATED] architecture.timeout_seconds is deprecated. "+
-				"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
-				"This field will be removed in a future version.", cfg.Architecture.TimeoutSeconds)
-
-			if seconds, ok := timeout.(int); ok && seconds > 0 {
-				d := time.Duration(seconds) * time.Second
-				if d > deprecatedValue {
-					deprecatedValue = d
-					deprecatedSource = "architecture.timeout_seconds"
-				}
-			}
-		}
-	}
-
-	// Check quality_control.agents.selection_timeout_seconds
-	if qcSection, exists := rawMap["quality_control"]; exists && qcSection != nil {
-		qcMap, _ := qcSection.(map[string]interface{})
-		if agentsSection, exists := qcMap["agents"]; exists && agentsSection != nil {
-			agentsMap, _ := agentsSection.(map[string]interface{})
-			if timeout, exists := agentsMap["selection_timeout_seconds"]; exists {
-				log.Printf("[DEPRECATED] quality_control.agents.selection_timeout_seconds is deprecated. "+
-					"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
-					"This field will be removed in a future version.", cfg.QualityControl.Agents.SelectionTimeoutSeconds)
-
-				if seconds, ok := timeout.(int); ok && seconds > 0 {
-					d := time.Duration(seconds) * time.Second
-					if d > deprecatedValue {
-						deprecatedValue = d
-						deprecatedSource = "quality_control.agents.selection_timeout_seconds"
-					}
-				}
-			}
-		}
-	}
-
-	// Migrate deprecated value to timeouts.llm if not explicitly set
-	if !timeoutsLLMExplicitlySet && deprecatedValue > 0 {
-		cfg.Timeouts.LLM = deprecatedValue
-		log.Printf("[DEPRECATED] Migrating %s value (%v) to timeouts.llm. "+
-			"Please update your configuration to use timeouts.llm directly.",
-			deprecatedSource, deprecatedValue)
-	}
 }
 
 // handleTTSTimeoutFallback handles the migration of tts.timeout to timeouts.http.
