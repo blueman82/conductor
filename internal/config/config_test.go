@@ -751,9 +751,6 @@ func TestConfig_LearningDefaults(t *testing.T) {
 	if cfg.Learning.DBPath != ".conductor/learning/executions.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, ".conductor/learning/executions.db")
 	}
-	if !cfg.Learning.EnhancePrompts {
-		t.Errorf("Learning.EnhancePrompts = %v, want true", cfg.Learning.EnhancePrompts)
-	}
 	if cfg.Learning.KeepExecutionsDays != 90 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 90", cfg.Learning.KeepExecutionsDays)
 	}
@@ -796,7 +793,6 @@ func TestConfig_LearningCustomPath(t *testing.T) {
 	configContent := `learning:
   enabled: true
   db_path: /custom/path/learning.db
-  enhance_prompts: false
   keep_executions_days: 30
   max_executions_per_task: 50
 `
@@ -814,9 +810,6 @@ func TestConfig_LearningCustomPath(t *testing.T) {
 	}
 	if cfg.Learning.DBPath != "/custom/path/learning.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, "/custom/path/learning.db")
-	}
-	if cfg.Learning.EnhancePrompts {
-		t.Errorf("Learning.EnhancePrompts = %v, want false", cfg.Learning.EnhancePrompts)
 	}
 	if cfg.Learning.KeepExecutionsDays != 30 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 30", cfg.Learning.KeepExecutionsDays)
@@ -1665,7 +1658,6 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
   enabled: true
   db_path: /custom/db.db
   swap_during_retries: false
-  enhance_prompts: false
   qc_reads_plan_context: false
   qc_reads_db_context: false
   max_context_entries: 20
@@ -1689,9 +1681,6 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	}
 	if cfg.Learning.SwapDuringRetries {
 		t.Errorf("Learning.SwapDuringRetries = %v, want false", cfg.Learning.SwapDuringRetries)
-	}
-	if cfg.Learning.EnhancePrompts {
-		t.Errorf("Learning.EnhancePrompts = %v, want false", cfg.Learning.EnhancePrompts)
 	}
 	if cfg.Learning.QCReadsPlanContext {
 		t.Errorf("Learning.QCReadsPlanContext = %v, want false", cfg.Learning.QCReadsPlanContext)
@@ -3457,15 +3446,6 @@ func TestDeprecatedTimeoutFields(t *testing.T) {
 		description string
 	}{
 		{
-			name: "pattern.llm_timeout_seconds migrates to timeouts.llm",
-			configYAML: `pattern:
-  enabled: true
-  llm_timeout_seconds: 45
-`,
-			expectedLLM: 45 * time.Second,
-			description: "Deprecated pattern.llm_timeout_seconds should migrate to timeouts.llm",
-		},
-		{
 			name: "architecture.timeout_seconds migrates to timeouts.llm",
 			configYAML: `architecture:
   enabled: true
@@ -3489,8 +3469,6 @@ func TestDeprecatedTimeoutFields(t *testing.T) {
 			name: "timeouts.llm takes precedence over deprecated fields",
 			configYAML: `timeouts:
   llm: 30s
-pattern:
-  llm_timeout_seconds: 45
 architecture:
   timeout_seconds: 60
 `,
@@ -3499,9 +3477,7 @@ architecture:
 		},
 		{
 			name: "highest deprecated value wins when multiple deprecated fields set",
-			configYAML: `pattern:
-  llm_timeout_seconds: 30
-architecture:
+			configYAML: `architecture:
   timeout_seconds: 60
 quality_control:
   agents:
@@ -3516,14 +3492,6 @@ quality_control:
 `,
 			expectedLLM: 90 * time.Second,
 			description: "Without deprecated fields, default timeouts.llm should be used",
-		},
-		{
-			name: "deprecated field with zero value does not migrate",
-			configYAML: `pattern:
-  llm_timeout_seconds: 0
-`,
-			expectedLLM: 90 * time.Second,
-			description: "Zero value in deprecated field should not override default",
 		},
 	}
 
@@ -3559,13 +3527,6 @@ func TestDeprecatedTimeoutFieldsLogWarnings(t *testing.T) {
 		wantWarnings []string
 	}{
 		{
-			name: "pattern.llm_timeout_seconds logs warning",
-			configYAML: `pattern:
-  llm_timeout_seconds: 30
-`,
-			wantWarnings: []string{"pattern.llm_timeout_seconds is deprecated"},
-		},
-		{
 			name: "architecture.timeout_seconds logs warning",
 			configYAML: `architecture:
   timeout_seconds: 30
@@ -3582,14 +3543,15 @@ func TestDeprecatedTimeoutFieldsLogWarnings(t *testing.T) {
 		},
 		{
 			name: "multiple deprecated fields log multiple warnings",
-			configYAML: `pattern:
-  llm_timeout_seconds: 30
-architecture:
+			configYAML: `architecture:
   timeout_seconds: 45
+quality_control:
+  agents:
+    selection_timeout_seconds: 30
 `,
 			wantWarnings: []string{
-				"pattern.llm_timeout_seconds is deprecated",
 				"architecture.timeout_seconds is deprecated",
+				"selection_timeout_seconds is deprecated",
 			},
 		},
 	}

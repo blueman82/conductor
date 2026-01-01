@@ -55,15 +55,6 @@ type PatternConfig struct {
 	// LLM Enhancement (optional, requires Claude CLI)
 	// LLMEnhancementEnabled enables Claude-based confidence refinement
 	LLMEnhancementEnabled bool `yaml:"llm_enhancement_enabled"`
-
-	// LLMMinConfidence is the minimum confidence to trigger LLM enhancement (default: 0.3)
-	LLMMinConfidence float64 `yaml:"llm_min_confidence"`
-
-	// LLMMaxConfidence is the maximum confidence to trigger LLM enhancement (default: 0.7)
-	LLMMaxConfidence float64 `yaml:"llm_max_confidence"`
-
-	// LLMTimeoutSeconds is the timeout for Claude CLI response (default: 30)
-	LLMTimeoutSeconds int `yaml:"llm_timeout_seconds"`
 }
 
 // DefaultPatternConfig returns PatternConfig with sensible default values.
@@ -80,11 +71,8 @@ func DefaultPatternConfig() PatternConfig {
 		InjectIntoPrompt:         true,  // Include analysis in prompts by default
 		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
 		MaxRelatedFiles:          10,    // Limit related files
-		CacheTTLSeconds:          3600,  // 1 hour cache
-		LLMEnhancementEnabled:    false, // Disabled by default
-		LLMMinConfidence:         0.3,   // Enhance when >= 0.3
-		LLMMaxConfidence:         0.7,   // Enhance when <= 0.7
-		LLMTimeoutSeconds:        30,    // 30 second timeout for Claude response
+		CacheTTLSeconds:       3600,  // 1 hour cache
+		LLMEnhancementEnabled: false, // Disabled by default
 	}
 }
 
@@ -143,38 +131,6 @@ func (c *PatternConfig) Validate() error {
 			Field:   "cache_ttl_seconds",
 			Message: "must be >= 0",
 			Value:   c.CacheTTLSeconds,
-		}
-	}
-
-	// LLM enhancement validation
-	if c.LLMEnhancementEnabled {
-		if c.LLMMinConfidence < 0 || c.LLMMinConfidence > 1 {
-			return &ConfigError{
-				Field:   "llm_min_confidence",
-				Message: "must be between 0 and 1",
-				Value:   c.LLMMinConfidence,
-			}
-		}
-		if c.LLMMaxConfidence < 0 || c.LLMMaxConfidence > 1 {
-			return &ConfigError{
-				Field:   "llm_max_confidence",
-				Message: "must be between 0 and 1",
-				Value:   c.LLMMaxConfidence,
-			}
-		}
-		if c.LLMMinConfidence > c.LLMMaxConfidence {
-			return &ConfigError{
-				Field:   "llm_min_confidence",
-				Message: "must be <= llm_max_confidence",
-				Value:   c.LLMMinConfidence,
-			}
-		}
-		if c.LLMTimeoutSeconds <= 0 {
-			return &ConfigError{
-				Field:   "llm_timeout_seconds",
-				Message: "must be > 0",
-				Value:   c.LLMTimeoutSeconds,
-			}
 		}
 	}
 

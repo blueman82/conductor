@@ -132,10 +132,6 @@ learning:
   # When a task fails repeatedly, swap to a better-performing agent suggested by QC or history
   swap_during_retries: true
 
-  # Enhance prompts with learned context (default: true)
-  # When enabled, conductor enriches task prompts with relevant execution history
-  enhance_prompts: true
-
   # Enable QC to read plan file context (default: true)
   # QC agent loads execution history from current run's plan file before reviewing
   qc_reads_plan_context: true
@@ -489,10 +485,6 @@ pattern:
   # Uses Claude CLI to refine confidence when in uncertain range
   # Provides TTS + visual countdown during rate limit waits
   llm_enhancement_enabled: false  # Disabled by default
-  llm_min_confidence: 0.3         # Enhance when confidence >= this
-  llm_max_confidence: 0.7         # Enhance when confidence <= this
-  # DEPRECATED: Use timeouts.llm instead (v2.33+)
-  # llm_timeout_seconds: 30       # Timeout for Claude CLI response
 
 # Pattern Intelligence Examples
 
@@ -530,8 +522,6 @@ pattern:
 # pattern:
 #   enabled: true
 #   llm_enhancement_enabled: true
-#   llm_min_confidence: 0.3
-#   llm_max_confidence: 0.7
 
 # Validation Examples
 

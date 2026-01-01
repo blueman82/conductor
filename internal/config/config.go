@@ -85,9 +85,6 @@ type LearningConfig struct {
 	// Default: true
 	IntelligentSwapEnabled bool `yaml:"intelligent_swap_enabled"`
 
-	// EnhancePrompts enables prompt enhancement based on learned patterns
-	EnhancePrompts bool `yaml:"enhance_prompts"`
-
 	// WarmUpEnabled enables warm-up context injection for agent priming (v2.29+)
 	// When true, agents receive similar successful task approaches, common pitfalls,
 	// and file-specific patterns before task execution.
@@ -291,15 +288,6 @@ type PatternConfig struct {
 	// LLM Enhancement (optional, requires Claude CLI)
 	// LLMEnhancementEnabled enables Claude-based confidence refinement for uncertain cases
 	LLMEnhancementEnabled bool `yaml:"llm_enhancement_enabled"`
-
-	// LLMMinConfidence is the minimum confidence to trigger LLM enhancement (default: 0.3)
-	LLMMinConfidence float64 `yaml:"llm_min_confidence"`
-
-	// LLMMaxConfidence is the maximum confidence to trigger LLM enhancement (default: 0.7)
-	LLMMaxConfidence float64 `yaml:"llm_max_confidence"`
-
-	// LLMTimeoutSeconds is the timeout for Claude CLI response (default: 30)
-	LLMTimeoutSeconds int `yaml:"llm_timeout_seconds"`
 
 	// RequireJustification requires implementing agent to justify custom implementations
 	// when STOP protocol finds prior art (existing solutions, similar commits, related issues).
@@ -585,11 +573,8 @@ func DefaultPatternConfig() PatternConfig {
 		InjectIntoPrompt:         true,  // Include analysis in prompts by default
 		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
 		MaxRelatedFiles:          10,    // Limit related files
-		CacheTTLSeconds:          3600,  // 1 hour cache
-		LLMEnhancementEnabled:    false, // Disabled by default
-		LLMMinConfidence:         0.3,   // Enhance when >= 0.3
-		LLMMaxConfidence:         0.7,   // Enhance when <= 0.7
-		LLMTimeoutSeconds:        30,    // 30 second timeout for Claude response
+		CacheTTLSeconds:       3600,  // 1 hour cache
+		LLMEnhancementEnabled: false, // Disabled by default
 	}
 }
 
@@ -635,7 +620,6 @@ func DefaultConfig() *Config {
 			DBPath:                 ".conductor/learning/executions.db",
 			SwapDuringRetries:      true,
 			IntelligentSwapEnabled: true, // Enable intelligent agent swap by default (v2.30+)
-			EnhancePrompts:         true,
 			WarmUpEnabled:          true, // Enable warm-up context by default
 			QCReadsPlanContext:     true,
 			QCReadsDBContext:       true,
@@ -887,9 +871,6 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := learningMap["swap_during_retries"]; exists {
 				cfg.Learning.SwapDuringRetries = learning.SwapDuringRetries
-			}
-			if _, exists := learningMap["enhance_prompts"]; exists {
-				cfg.Learning.EnhancePrompts = learning.EnhancePrompts
 			}
 			if _, exists := learningMap["qc_reads_plan_context"]; exists {
 				cfg.Learning.QCReadsPlanContext = learning.QCReadsPlanContext
@@ -1263,31 +1244,12 @@ func LoadConfig(path string) (*Config, error) {
 // Logs deprecation warnings for each deprecated field found.
 //
 // Deprecated fields:
-//   - pattern.llm_timeout_seconds → timeouts.llm
 //   - architecture.timeout_seconds → timeouts.llm
 //   - quality_control.agents.selection_timeout_seconds → timeouts.llm
 func handleDeprecatedTimeoutFields(rawMap map[string]interface{}, cfg *Config, timeoutsLLMExplicitlySet bool) {
 	// Track the highest deprecated value to use for migration
 	var deprecatedValue time.Duration
 	var deprecatedSource string
-
-	// Check pattern.llm_timeout_seconds
-	if patternSection, exists := rawMap["pattern"]; exists && patternSection != nil {
-		patternMap, _ := patternSection.(map[string]interface{})
-		if llmTimeout, exists := patternMap["llm_timeout_seconds"]; exists {
-			log.Printf("[DEPRECATED] pattern.llm_timeout_seconds is deprecated. "+
-				"Please migrate to timeouts.llm (e.g., 'timeouts:\\n  llm: %ds'). "+
-				"This field will be removed in a future version.", cfg.Pattern.LLMTimeoutSeconds)
-
-			if seconds, ok := llmTimeout.(int); ok && seconds > 0 {
-				d := time.Duration(seconds) * time.Second
-				if d > deprecatedValue {
-					deprecatedValue = d
-					deprecatedSource = "pattern.llm_timeout_seconds"
-				}
-			}
-		}
-	}
 
 	// Check architecture.timeout_seconds
 	if archSection, exists := rawMap["architecture"]; exists && archSection != nil {

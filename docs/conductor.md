@@ -1372,9 +1372,6 @@ learning:
   # When a task fails, uses IntelligentAgentSwapper to select a better agent
   swap_during_retries: true
 
-  # Enhance prompts with learned context (default: true)
-  enhance_prompts: true
-
   # Enable QC to read plan file context (default: true)
   # QC agent loads execution history from current run before reviewing
   qc_reads_plan_context: true
@@ -3295,9 +3292,6 @@ learning:
   # Uses IntelligentAgentSwapper for Claude-powered agent selection
   swap_during_retries: true
 
-  # Enhance prompts with learned context (default: true)
-  enhance_prompts: true
-
   # Enable QC to read plan file context (default: true)
   qc_reads_plan_context: true
 
@@ -3321,7 +3315,6 @@ learning:
 | `enabled` | bool | `true` | Master switch for learning system |
 | `db_path` | string | `.conductor/learning/executions.db` | Path to SQLite database file |
 | `swap_during_retries` | bool | `true` | Enable inter-retry agent swapping via IntelligentAgentSwapper |
-| `enhance_prompts` | bool | `true` | Add learned context to prompts |
 | `qc_reads_plan_context` | bool | `true` | QC loads execution history from plan |
 | `qc_reads_db_context` | bool | `true` | QC loads execution history from database |
 | `max_context_entries` | int | `10` | Maximum historical entries for QC context |

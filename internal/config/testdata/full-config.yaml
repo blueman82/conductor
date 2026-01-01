@@ -20,7 +20,6 @@ learning:
   enabled: true
   db_path: /tmp/learning.db
   swap_during_retries: false
-  enhance_prompts: false
   qc_reads_plan_context: false
   qc_reads_db_context: false
   max_context_entries: 25

@@ -72,7 +72,6 @@ quality_control:
 learning:
   enabled: true
   swap_during_retries: true
-  enhance_prompts: true
 ```
 
 ### Pattern Intelligence
@@ -84,8 +83,7 @@ pattern:
   duplicate_threshold: 0.9
   enable_stop: true             # STOP protocol (Search/Think/Outline/Prove)
   require_justification: true   # QC asks for justification when prior art found
-  llm_enhancement_enabled: true # Claude refines uncertain confidence (0.3-0.7)
-  llm_timeout_seconds: 30
+  llm_enhancement_enabled: true # Claude refines uncertain confidence
 ```
 
 ### Budget & Rate Limits
