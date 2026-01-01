@@ -75,6 +75,7 @@ type QCAgentConfig struct {
 	CacheTTLSeconds         int  // Cache TTL in seconds (default: 3600)
 	SelectionTimeoutSeconds int  // Timeout for Claude selection calls (default: 90)
 	RequireCodeReview       bool // Always include code-reviewer as baseline (default: true)
+	DefaultAgent            string // Fallback agent when no explicit list provided (default: "quality-control")
 }
 
 // QualityControlConfig holds configuration for the QA review process
