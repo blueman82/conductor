@@ -444,8 +444,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// This ensures plans without QC frontmatter get sensible defaults from config
 	if !plan.QualityControl.Enabled && cfg.QualityControl.Enabled {
 		plan.QualityControl = models.QualityControlConfig{
-			Enabled:     cfg.QualityControl.Enabled,
-			ReviewAgent: cfg.QualityControl.ReviewAgent,
+			Enabled: cfg.QualityControl.Enabled,
 			Agents: models.QCAgentConfig{
 				Mode:                    cfg.QualityControl.Agents.Mode,
 				ExplicitList:            cfg.QualityControl.Agents.ExplicitList,
