@@ -572,8 +572,7 @@ func DefaultConfig() *Config {
 			MaxExecutionsPerTask:   100,
 		},
 		QualityControl: QualityControlConfig{
-			Enabled:     false,
-			ReviewAgent: "quality-control", // Deprecated, kept for backward compat
+			Enabled: false,
 			Agents: QCAgentConfig{
 				Mode:              "auto",
 				ExplicitList:      []string{},
@@ -773,9 +772,6 @@ func LoadConfig(path string) (*Config, error) {
 
 			if _, exists := qcMap["enabled"]; exists {
 				cfg.QualityControl.Enabled = qc.Enabled
-			}
-			if _, exists := qcMap["review_agent"]; exists {
-				cfg.QualityControl.ReviewAgent = qc.ReviewAgent
 			}
 			if _, exists := qcMap["retry_on_red"]; exists {
 				cfg.QualityControl.RetryOnRed = qc.RetryOnRed
