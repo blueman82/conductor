@@ -1295,7 +1295,6 @@ retry_failed: false       # Retry tasks marked as failed (default: false)
 # Quality control settings
 quality_control:
   enabled: true              # Enable QC reviews (default: true)
-  # review_agent: conductor-qc # DEPRECATED: use agents section below
   retry_on_red: 2            # Retry attempts on RED verdict (default: 2)
 
   # Multi-agent QC configuration (v2.2+)
