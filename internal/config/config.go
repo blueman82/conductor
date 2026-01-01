@@ -790,6 +790,11 @@ func LoadConfig(path string) (*Config, error) {
 						cfg.QualityControl.Agents.Mode = modeStr
 					}
 				}
+				if defaultAgent, exists := agentsMap["default_agent"]; exists {
+					if agentStr, ok := defaultAgent.(string); ok {
+						cfg.QualityControl.Agents.DefaultAgent = agentStr
+					}
+				}
 				if explicitList, exists := agentsMap["explicit_list"]; exists {
 					if list, ok := explicitList.([]interface{}); ok {
 						cfg.QualityControl.Agents.ExplicitList = interfaceSliceToStringSlice(list)
