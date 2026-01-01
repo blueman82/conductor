@@ -578,9 +578,12 @@ func TestOrchestratorWithQualityControl(t *testing.T) {
 		Name:  "Plan 1",
 		Tasks: []models.Task{{Number: "1", Name: "Task 1"}},
 		QualityControl: models.QualityControlConfig{
-			Enabled:     true,
-			ReviewAgent: "quality-control",
-			RetryOnRed:  2,
+			Enabled: true,
+			Agents: models.QCAgentConfig{
+				Mode:         "explicit",
+				ExplicitList: []string{"quality-control"},
+			},
+			RetryOnRed: 2,
 		},
 	}
 
