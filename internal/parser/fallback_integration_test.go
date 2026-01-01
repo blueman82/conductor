@@ -12,7 +12,9 @@ func TestRetryOnRedFallback_EndToEnd(t *testing.T) {
 conductor:
   quality_control:
     enabled: true
-    review_agent: "quality-control"
+    agents:
+      mode: explicit
+      explicit_list: ["quality-control"]
     retry_on_red: 5
 
 plan:
