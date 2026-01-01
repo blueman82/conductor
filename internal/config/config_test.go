@@ -1610,7 +1610,7 @@ func TestQCAgentConfigMissingAgentsSection(t *testing.T) {
 
 	configContent := `quality_control:
   enabled: true
-  review_agent: quality-control
+  retry_on_red: 3
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -1621,9 +1621,13 @@ func TestQCAgentConfigMissingAgentsSection(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	// With review_agent but no agents section, should convert to explicit mode
-	if cfg.QualityControl.Agents.Mode != "explicit" {
-		t.Errorf("QCAgent.Mode = %q, want %q", cfg.QualityControl.Agents.Mode, "explicit")
+	// Quality control should be enabled
+	if !cfg.QualityControl.Enabled {
+		t.Errorf("QualityControl.Enabled = %v, want true", cfg.QualityControl.Enabled)
+	}
+	// RetryOnRed should be set from config
+	if cfg.QualityControl.RetryOnRed != 3 {
+		t.Errorf("QualityControl.RetryOnRed = %d, want 3", cfg.QualityControl.RetryOnRed)
 	}
 }
 
