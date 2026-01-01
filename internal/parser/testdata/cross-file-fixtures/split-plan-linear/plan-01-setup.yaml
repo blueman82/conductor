@@ -2,7 +2,10 @@ conductor:
   default_agent: godev
   quality_control:
     enabled: true
-    review_agent: code-reviewer
+    agents:
+      mode: explicit
+      explicit_list:
+        - code-reviewer
 
 plan:
   metadata:
