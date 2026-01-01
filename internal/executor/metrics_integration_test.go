@@ -32,9 +32,12 @@ func TestMetricsIntegration_RecordsPatternDetections(t *testing.T) {
 
 	executor, err := NewTaskExecutor(invoker, reviewer, &recordingUpdater{}, TaskExecutorConfig{
 		QualityControl: models.QualityControlConfig{
-			Enabled:     true,
-			RetryOnRed:  1,
-			ReviewAgent: "test-reviewer",
+			Enabled:    true,
+			RetryOnRed: 1,
+			Agents: models.QCAgentConfig{
+				Mode:         "explicit",
+				ExplicitList: []string{"test-reviewer"},
+			},
 		},
 	})
 	if err != nil {
