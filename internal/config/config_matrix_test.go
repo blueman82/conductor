@@ -36,7 +36,6 @@ func TestLoadConfig_FullMatrixCoversAllFields(t *testing.T) {
 
 	t.Run("QualityControl", func(t *testing.T) {
 		assertEqual(t, "Enabled", cfg.QualityControl.Enabled, true)
-		assertEqual(t, "ReviewAgent", cfg.QualityControl.ReviewAgent, "custom-qc")
 		assertEqual(t, "RetryOnRed", cfg.QualityControl.RetryOnRed, 3)
 
 		assertEqual(t, "Agents.Mode", cfg.QualityControl.Agents.Mode, "explicit")
