@@ -168,7 +168,9 @@ Test content
 conductor:
   quality_control:
     enabled: true
-    review_agent: quality-control
+    agents:
+      mode: explicit
+      explicit_list: [quality-control]
 ---
 
 # Test Plan
