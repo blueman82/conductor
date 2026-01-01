@@ -417,17 +417,20 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 	// Determine if STOP justification is required (prior art exists and config enables it)
 	requireSTOPJustification := qc.RequireJustification && qc.STOPSummary != ""
 
+	// Determine the QC agent to use
+	qcAgent := qc.getDefaultAgent()
+
 	// Create a review task for the invoker with JSON schema enforcement
 	reviewTask := models.Task{
 		Number:     task.Number,
 		Name:       fmt.Sprintf("QC Review: %s", task.Name),
 		Prompt:     basePrompt,
-		Agent:      qc.ReviewAgent,
+		Agent:      qcAgent,
 		JSONSchema: models.QCResponseSchemaWithOptions(hasSuccessCriteria, requireSTOPJustification), // Enforce QC response structure via schema
 	}
 
 	// Invoke the QC agent and parse response
-	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, qc.ReviewAgent)
+	qcResp, jsonErr := qc.invokeAndParseQCAgent(ctx, reviewTask, qcAgent)
 	if jsonErr != nil {
 		// Invocation or parsing failed
 		return nil, fmt.Errorf("QC review failed: %w", jsonErr)
