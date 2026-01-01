@@ -191,16 +191,19 @@ func TestWaveCalculation(t *testing.T) {
 func TestQualityControlConfig(t *testing.T) {
 	t.Run("quality control config has required fields", func(t *testing.T) {
 		qc := QualityControlConfig{
-			Enabled:     true,
-			ReviewAgent: "reviewer",
-			RetryOnRed:  3,
+			Enabled: true,
+			Agents: QCAgentConfig{
+				Mode:         "explicit",
+				ExplicitList: []string{"reviewer"},
+			},
+			RetryOnRed: 3,
 		}
 
 		if !qc.Enabled {
 			t.Error("QualityControlConfig.Enabled should be true")
 		}
-		if qc.ReviewAgent != "reviewer" {
-			t.Errorf("QualityControlConfig.ReviewAgent = %v, want reviewer", qc.ReviewAgent)
+		if len(qc.Agents.ExplicitList) == 0 || qc.Agents.ExplicitList[0] != "reviewer" {
+			t.Errorf("QualityControlConfig.Agents.ExplicitList = %v, want [reviewer]", qc.Agents.ExplicitList)
 		}
 		if qc.RetryOnRed != 3 {
 			t.Errorf("QualityControlConfig.RetryOnRed = %v, want 3", qc.RetryOnRed)
