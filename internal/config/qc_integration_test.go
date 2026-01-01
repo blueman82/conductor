@@ -231,9 +231,9 @@ Test task.
 	// Simulate merge logic from run.go
 	if !plan.QualityControl.Enabled && cfg.QualityControl.Enabled {
 		plan.QualityControl = models.QualityControlConfig{
-			Enabled:     cfg.QualityControl.Enabled,
-			ReviewAgent: cfg.QualityControl.ReviewAgent,
-			RetryOnRed:  cfg.QualityControl.RetryOnRed,
+			Enabled:    cfg.QualityControl.Enabled,
+			Agents:     cfg.QualityControl.Agents,
+			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
 	}
 
