@@ -758,7 +758,6 @@ func TestParseYAMLWithQCAgentConfig(t *testing.T) {
 conductor:
   quality_control:
     enabled: true
-    review_agent: "quality-control"
     retry_on_red: 2
     agents:
       mode: "auto"
