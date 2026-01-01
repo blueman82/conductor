@@ -801,11 +801,6 @@ func LoadConfig(path string) (*Config, error) {
 						cfg.QualityControl.Agents.BlockedAgents = interfaceSliceToStringSlice(list)
 					}
 				}
-			} else if cfg.QualityControl.ReviewAgent != "" && cfg.QualityControl.Agents.Mode == "auto" {
-				// Backward compatibility: if no agents section but review_agent is set,
-				// convert to explicit mode with single agent
-				cfg.QualityControl.Agents.Mode = "explicit"
-				cfg.QualityControl.Agents.ExplicitList = []string{cfg.QualityControl.ReviewAgent}
 			}
 		}
 
