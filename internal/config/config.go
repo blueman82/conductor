@@ -578,6 +578,7 @@ func DefaultConfig() *Config {
 			Enabled: false,
 			Agents: QCAgentConfig{
 				Mode:              "auto",
+				DefaultAgent:      "quality-control",
 				ExplicitList:      []string{},
 				AdditionalAgents:  []string{},
 				BlockedAgents:     []string{},
