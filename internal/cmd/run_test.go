@@ -2811,7 +2811,9 @@ quality_control:
 ---`,
 			configQC: `quality_control:
   enabled: false
-  review_agent: config-agent
+  agents:
+    mode: explicit
+    explicit_list: [config-agent]
   retry_on_red: 6
 `,
 			expectPlanQCEnabled: true,
