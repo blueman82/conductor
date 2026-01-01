@@ -251,45 +251,55 @@ func TestQualityControlConfigValidation(t *testing.T) {
 		wantError bool
 	}{
 		{
-			name: "valid QC config",
+			name: "valid QC config with explicit mode",
 			config: `quality_control:
   enabled: true
-  review_agent: my-agent
+  agents:
+    mode: explicit
+    explicit_list:
+      - my-agent
   retry_on_red: 3
 `,
 			wantError: false,
 		},
 		{
-			name: "QC enabled but empty review_agent",
+			name: "QC enabled with auto mode",
 			config: `quality_control:
   enabled: true
-  review_agent: ""
+  agents:
+    mode: auto
   retry_on_red: 2
 `,
-			wantError: false, // v2.2+: empty review_agent is valid with auto mode (auto-selects agents)
+			wantError: false,
 		},
 		{
 			name: "QC enabled but negative retry_on_red",
 			config: `quality_control:
   enabled: true
-  review_agent: my-agent
+  agents:
+    mode: explicit
+    explicit_list:
+      - my-agent
   retry_on_red: -1
 `,
 			wantError: true,
 		},
 		{
-			name: "QC enabled but missing review_agent field",
+			name: "QC enabled with default auto mode",
 			config: `quality_control:
   enabled: true
+  agents:
+    mode: auto
   retry_on_red: 2
 `,
-			wantError: false, // Should use default "quality-control"
+			wantError: false,
 		},
 		{
 			name: "QC disabled with invalid values",
 			config: `quality_control:
   enabled: false
-  review_agent: ""
+  agents:
+    mode: auto
   retry_on_red: -1
 `,
 			wantError: false, // Validation only applies when enabled
