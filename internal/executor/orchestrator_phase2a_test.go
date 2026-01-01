@@ -559,8 +559,8 @@ func TestOrchestratorWithQualityControl(t *testing.T) {
 			if !plan.QualityControl.Enabled {
 				t.Error("expected QC to be enabled in merged plan")
 			}
-			if plan.QualityControl.ReviewAgent != "quality-control" {
-				t.Errorf("expected QC agent to be quality-control, got %s", plan.QualityControl.ReviewAgent)
+			if len(plan.QualityControl.Agents.ExplicitList) == 0 || plan.QualityControl.Agents.ExplicitList[0] != "quality-control" {
+				t.Errorf("expected QC agent to be quality-control, got %v", plan.QualityControl.Agents.ExplicitList)
 			}
 
 			var results []models.TaskResult
