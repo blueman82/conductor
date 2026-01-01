@@ -1337,15 +1337,6 @@ quality_control:
 #     require_code_review: true
 #     blocked: []
 
-# Feedback storage settings
-feedback:
-  store_in_plan_file: true   # Store execution history in plan file (default: true)
-  store_in_database: true    # Store execution history in database (default: true)
-  format: json               # Response format: json or text (default: json)
-  store_on_green: true       # Store successful executions (default: true)
-  store_on_red: true         # Store failed executions (default: true)
-  store_on_yellow: true      # Store warning executions (default: true)
-
 # Executor settings (v2.11+)
 executor:
   # Enable Claude-based error classification (default: false)
@@ -3414,17 +3405,6 @@ Structured data stored in SQLite for pattern analysis:
 - Agent performance metrics
 - Failure categorization
 
-**Configuration:**
-```yaml
-feedback:
-  store_in_plan_file: true   # Enable plan file storage
-  store_in_database: true    # Enable database storage
-  format: json               # Response format (json or text)
-  store_on_green: true       # Store successful executions
-  store_on_red: true         # Store failed executions
-  store_on_yellow: true      # Store warning executions
-```
-
 **Benefits of Dual Storage:**
 - Plan files provide immediate visibility into task history
 - Database enables long-term pattern analysis
@@ -3746,14 +3726,6 @@ A: It uses Claude to analyze multiple factors:
 - Task type (Go code suggests golang-pro)
 - Failure patterns (syntax errors suggest different approach)
 - Historical success data from database context
-
-**Q: Can I disable dual feedback storage?**
-A: Yes, configure in `.conductor/config.yaml`:
-```yaml
-feedback:
-  store_in_plan_file: false  # Disable plan file storage
-  store_in_database: true    # Keep database storage only
-```
 
 ---
 
