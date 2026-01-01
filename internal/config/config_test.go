@@ -1099,8 +1099,8 @@ func TestQualityControlParsing(t *testing.T) {
 		{
 			name:          "quality_control section absent",
 			configContent: `max_concurrency: 5`,
-			expectEnabled: false,  // should use default
-			expectRetry:   2,      // should use default
+			expectEnabled: false, // should use default
+			expectRetry:   2,     // should use default
 		},
 	}
 
