@@ -174,15 +174,15 @@ plan:
 	// Config should NOT override plan frontmatter
 	if !plan.QualityControl.Enabled && cfg.QualityControl.Enabled {
 		plan.QualityControl = models.QualityControlConfig{
-			Enabled:     cfg.QualityControl.Enabled,
-			ReviewAgent: cfg.QualityControl.ReviewAgent,
-			RetryOnRed:  cfg.QualityControl.RetryOnRed,
+			Enabled:    cfg.QualityControl.Enabled,
+			Agents:     cfg.QualityControl.Agents,
+			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
 	}
 
 	// Verify plan settings are preserved (not overridden by config)
-	if plan.QualityControl.ReviewAgent != "plan-agent" {
-		t.Errorf("Plan.QualityControl.ReviewAgent = %q, want %q (plan takes precedence)", plan.QualityControl.ReviewAgent, "plan-agent")
+	if len(plan.QualityControl.Agents.ExplicitList) != 1 || plan.QualityControl.Agents.ExplicitList[0] != "plan-agent" {
+		t.Errorf("Plan.QualityControl.Agents.ExplicitList = %v, want [plan-agent] (plan takes precedence)", plan.QualityControl.Agents.ExplicitList)
 	}
 	if plan.QualityControl.RetryOnRed != 5 {
 		t.Errorf("Plan.QualityControl.RetryOnRed = %d, want 5 (plan takes precedence)", plan.QualityControl.RetryOnRed)
