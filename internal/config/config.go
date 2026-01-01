@@ -129,6 +129,10 @@ type LearningConfig struct {
 
 	// MaxExecutionsPerTask is the maximum number of executions to keep per task
 	MaxExecutionsPerTask int `yaml:"max_executions_per_task"`
+
+	// MinFailuresBeforeAdapt is the minimum consecutive failures before considering agent swap
+	// Default: 1
+	MinFailuresBeforeAdapt int `yaml:"min_failures_before_adapt"`
 }
 
 // QCAgentConfig represents multi-agent QC configuration

@@ -211,6 +211,10 @@ type DefaultTaskExecutor struct {
 	// Commit Verification integration (v2.30+)
 	CommitVerifier CommitVerifier // Verifies agent created expected commit (optional)
 
+	// MinFailuresBeforeAdapt is the threshold for failure analysis (v2.34+)
+	// Defaults to 1 if not set
+	MinFailuresBeforeAdapt int
+
 	// Runtime state for passing to QC
 	lastTestResults        []TestCommandResult            // Populated after RunTestCommands
 	lastCriterionResults   []CriterionVerificationResult  // Populated after RunCriterionVerifications
@@ -288,7 +292,11 @@ func (te *DefaultTaskExecutor) preTaskHook(ctx context.Context, task *models.Tas
 
 	// Query learning store for failure analysis (for prompt enhancement only)
 	// Agent selection now handled by IntelligentAgentSwapper during retries
-	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number, 1)
+	minFailures := te.MinFailuresBeforeAdapt
+	if minFailures <= 0 {
+		minFailures = 1 // Default to 1 if not configured
+	}
+	analysis, err := te.LearningStore.AnalyzeFailures(ctx, te.PlanFile, task.Number, minFailures)
 	if err != nil {
 		// Log warning but don't break execution (graceful degradation)
 		return nil

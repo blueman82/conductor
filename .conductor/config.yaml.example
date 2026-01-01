@@ -169,9 +169,9 @@ learning:
   # Limits the number of historical attempts included in QC context
   max_context_entries: 10
 
-  # Minimum failures before adapting strategy (default: 2)
+  # Minimum failures before adapting strategy (default: 1)
   # Conductor will consider adapting (swapping agents) after this many consecutive failures
-  min_failures_before_adapt: 2
+  min_failures_before_adapt: 1
 
   # Days to keep execution history (default: 90)
   # Older execution records are cleaned up automatically

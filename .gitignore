@@ -73,6 +73,9 @@ test-results/
 transcripts/
 conductor
 
+# Local changelog (not tracked)
+CHANGELOG.md
+
 # Ignore docs folder
 docs/*
 
