@@ -89,12 +89,16 @@ type QualityController struct {
 
 // getDefaultAgent returns the primary QC agent to use based on AgentConfig.
 // For explicit/mixed modes, returns the first agent in the list.
-// For auto/intelligent modes, returns "quality-control" as the default.
+// Falls back to configured DefaultAgent if no explicit agents provided.
+// Ultimate fallback is "quality-control" if no default agent configured.
 func (qc *QualityController) getDefaultAgent() string {
 	if len(qc.AgentConfig.ExplicitList) > 0 {
 		return qc.AgentConfig.ExplicitList[0]
 	}
-	return "quality-control" // Default fallback agent
+	if qc.AgentConfig.DefaultAgent != "" {
+		return qc.AgentConfig.DefaultAgent
+	}
+	return "quality-control" // Ultimate fallback
 }
 
 // QCLogger is the minimal interface for QC logging functionality
