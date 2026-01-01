@@ -61,8 +61,8 @@ func inferDomainChecks(files []string) string {
 
 // QualityController manages quality control reviews using Claude Code agents
 type QualityController struct {
-	Invoker     InvokerInterface
-	AgentConfig models.QCAgentConfig // Multi-agent QC configuration (v2.2+)
+	Invoker             InvokerInterface
+	AgentConfig         models.QCAgentConfig       // Multi-agent QC configuration (v2.2+)
 	Registry            *agent.Registry            // Agent registry for auto-selection (v2.2+)
 	MaxRetries          int                        // Maximum number of retry attempts for RED responses
 	LearningStore       *learning.Store            // Learning store for historical context (optional)

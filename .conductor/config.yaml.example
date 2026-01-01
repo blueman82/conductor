@@ -55,6 +55,11 @@ quality_control:
     # - intelligent: Claude-based selection analyzing task context (v2.4+)
     mode: auto
 
+    # Default fallback agent when mode is "auto" or "intelligent" and no explicit_list provided
+    # Used as a safety fallback if no specialized agent matches the task type
+    # (default: quality-control)
+    default_agent: quality-control
+
     # Explicit list of agents (for mode=explicit)
     # explicit_list: [security-auditor, code-reviewer, golang-pro]
 
