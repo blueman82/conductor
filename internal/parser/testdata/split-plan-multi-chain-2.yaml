@@ -16,7 +16,10 @@ plan:
   default_agent: "golang-pro"
   quality_control:
     enabled: true
-    review_agent: "quality-control"
+    agents:
+      mode: explicit
+      explicit_list:
+        - quality-control
     retry_on_red: 2
   tasks:
     - task_number: 5
