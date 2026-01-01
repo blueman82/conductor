@@ -1091,12 +1091,14 @@ conductor:
 			expectedBlocked:    []string{"old-agent"},
 		},
 		{
-			name: "markdown without agents section (backward compatibility)",
+			name: "markdown with modern agents section",
 			markdown: `---
 conductor:
   quality_control:
     enabled: true
-    review_agent: "quality-control"
+    agents:
+      mode: "explicit"
+      explicit_list: ["quality-control"]
 ---
 
 # Test Plan
@@ -1107,8 +1109,8 @@ conductor:
 **Depends on**: None
 **Estimated time**: 30m
 `,
-			expectedMode:       "",
-			expectedExplicit:   []string{},
+			expectedMode:       "explicit",
+			expectedExplicit:   []string{"quality-control"},
 			expectedAdditional: []string{},
 			expectedBlocked:    []string{},
 		},
