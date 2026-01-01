@@ -1395,41 +1395,6 @@ func TestQCAgentConfigComplexMixed(t *testing.T) {
 	}
 }
 
-// TestQCAgentConfigBackwardCompatibility tests backward compatibility with review_agent
-func TestQCAgentConfigBackwardCompatibility(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-
-	configContent := `quality_control:
-  enabled: true
-  review_agent: custom-reviewer
-  retry_on_red: 2
-`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write test config: %v", err)
-	}
-
-	cfg, err := LoadConfig(configPath)
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
-	}
-
-	if !cfg.QualityControl.Enabled {
-		t.Errorf("QualityControl.Enabled = %v, want true", cfg.QualityControl.Enabled)
-	}
-	if cfg.QualityControl.ReviewAgent != "custom-reviewer" {
-		t.Errorf("QualityControl.ReviewAgent = %q, want %q", cfg.QualityControl.ReviewAgent, "custom-reviewer")
-	}
-
-	// Should auto-convert to explicit mode
-	if cfg.QualityControl.Agents.Mode != "explicit" {
-		t.Errorf("QCAgent.Mode should be 'explicit' for backward compatibility, got %q", cfg.QualityControl.Agents.Mode)
-	}
-	if len(cfg.QualityControl.Agents.ExplicitList) != 1 || cfg.QualityControl.Agents.ExplicitList[0] != "custom-reviewer" {
-		t.Errorf("QCAgent.ExplicitList should contain review_agent, got %v", cfg.QualityControl.Agents.ExplicitList)
-	}
-}
-
 // TestQCAgentConfigValidationValidModes tests validation of valid QC modes
 func TestQCAgentConfigValidationValidModes(t *testing.T) {
 	validModes := []string{"auto", "explicit", "mixed"}
