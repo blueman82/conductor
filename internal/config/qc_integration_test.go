@@ -92,9 +92,9 @@ Set up REST API server.
 	// This is the critical path that merges config QC into plan
 	if !plan.QualityControl.Enabled && cfg.QualityControl.Enabled {
 		plan.QualityControl = models.QualityControlConfig{
-			Enabled:     cfg.QualityControl.Enabled,
-			ReviewAgent: cfg.QualityControl.ReviewAgent,
-			RetryOnRed:  cfg.QualityControl.RetryOnRed,
+			Enabled:    cfg.QualityControl.Enabled,
+			Agents:     cfg.QualityControl.Agents,
+			RetryOnRed: cfg.QualityControl.RetryOnRed,
 		}
 	}
 
@@ -102,8 +102,11 @@ Set up REST API server.
 	if !plan.QualityControl.Enabled {
 		t.Errorf("After merge, Plan.QualityControl.Enabled = %v, want true", plan.QualityControl.Enabled)
 	}
-	if plan.QualityControl.ReviewAgent != "custom-qa-agent" {
-		t.Errorf("After merge, Plan.QualityControl.ReviewAgent = %q, want %q", plan.QualityControl.ReviewAgent, "custom-qa-agent")
+	if plan.QualityControl.Agents.Mode != "explicit" {
+		t.Errorf("After merge, Plan.QualityControl.Agents.Mode = %q, want %q", plan.QualityControl.Agents.Mode, "explicit")
+	}
+	if len(plan.QualityControl.Agents.ExplicitList) != 1 || plan.QualityControl.Agents.ExplicitList[0] != "custom-qa-agent" {
+		t.Errorf("After merge, Plan.QualityControl.Agents.ExplicitList = %v, want [custom-qa-agent]", plan.QualityControl.Agents.ExplicitList)
 	}
 	if plan.QualityControl.RetryOnRed != 3 {
 		t.Errorf("After merge, Plan.QualityControl.RetryOnRed = %d, want 3", plan.QualityControl.RetryOnRed)
