@@ -87,6 +87,16 @@ type QualityController struct {
 	CommitVerification *CommitVerification // Result from postVerifyCommitHook (injected into prompt)
 }
 
+// getDefaultAgent returns the primary QC agent to use based on AgentConfig.
+// For explicit/mixed modes, returns the first agent in the list.
+// For auto/intelligent modes, returns "quality-control" as the default.
+func (qc *QualityController) getDefaultAgent() string {
+	if len(qc.AgentConfig.ExplicitList) > 0 {
+		return qc.AgentConfig.ExplicitList[0]
+	}
+	return "quality-control" // Default fallback agent
+}
+
 // QCLogger is the minimal interface for QC logging functionality
 type QCLogger interface {
 	LogQCAgentSelection(agents []string, mode string)
