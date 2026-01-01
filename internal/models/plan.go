@@ -79,10 +79,9 @@ type QCAgentConfig struct {
 
 // QualityControlConfig holds configuration for the QA review process
 type QualityControlConfig struct {
-	Enabled     bool          // Whether QC is enabled
-	ReviewAgent string        // Agent to use for reviews (DEPRECATED: use Agents)
-	Agents      QCAgentConfig // Multi-agent QC configuration (v2.2+)
-	RetryOnRed  int           // Number of retries on RED status
+	Enabled    bool          // Whether QC is enabled
+	Agents     QCAgentConfig // Multi-agent QC configuration (v2.2+)
+	RetryOnRed int           // Number of retries on RED status
 }
 
 // WorktreeGroup represents a group of related tasks for organization.
