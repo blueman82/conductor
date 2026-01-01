@@ -451,7 +451,7 @@ func (qc *QualityController) Review(ctx context.Context, task models.Task, outpu
 		Flag:            qcResp.Verdict,
 		Feedback:        qcResp.Feedback,
 		SuggestedAgent:  qcResp.SuggestedAgent,
-		AgentName:       qc.ReviewAgent,
+		AgentName:       qcAgent,
 		CriteriaResults: qcResp.CriteriaResults,
 	}
 
