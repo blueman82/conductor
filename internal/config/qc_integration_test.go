@@ -458,9 +458,9 @@ Test task.
 			// Apply merge logic (from run.go lines 341-350)
 			if !plan.QualityControl.Enabled && cfg.QualityControl.Enabled {
 				plan.QualityControl = models.QualityControlConfig{
-					Enabled:     cfg.QualityControl.Enabled,
-					ReviewAgent: cfg.QualityControl.ReviewAgent,
-					RetryOnRed:  cfg.QualityControl.RetryOnRed,
+					Enabled:    cfg.QualityControl.Enabled,
+					Agents:     cfg.QualityControl.Agents,
+					RetryOnRed: cfg.QualityControl.RetryOnRed,
 				}
 			}
 
@@ -471,8 +471,15 @@ Test task.
 
 			// Only check agent and retry if QC is enabled
 			if plan.QualityControl.Enabled {
-				if plan.QualityControl.ReviewAgent != tt.expectAgent {
-					t.Errorf("%s: Plan.QualityControl.ReviewAgent = %q, want %q", tt.description, plan.QualityControl.ReviewAgent, tt.expectAgent)
+				if plan.QualityControl.Agents.Mode != tt.expectMode {
+					t.Errorf("%s: Plan.QualityControl.Agents.Mode = %q, want %q", tt.description, plan.QualityControl.Agents.Mode, tt.expectMode)
+				}
+				agentList := plan.QualityControl.Agents.ExplicitList
+				if len(agentList) == 0 && plan.QualityControl.Agents.Mode == "explicit" {
+					agentList = []string{tt.expectAgent}
+				}
+				if len(agentList) > 0 && agentList[0] != tt.expectAgent {
+					t.Errorf("%s: Plan.QualityControl.Agents.ExplicitList[0] = %q, want %q", tt.description, agentList[0], tt.expectAgent)
 				}
 				if plan.QualityControl.RetryOnRed != tt.expectRetry {
 					t.Errorf("%s: Plan.QualityControl.RetryOnRed = %d, want %d", tt.description, plan.QualityControl.RetryOnRed, tt.expectRetry)
