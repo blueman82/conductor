@@ -114,10 +114,6 @@ type QualityControlConfig struct {
 	// Enabled enables the quality control system
 	Enabled bool `yaml:"enabled"`
 
-	// ReviewAgent is the name of the agent used for quality control reviews
-	// DEPRECATED: Use Agents.ExplicitList instead. Kept for backward compatibility.
-	ReviewAgent string `yaml:"review_agent"`
-
 	// Agents contains multi-agent QC configuration (v2.2+)
 	Agents QCAgentConfig `yaml:"agents"`
 
