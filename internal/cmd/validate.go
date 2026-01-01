@@ -552,14 +552,41 @@ func validateAgents(plan *models.Plan, registry *agent.Registry) []string {
 		checkedAgents[plan.DefaultAgent] = true
 	}
 
-	// Check QC review agent if specified
-	if plan.QualityControl.Enabled && plan.QualityControl.ReviewAgent != "" {
-		agentName := plan.QualityControl.ReviewAgent
-		if !checkedAgents[agentName] {
-			if !registry.Exists(agentName) {
-				errors = append(errors, fmt.Sprintf("QC review agent '%s' not found in registry", agentName))
+	// Check QC agents if specified
+	if plan.QualityControl.Enabled {
+		// Check deprecated ReviewAgent field for backward compatibility
+		if plan.QualityControl.ReviewAgent != "" {
+			agentName := plan.QualityControl.ReviewAgent
+			if !checkedAgents[agentName] {
+				if !registry.Exists(agentName) {
+					errors = append(errors, fmt.Sprintf("QC review agent '%s' not found in registry", agentName))
+				}
+				checkedAgents[agentName] = true
 			}
-			checkedAgents[agentName] = true
+		}
+
+		// Check modern agents format (explicit_list)
+		if plan.QualityControl.Agents.Mode == "explicit" && len(plan.QualityControl.Agents.ExplicitList) > 0 {
+			for _, agentName := range plan.QualityControl.Agents.ExplicitList {
+				if !checkedAgents[agentName] {
+					if !registry.Exists(agentName) {
+						errors = append(errors, fmt.Sprintf("QC agent '%s' not found in registry", agentName))
+					}
+					checkedAgents[agentName] = true
+				}
+			}
+		}
+
+		// Check additional agents
+		if len(plan.QualityControl.Agents.AdditionalAgents) > 0 {
+			for _, agentName := range plan.QualityControl.Agents.AdditionalAgents {
+				if !checkedAgents[agentName] {
+					if !registry.Exists(agentName) {
+						errors = append(errors, fmt.Sprintf("Additional QC agent '%s' not found in registry", agentName))
+					}
+					checkedAgents[agentName] = true
+				}
+			}
 		}
 	}
 
