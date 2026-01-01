@@ -389,7 +389,7 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 		if merged.DefaultAgent == "" && plan.DefaultAgent != "" {
 			merged.DefaultAgent = plan.DefaultAgent
 		}
-		if merged.QualityControl.ReviewAgent == "" && plan.QualityControl.ReviewAgent != "" {
+		if !merged.QualityControl.Enabled && plan.QualityControl.Enabled {
 			merged.QualityControl = plan.QualityControl
 		}
 	}
