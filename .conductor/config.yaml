@@ -1,0 +1,325 @@
+# =============================================================================
+# Conductor Configuration - All Features Enabled
+# =============================================================================
+# This config enables all advanced features for maximum automation and quality.
+# CLI flags override these settings. Plans can override some settings via frontmatter.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CORE EXECUTION SETTINGS
+# Controls how tasks are scheduled and executed across waves
+# -----------------------------------------------------------------------------
+
+# Maximum parallel tasks per wave (0 = unlimited, 4 = safe default for API limits)
+max_concurrency: 4
+
+# Logging verbosity: trace | debug | info | warn | error
+log_level: info
+
+# Directory for task execution logs (one file per task per run)
+log_dir: .conductor/logs
+
+# Validate plan without executing (useful for CI/testing plans)
+dry_run: false
+
+# Skip tasks already marked completed in plan file (enables resume)
+skip_completed: true
+
+# Retry tasks that failed in previous runs (combines with skip_completed)
+retry_failed: true
+
+# -----------------------------------------------------------------------------
+# QUALITY CONTROL
+# Multi-agent review system that validates task outputs before marking complete
+# RED = fail + retry, YELLOW = pass with warnings, GREEN = pass
+# -----------------------------------------------------------------------------
+quality_control:
+  # Master switch for QC reviews (false = tasks pass without review)
+  enabled: true
+
+  agents:
+    # Agent selection strategy:
+    #   auto       - Select based on file extensions (.go→golang-pro, .py→python-pro)
+    #   explicit   - Use only agents from explicit_list
+    #   mixed      - Auto-select + additional agents from additional list
+    #   intelligent - Claude analyzes task context and picks optimal reviewers
+    mode: intelligent
+
+    # Explicit list of agents (for mode=explicit) [security-auditor, code-reviewer, golang-pro]
+    explicit_list: []
+
+    # Additional agents to add to auto-selection (for mode=mixed) [security-auditor, code-reviewer, golang-pro]
+    additional: []
+
+    # Agents to never use (for any mode) [security-auditor, code-reviewer, golang-pro]
+    blocked: []
+
+    # Maximum QC agents per task (prevents excessive review overhead)
+    max_agents: 4
+
+    # Cache duration for intelligent selection results (seconds)
+    cache_ttl_seconds: 3600
+
+    # Always include code-reviewer as baseline (recommended for code tasks)
+    require_code_review: true
+
+    # Default fallback agent when mode is "auto" or "intelligent" and no explicit_list provided
+    # Used as a safety fallback if no specialized agent matches the task type
+    # (default: quality-control)
+    default_agent: quality-control
+
+  # Retry attempts on RED verdict before task fails permanently
+  retry_on_red: 2
+
+# -----------------------------------------------------------------------------
+# LEARNING SYSTEM
+# Adaptive execution that improves over time based on historical patterns
+# Tracks successes/failures per agent+task combination for smarter decisions
+# -----------------------------------------------------------------------------
+learning:
+  # Master switch for learning system
+  enabled: true
+
+  # SQLite database path for execution history
+  db_path: .conductor/learning/executions.db
+
+  # Swap to better-performing agent during retry loops (QC can suggest)
+  swap_during_retries: true
+
+  # Enable warm-up context injection for agent priming
+  # Agents receive similar successful task approaches and common pitfalls
+  warmup_enabled: true
+
+  # Consecutive failures before considering agent swap
+  min_failures_before_adapt: 1
+
+  # Days to retain execution history (older records auto-cleaned)
+  keep_executions_days: 365
+
+# -----------------------------------------------------------------------------
+# AGENT WATCH
+# Behavioral analytics for Claude Code sessions via `conductor observe` commands
+# Parses JSONL session files to extract tool usage, errors, and patterns
+# -----------------------------------------------------------------------------
+agent_watch:
+  # Master switch for Agent Watch analytics
+  enabled: true
+
+  # Directory containing Claude Code session JSONL files
+  base_dir: "~/.claude/projects"
+
+  # Default result limit for observe commands
+  default_limit: 100
+
+  # Refresh interval for real-time streaming (seconds)
+  poll_interval_secs: 2
+
+  # Automatically import new sessions into learning database
+  auto_import: true
+
+  # LRU cache size for parsed sessions (memory optimization)
+  cache_size: 50
+
+  # Token pricing per 1M tokens (for cost calculations in reports)
+  cost_model:
+    sonnet_input: 3.0
+    sonnet_output: 15.0
+    haiku_input: 0.80
+    haiku_output: 4.0
+    opus_input: 15.0
+    opus_output: 75.0
+
+# -----------------------------------------------------------------------------
+# VALIDATION
+# Plan file validation strictness settings
+# -----------------------------------------------------------------------------
+validation:
+  # How to handle key_point vs success_criteria count mismatch:
+  #   warn   - Log warning, continue execution
+  #   strict - Fail validation if key_points > success_criteria
+  #   off    - Disable check entirely
+  key_point_criteria: warn
+
+  # Enforce PlannerComplianceSpec rules when present in plan
+  # Validates terminology, task types, documentation targets
+  strict_rubric: true
+
+# -----------------------------------------------------------------------------
+# EXECUTOR GUARDS
+# Runtime enforcement gates that validate task execution at various stages
+# These provide hard gates (fail task) and soft signals (inform QC)
+# -----------------------------------------------------------------------------
+executor:
+  # Run dependency_checks commands BEFORE agent invocation
+  # Failure = task blocked (preflight gate)
+  enforce_dependency_checks: true
+
+  # Run test_commands AFTER agent output, BEFORE QC review
+  # With QC: failure triggers retry with feedback
+  # Without QC: failure = task fails (hard gate)
+  enforce_test_commands: true
+
+  # Run per-criterion verification commands after agent output
+  # Results injected into QC prompt (soft signal, doesn't block)
+  verify_criteria: true
+
+  # Prevent concurrent tasks from modifying same Go package
+  # Tasks acquire package locks; conflicts block until released
+  enforce_package_guard: true
+
+  # Verify documentation tasks edit specified sections
+  # Ensures agents modify exact targets from plan
+  enforce_doc_targets: true
+
+  # Analyze test failures and categorize: CODE_LEVEL | PLAN_LEVEL | ENV_LEVEL
+  # Provides actionable suggestions based on error type
+  enable_error_pattern_detection: true
+
+  # Use Claude to semantically analyze errors (more accurate than regex)
+  # Cost: ~1-2 cents per classification, falls back to regex on timeout
+  enable_claude_classification: true
+
+# Text-to-Speech (TTS) configuration (v2.10+)
+# Enables voice feedback for task completion events
+tts:
+  # Enable/disable TTS functionality (default: false)
+  # When false, no TTS requests are made - zero behavior change from pre-TTS
+  enabled: true
+
+  # TTS server endpoint URL - local Orpheus server
+  base_url: "http://localhost:5005"
+
+  # TTS model to use for speech synthesis
+  model: "orpheus"
+
+  # Voice to use for speech synthesis
+  # Orpheus voices: tara, leah, jess, leo, dan, mia, zac, zoe
+  voice: "tara"
+
+# -----------------------------------------------------------------------------
+# SETUP INTROSPECTOR
+# Pre-wave setup phase that introspects the project to determine setup commands
+# When enabled, Claude analyzes the project before Wave 1 execution to discover
+# and run necessary setup commands (e.g., dependency installation, build prerequisites)
+# -----------------------------------------------------------------------------
+setup:
+  # Enable/disable setup phase (default: false)
+  # When false, no setup introspection is performed - zero behavior change from pre-setup
+  enabled: false
+
+# -----------------------------------------------------------------------------
+# BUDGET & RATE LIMITS
+# Intelligent handling of API rate limits with state persistence
+# Automatically waits or saves state for later resume
+# -----------------------------------------------------------------------------
+budget:
+  # Master switch for budget tracking
+  enabled: true
+
+  # Intelligent wait/exit on rate limit detection:
+  #   wait <= max_wait_duration → countdown with TTS announcements
+  #   wait > max_wait_duration → save state, exit cleanly for later resume
+  auto_resume: true
+
+  # Maximum time to wait for rate limit reset before save-and-exit
+  # 6h covers most session limits; weekly limits trigger save-and-exit
+  max_wait_duration: 6h
+
+  # How often to announce countdown during wait (console + TTS)
+  announce_interval: 15m
+
+  # Extra buffer after reset before resuming (avoids edge cases)
+  safety_buffer: 60s
+
+# -----------------------------------------------------------------------------
+# PATTERN INTELLIGENCE
+# STOP protocol (Search/Think/Outline/Prove) and duplicate detection
+# Analyzes tasks for existing solutions before execution to avoid rework
+# -----------------------------------------------------------------------------
+pattern:
+  # Master switch for Pattern Intelligence
+  enabled: true
+
+  # Operating mode:
+  #   block   - Hard gate: fail tasks with high similarity
+  #   warn    - Soft signal: log warning, allow execution
+  #   suggest - Context injection only, no warnings
+  mode: warn
+
+  # Similarity score (0.0-1.0) that triggers mode action
+  similarity_threshold: 0.8
+
+  # Score threshold to consider task a duplicate (higher = stricter)
+  duplicate_threshold: 0.9
+
+  # Minimum confidence before acting (low confidence = suggestions only)
+  min_confidence: 0.7
+
+  # Enable STOP protocol: searches git history, issues, docs, learning DB
+  enable_stop: true
+
+  # Enable content hashing and similarity scoring for duplicate detection
+  enable_duplicate_detection: true
+
+  # Include pattern analysis results in agent prompts (prior art context)
+  inject_into_prompt: true
+
+  # Maximum patterns to inject per task (prevents prompt bloat)
+  max_patterns_per_task: 5
+
+  # Maximum related files to include in analysis
+  max_related_files: 10
+
+  # QC demands justification when STOP finds prior art
+  # Weak/missing justification → YELLOW verdict
+  require_justification: true
+
+  # Use Claude CLI to refine confidence (always runs when enabled)
+  llm_enhancement_enabled: true
+
+# -----------------------------------------------------------------------------
+# ARCHITECTURE CHECKPOINT
+# LLM-based 6-question assessment before task execution
+# Language-agnostic: Claude reasons about architectural impact semantically
+# Questions cover: boundaries, patterns, dependencies, testing, performance, security
+# -----------------------------------------------------------------------------
+architecture:
+  # Master switch for Architecture Checkpoint
+  enabled: true
+
+  # Operating mode:
+  #   block    - Hard gate: fail tasks flagged for architectural review
+  #   escalate - Soft signal: log warning, inject context into prompt
+  mode: escalate
+
+  # QC verifies architectural decisions are properly justified
+  require_justification: true
+
+  # Escalate when Claude's assessment confidence < threshold
+  escalate_on_uncertain: true
+
+  # Confidence threshold below which escalation triggers
+  confidence_threshold: 0.7
+
+# -----------------------------------------------------------------------------
+# TIMEOUTS
+# Centralized timeout configuration for different operation categories
+# All Claude CLI calls use timeouts.llm; HTTP services use timeouts.http
+# -----------------------------------------------------------------------------
+timeouts:
+  # Task execution timeout - maximum time for agent to complete a task (default: 12h)
+  # This is the overall timeout for main agent task execution
+  task: 12h
+
+  # LLM timeout - internal Claude CLI calls (default: 90s)
+  # Used by: ClaudeEnhancer, Assessor, ClaudeSimilarity, TaskAgentSelector,
+  #          IntelligentAgentSwapper, QC IntelligentSelector
+  llm: 60s
+
+  # HTTP timeout - external HTTP services (default: 30s)
+  # Used by: TTS client, webhooks, external API calls
+  http: 90s
+
+  # Search timeout - fast local CLI operations (default: 30s)
+  # Used by: STOPSearcher (git, grep, issue search, doc search)
+  search: 90s
