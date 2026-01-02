@@ -29,6 +29,7 @@ Conductor orchestrates multiple Claude Code agents to execute implementation pla
 - **Mandatory Commits** — Agents instructed to commit, conductor verifies via git log
 - **Budget & Rate Limits** — Intelligent auto-resume, session resume, state persistence
 - **Voice Feedback** — Optional TTS via local Orpheus server
+- **Setup Introspection** — Pre-wave setup phase via Claude introspection for dependency installation
 
 ## Quick Start
 
