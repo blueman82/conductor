@@ -206,11 +206,18 @@ func recordSessionData(ctx context.Context, store *learning.Store,
 
 	// Create synthetic task execution entry for imported sessions
 	// This is necessary because behavioral_sessions has a foreign key to task_executions
+
+	// Safe truncation of session ID (may be shorter than 8 chars)
+	sessionIDPrefix := sessionInfo.SessionID
+	if len(sessionIDPrefix) > 8 {
+		sessionIDPrefix = sessionIDPrefix[:8]
+	}
+
 	exec := &learning.TaskExecution{
 		PlanFile:     sessionInfo.Project,
 		RunNumber:    1,
-		TaskNumber:   sessionInfo.SessionID[:8], // Use first 8 chars of UUID
-		TaskName:     fmt.Sprintf("Agent Session: %s", sessionInfo.SessionID[:8]),
+		TaskNumber:   sessionIDPrefix,
+		TaskName:     fmt.Sprintf("Agent Session: %s", sessionIDPrefix),
 		Agent:        sessionData.Session.AgentName,
 		Prompt:       fmt.Sprintf("Session imported from: %s", sessionInfo.FilePath),
 		Success:      sessionData.Session.Success,
