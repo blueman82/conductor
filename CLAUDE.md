@@ -7,7 +7,7 @@ Last updated: 2026-01-02
 
 Conductor is a Go CLI for autonomous multi-agent orchestration. It parses plan files (Markdown/YAML), calculates task dependencies via graph algorithms, and executes tasks in parallel waves with QC reviews and adaptive learning.
 
-**Current**: v2.33.0 - Production-ready with Timeout Consolidation, ClaudeSimilarity (semantic task comparison), XML prompt format, Pattern Intelligence, Architecture Checkpoint, Mandatory Commit Verification, TTS feedback, budget tracking, and 86%+ test coverage.
+**Current**: v3.0.0 - Major config cleanup removing 30+ dead/deprecated fields. All 71 config options now verified active. Breaking: removed `feedback.*`, `console.*`, deprecated timeout fields. See CHANGELOG.md for migration guide.
 
 ## Quick Reference
 
@@ -60,7 +60,6 @@ cmd := exec.CommandContext(ctx, "claude", args...)
 ### Core Settings
 ```yaml
 max_concurrency: 4
-timeout: 5m
 skip_completed: true
 retry_failed: true
 
@@ -74,6 +73,8 @@ quality_control:
 learning:
   enabled: true
   swap_during_retries: true
+  warmup_enabled: true
+  keep_executions_days: 90
 ```
 
 ### Pattern Intelligence
@@ -85,7 +86,7 @@ pattern:
   duplicate_threshold: 0.9
   enable_stop: true             # STOP protocol (Search/Think/Outline/Prove)
   require_justification: true   # QC asks for justification when prior art found
-  llm_enhancement_enabled: true # Claude refines uncertain confidence
+  llm_enhancement_enabled: true # Claude refines similarity via ClaudeSimilarity
 ```
 
 ### Budget & Rate Limits
