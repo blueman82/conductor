@@ -77,6 +77,8 @@ type OrchestratorConfig struct {
 	FileToTaskMapping map[string]string
 	// Pattern Intelligence hook (v2.23+)
 	PatternHook *PatternIntelligenceHook
+	// Setup hook for pre-wave project introspection (v3.0+)
+	SetupHook *SetupHook
 	// TargetTask filters execution to a single task (v2.27+)
 	// Empty string means run all tasks
 	TargetTask string
@@ -100,6 +102,8 @@ type Orchestrator struct {
 	retryFailed       bool              // Retry tasks that have failed status
 	// Pattern Intelligence hook (v2.23+)
 	patternHook *PatternIntelligenceHook
+	// Setup hook for pre-wave project introspection (v3.0+)
+	setupHook *SetupHook
 	// targetTask filters execution to a single task (v2.27+)
 	// Empty string means run all tasks
 	targetTask string
@@ -185,6 +189,7 @@ func NewOrchestratorFromConfig(config OrchestratorConfig) *Orchestrator {
 		retryFailed:       config.RetryFailed,
 		FileToTaskMapping: config.FileToTaskMapping,
 		patternHook:       config.PatternHook,
+		setupHook:         config.SetupHook,
 		targetTask:        config.TargetTask,
 		similarity:        config.Similarity,
 	}
@@ -268,6 +273,17 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (
 	}()
 
 	startTime := time.Now()
+
+	// Run setup hook before wave execution (v3.0+)
+	// SetupHook introspects the project and runs required setup commands
+	if o.setupHook != nil {
+		if err := o.setupHook.Setup(ctx); err != nil {
+			// Log but don't fail - graceful degradation
+			if o.logger != nil {
+				fmt.Printf("Setup hook warning: %v\n", err)
+			}
+		}
+	}
 
 	// Execute the plan through the wave executor
 	results, err := o.waveExecutor.ExecutePlan(ctx, mergedPlan)
