@@ -49,9 +49,6 @@ type PatternConfig struct {
 	// MaxRelatedFiles limits related files included in analysis
 	MaxRelatedFiles int `yaml:"max_related_files"`
 
-	// CacheTTLSeconds is how long to cache pattern analysis results (default: 3600)
-	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
-
 	// LLM Enhancement (optional, requires Claude CLI)
 	// LLMEnhancementEnabled enables Claude-based confidence refinement
 	// When enabled, always runs enhancement (no confidence thresholds)
@@ -72,7 +69,6 @@ func DefaultPatternConfig() PatternConfig {
 		InjectIntoPrompt:         true,  // Include analysis in prompts by default
 		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
 		MaxRelatedFiles:          10,    // Limit related files
-		CacheTTLSeconds:          3600,  // 1 hour cache
 		LLMEnhancementEnabled:    false, // Disabled by default
 	}
 }
@@ -124,14 +120,6 @@ func (c *PatternConfig) Validate() error {
 			Field:   "max_related_files",
 			Message: "must be >= 0",
 			Value:   c.MaxRelatedFiles,
-		}
-	}
-
-	if c.CacheTTLSeconds < 0 {
-		return &ConfigError{
-			Field:   "cache_ttl_seconds",
-			Message: "must be >= 0",
-			Value:   c.CacheTTLSeconds,
 		}
 	}
 

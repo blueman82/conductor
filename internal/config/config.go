@@ -214,9 +214,6 @@ type PatternConfig struct {
 	// MaxRelatedFiles limits related files included in analysis
 	MaxRelatedFiles int `yaml:"max_related_files"`
 
-	// CacheTTLSeconds is how long to cache pattern analysis results (default: 3600)
-	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
-
 	// LLM Enhancement (optional, requires Claude CLI)
 	// LLMEnhancementEnabled enables Claude-based confidence refinement for uncertain cases
 	LLMEnhancementEnabled bool `yaml:"llm_enhancement_enabled"`
@@ -474,7 +471,6 @@ func DefaultPatternConfig() PatternConfig {
 		InjectIntoPrompt:         true,  // Include analysis in prompts by default
 		MaxPatternsPerTask:       5,     // Limit patterns to avoid prompt bloat
 		MaxRelatedFiles:          10,    // Limit related files
-		CacheTTLSeconds:          3600,  // 1 hour cache
 		LLMEnhancementEnabled:    false, // Disabled by default
 	}
 }
@@ -936,9 +932,6 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := patternMap["max_related_files"]; exists {
 				cfg.Pattern.MaxRelatedFiles = pattern.MaxRelatedFiles
 			}
-			if _, exists := patternMap["cache_ttl_seconds"]; exists {
-				cfg.Pattern.CacheTTLSeconds = pattern.CacheTTLSeconds
-			}
 			if _, exists := patternMap["llm_enhancement_enabled"]; exists {
 				cfg.Pattern.LLMEnhancementEnabled = pattern.LLMEnhancementEnabled
 			}
@@ -1268,11 +1261,6 @@ func (c *Config) Validate() error {
 		// Validate max_related_files is non-negative
 		if c.Pattern.MaxRelatedFiles < 0 {
 			return fmt.Errorf("pattern.max_related_files must be >= 0, got %d", c.Pattern.MaxRelatedFiles)
-		}
-
-		// Validate cache_ttl_seconds is non-negative
-		if c.Pattern.CacheTTLSeconds < 0 {
-			return fmt.Errorf("pattern.cache_ttl_seconds must be >= 0, got %d", c.Pattern.CacheTTLSeconds)
 		}
 	}
 

@@ -46,9 +46,6 @@ func TestDefaultPatternConfig(t *testing.T) {
 	if cfg.MaxRelatedFiles != 10 {
 		t.Errorf("expected max_related_files 10, got %d", cfg.MaxRelatedFiles)
 	}
-	if cfg.CacheTTLSeconds != 3600 {
-		t.Errorf("expected cache_ttl_seconds 3600, got %d", cfg.CacheTTLSeconds)
-	}
 }
 
 func TestPatternConfig_Validate(t *testing.T) {
@@ -75,7 +72,6 @@ func TestPatternConfig_Validate(t *testing.T) {
 				EnableDuplicateDetection: true,
 				MaxPatternsPerTask:       5,
 				MaxRelatedFiles:          10,
-				CacheTTLSeconds:          3600,
 			},
 			wantErr: false,
 		},
@@ -148,21 +144,6 @@ func TestPatternConfig_Validate(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "max_related_files",
-		},
-		{
-			name: "invalid cache_ttl_seconds negative",
-			config: PatternConfig{
-				Enabled:             true,
-				Mode:                PatternModeWarn,
-				SimilarityThreshold: 0.8,
-				DuplicateThreshold:  0.9,
-				MinConfidence:       0.7,
-				MaxPatternsPerTask:  5,
-				MaxRelatedFiles:     10,
-				CacheTTLSeconds:     -1,
-			},
-			wantErr: true,
-			errMsg:  "cache_ttl_seconds",
 		},
 	}
 

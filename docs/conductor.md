@@ -2161,9 +2161,6 @@ pattern:
   # Maximum related files to include in analysis (default: 10)
   max_related_files: 10
 
-  # Cache TTL in seconds (default: 3600)
-  cache_ttl_seconds: 3600
-
   # Require implementing agent to justify custom implementations (v2.24+)
   # When STOP finds prior art, QC will request justification
   require_justification: true
