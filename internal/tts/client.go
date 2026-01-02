@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/harrison/conductor/internal/config"
 )
@@ -34,12 +35,12 @@ type Client struct {
 }
 
 // NewClient creates a new TTS client with the given configuration.
-// The HTTP client timeout is set from the config.
-func NewClient(cfg config.TTSConfig) *Client {
+// The HTTP client timeout is passed separately (typically from timeouts.http config).
+func NewClient(cfg config.TTSConfig, httpTimeout time.Duration) *Client {
 	return &Client{
 		config: cfg,
 		httpClient: &http.Client{
-			Timeout: cfg.Timeout,
+			Timeout: httpTimeout,
 		},
 		speechQueue: make(chan string, 100), // Buffer up to 100 announcements
 	}

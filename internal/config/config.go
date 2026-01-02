@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -278,12 +277,6 @@ type TTSConfig struct {
 
 	// Voice is the TTS voice to use
 	Voice string `yaml:"voice"`
-
-	// Timeout is the maximum time to wait for TTS response.
-	// DEPRECATED: Use timeouts.http instead. When tts.timeout is not explicitly set,
-	// the value from timeouts.http will be used as a fallback.
-	// This field will be removed in a future version.
-	Timeout time.Duration `yaml:"timeout"`
 }
 
 // ExecutorConfig controls task execution behavior
@@ -467,7 +460,6 @@ func DefaultTTSConfig() TTSConfig {
 		BaseURL: "http://localhost:5005",
 		Model:   "orpheus",
 		Voice:   "tara",
-		Timeout: 30 * time.Second,
 	}
 }
 
@@ -879,8 +871,7 @@ func LoadConfig(path string) (*Config, error) {
 			}
 		}
 
-		// Merge TTS config (note: TTS timeout fallback is applied AFTER timeouts parsing)
-		ttsTimeoutExplicitlySet := false
+		// Merge TTS config
 		if ttsSection, exists := rawMap["tts"]; exists && ttsSection != nil {
 			tts := yamlCfg.TTS
 			ttsMap, _ := ttsSection.(map[string]interface{})
@@ -896,14 +887,6 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := ttsMap["voice"]; exists {
 				cfg.TTS.Voice = tts.Voice
-			}
-			if _, exists := ttsMap["timeout"]; exists && tts.Timeout != "" {
-				timeout, err := time.ParseDuration(tts.Timeout)
-				if err != nil {
-					return nil, fmt.Errorf("invalid tts.timeout format %q: %w", tts.Timeout, err)
-				}
-				cfg.TTS.Timeout = timeout
-				ttsTimeoutExplicitlySet = true
 			}
 		}
 
@@ -1056,30 +1039,9 @@ func LoadConfig(path string) (*Config, error) {
 			}
 		}
 
-		// Handle TTS timeout fallback to timeouts.http
-		// This must be done AFTER timeouts parsing so cfg.Timeouts.HTTP has the correct value
-		handleTTSTimeoutFallback(cfg, ttsTimeoutExplicitlySet)
 	}
 
 	return cfg, nil
-}
-
-// handleTTSTimeoutFallback handles the migration of tts.timeout to timeouts.http.
-// When tts.timeout is explicitly set, logs a deprecation warning.
-// When tts.timeout is not set, uses timeouts.http as the fallback value.
-//
-// Migration path:
-//   - tts.timeout → timeouts.http (for external HTTP services)
-func handleTTSTimeoutFallback(cfg *Config, ttsTimeoutExplicitlySet bool) {
-	if ttsTimeoutExplicitlySet {
-		// Log deprecation warning when tts.timeout is explicitly set
-		log.Printf("[DEPRECATED] tts.timeout is deprecated. "+
-			"Please migrate to timeouts.http (e.g., 'timeouts:\\n  http: %v'). "+
-			"This field will be removed in a future version.", cfg.TTS.Timeout)
-	} else {
-		// Use timeouts.http as fallback when tts.timeout not explicitly set
-		cfg.TTS.Timeout = cfg.Timeouts.HTTP
-	}
 }
 
 // LoadConfigFromRootWithBuildTime loads configuration from conductor repo root

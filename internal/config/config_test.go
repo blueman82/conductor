@@ -2456,9 +2456,6 @@ func TestDefaultTTSConfig(t *testing.T) {
 	if cfg.Voice != "tara" {
 		t.Errorf("Voice = %q, want %q", cfg.Voice, "tara")
 	}
-	if cfg.Timeout != 30*time.Second {
-		t.Errorf("Timeout = %v, want 30s", cfg.Timeout)
-	}
 }
 
 // TestDefaultConfigIncludesTTS tests that DefaultConfig includes TTS config
@@ -2478,9 +2475,6 @@ func TestDefaultConfigIncludesTTS(t *testing.T) {
 	if cfg.TTS.Voice != "tara" {
 		t.Errorf("TTS.Voice = %q, want %q (default)", cfg.TTS.Voice, "tara")
 	}
-	if cfg.TTS.Timeout != 30*time.Second {
-		t.Errorf("TTS.Timeout = %v, want 30s (default)", cfg.TTS.Timeout)
-	}
 }
 
 // TestLoadTTSConfigFullSettings tests loading complete TTS configuration
@@ -2493,7 +2487,6 @@ func TestLoadTTSConfigFullSettings(t *testing.T) {
   base_url: http://custom-tts:8080
   model: custom-model
   voice: custom-voice
-  timeout: 5s
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -2515,9 +2508,6 @@ func TestLoadTTSConfigFullSettings(t *testing.T) {
 	}
 	if cfg.TTS.Voice != "custom-voice" {
 		t.Errorf("TTS.Voice = %q, want %q", cfg.TTS.Voice, "custom-voice")
-	}
-	if cfg.TTS.Timeout != 5*time.Second {
-		t.Errorf("TTS.Timeout = %v, want 5s", cfg.TTS.Timeout)
 	}
 }
 
@@ -2555,9 +2545,6 @@ func TestLoadTTSConfigPartialSettings(t *testing.T) {
 	if cfg.TTS.Model != "orpheus" {
 		t.Errorf("TTS.Model = %q, want %q (default)", cfg.TTS.Model, "orpheus")
 	}
-	if cfg.TTS.Timeout != 30*time.Second {
-		t.Errorf("TTS.Timeout = %v, want 30s (default)", cfg.TTS.Timeout)
-	}
 }
 
 // TestLoadTTSConfigDisabledByDefault tests TTS stays disabled without explicit config
@@ -2581,76 +2568,6 @@ log_level: debug
 	// TTS should remain disabled
 	if cfg.TTS.Enabled != false {
 		t.Errorf("TTS.Enabled = %v, want false (default)", cfg.TTS.Enabled)
-	}
-}
-
-// TestLoadTTSConfigInvalidTimeout tests error handling for invalid timeout
-func TestLoadTTSConfigInvalidTimeout(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-
-	configContent := `tts:
-  enabled: true
-  timeout: invalid-duration
-`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write test config: %v", err)
-	}
-
-	_, err := LoadConfig(configPath)
-	if err == nil {
-		t.Error("LoadConfig() expected error for invalid timeout duration, got nil")
-	}
-	if !strings.Contains(err.Error(), "tts.timeout") {
-		t.Errorf("error message should mention tts.timeout, got: %v", err)
-	}
-}
-
-// TestLoadTTSConfigTimeoutFormats tests various timeout duration formats
-func TestLoadTTSConfigTimeoutFormats(t *testing.T) {
-	tests := []struct {
-		name     string
-		timeout  string
-		expected time.Duration
-	}{
-		{
-			name:     "seconds",
-			timeout:  "3s",
-			expected: 3 * time.Second,
-		},
-		{
-			name:     "milliseconds",
-			timeout:  "500ms",
-			expected: 500 * time.Millisecond,
-		},
-		{
-			name:     "combined",
-			timeout:  "1s500ms",
-			expected: 1*time.Second + 500*time.Millisecond,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			configPath := filepath.Join(tmpDir, "config.yaml")
-
-			configContent := fmt.Sprintf(`tts:
-  timeout: %s
-`, tt.timeout)
-			if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-				t.Fatalf("failed to write test config: %v", err)
-			}
-
-			cfg, err := LoadConfig(configPath)
-			if err != nil {
-				t.Fatalf("LoadConfig() error = %v", err)
-			}
-
-			if cfg.TTS.Timeout != tt.expected {
-				t.Errorf("TTS.Timeout = %v, want %v", cfg.TTS.Timeout, tt.expected)
-			}
-		})
 	}
 }
 
@@ -2874,184 +2791,5 @@ func TestTimeoutsConfigMerge(t *testing.T) {
 	}
 	if cfg.Timeouts.Search != 30*time.Second {
 		t.Errorf("Timeouts.Search = %v, want default %v", cfg.Timeouts.Search, 30*time.Second)
-	}
-}
-
-// TestTTSTimeoutFallbackToTimeoutsHTTP verifies that when tts.timeout is not explicitly set,
-// the value from timeouts.http is used as a fallback. This establishes a reusable pattern
-// for migrating component-specific timeouts to the centralized timeouts.http configuration.
-func TestTTSTimeoutFallbackToTimeoutsHTTP(t *testing.T) {
-	tests := []struct {
-		name            string
-		configYAML      string
-		expectedTimeout time.Duration
-		description     string
-	}{
-		{
-			name: "tts.timeout not set - uses timeouts.http as fallback",
-			configYAML: `tts:
-  enabled: true
-  base_url: http://localhost:5005
-timeouts:
-  http: 45s
-`,
-			expectedTimeout: 45 * time.Second,
-			description:     "When tts.timeout is not set, should use timeouts.http value",
-		},
-		{
-			name: "tts.timeout not set with custom timeouts.http",
-			configYAML: `tts:
-  enabled: true
-timeouts:
-  http: 2m
-`,
-			expectedTimeout: 2 * time.Minute,
-			description:     "TTS should inherit custom timeouts.http value",
-		},
-		{
-			name: "neither tts.timeout nor timeouts.http set - uses defaults",
-			configYAML: `tts:
-  enabled: true
-`,
-			expectedTimeout: 30 * time.Second, // Default timeouts.http value
-			description:     "Should use default timeouts.http (30s) when neither is set",
-		},
-		{
-			name: "only timeouts section with http",
-			configYAML: `timeouts:
-  http: 1m30s
-`,
-			expectedTimeout: 90 * time.Second,
-			description:     "TTS.Timeout should match timeouts.http even without explicit TTS config",
-		},
-		{
-			name:            "no config at all - uses defaults",
-			configYAML:      `max_concurrency: 4`,
-			expectedTimeout: 30 * time.Second, // Default timeouts.http value
-			description:     "Default TTS.Timeout should equal default timeouts.http",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			configPath := filepath.Join(tmpDir, "config.yaml")
-
-			if err := os.WriteFile(configPath, []byte(tt.configYAML), 0644); err != nil {
-				t.Fatalf("failed to write test config: %v", err)
-			}
-
-			cfg, err := LoadConfig(configPath)
-			if err != nil {
-				t.Fatalf("LoadConfig() error = %v", err)
-			}
-
-			if cfg.TTS.Timeout != tt.expectedTimeout {
-				t.Errorf("TTS.Timeout = %v, want %v (%s)", cfg.TTS.Timeout, tt.expectedTimeout, tt.description)
-			}
-
-			// Verify that TTS.Timeout matches Timeouts.HTTP when tts.timeout not explicitly set
-			if cfg.TTS.Timeout != cfg.Timeouts.HTTP {
-				t.Errorf("TTS.Timeout (%v) should equal Timeouts.HTTP (%v) when tts.timeout not set",
-					cfg.TTS.Timeout, cfg.Timeouts.HTTP)
-			}
-		})
-	}
-}
-
-// TestTTSTimeoutExplicitlySetOverridesTimeoutsHTTP verifies that when tts.timeout IS explicitly set,
-// it takes precedence over timeouts.http (with a deprecation warning logged).
-func TestTTSTimeoutExplicitlySetOverridesTimeoutsHTTP(t *testing.T) {
-	tests := []struct {
-		name            string
-		configYAML      string
-		expectedTimeout time.Duration
-		description     string
-	}{
-		{
-			name: "explicit tts.timeout takes precedence over timeouts.http",
-			configYAML: `tts:
-  enabled: true
-  timeout: 5s
-timeouts:
-  http: 45s
-`,
-			expectedTimeout: 5 * time.Second,
-			description:     "Explicit tts.timeout should override timeouts.http",
-		},
-		{
-			name: "explicit tts.timeout without timeouts section",
-			configYAML: `tts:
-  enabled: true
-  timeout: 10s
-`,
-			expectedTimeout: 10 * time.Second,
-			description:     "Explicit tts.timeout should be used even without timeouts section",
-		},
-		{
-			name: "explicit tts.timeout with longer duration than timeouts.http",
-			configYAML: `tts:
-  timeout: 2m
-timeouts:
-  http: 15s
-`,
-			expectedTimeout: 2 * time.Minute,
-			description:     "Explicit tts.timeout can be longer than timeouts.http",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			configPath := filepath.Join(tmpDir, "config.yaml")
-
-			if err := os.WriteFile(configPath, []byte(tt.configYAML), 0644); err != nil {
-				t.Fatalf("failed to write test config: %v", err)
-			}
-
-			// Note: LoadConfig will log a deprecation warning for tts.timeout
-			// We can't easily capture log output in this test, but the behavior is correct
-			cfg, err := LoadConfig(configPath)
-			if err != nil {
-				t.Fatalf("LoadConfig() error = %v", err)
-			}
-
-			if cfg.TTS.Timeout != tt.expectedTimeout {
-				t.Errorf("TTS.Timeout = %v, want %v (%s)", cfg.TTS.Timeout, tt.expectedTimeout, tt.description)
-			}
-		})
-	}
-}
-
-// TestTTSTimeoutDeprecationWarningLogged verifies that using tts.timeout logs a deprecation warning.
-// This test documents the migration path from tts.timeout to timeouts.http.
-func TestTTSTimeoutDeprecationWarningLogged(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-
-	// Config with explicit tts.timeout (deprecated)
-	configContent := `tts:
-  enabled: true
-  timeout: 15s
-`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write test config: %v", err)
-	}
-
-	// LoadConfig will log a deprecation warning - we verify the config loads correctly
-	// The actual warning output goes to log.Printf
-	cfg, err := LoadConfig(configPath)
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
-	}
-
-	// Verify explicit timeout is preserved
-	if cfg.TTS.Timeout != 15*time.Second {
-		t.Errorf("TTS.Timeout = %v, want 15s", cfg.TTS.Timeout)
-	}
-
-	// Verify config loaded successfully
-	if cfg == nil {
-		t.Fatal("LoadConfig() returned nil config")
 	}
 }

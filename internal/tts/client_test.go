@@ -16,10 +16,9 @@ func TestNewClient(t *testing.T) {
 	cfg := config.TTSConfig{
 		Enabled: true,
 		BaseURL: "http://localhost:5005",
-		Timeout: 2 * time.Second,
 	}
 
-	client := NewClient(cfg)
+	client := NewClient(cfg, 2*time.Second)
 
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -73,9 +72,8 @@ func TestClient_CheckHealth(t *testing.T) {
 			cfg := config.TTSConfig{
 				Enabled: true,
 				BaseURL: server.URL,
-				Timeout: 2 * time.Second,
 			}
-			client := NewClient(cfg)
+			client := NewClient(cfg, 2*time.Second)
 
 			got := client.CheckHealth()
 			if got != tt.want {
@@ -89,9 +87,8 @@ func TestClient_CheckHealth_ServerUnavailable(t *testing.T) {
 	cfg := config.TTSConfig{
 		Enabled: true,
 		BaseURL: "http://localhost:59999", // Port that should be unavailable
-		Timeout: 100 * time.Millisecond,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 100*time.Millisecond)
 
 	got := client.CheckHealth()
 	if got != false {
@@ -136,9 +133,8 @@ func TestClient_IsAvailable(t *testing.T) {
 			cfg := config.TTSConfig{
 				Enabled: tt.enabled,
 				BaseURL: server.URL,
-				Timeout: 2 * time.Second,
 			}
-			client := NewClient(cfg)
+			client := NewClient(cfg, 2*time.Second)
 
 			got := client.IsAvailable()
 			if got != tt.want {
@@ -159,9 +155,8 @@ func TestClient_IsAvailable_CachesResult(t *testing.T) {
 	cfg := config.TTSConfig{
 		Enabled: true,
 		BaseURL: server.URL,
-		Timeout: 2 * time.Second,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 2*time.Second)
 
 	// Call IsAvailable multiple times
 	result1 := client.IsAvailable()
@@ -190,9 +185,8 @@ func TestClient_IsAvailable_DisabledSkipsHealthCheck(t *testing.T) {
 	cfg := config.TTSConfig{
 		Enabled: false, // Disabled
 		BaseURL: server.URL,
-		Timeout: 2 * time.Second,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 2*time.Second)
 
 	// Call IsAvailable - should return false without contacting server
 	result := client.IsAvailable()
@@ -213,9 +207,8 @@ func TestClient_Config(t *testing.T) {
 		BaseURL: "http://localhost:5005",
 		Model:   "orpheus",
 		Voice:   "tara",
-		Timeout: 2 * time.Second,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 2*time.Second)
 
 	got := client.Config()
 	if got != cfg {
@@ -236,9 +229,8 @@ func TestClient_Speak_WhenNotAvailable(t *testing.T) {
 		BaseURL: server.URL,
 		Model:   "orpheus",
 		Voice:   "tara",
-		Timeout: 2 * time.Second,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 2*time.Second)
 
 	// Speak should return immediately without making any requests
 	client.Speak("Hello world")
@@ -283,9 +275,8 @@ func TestClient_Speak_SendsCorrectRequest(t *testing.T) {
 		BaseURL: server.URL,
 		Model:   "orpheus",
 		Voice:   "tara",
-		Timeout: 2 * time.Second,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 2*time.Second)
 
 	client.Speak("Hello world")
 
@@ -336,9 +327,8 @@ func TestClient_Speak_NonBlocking(t *testing.T) {
 		BaseURL: server.URL,
 		Model:   "orpheus",
 		Voice:   "tara",
-		Timeout: 2 * time.Second,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 2*time.Second)
 
 	// Force health check first
 	_ = client.IsAvailable()
@@ -369,9 +359,8 @@ func TestClient_Speak_SilentlyHandlesErrors(t *testing.T) {
 		BaseURL: server.URL,
 		Model:   "orpheus",
 		Voice:   "tara",
-		Timeout: 2 * time.Second,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 2*time.Second)
 
 	// This should not panic or cause any issues
 	client.Speak("Hello world")
@@ -391,9 +380,8 @@ func TestClient_Speak_HandlesUnavailableServer(t *testing.T) {
 		BaseURL: healthServer.URL,
 		Model:   "orpheus",
 		Voice:   "tara",
-		Timeout: 100 * time.Millisecond,
 	}
-	client := NewClient(cfg)
+	client := NewClient(cfg, 100*time.Millisecond)
 
 	// Force health check while server is up
 	_ = client.IsAvailable()
