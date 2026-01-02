@@ -337,6 +337,39 @@ executor:
 # executor:
 #   enable_claude_classification: true
 
+# Text-to-Speech (TTS) configuration (v2.10+)
+# Enables voice feedback for task completion events
+tts:
+  # Enable/disable TTS functionality (default: false)
+  # When false, no TTS requests are made - zero behavior change from pre-TTS
+  enabled: false
+
+  # TTS server endpoint URL - local Orpheus server
+  base_url: "http://localhost:5005"
+
+  # TTS model to use for speech synthesis
+  model: "orpheus"
+
+  # Voice to use for speech synthesis
+  # Orpheus voices: tara, leah, jess, leo, dan, mia, zac, zoe
+  voice: "tara"
+
+# TTS Examples
+
+# Example: Enable TTS with default settings
+# tts:
+#   enabled: true
+
+# Example: Use a different voice
+# tts:
+#   enabled: true
+#   voice: "leo"
+
+# Example: Custom TTS server
+# tts:
+#   enabled: true
+#   base_url: "http://192.168.1.100:5005"
+
 # Budget & Rate Limit Auto-Resume (v2.20+)
 # Intelligent rate limit handling with state persistence for long-running plans
 budget:
