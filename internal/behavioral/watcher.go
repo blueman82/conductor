@@ -28,6 +28,13 @@ type LiveWatcher struct {
 
 // NewLiveWatcher creates a new file watcher for JSONL files
 func NewLiveWatcher(rootDir, project string) *LiveWatcher {
+	// Expand ~ to home directory
+	if strings.HasPrefix(rootDir, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			rootDir = filepath.Join(home, rootDir[2:])
+		}
+	}
+
 	return &LiveWatcher{
 		rootDir:      rootDir,
 		project:      project,
