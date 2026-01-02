@@ -261,6 +261,12 @@ type TTSConfig struct {
 	Voice string `yaml:"voice"`
 }
 
+// SetupConfig controls pre-wave setup phase functionality
+type SetupConfig struct {
+	// Enabled enables the setup phase (default: false for zero behavior change)
+	Enabled bool `yaml:"enabled"`
+}
+
 // ExecutorConfig controls task execution behavior
 type ExecutorConfig struct {
 	// EnforceDependencyChecks enables running dependency check commands before task invocation.
@@ -358,6 +364,9 @@ type Config struct {
 	// TTS controls text-to-speech functionality
 	TTS TTSConfig `yaml:"tts"`
 
+	// Setup controls pre-wave setup phase functionality
+	Setup SetupConfig `yaml:"setup"`
+
 	// Budget controls usage budget tracking and enforcement
 	Budget BudgetConfig `yaml:"budget"`
 
@@ -442,6 +451,14 @@ func DefaultTTSConfig() TTSConfig {
 		BaseURL: "http://localhost:5005",
 		Model:   "orpheus",
 		Voice:   "tara",
+	}
+}
+
+// DefaultSetupConfig returns SetupConfig with sensible default values
+// Setup is DISABLED by default to ensure zero behavior change unless explicitly enabled
+func DefaultSetupConfig() SetupConfig {
+	return SetupConfig{
+		Enabled: false,
 	}
 }
 
@@ -546,6 +563,7 @@ func DefaultConfig() *Config {
 			IntelligentAgentSelection:   false, // Disabled by default, also enabled when QC mode is "intelligent"
 		},
 		TTS:          DefaultTTSConfig(),
+		Setup:        DefaultSetupConfig(),
 		Budget:       DefaultBudgetConfig(),
 		Pattern:      DefaultPatternConfig(),
 		Architecture: DefaultArchitectureConfig(),
@@ -619,6 +637,7 @@ func LoadConfig(path string) (*Config, error) {
 		Validation     ValidationConfig     `yaml:"validation"`
 		Executor       ExecutorConfig       `yaml:"executor"`
 		TTS            yamlTTSConfig        `yaml:"tts"`
+		Setup          SetupConfig          `yaml:"setup"`
 		Budget         yamlBudgetConfig     `yaml:"budget"`
 		Pattern        PatternConfig        `yaml:"pattern"`
 		Architecture   ArchitectureConfig   `yaml:"architecture"`
@@ -860,6 +879,16 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			if _, exists := ttsMap["voice"]; exists {
 				cfg.TTS.Voice = tts.Voice
+			}
+		}
+
+		// Merge Setup config
+		if setupSection, exists := rawMap["setup"]; exists && setupSection != nil {
+			setup := yamlCfg.Setup
+			setupMap, _ := setupSection.(map[string]interface{})
+
+			if _, exists := setupMap["enabled"]; exists {
+				cfg.Setup.Enabled = setup.Enabled
 			}
 		}
 
