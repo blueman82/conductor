@@ -49,6 +49,11 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [Server Setup](#server-setup)
   - [Configuration](#configuration-1)
   - [Available Voices](#available-voices)
+- [Setup Introspector](#setup-introspector-v30)
+  - [Overview](#setup-overview)
+  - [How It Works](#setup-how-it-works)
+  - [Configuration](#setup-configuration)
+  - [Example Usage](#setup-example-usage)
 - [Troubleshooting & FAQ](#troubleshooting--faq)
 - [Development Workflow](#development-workflow)
 
@@ -3794,6 +3799,151 @@ Execution Event → Logger Interface → TTSLogger → Announcer → Client → 
 - **Lazy health check**: Server availability checked once on first announcement
 - **Serialized queue**: 100-message buffer prevents overlapping audio
 - **Graceful degradation**: Disabled TTS = zero behavior change from pre-TTS versions
+
+---
+
+## Setup Introspector (v3.0+)
+
+### Overview {#setup-overview}
+
+The Setup Introspector is an optional pre-wave phase that uses Claude to analyze your project and automatically determine what setup commands need to run before task execution begins. This enables fully autonomous operation of complex projects that require build steps, dependency installation, or other prerequisite commands.
+
+### How It Works {#setup-how-it-works}
+
+When enabled, the Setup Introspector runs before Wave 1:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Conductor Execution Flow                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. Plan Parsing       Parse plan file(s)                        │
+│         ↓                                                        │
+│  2. Validation         Validate dependencies, agents             │
+│         ↓                                                        │
+│  3. Setup Phase        ← SetupIntrospector (when enabled)        │
+│         ↓                                                        │
+│  4. Wave 1             Execute independent tasks                 │
+│         ↓                                                        │
+│  5. Wave 2+            Execute dependent tasks                   │
+│         ↓                                                        │
+│  6. Completion         Summary and cleanup                       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**The Setup Phase:**
+
+1. **Introspection**: Claude analyzes your project structure, looking at:
+   - `package.json`, `go.mod`, `Cargo.toml`, `requirements.txt`, etc.
+   - Build configuration files (`Makefile`, `CMakeLists.txt`, etc.)
+   - Project README and documentation
+   - Existing lock files and build artifacts
+
+2. **Command Discovery**: Based on the analysis, Claude determines the required setup commands:
+   - Dependency installation (`npm install`, `go mod download`, `pip install -r requirements.txt`)
+   - Build prerequisites (`make deps`, `bundle install`)
+   - Environment setup (`source venv/bin/activate`)
+
+3. **Command Execution**: Discovered commands are executed in order, with:
+   - Output logging
+   - Error detection
+   - Failure handling (aborts execution on critical failures)
+
+4. **Wave Execution**: Once setup completes successfully, normal wave execution begins
+
+### Configuration {#setup-configuration}
+
+Add to `.conductor/config.yaml`:
+
+```yaml
+setup:
+  enabled: true   # Enable setup phase (default: false)
+```
+
+The Setup Introspector uses the `timeouts.llm` setting for its Claude CLI calls:
+
+```yaml
+timeouts:
+  llm: 90s  # Timeout for setup introspection (default: 90s)
+```
+
+### Example Usage {#setup-example-usage}
+
+**Scenario**: A multi-language project with Go backend and React frontend.
+
+**Project Structure:**
+```
+myproject/
+├── backend/
+│   ├── go.mod
+│   ├── go.sum
+│   └── main.go
+├── frontend/
+│   ├── package.json
+│   ├── package-lock.json
+│   └── src/
+└── Makefile
+```
+
+**Config:**
+```yaml
+# .conductor/config.yaml
+setup:
+  enabled: true
+```
+
+**Execution:**
+```bash
+$ conductor run plan.yaml
+
+[Setup] Introspecting project...
+[Setup] Found: Go module (backend/go.mod)
+[Setup] Found: Node.js project (frontend/package.json)
+[Setup] Executing: cd backend && go mod download
+[Setup] Executing: cd frontend && npm ci
+[Setup] Setup complete (45s)
+
+[Wave 1] Starting 3 tasks...
+```
+
+**What Setup Discovers:**
+
+| File Found | Commands Generated |
+|------------|-------------------|
+| `go.mod` | `go mod download` |
+| `package.json` | `npm install` or `npm ci` (if lock file exists) |
+| `requirements.txt` | `pip install -r requirements.txt` |
+| `Cargo.toml` | `cargo fetch` |
+| `Makefile` with `deps` target | `make deps` |
+| `composer.json` | `composer install` |
+| `Gemfile` | `bundle install` |
+
+### When to Use
+
+**Enable Setup Introspector when:**
+- Running plans on fresh clones or CI environments
+- Project has multiple dependency managers
+- Build steps must complete before task execution
+- You want fully autonomous execution without manual prep
+
+**Keep Disabled when:**
+- Dependencies are already installed
+- Running subsequent executions in same environment
+- Setup commands require interactive input
+- You prefer explicit control over prerequisites
+
+### Graceful Degradation
+
+The Setup Introspector is designed for reliability:
+
+| Condition | Behavior |
+|-----------|----------|
+| `setup.enabled: false` | No setup phase, waves start immediately |
+| No dependencies found | Logs "No setup required", continues to waves |
+| Command fails | Logs error, aborts execution (setup is critical) |
+| Claude timeout | Uses default timeout from `timeouts.llm` |
+| Introspection fails | Logs warning, continues to waves (best-effort) |
 
 ---
 
