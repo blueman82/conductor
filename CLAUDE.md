@@ -106,6 +106,12 @@ tts:
   voice: "tara"
 ```
 
+### Setup (Optional)
+```yaml
+setup:
+  enabled: true  # Enable pre-wave setup phase (default: false)
+```
+
 ### Timeouts (v2.33+)
 ```yaml
 timeouts:
