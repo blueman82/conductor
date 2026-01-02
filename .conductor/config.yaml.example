@@ -370,6 +370,21 @@ tts:
 #   enabled: true
 #   base_url: "http://192.168.1.100:5005"
 
+# Setup Introspector configuration (v3.1+)
+# Pre-wave setup phase that introspects the project to determine setup commands
+# When enabled, Claude analyzes the project before Wave 1 execution to discover
+# and run necessary setup commands (e.g., dependency installation, build prerequisites)
+setup:
+  # Enable/disable setup phase (default: false)
+  # When false, no setup introspection is performed - zero behavior change from pre-setup
+  enabled: false
+
+# Setup Examples
+
+# Example: Enable setup introspector
+# setup:
+#   enabled: true
+
 # Budget & Rate Limit Auto-Resume (v2.20+)
 # Intelligent rate limit handling with state persistence for long-running plans
 budget:
