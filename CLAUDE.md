@@ -111,6 +111,7 @@ tts:
 setup:
   enabled: true  # Enable pre-wave setup phase (default: false)
 ```
+When enabled, Claude introspects the project before wave execution to discover and run setup commands (e.g., dependency installation, build prerequisites).
 
 ### Timeouts (v2.33+)
 ```yaml
