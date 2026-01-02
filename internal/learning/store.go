@@ -854,6 +854,30 @@ func (s *Store) DeleteOldBehavioralData(ctx context.Context, olderThan time.Time
 	return deleted, nil
 }
 
+// CleanupOldExecutions removes task execution records older than the specified number of days.
+// Also cleans up related behavioral data via cascade.
+// Returns the number of deleted execution records.
+func (s *Store) CleanupOldExecutions(ctx context.Context, keepDays int) (int64, error) {
+	if keepDays <= 0 {
+		return 0, nil // 0 or negative means keep forever
+	}
+
+	cutoff := time.Now().AddDate(0, 0, -keepDays)
+
+	query := `DELETE FROM task_executions WHERE timestamp < ?`
+	result, err := s.db.ExecContext(ctx, query, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup old executions: %w", err)
+	}
+
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
+
+	return deleted, nil
+}
+
 // AgentTypeStats represents aggregated statistics for an agent type
 type AgentTypeStats struct {
 	AgentType           string

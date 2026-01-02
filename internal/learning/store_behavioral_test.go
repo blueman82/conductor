@@ -563,6 +563,72 @@ func TestBehavioralSessionData_NullHandling(t *testing.T) {
 	})
 }
 
+func TestCleanupOldExecutions(t *testing.T) {
+	t.Run("deletes executions older than keepDays", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Create old execution (manually insert with old timestamp)
+		query := `INSERT INTO task_executions
+			(plan_file, task_number, task_name, agent, prompt, success, duration_seconds, timestamp)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		_, err := store.db.Exec(query,
+			"test.yaml", "1", "Old Task", "test-agent", "test", true, 60,
+			time.Now().Add(-100*24*time.Hour)) // 100 days ago
+		require.NoError(t, err)
+
+		// Create recent execution
+		recentExec := &TaskExecution{
+			PlanFile:     "test.yaml",
+			TaskNumber:   "2",
+			TaskName:     "Recent Task",
+			Agent:        "test-agent",
+			Prompt:       "test",
+			Success:      true,
+			DurationSecs: 60,
+		}
+		err = store.RecordExecution(ctx, recentExec)
+		require.NoError(t, err)
+
+		// Cleanup records older than 90 days
+		deleted, err := store.CleanupOldExecutions(ctx, 90)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), deleted)
+
+		// Verify recent execution still exists
+		execs, err := store.GetExecutions("test.yaml")
+		require.NoError(t, err)
+		assert.Len(t, execs, 1)
+		assert.Equal(t, "Recent Task", execs[0].TaskName)
+	})
+
+	t.Run("keepDays 0 means keep forever", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Create old execution
+		query := `INSERT INTO task_executions
+			(plan_file, task_number, task_name, agent, prompt, success, duration_seconds, timestamp)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		_, err := store.db.Exec(query,
+			"test.yaml", "1", "Old Task", "test-agent", "test", true, 60,
+			time.Now().Add(-365*24*time.Hour)) // 1 year ago
+		require.NoError(t, err)
+
+		// Cleanup with 0 should not delete anything
+		deleted, err := store.CleanupOldExecutions(ctx, 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), deleted)
+
+		// Verify execution still exists
+		execs, err := store.GetExecutions("test.yaml")
+		require.NoError(t, err)
+		assert.Len(t, execs, 1)
+	})
+}
+
 // Helper function
 func timePtr(t time.Time) *time.Time {
 	return &t

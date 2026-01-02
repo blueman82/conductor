@@ -309,6 +309,16 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 		learningStore = store
 		defer store.Close()
+
+		// Cleanup old execution records if keep_executions_days is configured
+		if cfg.Learning.KeepExecutionsDays > 0 {
+			deleted, err := store.CleanupOldExecutions(context.Background(), cfg.Learning.KeepExecutionsDays)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to cleanup old executions: %v\n", err)
+			} else if deleted > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Cleaned up %d old execution records (older than %d days)\n", deleted, cfg.Learning.KeepExecutionsDays)
+			}
+		}
 	}
 
 	// Use merged config values
@@ -693,7 +703,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Wire Warm-Up Provider (v2.32+) with shared ClaudeSimilarity
 	// WarmUpProvider primes agents with historical context from similar tasks
-	if cfg.Learning.Enabled && learningStore != nil {
+	if cfg.Learning.Enabled && cfg.Learning.WarmUpEnabled && learningStore != nil {
 		warmUpProvider := learning.NewWarmUpProvider(learningStore, claudeSim)
 		taskExec.WarmUpHook = executor.NewWarmUpHook(warmUpProvider, consoleLog)
 	}
