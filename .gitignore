@@ -81,3 +81,6 @@ docs/*
 
 # To un-ignore a file in an ignored directory, need to:
 !docs/conductor.md
+!docs/plans/
+docs/plans/*
+!docs/plans/setup-introspector.yaml

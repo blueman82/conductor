@@ -1,0 +1,863 @@
+# ═══════════════════════════════════════════════════════════════
+# DATA FLOW REGISTRY
+# ═══════════════════════════════════════════════════════════════
+# PRODUCERS: Task 1 → SetupConfig type
+#            Task 2 → SetupIntrospector type, SetupResult, SetupCommand
+#            Task 3 → SetupIntrospector.Introspect(), RunSetupCommands()
+#            Task 4 → SetupHook, orchestrator integration
+# CONSUMERS: Task 2 → [1], Task 3 → [2], Task 4 → [3], Task 5 → [1,4], Task 6 → [3,4]
+#            Task 7 → [1], Task 8 → [1], Task 9 → [1], Task 10 → [1], Task 11 → [1]
+# VALIDATION: All consumers depend_on their producers ✓
+# ═══════════════════════════════════════════════════════════════
+# SUCCESS CRITERIA VALIDATION
+# ═══════════════════════════════════════════════════════════════
+# All criteria derived from key_points ✓
+# Same terminology in key_points and criteria ✓
+# Component tasks have CAPABILITY-only criteria ✓
+# Integration tasks have dual criteria ✓
+# ═══════════════════════════════════════════════════════════════
+
+conductor:
+  worktree_groups:
+    - group_id: "setup-config"
+      description: "Configuration foundation"
+      tasks: [1]
+      rationale: "Config must exist before types reference it"
+    - group_id: "setup-core"
+      description: "Core SetupIntrospector implementation"
+      tasks: [2, 3]
+      rationale: "Types then implementation, sequential in same package"
+    - group_id: "setup-integration"
+      description: "Hook wrapper and orchestrator wiring"
+      tasks: [4, 5]
+      rationale: "Integration layer depends on core"
+    - group_id: "setup-testing"
+      description: "Comprehensive tests"
+      tasks: [6]
+      rationale: "Tests after implementation complete"
+    - group_id: "setup-docs"
+      description: "Configuration and documentation"
+      tasks: [7, 8, 9, 10, 11]
+      rationale: "Document config and update all docs after code complete"
+planner_compliance:
+  planner_version: "4.0.0"
+  strict_enforcement: true
+  required_features:
+    - dependency_checks
+    - test_commands
+    - success_criteria
+    - data_flow_registry
+    - package_guard
+data_flow_registry:
+  producers:
+    SetupConfig:
+      - task: "1"
+        description: "Creates SetupConfig struct with Enabled field"
+    SetupIntrospector:
+      - task: "2"
+        description: "Creates SetupIntrospector struct with Timeout, ClaudePath, Logger"
+    SetupResult:
+      - task: "2"
+        description: "Creates SetupResult and SetupCommand types"
+    Introspect:
+      - task: "3"
+        description: "Creates Introspect() method calling Claude CLI"
+    RunSetupCommands:
+      - task: "3"
+        description: "Creates RunSetupCommands() method executing commands"
+    SetupHook:
+      - task: "4"
+        description: "Creates SetupHook wrapper with nil-safety"
+  consumers:
+    SetupConfig:
+      - task: "2"
+        description: "Uses SetupConfig.Enabled to check if feature active"
+      - task: "5"
+        description: "Reads cfg.Setup.Enabled in run.go"
+    SetupIntrospector:
+      - task: "3"
+        description: "Adds methods to SetupIntrospector type"
+      - task: "4"
+        description: "Wraps SetupIntrospector in hook"
+    SetupResult:
+      - task: "3"
+        description: "Returned by Introspect(), consumed by RunSetupCommands()"
+    Introspect:
+      - task: "4"
+        description: "Called by SetupHook.Setup()"
+    RunSetupCommands:
+      - task: "4"
+        description: "Called by SetupHook.Setup()"
+    SetupHook:
+      - task: "5"
+        description: "Wired into OrchestratorConfig in run.go"
+      - task: "6"
+        description: "Tested in integration tests"
+plan:
+  metadata:
+    feature_name: "SetupIntrospector: Pre-Wave Setup Phase"
+    created: "2026-01-02"
+    target: "Let Claude introspect project to determine setup commands before Wave 1"
+  context:
+    framework: "Go 1.25"
+    architecture: "CLI orchestrator with Claude CLI integration"
+    test_framework: "go test"
+  tasks:
+    # ══════════════════════════════════════════════════════════════
+    # TASK 1: Add SetupConfig to config.go
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "1"
+      name: "Add SetupConfig to config.go"
+      agent: "golang-pro"
+      files:
+        - "internal/config/config.go"
+      depends_on: []
+      success_criteria:
+        - "SetupConfig struct has Enabled bool field with yaml tag"
+        - "DefaultSetupConfig() returns SetupConfig with Enabled=false"
+        - "Config struct has Setup SetupConfig field with yaml tag"
+        - "LoadConfig parses setup section from YAML"
+        - "go build ./... succeeds"
+        - "go test ./internal/config/... passes"
+        - "No TODO comments in production code"
+        - "No placeholder empty structs"
+        - "No unused variables"
+      test_commands:
+        - "go build ./..."
+        - "go test ./internal/config/... -v"
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./..."
+            description: "Verify build succeeds before task"
+          - command: "grep -q 'type TTSConfig struct' internal/config/config.go"
+            description: "Verify TTS pattern exists to follow"
+        documentation_targets: []
+      description: |
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify config patterns exist
+            grep -n "type TTSConfig struct" internal/config/config.go
+            grep -n "func DefaultTTSConfig" internal/config/config.go
+          </commands>
+        </dependency_verification>
+
+        <task_description>
+          Add SetupConfig struct following TTSConfig pattern in internal/config/config.go.
+          <requirements>
+            <item>SetupConfig struct with Enabled bool yaml:"enabled"</item>
+            <item>DefaultSetupConfig() returning Enabled=false (zero behavior change)</item>
+            <item>Add Setup SetupConfig yaml:"setup" field to main Config struct</item>
+            <item>Add YAML parsing in LoadConfig (after TTS section ~line 864)</item>
+          </requirements>
+          Setup is DISABLED by default to ensure no behavior change unless explicitly enabled.
+        </task_description>
+      implementation:
+        approach: |
+          Follow existing TTSConfig pattern exactly. Add struct after TTSConfig (line 262),
+          default function after DefaultTTSConfig (line 446), field to Config struct,
+          and YAML parsing logic in LoadConfig.
+        key_points:
+          - point: "SetupConfig struct with Enabled bool field"
+            details: 'yaml:"enabled" tag for YAML parsing'
+            reference: "internal/config/config.go:249-262 (TTSConfig pattern)"
+          - point: "DefaultSetupConfig() returns Enabled=false"
+            details: "Zero behavior change unless user explicitly enables"
+            reference: "internal/config/config.go:437-446 (DefaultTTSConfig pattern)"
+          - point: "Config struct has Setup SetupConfig field"
+            details: 'yaml:"setup" tag, placed near TTS field'
+            reference: "internal/config/config.go:320-372 (Config struct)"
+          - point: "LoadConfig parses setup section"
+            details: "Check rawMap for setup key, merge with defaults"
+            reference: "internal/config/config.go:860-880 (TTS parsing pattern)"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "gofmt -w internal/config/config.go && go build ./..."
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "add SetupConfig for pre-wave setup phase"
+        files:
+          - "internal/config/config.go"
+      status: "failed"
+    # ══════════════════════════════════════════════════════════════
+    # TASK 2: Create SetupIntrospector types
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "2"
+      name: "Create SetupIntrospector types and constructor"
+      agent: "golang-pro"
+      files:
+        - "internal/executor/setup_introspector.go"
+      depends_on: [1]
+      success_criteria:
+        - "SetupResult struct has Commands []SetupCommand and Reasoning string with json tags"
+        - "SetupCommand struct has Command, Purpose string and Required bool with json tags"
+        - "SetupIntrospector struct has Timeout time.Duration, ClaudePath string, Logger budget.WaiterLogger"
+        - "NewSetupIntrospector constructor accepts timeout and logger parameters"
+        - "SetupSchema() returns valid JSON schema for SetupResult"
+        - "go build ./... succeeds"
+        - "No TODO comments in production code"
+        - "No placeholder empty structs"
+        - "No unused variables"
+      test_commands:
+        - "go build ./..."
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./..."
+            description: "Verify build succeeds before task"
+          - command: "grep -q 'type ClaudeSimilarity struct' internal/similarity/claude_similarity.go"
+            description: "Verify ClaudeSimilarity pattern exists to follow"
+        documentation_targets: []
+      description: |
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify patterns exist
+            grep -n "type ClaudeSimilarity struct" internal/similarity/claude_similarity.go
+            grep -n "func NewClaudeSimilarity" internal/similarity/claude_similarity.go
+            grep -n "func SimilaritySchema" internal/similarity/schema.go
+          </commands>
+        </dependency_verification>
+
+        <task_description>
+          Create internal/executor/setup_introspector.go with types following ClaudeSimilarity pattern.
+          <requirements>
+            <item>SetupResult struct: Commands []SetupCommand, Reasoning string</item>
+            <item>SetupCommand struct: Command, Purpose string, Required bool</item>
+            <item>SetupIntrospector struct: Timeout, ClaudePath, Logger (match ClaudeSimilarity)</item>
+            <item>NewSetupIntrospector(timeout, logger) constructor</item>
+            <item>SetupSchema() returning JSON schema string</item>
+          </requirements>
+        </task_description>
+      implementation:
+        approach: |
+          Create new file following ClaudeSimilarity pattern from internal/similarity/.
+          Types from memory design (70bf9f86). JSON schema enforces response structure.
+        key_points:
+          - point: "SetupResult struct with Commands and Reasoning"
+            details: "json tags for Claude CLI --json-schema parsing"
+            reference: "memory 70bf9f86 design"
+          - point: "SetupCommand struct with Command, Purpose, Required"
+            details: "Required bool distinguishes hard deps from nice-to-have"
+            reference: "memory 70bf9f86 design"
+          - point: "SetupIntrospector struct with Timeout, ClaudePath, Logger"
+            details: "Match ClaudeSimilarity exactly for consistency"
+            reference: "internal/similarity/claude_similarity.go:30-37"
+          - point: "NewSetupIntrospector constructor"
+            details: "Accept timeout and logger, default ClaudePath to 'claude'"
+            reference: "internal/similarity/claude_similarity.go:39-46"
+          - point: "SetupSchema() returns JSON schema"
+            details: "Enforces Commands array, Reasoning string, additionalProperties false"
+            reference: "internal/similarity/schema.go:4-22"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "gofmt -w internal/executor/setup_introspector.go && go build ./..."
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "add SetupIntrospector types and constructor"
+        files:
+          - "internal/executor/setup_introspector.go"
+    # ══════════════════════════════════════════════════════════════
+    # TASK 3: Implement Introspect and RunSetupCommands methods
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "3"
+      name: "Implement Introspect() and RunSetupCommands() methods"
+      agent: "golang-pro"
+      files:
+        - "internal/executor/setup_introspector.go"
+      depends_on: [2]
+      success_criteria:
+        - "Introspect() calls Claude CLI with -p, --json-schema, --output-format json, --settings flags"
+        - "Introspect() uses context.WithTimeout with si.Timeout"
+        - "Introspect() calls claude.SetCleanEnv(cmd) before execution"
+        - "Introspect() uses agent.ParseClaudeOutput() to parse response"
+        - "Introspect() handles rate limits via budget.ParseRateLimitFromError()"
+        - "buildPrompt() includes project file listing from current directory"
+        - "RunSetupCommands() executes commands sequentially via exec.CommandContext"
+        - "RunSetupCommands() stops on error if command.Required is true"
+        - "RunSetupCommands() logs warning and continues if command.Required is false"
+        - "go build ./... succeeds"
+        - "No TODO comments in production code"
+        - "No placeholder empty structs"
+        - "No unused variables"
+      test_commands:
+        - "go build ./..."
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./..."
+            description: "Verify build succeeds before task"
+          - command: "grep -q 'func (cs \\*ClaudeSimilarity) invoke' internal/similarity/claude_similarity.go"
+            description: "Verify invoke pattern exists"
+        documentation_targets: []
+      description: |
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify Claude CLI invocation patterns
+            grep -n "exec.CommandContext" internal/similarity/claude_similarity.go
+            grep -n "claude.SetCleanEnv" internal/similarity/claude_similarity.go
+            grep -n "agent.ParseClaudeOutput" internal/similarity/claude_similarity.go
+            grep -n "budget.ParseRateLimitFromError" internal/similarity/claude_similarity.go
+          </commands>
+        </dependency_verification>
+
+        <task_description>
+          Implement the core methods following ClaudeSimilarity.invoke() pattern exactly.
+          <requirements>
+            <item>Introspect(ctx) (*SetupResult, error) - calls Claude CLI</item>
+            <item>buildPrompt() - generates prompt with project file listing</item>
+            <item>RunSetupCommands(ctx, result) error - executes commands</item>
+            <item>Rate limit handling with budget.ParseRateLimitFromError()</item>
+          </requirements>
+          The prompt should ask Claude to examine project files and suggest setup commands.
+        </task_description>
+      implementation:
+        approach: |
+          Follow ClaudeSimilarity.invoke() pattern exactly for Claude CLI call.
+          buildPrompt() lists files in current directory for Claude to analyze.
+          RunSetupCommands() iterates result.Commands, respecting Required flag.
+        key_points:
+          - point: "Introspect() with Claude CLI args pattern"
+            details: "-p prompt, --json-schema, --output-format json, --settings disableAllHooks"
+            reference: "internal/similarity/claude_similarity.go:82-88"
+          - point: "context.WithTimeout for timeout handling"
+            details: "Use si.Timeout from constructor"
+            reference: "internal/similarity/claude_similarity.go:73-74"
+          - point: "claude.SetCleanEnv(cmd) before execution"
+            details: "Prevents VSCode socket file issues"
+            reference: "internal/similarity/claude_similarity.go:90"
+          - point: "agent.ParseClaudeOutput() for response parsing"
+            details: "Handles structured_output wrapper from Claude CLI"
+            reference: "internal/similarity/claude_similarity.go:96-98"
+          - point: "budget.ParseRateLimitFromError() for rate limits"
+            details: "Retry once after waiting if rate limited"
+            reference: "internal/similarity/claude_similarity.go:51-63"
+          - point: "buildPrompt() with file listing"
+            details: "List files via filepath.Walk or ls, include in prompt"
+            reference: "memory 70bf9f86 prompt design"
+          - point: "RunSetupCommands() sequential execution"
+            details: "Required=true stops on error, Required=false logs warning"
+            reference: "memory 70bf9f86 design"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "gofmt -w internal/executor/setup_introspector.go && go build ./..."
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "implement SetupIntrospector.Introspect() and RunSetupCommands()"
+        files:
+          - "internal/executor/setup_introspector.go"
+    # ══════════════════════════════════════════════════════════════
+    # TASK 4: Create SetupHook and integrate with orchestrator
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "4"
+      name: "Create SetupHook and integrate with orchestrator"
+      agent: "golang-pro"
+      type: integration
+      files:
+        - "internal/executor/setup_hook.go"
+        - "internal/executor/orchestrator.go"
+      depends_on: [3]
+      success_criteria:
+        - "SetupHook struct wraps SetupIntrospector with logger field"
+        - "NewSetupHook() returns nil if introspector is nil (nil-safety)"
+        - "SetupHook.Setup() calls Introspect() then RunSetupCommands()"
+        - "SetupHook.Setup() logs timing information"
+        - "OrchestratorConfig has SetupHook field"
+        - "NewOrchestratorFromConfig wires SetupHook to orchestrator"
+        - "Orchestrator.ExecutePlan() calls SetupHook.Setup() before waveExecutor.ExecutePlan()"
+        - "Setup errors log warning but do not block wave execution"
+        - "go build ./... succeeds"
+        - "No TODO comments in production code"
+        - "No placeholder empty structs"
+        - "No unused variables"
+      integration_criteria:
+        - "SetupHook integrates with Orchestrator via OrchestratorConfig"
+        - "Setup phase runs exactly once before Wave 1 for all plans"
+        - "Graceful degradation when SetupHook is nil"
+      test_commands:
+        - "go build ./..."
+        - "go test ./internal/executor/... -v -run Orchestrator"
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./..."
+            description: "Verify build succeeds before task"
+          - command: "grep -q 'PatternHook \\*PatternIntelligenceHook' internal/executor/orchestrator.go"
+            description: "Verify PatternHook pattern exists to follow"
+        documentation_targets: []
+      description: |
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify hook patterns
+            grep -n "func NewPatternIntelligenceHook" internal/executor/pattern_integration.go
+            grep -n "PatternHook" internal/executor/orchestrator.go
+            grep -n "waveExecutor.ExecutePlan" internal/executor/orchestrator.go
+          </commands>
+        </dependency_verification>
+
+        <task_description>
+          Create SetupHook wrapper and integrate into orchestrator.
+          <requirements>
+            <item>SetupHook struct with introspector and logger</item>
+            <item>NewSetupHook() with nil-safety (return nil if introspector nil)</item>
+            <item>Setup() method calling Introspect + RunSetupCommands</item>
+            <item>Add SetupHook to OrchestratorConfig</item>
+            <item>Wire in NewOrchestratorFromConfig</item>
+            <item>Call before waveExecutor.ExecutePlan() in ExecutePlan()</item>
+          </requirements>
+        </task_description>
+      implementation:
+        approach: |
+          Create setup_hook.go following PatternIntelligenceHook pattern.
+          Modify orchestrator.go to add SetupHook field and call before waves.
+          Insertion point: orchestrator.go:270-273 (before waveExecutor.ExecutePlan).
+        key_points:
+          - point: "SetupHook struct with introspector and logger"
+            details: "Logger for timing/status output"
+            reference: "internal/executor/pattern_integration.go:14-22"
+          - point: "NewSetupHook() returns nil if introspector nil"
+            details: "Nil-safety pattern from all hooks"
+            reference: "internal/executor/warmup_hook.go:25-30"
+          - point: "Setup() calls Introspect then RunSetupCommands"
+            details: "Log start, timing, completion"
+            reference: "internal/executor/pattern_integration.go:74-100"
+          - point: "OrchestratorConfig has SetupHook field"
+            details: "Add after PatternHook field"
+            reference: "internal/executor/orchestrator.go:79"
+          - point: "NewOrchestratorFromConfig wires SetupHook"
+            details: "Store on orchestrator struct"
+            reference: "internal/executor/orchestrator.go:187"
+          - point: "ExecutePlan() calls Setup() before waves"
+            details: "Insert at line 270-273, before waveExecutor.ExecutePlan()"
+            reference: "internal/executor/orchestrator.go:273"
+          - point: "Errors log warning, do not block"
+            details: "Graceful degradation - setup failure shouldn't stop plan"
+            reference: "internal/executor/warmup_hook.go:35-80"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "gofmt -w internal/executor/*.go && go build ./..."
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "add SetupHook and integrate with orchestrator"
+        files:
+          - "internal/executor/setup_hook.go"
+          - "internal/executor/orchestrator.go"
+    # ══════════════════════════════════════════════════════════════
+    # TASK 5: Wire SetupIntrospector in run.go
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "5"
+      name: "Wire SetupIntrospector in run.go"
+      agent: "golang-pro"
+      type: integration
+      files:
+        - "internal/cmd/run.go"
+      depends_on: [1, 4]
+      success_criteria:
+        - "run.go checks cfg.Setup.Enabled before creating SetupIntrospector"
+        - "NewSetupIntrospector() called with cfg.Timeouts.LLM timeout"
+        - "NewSetupHook() called with introspector and logger"
+        - "OrchestratorConfig includes SetupHook field"
+        - "go build ./... succeeds"
+        - "No TODO comments in production code"
+        - "No placeholder empty structs"
+        - "No unused variables"
+      integration_criteria:
+        - "Setup wiring follows Pattern Intelligence wiring pattern"
+        - "SetupHook only created when cfg.Setup.Enabled is true"
+        - "Timeout sourced from config.Timeouts.LLM"
+      test_commands:
+        - "go build ./..."
+        - "go test ./internal/cmd/... -v"
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./..."
+            description: "Verify build succeeds before task"
+          - command: "grep -q 'PatternIntelligence' internal/cmd/run.go"
+            description: "Verify Pattern Intelligence wiring pattern exists"
+        documentation_targets: []
+      description: |
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify wiring patterns
+            grep -n "cfg.Pattern.Enabled" internal/cmd/run.go
+            grep -n "NewPatternIntelligence" internal/cmd/run.go
+            grep -n "OrchestratorConfig{" internal/cmd/run.go
+          </commands>
+        </dependency_verification>
+
+        <task_description>
+          Wire SetupIntrospector creation into run.go following Pattern Intelligence pattern.
+          <requirements>
+            <item>Check cfg.Setup.Enabled</item>
+            <item>Create SetupIntrospector with cfg.Timeouts.LLM</item>
+            <item>Create SetupHook wrapping introspector</item>
+            <item>Add SetupHook to OrchestratorConfig</item>
+          </requirements>
+        </task_description>
+      implementation:
+        approach: |
+          Follow Pattern Intelligence wiring pattern at run.go:686-702.
+          Add setup wiring in same section, check enabled flag, create components,
+          add to OrchestratorConfig construction.
+        key_points:
+          - point: "Check cfg.Setup.Enabled"
+            details: "Only create if explicitly enabled"
+            reference: "internal/cmd/run.go:686-688"
+          - point: "NewSetupIntrospector with cfg.Timeouts.LLM"
+            details: "Use centralized timeout from config"
+            reference: "internal/cmd/run.go:689-695"
+          - point: "NewSetupHook with introspector and logger"
+            details: "Wrap introspector for orchestrator integration"
+            reference: "internal/cmd/run.go:696-700"
+          - point: "Add SetupHook to OrchestratorConfig"
+            details: "Include in struct construction at line 745-756"
+            reference: "internal/cmd/run.go:745-756"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "gofmt -w internal/cmd/run.go && go build ./..."
+            exit_on_failure: true
+      commit:
+        type: "feat"
+        message: "wire SetupIntrospector in run.go"
+        files:
+          - "internal/cmd/run.go"
+    # ══════════════════════════════════════════════════════════════
+    # TASK 6: Add unit and integration tests
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "6"
+      name: "Add SetupIntrospector tests"
+      agent: "golang-pro"
+      files:
+        - "internal/executor/setup_introspector_test.go"
+      depends_on: [3, 4]
+      success_criteria:
+        - "TestNewSetupIntrospector verifies constructor initialization"
+        - "TestSetupSchema verifies JSON schema structure"
+        - "TestBuildPrompt verifies prompt contains file listing instructions"
+        - "TestRunSetupCommands_RequiredFailure verifies stop on required error"
+        - "TestRunSetupCommands_OptionalFailure verifies continue on optional error"
+        - "TestNewSetupHook_NilSafety verifies nil return when introspector nil"
+        - "All tests pass with go test ./internal/executor/... -run Setup"
+        - "No TODO comments in production code"
+        - "No placeholder empty structs"
+        - "No unused variables"
+      test_commands:
+        - "go test ./internal/executor/... -v -run Setup"
+        - "go test ./internal/executor/... -cover"
+      runtime_metadata:
+        dependency_checks:
+          - command: "go build ./..."
+            description: "Verify build succeeds before task"
+          - command: "test -f internal/executor/setup_introspector.go"
+            description: "Verify setup_introspector.go exists"
+        documentation_targets: []
+      description: |
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify test patterns
+            grep -n "func TestNewClaudeSimilarity" internal/similarity/claude_similarity_test.go
+            grep -n "func TestSimilaritySchema" internal/similarity/claude_similarity_test.go
+          </commands>
+        </dependency_verification>
+
+        <task_description>
+          Create comprehensive unit tests following ClaudeSimilarity test patterns.
+          <requirements>
+            <item>Constructor tests</item>
+            <item>Schema validation tests</item>
+            <item>Prompt building tests</item>
+            <item>Command runner tests (mock exec)</item>
+            <item>Hook nil-safety tests</item>
+          </requirements>
+        </task_description>
+      implementation:
+        approach: |
+          Follow claude_similarity_test.go patterns. Test constructor,
+          schema, prompt building, command execution with mocked commands.
+        key_points:
+          - point: "TestNewSetupIntrospector constructor"
+            details: "Verify fields initialized correctly"
+            reference: "internal/similarity/claude_similarity_test.go:20-36"
+          - point: "TestSetupSchema validates schema"
+            details: "Check required fields present in schema"
+            reference: "internal/similarity/claude_similarity_test.go:62-85"
+          - point: "TestBuildPrompt verifies content"
+            details: "Check prompt contains key instructions"
+            reference: "internal/similarity/claude_similarity_test.go:38-60"
+          - point: "TestRunSetupCommands_RequiredFailure"
+            details: "Verify execution stops when required command fails"
+            reference: "new test"
+          - point: "TestRunSetupCommands_OptionalFailure"
+            details: "Verify execution continues when optional command fails"
+            reference: "new test"
+          - point: "TestNewSetupHook_NilSafety"
+            details: "Verify nil returned when introspector is nil"
+            reference: "internal/executor/warmup_hook_test.go"
+      code_quality:
+        go:
+          full_quality_pipeline:
+            command: "gofmt -w internal/executor/setup_introspector_test.go && go test ./internal/executor/... -run Setup"
+            exit_on_failure: true
+      commit:
+        type: "test"
+        message: "add SetupIntrospector unit tests"
+        files:
+          - "internal/executor/setup_introspector_test.go"
+
+    # ══════════════════════════════════════════════════════════════
+    # TASK 7: Add setup section to config.yaml.example
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "7"
+      name: "Add setup section to config.yaml.example"
+      agent: "technical-documentation-specialist"
+      files:
+        - ".conductor/config.yaml.example"
+      depends_on: [1]
+      success_criteria:
+        - "setup: section added with header comment including version (v3.1+)"
+        - "enabled: false field documented with default value"
+        - "Section follows existing documentation pattern (TTS, Budget sections)"
+        - "Comments explain what SetupIntrospector does"
+        - "No TODO comments"
+      test_commands:
+        - "grep -q 'setup:' .conductor/config.yaml.example"
+        - "grep -q 'enabled: false' .conductor/config.yaml.example"
+      runtime_metadata:
+        dependency_checks:
+          - command: "test -f .conductor/config.yaml.example"
+            description: "Verify config.yaml.example exists"
+        documentation_targets:
+          - file: ".conductor/config.yaml.example"
+            section: "setup"
+      description: |
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify existing patterns
+            grep -n "# Text-to-Speech" .conductor/config.yaml.example
+            grep -n "tts:" .conductor/config.yaml.example
+          </commands>
+        </dependency_verification>
+
+        <task_description>
+          Add setup configuration section to .conductor/config.yaml.example.
+          <requirements>
+            <item>Add after existing sections (near TTS or at end)</item>
+            <item>Include header comment with version (v3.1+)</item>
+            <item>Document enabled field with default false</item>
+            <item>Explain what SetupIntrospector does</item>
+          </requirements>
+        </task_description>
+      implementation:
+        approach: |
+          Follow existing TTS section documentation pattern.
+          Add setup section with clear explanation of feature purpose.
+        key_points:
+          - point: "Section header with version info"
+            details: "# Setup Introspector configuration (v3.1+)"
+            reference: ".conductor/config.yaml.example:182-184 (TTS pattern)"
+          - point: "enabled: false documented"
+            details: "Explain disabled by default for zero behavior change"
+            reference: ".conductor/config.yaml.example:185-188"
+          - point: "Feature explanation"
+            details: "Claude introspects project to determine setup commands before Wave 1"
+            reference: "memory 70bf9f86"
+      commit:
+        type: "docs"
+        message: "add setup section to config.yaml.example"
+        files:
+          - ".conductor/config.yaml.example"
+
+    # ══════════════════════════════════════════════════════════════
+    # TASK 8: Add setup section to config.yaml
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "8"
+      name: "Add setup section to config.yaml"
+      agent: "technical-documentation-specialist"
+      files:
+        - ".conductor/config.yaml"
+      depends_on: [1]
+      success_criteria:
+        - "setup: section added matching config.yaml.example structure"
+        - "enabled: false set as default value"
+        - "Section placement consistent with config.yaml.example"
+        - "No TODO comments"
+      test_commands:
+        - "grep -q 'setup:' .conductor/config.yaml"
+        - "conductor validate docs/plans/setup-introspector.yaml"
+      runtime_metadata:
+        dependency_checks:
+          - command: "test -f .conductor/config.yaml"
+            description: "Verify config.yaml exists"
+        documentation_targets:
+          - file: ".conductor/config.yaml"
+            section: "setup"
+      description: |
+        <dependency_verification priority="execute_first">
+          <commands>
+            # Verify config exists
+            test -f .conductor/config.yaml
+            grep -n "tts:" .conductor/config.yaml
+          </commands>
+        </dependency_verification>
+
+        <task_description>
+          Add setup configuration section to .conductor/config.yaml.
+          <requirements>
+            <item>Match structure from config.yaml.example</item>
+            <item>Set enabled: false</item>
+            <item>Place consistently with example file</item>
+          </requirements>
+        </task_description>
+      implementation:
+        approach: |
+          Add setup section matching config.yaml.example.
+          Keep enabled: false as default.
+        key_points:
+          - point: "setup: section with enabled: false"
+            details: "Match config.yaml.example structure"
+            reference: ".conductor/config.yaml.example"
+          - point: "Consistent placement"
+            details: "Place near TTS or budget section"
+            reference: ".conductor/config.yaml"
+      commit:
+        type: "feat"
+        message: "add setup section to config.yaml"
+        files:
+          - ".conductor/config.yaml"
+
+    # ══════════════════════════════════════════════════════════════
+    # TASK 9: Update CLAUDE.md with setup configuration
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "9"
+      name: "Update CLAUDE.md with setup configuration"
+      agent: "technical-documentation-specialist"
+      files:
+        - "CLAUDE.md"
+      depends_on: [1]
+      success_criteria:
+        - "Setup section added to Configuration section in CLAUDE.md"
+        - "setup.enabled field documented"
+        - "Feature purpose explained (Claude introspects project for setup commands)"
+        - "Follows existing CLAUDE.md documentation style"
+        - "No TODO comments"
+      test_commands:
+        - "grep -q 'setup' CLAUDE.md"
+      runtime_metadata:
+        dependency_checks:
+          - command: "test -f CLAUDE.md"
+            description: "Verify CLAUDE.md exists"
+        documentation_targets:
+          - file: "CLAUDE.md"
+            section: "Configuration"
+      description: |
+        <task_description>
+          Update CLAUDE.md to document the new setup configuration section.
+          Add to the Configuration section following existing patterns.
+        </task_description>
+      implementation:
+        approach: |
+          Add setup config documentation to CLAUDE.md Configuration section.
+        key_points:
+          - point: "Add setup to Configuration section"
+            details: "Document setup.enabled field"
+            reference: "CLAUDE.md"
+      commit:
+        type: "docs"
+        message: "add setup configuration to CLAUDE.md"
+        files:
+          - "CLAUDE.md"
+
+    # ══════════════════════════════════════════════════════════════
+    # TASK 10: Update docs/conductor.md with setup documentation
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "10"
+      name: "Update docs/conductor.md with setup documentation"
+      agent: "technical-documentation-specialist"
+      files:
+        - "docs/conductor.md"
+      depends_on: [1]
+      success_criteria:
+        - "Setup Introspector section added to docs/conductor.md"
+        - "Feature workflow explained (introspect → run commands → waves)"
+        - "Configuration options documented"
+        - "Examples provided"
+        - "Follows existing documentation style"
+        - "No TODO comments"
+      test_commands:
+        - "grep -q -i 'setup' docs/conductor.md"
+      runtime_metadata:
+        dependency_checks:
+          - command: "test -f docs/conductor.md"
+            description: "Verify docs/conductor.md exists"
+        documentation_targets:
+          - file: "docs/conductor.md"
+            section: "Setup Introspector"
+      description: |
+        <task_description>
+          Add comprehensive SetupIntrospector documentation to docs/conductor.md.
+          Include feature explanation, workflow, configuration, and examples.
+        </task_description>
+      implementation:
+        approach: |
+          Add detailed setup documentation section explaining the feature.
+        key_points:
+          - point: "Feature explanation"
+            details: "Claude introspects project to determine setup commands"
+            reference: "memory 70bf9f86"
+          - point: "Workflow diagram"
+            details: "Introspect → Run Commands → Execute Waves"
+            reference: "memory 70bf9f86"
+          - point: "Configuration options"
+            details: "setup.enabled, uses timeouts.llm"
+            reference: "internal/config/config.go"
+      commit:
+        type: "docs"
+        message: "add SetupIntrospector documentation to conductor.md"
+        files:
+          - "docs/conductor.md"
+
+    # ══════════════════════════════════════════════════════════════
+    # TASK 11: Update README.md with setup feature mention
+    # ══════════════════════════════════════════════════════════════
+    - task_number: "11"
+      name: "Update README.md with setup feature"
+      agent: "technical-documentation-specialist"
+      files:
+        - "README.md"
+      depends_on: [1]
+      success_criteria:
+        - "Setup Introspector mentioned in features list or appropriate section"
+        - "Brief description of feature purpose"
+        - "Link to detailed docs if applicable"
+        - "Follows existing README.md style"
+        - "No TODO comments"
+      test_commands:
+        - "grep -qi 'setup' README.md || echo 'Feature mention optional'"
+      runtime_metadata:
+        dependency_checks:
+          - command: "test -f README.md"
+            description: "Verify README.md exists"
+        documentation_targets:
+          - file: "README.md"
+            section: "Features"
+      description: |
+        <task_description>
+          Update README.md to mention SetupIntrospector feature.
+          Add brief description in features section or appropriate location.
+        </task_description>
+      implementation:
+        approach: |
+          Add SetupIntrospector to features list with brief description.
+        key_points:
+          - point: "Feature mention in README"
+            details: "Pre-wave setup phase via Claude introspection"
+            reference: "README.md"
+      commit:
+        type: "docs"
+        message: "add SetupIntrospector feature to README.md"
+        files:
+          - "README.md"
