@@ -120,17 +120,9 @@ learning:
   # When a task fails repeatedly, swap to a better-performing agent suggested by QC or history
   swap_during_retries: true
 
-  # Enable QC to read plan file context (default: true)
-  # QC agent loads execution history from current run's plan file before reviewing
-  qc_reads_plan_context: true
-
-  # Enable QC to read database context (default: true)
-  # QC agent loads historical execution data from database before reviewing
-  qc_reads_db_context: true
-
-  # Maximum context entries to load (default: 10)
-  # Limits the number of historical attempts included in QC context
-  max_context_entries: 10
+  # Enable warm-up context injection for agent priming (default: true)
+  # Agents receive similar successful task approaches and common pitfalls before execution
+  warmup_enabled: true
 
   # Minimum failures before adapting strategy (default: 1)
   # Conductor will consider adapting (swapping agents) after this many consecutive failures
@@ -140,10 +132,6 @@ learning:
   # Older execution records are cleaned up automatically
   keep_executions_days: 90
 
-  # Maximum execution records per task (default: 100)
-  # Limits the number of execution records kept for each unique task
-  max_executions_per_task: 100
-
 # Example: Disable learning system
 # learning:
 #   enabled: false
@@ -152,20 +140,9 @@ learning:
 # learning:
 #   db_path: /var/lib/conductor/learning/executions.db
 
-# Example: Enable automatic agent adaptation
+# Example: Disable warm-up context
 # learning:
-#   auto_adapt_agent: true
-#   swap_during_retries: true
-#   min_failures_before_adapt: 3
-
-# Example: Disable QC context loading
-# learning:
-#   qc_reads_plan_context: false
-#   qc_reads_db_context: false
-
-# Example: Limit context to recent attempts only
-# learning:
-#   max_context_entries: 5
+#   warmup_enabled: false
 
 # Quality Control Examples
 

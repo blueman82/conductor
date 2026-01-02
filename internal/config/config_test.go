@@ -751,12 +751,6 @@ func TestConfig_LearningDefaults(t *testing.T) {
 	if cfg.Learning.DBPath != ".conductor/learning/executions.db" {
 		t.Errorf("Learning.DBPath = %q, want %q", cfg.Learning.DBPath, ".conductor/learning/executions.db")
 	}
-	if cfg.Learning.KeepExecutionsDays != 90 {
-		t.Errorf("Learning.KeepExecutionsDays = %d, want 90", cfg.Learning.KeepExecutionsDays)
-	}
-	if cfg.Learning.MaxExecutionsPerTask != 100 {
-		t.Errorf("Learning.MaxExecutionsPerTask = %d, want 100", cfg.Learning.MaxExecutionsPerTask)
-	}
 }
 
 // TestConfig_LearningDisabled tests loading config with learning disabled
@@ -794,7 +788,6 @@ func TestConfig_LearningCustomPath(t *testing.T) {
   enabled: true
   db_path: /custom/path/learning.db
   keep_executions_days: 30
-  max_executions_per_task: 50
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -813,9 +806,6 @@ func TestConfig_LearningCustomPath(t *testing.T) {
 	}
 	if cfg.Learning.KeepExecutionsDays != 30 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 30", cfg.Learning.KeepExecutionsDays)
-	}
-	if cfg.Learning.MaxExecutionsPerTask != 50 {
-		t.Errorf("Learning.MaxExecutionsPerTask = %d, want 50", cfg.Learning.MaxExecutionsPerTask)
 	}
 }
 
@@ -858,7 +848,6 @@ func TestConfig_LearningValidation(t *testing.T) {
   enabled: true
   db_path: .conductor/learning/executions.db
   keep_executions_days: 90
-  max_executions_per_task: 100
 `,
 			wantError: false,
 		},
@@ -875,14 +864,6 @@ func TestConfig_LearningValidation(t *testing.T) {
 			config: `learning:
   enabled: true
   keep_executions_days: -1
-`,
-			wantError: true,
-		},
-		{
-			name: "negative max_executions_per_task",
-			config: `learning:
-  enabled: true
-  max_executions_per_task: -1
 `,
 			wantError: true,
 		},
@@ -1150,14 +1131,8 @@ func TestConfig_EnhancedLearningDefaults(t *testing.T) {
 	if !cfg.Learning.SwapDuringRetries {
 		t.Errorf("Learning.SwapDuringRetries = %v, want true", cfg.Learning.SwapDuringRetries)
 	}
-	if !cfg.Learning.QCReadsPlanContext {
-		t.Errorf("Learning.QCReadsPlanContext = %v, want true", cfg.Learning.QCReadsPlanContext)
-	}
-	if !cfg.Learning.QCReadsDBContext {
-		t.Errorf("Learning.QCReadsDBContext = %v, want true", cfg.Learning.QCReadsDBContext)
-	}
-	if cfg.Learning.MaxContextEntries != 10 {
-		t.Errorf("Learning.MaxContextEntries = %d, want 10", cfg.Learning.MaxContextEntries)
+	if !cfg.Learning.WarmUpEnabled {
+		t.Errorf("Learning.WarmUpEnabled = %v, want true", cfg.Learning.WarmUpEnabled)
 	}
 }
 
@@ -1170,11 +1145,8 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
   enabled: true
   db_path: /custom/db.db
   swap_during_retries: false
-  qc_reads_plan_context: false
-  qc_reads_db_context: false
-  max_context_entries: 20
+  warmup_enabled: false
   keep_executions_days: 60
-  max_executions_per_task: 200
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -1194,20 +1166,11 @@ func TestConfig_EnhancedLearningYAMLLoading(t *testing.T) {
 	if cfg.Learning.SwapDuringRetries {
 		t.Errorf("Learning.SwapDuringRetries = %v, want false", cfg.Learning.SwapDuringRetries)
 	}
-	if cfg.Learning.QCReadsPlanContext {
-		t.Errorf("Learning.QCReadsPlanContext = %v, want false", cfg.Learning.QCReadsPlanContext)
-	}
-	if cfg.Learning.QCReadsDBContext {
-		t.Errorf("Learning.QCReadsDBContext = %v, want false", cfg.Learning.QCReadsDBContext)
-	}
-	if cfg.Learning.MaxContextEntries != 20 {
-		t.Errorf("Learning.MaxContextEntries = %d, want 20", cfg.Learning.MaxContextEntries)
+	if cfg.Learning.WarmUpEnabled {
+		t.Errorf("Learning.WarmUpEnabled = %v, want false", cfg.Learning.WarmUpEnabled)
 	}
 	if cfg.Learning.KeepExecutionsDays != 60 {
 		t.Errorf("Learning.KeepExecutionsDays = %d, want 60", cfg.Learning.KeepExecutionsDays)
-	}
-	if cfg.Learning.MaxExecutionsPerTask != 200 {
-		t.Errorf("Learning.MaxExecutionsPerTask = %d, want 200", cfg.Learning.MaxExecutionsPerTask)
 	}
 }
 
@@ -1689,7 +1652,6 @@ quality_control:
 learning:
   enabled: true
   swap_during_retries: true
-  qc_reads_db_context: true
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -1725,9 +1687,6 @@ learning:
 	// Verify learning config
 	if !cfg.Learning.Enabled {
 		t.Errorf("Learning.Enabled = %v, want true", cfg.Learning.Enabled)
-	}
-	if !cfg.Learning.QCReadsDBContext {
-		t.Errorf("Learning.QCReadsDBContext = %v, want true", cfg.Learning.QCReadsDBContext)
 	}
 
 	// Validate the entire config

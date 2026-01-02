@@ -1353,23 +1353,15 @@ learning:
   # When a task fails, uses IntelligentAgentSwapper to select a better agent
   swap_during_retries: true
 
-  # Enable QC to read plan file context (default: true)
-  # QC agent loads execution history from current run before reviewing
-  qc_reads_plan_context: true
-
-  # Enable QC to read database context (default: true)
-  # QC agent loads historical execution data before reviewing
-  qc_reads_db_context: true
-
-  # Maximum context entries to load (default: 10)
-  # Limits the number of historical attempts included in QC context
-  max_context_entries: 10
+  # Enable warm-up context injection for agent priming (default: true)
+  # Agents receive similar successful task approaches and common pitfalls
+  warmup_enabled: true
 
   # Days to keep execution history (default: 90, 0 = forever)
   keep_executions_days: 90
 
-  # Maximum execution records per task (default: 100)
-  max_executions_per_task: 100
+  # Minimum consecutive failures before agent swap (default: 1)
+  min_failures_before_adapt: 1
 
 # Text-to-Speech settings (v2.14+)
 # Optional voice feedback via local Orpheus TTS server
@@ -3165,7 +3157,7 @@ The adaptive learning system is a feedback mechanism that improves task executio
    └─ Execute task with (potentially adapted) agent
 
 3. QC-Review Hook
-   ├─ Load historical context (if qc_reads_plan_context/qc_reads_db_context enabled)
+   ├─ Load historical context (automatic when learning enabled)
    ├─ Capture structured QC response (verdict, issues, recommendations)
    ├─ Parse suggested_agent for inter-retry swapping
    └─ Extract failure patterns from output
@@ -3272,20 +3264,14 @@ learning:
   # Uses IntelligentAgentSwapper for Claude-powered agent selection
   swap_during_retries: true
 
-  # Enable QC to read plan file context (default: true)
-  qc_reads_plan_context: true
-
-  # Enable QC to read database context (default: true)
-  qc_reads_db_context: true
-
-  # Maximum context entries to load (default: 10)
-  max_context_entries: 10
+  # Enable warm-up context injection for agent priming (default: true)
+  warmup_enabled: true
 
   # Days to keep execution history (default: 90, 0 = forever)
   keep_executions_days: 90
 
-  # Maximum execution records per task (default: 100)
-  max_executions_per_task: 100
+  # Minimum consecutive failures before agent swap (default: 1)
+  min_failures_before_adapt: 1
 ```
 
 #### Configuration Options
@@ -3295,11 +3281,9 @@ learning:
 | `enabled` | bool | `true` | Master switch for learning system |
 | `db_path` | string | `.conductor/learning/executions.db` | Path to SQLite database file |
 | `swap_during_retries` | bool | `true` | Enable inter-retry agent swapping via IntelligentAgentSwapper |
-| `qc_reads_plan_context` | bool | `true` | QC loads execution history from plan |
-| `qc_reads_db_context` | bool | `true` | QC loads execution history from database |
-| `max_context_entries` | int | `10` | Maximum historical entries for QC context |
+| `warmup_enabled` | bool | `true` | Enable warm-up context injection for agent priming |
 | `keep_executions_days` | int | `90` | Days to retain history (0 = forever) |
-| `max_executions_per_task` | int | `100` | Max records per task |
+| `min_failures_before_adapt` | int | `1` | Consecutive failures before considering agent swap |
 
 #### Configuration File Location
 
@@ -3434,8 +3418,6 @@ $ conductor learning stats plan.md
 learning:
   enabled: true
   swap_during_retries: true
-  qc_reads_plan_context: true
-  qc_reads_db_context: true
 quality_control:
   retry_on_red: 2
 ```
@@ -3563,16 +3545,14 @@ $ cat data.json | jq -r '.[] | select(.success == true) | .agent' | sort | uniq 
 ```yaml
 # .conductor/config.yaml
 learning:
-  qc_reads_plan_context: true
-  qc_reads_db_context: true
-  max_context_entries: 10
+  enabled: true
 ```
 
 **What happens:**
 
 1. Task executes and produces output
 2. QC agent receives context including:
-   - Last 10 execution attempts from plan file
+   - Execution history from plan file
    - Historical patterns from database
    - Previous QC feedback
 3. QC makes informed decision based on historical context
@@ -4311,11 +4291,9 @@ $ claude --help | grep json-schema
 
 **Solution:**
 ```bash
-# Check context loading configuration
+# Ensure learning is enabled in config
 learning:
-  qc_reads_plan_context: true   # Load from plan file
-  qc_reads_db_context: true     # Load from database
-  max_context_entries: 10       # Increase if needed
+  enabled: true
 
 # Verify plan file has execution_history section
 $ grep "execution_history" plan.yaml
@@ -4323,10 +4301,6 @@ $ grep "execution_history" plan.yaml
 # Check database has execution records
 $ sqlite3 .conductor/learning/executions.db \
   "SELECT COUNT(*) FROM task_executions;"
-
-# Increase context limit if needed
-learning:
-  max_context_entries: 20  # Default is 10
 ```
 
 #### Learning Commands Show No Data

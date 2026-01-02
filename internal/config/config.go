@@ -51,36 +51,15 @@ type LearningConfig struct {
 	// SwapDuringRetries enables agent swapping during retry attempts using IntelligentAgentSwapper
 	SwapDuringRetries bool `yaml:"swap_during_retries"`
 
-	// IntelligentSwapEnabled enables Claude-powered intelligent agent selection (v2.30+)
-	// When true, uses IntelligentAgentSwapper for context-aware selection that considers
-	// file extensions, knowledge graph history, LIP progress, and error patterns.
-	// Falls back to stats-only SelectBetterAgent when false or on error.
-	// Default: true
-	IntelligentSwapEnabled bool `yaml:"intelligent_swap_enabled"`
-
 	// WarmUpEnabled enables warm-up context injection for agent priming (v2.29+)
 	// When true, agents receive similar successful task approaches, common pitfalls,
 	// and file-specific patterns before task execution.
-	// Default: true
 	WarmUpEnabled bool `yaml:"warmup_enabled"`
-
-	// QCReadsPlanContext enables QC agent to read plan context
-	QCReadsPlanContext bool `yaml:"qc_reads_plan_context"`
-
-	// QCReadsDBContext enables QC agent to read database context
-	QCReadsDBContext bool `yaml:"qc_reads_db_context"`
-
-	// MaxContextEntries limits context entries loaded from DB
-	MaxContextEntries int `yaml:"max_context_entries"`
 
 	// KeepExecutionsDays is the number of days to keep execution history
 	KeepExecutionsDays int `yaml:"keep_executions_days"`
 
-	// MaxExecutionsPerTask is the maximum number of executions to keep per task
-	MaxExecutionsPerTask int `yaml:"max_executions_per_task"`
-
 	// MinFailuresBeforeAdapt is the minimum consecutive failures before considering agent swap
-	// Default: 1
 	MinFailuresBeforeAdapt int `yaml:"min_failures_before_adapt"`
 }
 
@@ -563,16 +542,10 @@ func DefaultConfig() *Config {
 		SkipCompleted:  false,
 		RetryFailed:    false,
 		Learning: LearningConfig{
-			Enabled:                true,
-			DBPath:                 ".conductor/learning/executions.db",
-			SwapDuringRetries:      true,
-			IntelligentSwapEnabled: true, // Enable intelligent agent swap by default (v2.30+)
-			WarmUpEnabled:          true, // Enable warm-up context by default
-			QCReadsPlanContext:     true,
-			QCReadsDBContext:       true,
-			MaxContextEntries:      10,
-			KeepExecutionsDays:     90,
-			MaxExecutionsPerTask:   100,
+			Enabled:           true,
+			DBPath:            ".conductor/learning/executions.db",
+			SwapDuringRetries: true,
+			WarmUpEnabled:     true,
 		},
 		QualityControl: QualityControlConfig{
 			Enabled: false,
@@ -745,26 +718,14 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := learningMap["swap_during_retries"]; exists {
 				cfg.Learning.SwapDuringRetries = learning.SwapDuringRetries
 			}
-			if _, exists := learningMap["qc_reads_plan_context"]; exists {
-				cfg.Learning.QCReadsPlanContext = learning.QCReadsPlanContext
-			}
-			if _, exists := learningMap["qc_reads_db_context"]; exists {
-				cfg.Learning.QCReadsDBContext = learning.QCReadsDBContext
-			}
-			if _, exists := learningMap["max_context_entries"]; exists {
-				cfg.Learning.MaxContextEntries = learning.MaxContextEntries
+			if _, exists := learningMap["warmup_enabled"]; exists {
+				cfg.Learning.WarmUpEnabled = learning.WarmUpEnabled
 			}
 			if _, exists := learningMap["keep_executions_days"]; exists {
 				cfg.Learning.KeepExecutionsDays = learning.KeepExecutionsDays
 			}
-			if _, exists := learningMap["max_executions_per_task"]; exists {
-				cfg.Learning.MaxExecutionsPerTask = learning.MaxExecutionsPerTask
-			}
-			if _, exists := learningMap["warmup_enabled"]; exists {
-				cfg.Learning.WarmUpEnabled = learning.WarmUpEnabled
-			}
-			if _, exists := learningMap["intelligent_swap_enabled"]; exists {
-				cfg.Learning.IntelligentSwapEnabled = learning.IntelligentSwapEnabled
+			if _, exists := learningMap["min_failures_before_adapt"]; exists {
+				cfg.Learning.MinFailuresBeforeAdapt = learning.MinFailuresBeforeAdapt
 			}
 		}
 
@@ -1240,9 +1201,6 @@ func (c *Config) Validate() error {
 		}
 		if c.Learning.KeepExecutionsDays < 0 {
 			return fmt.Errorf("learning.keep_executions_days must be >= 0, got %d", c.Learning.KeepExecutionsDays)
-		}
-		if c.Learning.MaxExecutionsPerTask < 0 {
-			return fmt.Errorf("learning.max_executions_per_task must be >= 0, got %d", c.Learning.MaxExecutionsPerTask)
 		}
 	}
 
