@@ -9,6 +9,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/harrison/conductor/internal/behavioral"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -33,7 +34,24 @@ func NewObserveCommand() *cobra.Command {
 The observe subsystem provides insights into agent sessions, tool usage,
 file operations, errors, and behavioral patterns extracted from agent
 execution history.`,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Check if agent watch is enabled in config
+			cfg, err := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+			if err == nil && !cfg.AgentWatch.Enabled {
+				return fmt.Errorf("agent watch is disabled in config (agent_watch.enabled: false)")
+			}
+			return nil
+		},
 		RunE: observeInteractive,
+	}
+
+	// Load config to get default values
+	cfg, err := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if err != nil {
+		// Use defaults if config fails to load
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
 	}
 
 	// Global flags available to all subcommands
@@ -43,7 +61,7 @@ execution history.`,
 	cmd.PersistentFlags().BoolVar(&observeErrorsOnly, "errors-only", false, "Show only errors")
 	cmd.PersistentFlags().StringVar(&observeTimeRange, "time-range", "", "Time range (e.g., '24h', '7d', '30d')")
 	cmd.PersistentFlags().StringVar(&observePollInterval, "poll-interval", "2s", "Poll interval for streaming (default: 2s)")
-	cmd.PersistentFlags().IntVarP(&observeLimit, "limit", "n", 20, "Limit number of results (0 for all)")
+	cmd.PersistentFlags().IntVarP(&observeLimit, "limit", "n", cfg.AgentWatch.DefaultLimit, fmt.Sprintf("Limit number of results (0 for all, default: %d)", cfg.AgentWatch.DefaultLimit))
 
 	// Add subcommands
 	cmd.AddCommand(NewObserveImportCmd())
@@ -90,7 +108,15 @@ func runInteractiveSessionSelection(project string) error {
 
 // runInteractiveSessionSelectionWithReader allows injection of reader for testing
 func runInteractiveSessionSelectionWithReader(project string, reader MenuReader) error {
-	aggregator := behavioral.NewAggregator(50)
+	// Load config for cache size
+	cfg, err := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if err != nil {
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
+	aggregator := behavioral.NewAggregatorWithBaseDir(cfg.AgentWatch.CacheSize, cfg.AgentWatch.BaseDir)
 	cyan := color.New(color.FgCyan)
 	bold := color.New(color.Bold)
 	green := color.New(color.FgGreen)

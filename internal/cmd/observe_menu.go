@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/harrison/conductor/internal/behavioral"
+	"github.com/harrison/conductor/internal/config"
 )
 
 const (
@@ -38,13 +39,21 @@ func DisplayProjectMenu() (string, error) {
 
 // DisplayProjectMenuWithReader allows injection of reader for testing
 func DisplayProjectMenuWithReader(reader MenuReader) (string, error) {
-	projects, err := behavioral.ListProjects()
+	// Load config for base_dir
+	cfg, cfgErr := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if cfgErr != nil {
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
+	projects, err := behavioral.ListProjectsWithBaseDir(cfg.AgentWatch.BaseDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to list projects: %w", err)
 	}
 
 	if len(projects) == 0 {
-		return "", fmt.Errorf("no projects found in ~/.claude/projects")
+		return "", fmt.Errorf("no projects found in %s", cfg.AgentWatch.BaseDir)
 	}
 
 	// Single page if projects fit

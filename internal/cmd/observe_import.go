@@ -61,6 +61,14 @@ func HandleImportCommand(cmd *cobra.Command, args []string) error {
 		ctx = context.Background()
 	}
 
+	// Load config for base_dir
+	cfg, cfgErr := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if cfgErr != nil {
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
 	// Get database path
 	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
@@ -74,13 +82,8 @@ func HandleImportCommand(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	// Get Claude projects directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	projectsDir := filepath.Join(homeDir, ".claude", "projects")
+	// Get Claude projects directory from config
+	projectsDir := cfg.AgentWatch.BaseDir
 
 	// Discover session files
 	fmt.Printf("Discovering JSONL files in %s...\n", projectsDir)
@@ -302,6 +305,91 @@ func recordSessionData(ctx context.Context, store *learning.Store,
 	}
 
 	return nil
+}
+
+// AutoImportIfEnabled checks config and automatically imports new session data if enabled.
+// This is a background/silent operation - only logs if sessions are actually imported.
+// Returns the number of sessions imported or an error if import failed unexpectedly.
+// Non-blocking: does not fail the calling command if import fails.
+func AutoImportIfEnabled(ctx context.Context, cfg *config.Config) int {
+	// Check if auto-import is enabled
+	if !cfg.AgentWatch.Enabled || !cfg.AgentWatch.AutoImport {
+		return 0
+	}
+
+	// Get database path
+	dbPath, err := config.GetLearningDBPath()
+	if err != nil {
+		// Log warning but don't fail
+		fmt.Fprintf(os.Stderr, "[auto-import] Warning: failed to get learning database path: %v\n", err)
+		return 0
+	}
+
+	// Open database (will initialize schema if needed)
+	store, err := learning.NewStore(dbPath)
+	if err != nil {
+		// Log warning but don't fail
+		fmt.Fprintf(os.Stderr, "[auto-import] Warning: failed to open learning store: %v\n", err)
+		return 0
+	}
+	defer store.Close()
+
+	// Get Claude projects directory from config
+	projectsDir := expandPath(cfg.AgentWatch.BaseDir)
+
+	// Discover session files
+	sessions, err := behavioral.DiscoverSessions(projectsDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[auto-import] Warning: failed to discover sessions: %v\n", err)
+		return 0
+	}
+
+	if len(sessions) == 0 {
+		return 0
+	}
+
+	// Import sessions silently with skip-exists behavior
+	imported := 0
+
+	for _, sessionInfo := range sessions {
+		// Parse session file
+		sessionData, err := behavioral.ParseSessionFile(sessionInfo.FilePath)
+		if err != nil {
+			// Skip files that can't be parsed
+			continue
+		}
+
+		// Check if session already imported (skip-exists behavior)
+		exists, checkErr := sessionExistsInDB(ctx, store, sessionInfo.SessionID)
+		if checkErr != nil || exists {
+			// Skip if exists or can't check
+			continue
+		}
+
+		// Lookup agent name from parent session
+		agentName := lookupAgentName(sessionInfo, projectsDir)
+		if agentName != "" && sessionData.Session.AgentName == "" {
+			sessionData.Session.AgentName = agentName
+		} else if agentName != "" && (strings.HasPrefix(sessionData.Session.AgentName, "agent-") || sessionData.Session.AgentName == "") {
+			// Override agent-xxx with human-readable name
+			sessionData.Session.AgentName = agentName
+		}
+
+		// Record session data
+		if err := recordSessionData(ctx, store, sessionData, sessionInfo); err != nil {
+			// Skip on error, continue with next
+			continue
+		}
+
+		imported++
+	}
+
+	// Log summary only if sessions were imported
+	if imported > 0 {
+		fmt.Fprintf(os.Stderr, "[auto-import] Imported %d new session(s)\n", imported)
+	}
+
+	return imported
 }
 
 // lookupAgentName resolves the human-readable agent name from parent session

@@ -222,24 +222,84 @@ func runBudgetResume(cmd *cobra.Command, args []string) error {
 func createUsageTracker() (*budget.UsageTracker, error) {
 	// Determine base directory
 	baseDir := budgetBaseDir
+	costModel := budget.DefaultCostModel() // Default fallback
+
+	// Load from config if not overridden
 	if baseDir == "" {
-		// Load from config
 		cfg, err := config.LoadConfigFromDir(".")
 		if err != nil {
-			return nil, fmt.Errorf("failed to load config: %w", err)
+			// Config load failed, use defaults but log warning
+			fmt.Fprintf(os.Stderr, "Warning: failed to load config, using default cost model: %v\n", err)
+		} else {
+			baseDir = cfg.AgentWatch.BaseDir
+			// Convert config cost model to tracker format
+			configCostModel := buildCostModelFromConfig(cfg.AgentWatch.CostModel)
+			costModel = configCostModel
 		}
-		baseDir = cfg.AgentWatch.BaseDir
+	} else {
+		// baseDir was explicitly provided via flag, still try to load config for cost model
+		cfg, err := config.LoadConfigFromDir(".")
+		if err == nil {
+			configCostModel := buildCostModelFromConfig(cfg.AgentWatch.CostModel)
+			costModel = configCostModel
+		}
 	}
 
 	// Expand home directory
 	baseDir = expandPath(baseDir)
 
 	// Create tracker and load usage data
-	tracker := budget.NewUsageTracker(baseDir, budget.DefaultCostModel())
+	tracker := budget.NewUsageTracker(baseDir, costModel)
 	if err := budget.LoadUsage(tracker); err != nil {
 		return nil, fmt.Errorf("failed to load usage data: %w", err)
 	}
 	return tracker, nil
+}
+
+// buildCostModelFromConfig converts CostModelConfig to the tracker's map[string]ModelPricing format.
+// Maps abstract model families (Sonnet/Haiku/Opus) to all known model versions.
+func buildCostModelFromConfig(costModelCfg config.CostModelConfig) map[string]budget.ModelPricing {
+	return map[string]budget.ModelPricing{
+		// Opus models
+		"claude-opus-4-5-20251101": {
+			InputPer1M:  costModelCfg.OpusInput,
+			OutputPer1M: costModelCfg.OpusOutput,
+		},
+		"claude-3-opus-20240229": {
+			InputPer1M:  costModelCfg.OpusInput,
+			OutputPer1M: costModelCfg.OpusOutput,
+		},
+		// Sonnet models
+		"claude-sonnet-4-5-20250929": {
+			InputPer1M:  costModelCfg.SonnetInput,
+			OutputPer1M: costModelCfg.SonnetOutput,
+		},
+		"claude-sonnet-3-7-20250219": {
+			InputPer1M:  costModelCfg.SonnetInput,
+			OutputPer1M: costModelCfg.SonnetOutput,
+		},
+		"claude-3-5-sonnet-20241022": {
+			InputPer1M:  costModelCfg.SonnetInput,
+			OutputPer1M: costModelCfg.SonnetOutput,
+		},
+		"claude-3-5-sonnet-20240620": {
+			InputPer1M:  costModelCfg.SonnetInput,
+			OutputPer1M: costModelCfg.SonnetOutput,
+		},
+		"claude-3-sonnet-20240229": {
+			InputPer1M:  costModelCfg.SonnetInput,
+			OutputPer1M: costModelCfg.SonnetOutput,
+		},
+		// Haiku models
+		"claude-3-5-haiku-20241022": {
+			InputPer1M:  costModelCfg.HaikuInput,
+			OutputPer1M: costModelCfg.HaikuOutput,
+		},
+		"claude-3-haiku-20240307": {
+			InputPer1M:  costModelCfg.HaikuInput,
+			OutputPer1M: costModelCfg.HaikuOutput,
+		},
+	}
 }
 
 // expandPath expands ~ to home directory

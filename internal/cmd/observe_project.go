@@ -17,6 +17,12 @@ func DisplayProjectAnalysis(project string, limit int) error {
 		return fmt.Errorf("project name is required (use --project flag or provide as argument)")
 	}
 
+	// Auto-import new sessions if enabled in config
+	ctx := context.Background()
+	if cfg, cfgErr := config.LoadConfigFromDir("."); cfgErr == nil {
+		AutoImportIfEnabled(ctx, cfg)
+	}
+
 	// Get learning DB path (uses build-time injected root)
 	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
@@ -30,19 +36,25 @@ func DisplayProjectAnalysis(project string, limit int) error {
 	}
 	defer store.Close()
 
-	ctx := context.Background()
-
 	// Try to get summary stats from DB
 	summaryStats, err := store.GetSummaryStats(ctx, project)
 	if err != nil {
 		return fmt.Errorf("get summary stats: %w", err)
 	}
 
+	// Load config for cache_size
+	cfg, cfgErr := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if cfgErr != nil {
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
 	// Try to get basic project stats from JSONL files
-	projectStats, projectStatsErr := behavioral.GetProjectStats(project)
+	projectStats, projectStatsErr := behavioral.GetProjectStatsWithBaseDir(project, cfg.AgentWatch.BaseDir)
 
 	// Try aggregator for richer JSONL-based metrics
-	aggregator := behavioral.NewAggregator(50)
+	aggregator := behavioral.NewAggregatorWithBaseDir(cfg.AgentWatch.CacheSize, cfg.AgentWatch.BaseDir)
 	projectMetrics, projectMetricsErr := aggregator.GetProjectMetrics(project)
 
 	// Get agent type stats for breakdown
@@ -219,8 +231,16 @@ func formatBytes(bytes int64) string {
 
 // DisplayProjectList displays a list of available projects
 func DisplayProjectList(limit int) error {
+	// Load config for base_dir
+	cfg, cfgErr := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if cfgErr != nil {
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
 	// Get projects from JSONL files
-	projects, err := behavioral.ListProjects()
+	projects, err := behavioral.ListProjectsWithBaseDir(cfg.AgentWatch.BaseDir)
 	if err != nil {
 		return fmt.Errorf("list projects: %w", err)
 	}

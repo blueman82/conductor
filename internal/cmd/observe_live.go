@@ -3,8 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/fatih/color"
@@ -67,12 +65,16 @@ func RunLiveWatch(ctx context.Context, project string, pollInterval time.Duratio
 		color.NoColor = true
 	}
 
-	// Get Claude projects directory
-	homeDir, err := os.UserHomeDir()
+	// Load config for base_dir
+	cfg, err := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
 	if err != nil {
-		return fmt.Errorf("get home directory: %w", err)
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
 	}
-	rootDir := filepath.Join(homeDir, ".claude", "projects")
+
+	// Get Claude projects directory from config
+	rootDir := cfg.AgentWatch.BaseDir
 
 	// Create watcher
 	watcher := behavioral.NewLiveWatcher(rootDir, project)

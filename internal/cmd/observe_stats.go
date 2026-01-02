@@ -27,6 +27,11 @@ func DisplayStats(project string, limit int) error {
 
 	ctx := context.Background()
 
+	// Auto-import new sessions if enabled in config
+	if cfg, cfgErr := config.LoadConfigFromDir("."); cfgErr == nil {
+		AutoImportIfEnabled(ctx, cfg)
+	}
+
 	// Get summary stats
 	summaryStats, err := store.GetSummaryStats(ctx, project)
 	if err != nil {
@@ -139,6 +144,11 @@ func DisplayRecentSessions(project string, limit int) error {
 	defer store.Close()
 
 	ctx := context.Background()
+
+	// Auto-import new sessions if enabled in config
+	if cfg, cfgErr := config.LoadConfigFromDir("."); cfgErr == nil {
+		AutoImportIfEnabled(ctx, cfg)
+	}
 
 	// Get recent sessions
 	sessions, err := store.GetRecentSessions(ctx, project, limit, 0)

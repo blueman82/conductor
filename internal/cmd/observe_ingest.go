@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -67,6 +66,14 @@ func HandleIngestCommand(cmd *cobra.Command, args []string) error {
 		ctx = context.Background()
 	}
 
+	// Load config for base_dir
+	configCfg, cfgErr := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if cfgErr != nil {
+		configCfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
 	// Get database path
 	dbPath, err := config.GetLearningDBPath()
 	if err != nil {
@@ -83,11 +90,7 @@ func HandleIngestCommand(cmd *cobra.Command, args []string) error {
 	// Determine root directory
 	rootDir := ingestRootDir
 	if rootDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		rootDir = filepath.Join(homeDir, ".claude", "projects")
+		rootDir = configCfg.AgentWatch.BaseDir
 	}
 
 	// Verify root directory exists

@@ -34,8 +34,16 @@ func DisplaySessionAnalysis(sessionID, project string) error {
 
 	ctx := context.Background()
 
+	// Load config for cache size and base_dir
+	cfg, err := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if err != nil {
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
 	// Try aggregator for JSONL-based metrics first
-	aggregator := behavioral.NewAggregator(50)
+	aggregator := behavioral.NewAggregatorWithBaseDir(cfg.AgentWatch.CacheSize, cfg.AgentWatch.BaseDir)
 
 	var metrics *behavioral.BehavioralMetrics
 	var sessionData *behavioral.SessionData
@@ -86,8 +94,16 @@ func DisplaySessionAnalysis(sessionID, project string) error {
 
 // findSessionAcrossProjects searches all projects for a session ID
 func findSessionAcrossProjects(aggregator *behavioral.Aggregator, sessionID string) (*behavioral.SessionInfo, *behavioral.BehavioralMetrics, *behavioral.SessionData, error) {
-	// Discover all sessions
-	sessions, err := behavioral.DiscoverSessions("~/.claude/projects")
+	// Load config for base_dir
+	cfg, err := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if err != nil {
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
+	// Discover all sessions using configured base_dir
+	sessions, err := behavioral.DiscoverSessions(cfg.AgentWatch.BaseDir)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("discover sessions: %w", err)
 	}

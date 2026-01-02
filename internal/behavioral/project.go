@@ -30,8 +30,13 @@ func ListProjects() ([]ProjectInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
+	return ListProjectsWithBaseDir(filepath.Join(homeDir, ".claude", "projects"))
+}
 
-	projectsDir := filepath.Join(homeDir, ".claude", "projects")
+// ListProjectsWithBaseDir scans the specified base directory and returns information about each project
+func ListProjectsWithBaseDir(baseDir string) ([]ProjectInfo, error) {
+	// Expand ~ in path
+	projectsDir := expandHomePath(baseDir)
 
 	// Check if projects directory exists
 	if _, err := os.Stat(projectsDir); os.IsNotExist(err) {
@@ -87,8 +92,12 @@ func GetProjectStats(projectName string) (*ProjectStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
+	return GetProjectStatsWithBaseDir(projectName, filepath.Join(homeDir, ".claude", "projects"))
+}
 
-	projectPath := filepath.Join(homeDir, ".claude", "projects", projectName)
+// GetProjectStatsWithBaseDir returns aggregate statistics for a specific project using the given base directory
+func GetProjectStatsWithBaseDir(projectName, baseDir string) (*ProjectStats, error) {
+	projectPath := filepath.Join(expandHomePath(baseDir), projectName)
 
 	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("project not found: %s", projectName)
@@ -122,4 +131,19 @@ func GetProjectStats(projectName string) (*ProjectStats, error) {
 	stats.ErrorRate = 0.0
 
 	return stats, nil
+}
+
+// expandHomePath expands ~ to the user's home directory
+func expandHomePath(path string) string {
+	if len(path) == 0 {
+		return path
+	}
+	if path[0] == '~' {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(homeDir, path[1:])
+	}
+	return path
 }

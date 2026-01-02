@@ -7,6 +7,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/harrison/conductor/internal/behavioral"
+	"github.com/harrison/conductor/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +47,15 @@ func DisplaySessionTranscript(sessionID, project string, raw bool) error {
 		color.NoColor = true
 	}
 
-	aggregator := behavioral.NewAggregator(50)
+	// Load config for cache_size and base_dir
+	cfg, cfgErr := config.LoadConfigFromRootWithBuildTime(GetConductorRepoRoot())
+	if cfgErr != nil {
+		cfg = &config.Config{
+			AgentWatch: config.DefaultAgentWatchConfig(),
+		}
+	}
+
+	aggregator := behavioral.NewAggregatorWithBaseDir(cfg.AgentWatch.CacheSize, cfg.AgentWatch.BaseDir)
 
 	var sessionData *behavioral.SessionData
 	var err error
