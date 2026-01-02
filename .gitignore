@@ -81,4 +81,3 @@ docs/*
 
 # To un-ignore a file in an ignored directory, need to:
 !docs/conductor.md
-.conductor/config.yaml
