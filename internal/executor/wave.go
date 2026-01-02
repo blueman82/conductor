@@ -98,50 +98,6 @@ func (w *WaveExecutor) SetPatternHook(hook *PatternIntelligenceHook) {
 	}
 }
 
-// checkBudget verifies budget limits before wave execution.
-// Returns an error if budget is exceeded and execution should stop.
-// Logs warnings if approaching budget threshold.
-func (w *WaveExecutor) checkBudget() error {
-	if w.budgetTracker == nil || w.budgetConfig == nil || !w.budgetConfig.Enabled {
-		return nil
-	}
-
-	// Skip if check interval is "disabled"
-	if w.budgetConfig.CheckInterval == "disabled" {
-		return nil
-	}
-
-	status := w.budgetTracker.GetStatus()
-	if status == nil || status.Block == nil {
-		return nil
-	}
-
-	currentCost := status.Block.CostUSD
-
-	// Check against MaxCostPerRun
-	if w.budgetConfig.MaxCostPerRun > 0 {
-		ratio := currentCost / w.budgetConfig.MaxCostPerRun
-
-		// Stop if budget exceeded
-		if ratio >= 1.0 {
-			if w.logger != nil {
-				w.logger.LogBudgetStatus(status)
-			}
-			return fmt.Errorf("budget exceeded: current cost $%.2f exceeds limit $%.2f",
-				currentCost, w.budgetConfig.MaxCostPerRun)
-		}
-
-		// Warn if approaching threshold
-		if ratio >= w.budgetConfig.WarnThreshold {
-			if w.logger != nil {
-				w.logger.LogBudgetWarning(ratio)
-			}
-		}
-	}
-
-	return nil
-}
-
 // ExecutePlan runs the plan's waves sequentially while executing tasks within each wave in parallel.
 // It returns all collected task results and the first error encountered, if any.
 func (w *WaveExecutor) ExecutePlan(ctx context.Context, plan *models.Plan) ([]models.TaskResult, error) {
@@ -227,19 +183,6 @@ func (w *WaveExecutor) executeWave(ctx context.Context, wave models.Wave, taskMa
 	}
 
 	// If all tasks are skipped, return the skipped results
-	if len(tasksToExecute) == 0 {
-		return skippedResults, nil
-	}
-
-	// ========== BUDGET GATE ==========
-	if w.budgetConfig != nil && w.budgetConfig.CheckInterval == "per_wave" {
-		if err := w.checkBudget(); err != nil {
-			return skippedResults, fmt.Errorf("budget gate: %w", err)
-		}
-	}
-	// ========== END BUDGET GATE ==========
-
-	// If all tasks were skipped/blocked, return the results
 	if len(tasksToExecute) == 0 {
 		return skippedResults, nil
 	}

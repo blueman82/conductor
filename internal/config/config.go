@@ -160,25 +160,10 @@ type ValidationConfig struct {
 	StrictRubric bool `yaml:"strict_rubric"`
 }
 
-// BudgetConfig controls usage budget tracking and enforcement
+// BudgetConfig controls usage budget tracking and rate limit handling
 type BudgetConfig struct {
 	// Enabled enables budget tracking (default: false for zero behavior change)
 	Enabled bool `yaml:"enabled"`
-
-	// MaxCostPerRun is the maximum cost in USD before stopping execution
-	// Set to 0 to disable cost limit
-	MaxCostPerRun float64 `yaml:"max_cost_per_run"`
-
-	// MaxCostPerTask is the maximum cost in USD for a single task (warning only)
-	// Set to 0 to disable per-task warning
-	MaxCostPerTask float64 `yaml:"max_cost_per_task"`
-
-	// WarnThreshold triggers a warning when this percentage of budget is used (0.0-1.0)
-	// Example: 0.8 means warn at 80% of max_cost_per_run
-	WarnThreshold float64 `yaml:"warn_threshold"`
-
-	// CheckInterval specifies when to check budget: "per_wave", "per_task", or "disabled"
-	CheckInterval string `yaml:"check_interval"`
 
 	// Intelligent Rate Limit Auto-Resume (v2.20+)
 	// AutoResume enables intelligent wait/exit on rate limit detection
@@ -468,10 +453,6 @@ func DefaultTTSConfig() TTSConfig {
 func DefaultBudgetConfig() BudgetConfig {
 	return BudgetConfig{
 		Enabled:          false,
-		MaxCostPerRun:    0,   // No limit
-		MaxCostPerTask:   0,   // No limit
-		WarnThreshold:    0.8, // Warn at 80%
-		CheckInterval:    "per_wave",
 		AutoResume:       true,             // Enabled by default
 		MaxWaitDuration:  6 * time.Hour,    // 6 hours
 		AnnounceInterval: 15 * time.Minute, // 15 minutes for TTS announcements
@@ -622,15 +603,11 @@ func LoadConfig(path string) (*Config, error) {
 		Search string `yaml:"search"`
 	}
 	type yamlBudgetConfig struct {
-		Enabled          bool    `yaml:"enabled"`
-		MaxCostPerRun    float64 `yaml:"max_cost_per_run"`
-		MaxCostPerTask   float64 `yaml:"max_cost_per_task"`
-		WarnThreshold    float64 `yaml:"warn_threshold"`
-		CheckInterval    string  `yaml:"check_interval"`
-		AutoResume       bool    `yaml:"auto_resume"`
-		MaxWaitDuration  string  `yaml:"max_wait_duration"`
-		AnnounceInterval string  `yaml:"announce_interval"`
-		SafetyBuffer     string  `yaml:"safety_buffer"`
+		Enabled          bool   `yaml:"enabled"`
+		AutoResume       bool   `yaml:"auto_resume"`
+		MaxWaitDuration  string `yaml:"max_wait_duration"`
+		AnnounceInterval string `yaml:"announce_interval"`
+		SafetyBuffer     string `yaml:"safety_buffer"`
 	}
 	type yamlConfig struct {
 		MaxConcurrency int                  `yaml:"max_concurrency"`
@@ -897,18 +874,6 @@ func LoadConfig(path string) (*Config, error) {
 
 			if _, exists := budgetMap["enabled"]; exists {
 				cfg.Budget.Enabled = budget.Enabled
-			}
-			if _, exists := budgetMap["max_cost_per_run"]; exists {
-				cfg.Budget.MaxCostPerRun = budget.MaxCostPerRun
-			}
-			if _, exists := budgetMap["max_cost_per_task"]; exists {
-				cfg.Budget.MaxCostPerTask = budget.MaxCostPerTask
-			}
-			if _, exists := budgetMap["warn_threshold"]; exists {
-				cfg.Budget.WarnThreshold = budget.WarnThreshold
-			}
-			if _, exists := budgetMap["check_interval"]; exists {
-				cfg.Budget.CheckInterval = budget.CheckInterval
 			}
 			if _, exists := budgetMap["auto_resume"]; exists {
 				cfg.Budget.AutoResume = budget.AutoResume
@@ -1257,17 +1222,6 @@ func (c *Config) Validate() error {
 
 	// Validate Budget configuration
 	if c.Budget.Enabled {
-		if c.Budget.WarnThreshold < 0 || c.Budget.WarnThreshold > 1 {
-			return fmt.Errorf("budget.warn_threshold must be between 0 and 1, got %f", c.Budget.WarnThreshold)
-		}
-		validIntervals := map[string]bool{
-			"per_wave": true,
-			"per_task": true,
-			"disabled": true,
-		}
-		if !validIntervals[c.Budget.CheckInterval] {
-			return fmt.Errorf("budget.check_interval must be one of: per_wave, per_task, disabled; got %q", c.Budget.CheckInterval)
-		}
 		if c.Budget.MaxWaitDuration < 0 {
 			return fmt.Errorf("budget.max_wait_duration must be >= 0, got %v", c.Budget.MaxWaitDuration)
 		}
