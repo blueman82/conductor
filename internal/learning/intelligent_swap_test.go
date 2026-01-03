@@ -159,12 +159,13 @@ func TestNewIntelligentAgentSwapper(t *testing.T) {
 		t.Error("LIP store not set correctly")
 	}
 
-	if swapper.ClaudePath != "claude" {
-		t.Errorf("expected ClaudePath 'claude', got '%s'", swapper.ClaudePath)
+	// Invoker is internal but we can verify it was created
+	if swapper.inv == nil {
+		t.Error("expected inv (claude.Invoker) to be set")
 	}
 
-	if swapper.Timeout != timeout {
-		t.Errorf("expected timeout %v, got %v", timeout, swapper.Timeout)
+	if swapper.Logger != logger {
+		t.Error("logger not set correctly")
 	}
 }
 
@@ -177,8 +178,12 @@ func TestNewIntelligentAgentSwapper_CustomTimeout(t *testing.T) {
 	customTimeout := 120 * time.Second
 	swapper := NewIntelligentAgentSwapper(registry, kg, lip, customTimeout, logger)
 
-	if swapper.Timeout != customTimeout {
-		t.Errorf("expected timeout %v, got %v", customTimeout, swapper.Timeout)
+	// Verify invoker was created with the timeout (accessed internally)
+	if swapper.inv == nil {
+		t.Fatal("expected non-nil invoker")
+	}
+	if swapper.inv.Timeout != customTimeout {
+		t.Errorf("expected invoker timeout %v, got %v", customTimeout, swapper.inv.Timeout)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -64,13 +63,10 @@ type IntelligentAgentSwapper struct {
 	// LIPStore provides progress scores from previous attempts
 	LIPStore LIPCollector
 
-	// ClaudePath is the path to the Claude CLI executable
-	ClaudePath string
+	// inv handles Claude CLI invocation with rate limit retry
+	inv *claude.Invoker
 
-	// Timeout is the maximum time to wait for Claude response
-	Timeout time.Duration
-
-	// Logger is for TTS + visual during rate limit wait
+	// Logger is for TTS + visual during rate limit wait (passed to Invoker)
 	Logger budget.WaiterLogger
 }
 
@@ -78,12 +74,14 @@ type IntelligentAgentSwapper struct {
 // The timeout parameter controls how long to wait for Claude CLI responses.
 // Use config.Timeouts.LLM from configuration for consistent timeout values.
 func NewIntelligentAgentSwapper(registry *agent.Registry, kg KnowledgeGraph, lipStore LIPCollector, timeout time.Duration, logger budget.WaiterLogger) *IntelligentAgentSwapper {
+	inv := claude.NewInvoker()
+	inv.Timeout = timeout
+	inv.Logger = logger
 	return &IntelligentAgentSwapper{
 		Registry:       registry,
 		KnowledgeGraph: kg,
 		LIPStore:       lipStore,
-		ClaudePath:     "claude",
-		Timeout:        timeout,
+		inv:            inv,
 		Logger:         logger,
 	}
 }
@@ -296,67 +294,31 @@ func (ias *IntelligentAgentSwapper) getAvailableAgents() []string {
 }
 
 // invokeClaudeForSwap calls Claude CLI to get agent swap recommendation
+// Uses claude.Invoker for CLI invocation with built-in rate limit handling.
 func (ias *IntelligentAgentSwapper) invokeClaudeForSwap(ctx context.Context, prompt string) (*AgentSwapRecommendation, error) {
-	result, err := ias.invoke(ctx, prompt)
+	req := claude.Request{
+		Prompt: prompt,
+		Schema: AgentSwapSchema(),
+	}
 
-	// Handle rate limit with retry (TTS + visual countdown)
+	// Invoke Claude CLI (rate limit handling is in Invoker)
+	resp, err := ias.inv.Invoke(ctx, req)
 	if err != nil {
-		if info := budget.ParseRateLimitFromError(err.Error()); info != nil {
-			// Use 24h as max - waiter uses actual reset time from info
-			waiter := budget.NewRateLimitWaiter(24*time.Hour, 15*time.Second, 30*time.Second, ias.Logger)
-			if waiter.ShouldWait(info) {
-				if waitErr := waiter.WaitForReset(ctx, info); waitErr != nil {
-					return nil, waitErr
-				}
-				// Retry once after wait
-				return ias.invoke(ctx, prompt)
-			}
-		}
 		return nil, err
 	}
 
-	return result, nil
-}
-
-// invoke performs the actual Claude CLI call (follows qc_intelligent.go pattern)
-func (ias *IntelligentAgentSwapper) invoke(ctx context.Context, prompt string) (*AgentSwapRecommendation, error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, ias.Timeout)
-	defer cancel()
-
-	args := []string{
-		"-p", prompt,
-		"--json-schema", AgentSwapSchema(),
-		"--output-format", "json",
-		"--settings", `{"disableAllHooks": true}`,
-	}
-
-	cmd := exec.CommandContext(ctxWithTimeout, ias.ClaudePath, args...)
-	claude.SetCleanEnv(cmd)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
-	}
-
-	parsed, err := agent.ParseClaudeOutput(string(output))
+	// Parse the response
+	content, _, err := claude.ParseResponse(resp.RawOutput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse claude output: %w", err)
 	}
 
-	if parsed.Content == "" {
+	if content == "" {
 		return nil, fmt.Errorf("empty response from claude")
 	}
 
 	var result AgentSwapRecommendation
-	if err := json.Unmarshal([]byte(parsed.Content), &result); err != nil {
-		// Try extracting JSON from mixed output (fallback)
-		start := strings.Index(parsed.Content, "{")
-		end := strings.LastIndex(parsed.Content, "}")
-		if start >= 0 && end > start {
-			if err := json.Unmarshal([]byte(parsed.Content[start:end+1]), &result); err != nil {
-				return nil, fmt.Errorf("failed to extract JSON: %w", err)
-			}
-			return &result, nil
-		}
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse swap recommendation: %w", err)
 	}
 
