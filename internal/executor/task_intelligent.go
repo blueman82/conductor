@@ -5,30 +5,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 )
 
 // TaskAgentSelector uses Claude to intelligently select an agent for task execution.
 // This is used when task.Agent is empty and QC mode is "intelligent".
+// Uses claude.Invoker for CLI invocation with rate limit handling.
 type TaskAgentSelector struct {
-	Registry   *agent.Registry
-	ClaudePath string
-	Timeout    time.Duration
+	Registry *agent.Registry
+	inv      *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
+	Logger   budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
 }
 
 // NewTaskAgentSelector creates a new task agent selector with the specified timeout.
 // The timeout controls how long to wait for Claude's agent selection response.
-func NewTaskAgentSelector(registry *agent.Registry, timeout time.Duration) *TaskAgentSelector {
+func NewTaskAgentSelector(registry *agent.Registry, timeout time.Duration, logger budget.WaiterLogger) *TaskAgentSelector {
+	inv := claude.NewInvoker()
+	inv.Timeout = timeout
+	inv.Logger = logger
 	return &TaskAgentSelector{
-		Registry:   registry,
-		ClaudePath: "claude",
-		Timeout:    timeout,
+		Registry: registry,
+		inv:      inv,
+		Logger:   logger,
 	}
 }
 
@@ -64,9 +68,41 @@ func (tas *TaskAgentSelector) SelectAgent(ctx context.Context, task models.Task)
 	}
 
 	prompt := tas.buildSelectionPrompt(task, availableAgents)
-	result, err := tas.invokeClaudeForSelection(ctx, prompt)
+
+	// Invoke Claude for recommendation via Invoker (rate limit handling is automatic)
+	req := claude.Request{
+		Prompt: prompt,
+		Schema: TaskAgentSelectionSchema(),
+	}
+
+	resp, err := tas.inv.Invoke(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("intelligent task agent selection failed: %w", err)
+	}
+
+	// Parse the response
+	content, _, err := claude.ParseResponse(resp.RawOutput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse claude output: %w", err)
+	}
+
+	if content == "" {
+		return nil, fmt.Errorf("empty content in claude response")
+	}
+
+	// Parse as selection result - schema guarantees valid JSON
+	var result TaskAgentSelectionResult
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		// Fallback: try to extract JSON from content (handles edge cases)
+		start := strings.Index(content, "{")
+		end := strings.LastIndex(content, "}")
+		if start >= 0 && end > start {
+			if err := json.Unmarshal([]byte(content[start:end+1]), &result); err != nil {
+				return nil, fmt.Errorf("schema enforcement failed: %w (content: %s)", err, content)
+			}
+		} else {
+			return nil, fmt.Errorf("schema enforcement failed: %w (content: %s)", err, content)
+		}
 	}
 
 	if !tas.agentExists(result.Agent) {
@@ -74,7 +110,7 @@ func (tas *TaskAgentSelector) SelectAgent(ctx context.Context, task models.Task)
 		result.Rationale = fmt.Sprintf("Fallback (agent not in registry): %s", result.Rationale)
 	}
 
-	return result, nil
+	return &result, nil
 }
 
 // getAvailableAgents returns a list of agent names from the registry.
@@ -150,45 +186,3 @@ Return JSON with "agent" (single agent name) and "rationale" (brief explanation)
 	return prompt
 }
 
-func (tas *TaskAgentSelector) invokeClaudeForSelection(ctx context.Context, prompt string) (*TaskAgentSelectionResult, error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, tas.Timeout)
-	defer cancel()
-
-	args := []string{
-		"-p", prompt,
-		"--json-schema", TaskAgentSelectionSchema(),
-		"--output-format", "json",
-		"--settings", `{"disableAllHooks": true}`,
-	}
-
-	cmd := exec.CommandContext(ctxWithTimeout, tas.ClaudePath, args...)
-	claude.SetCleanEnv(cmd)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
-	}
-
-	parsed, err := agent.ParseClaudeOutput(string(output))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse claude output: %w", err)
-	}
-
-	if parsed.Content == "" {
-		return nil, fmt.Errorf("empty content in claude response")
-	}
-
-	var result TaskAgentSelectionResult
-	if err := json.Unmarshal([]byte(parsed.Content), &result); err != nil {
-		start := strings.Index(parsed.Content, "{")
-		end := strings.LastIndex(parsed.Content, "}")
-		if start >= 0 && end > start {
-			if err := json.Unmarshal([]byte(parsed.Content[start:end+1]), &result); err != nil {
-				return nil, fmt.Errorf("failed to extract JSON: %w", err)
-			}
-			return &result, nil
-		}
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	return &result, nil
-}
