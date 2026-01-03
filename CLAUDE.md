@@ -188,6 +188,7 @@ conductor observe export --format json
 - `internal/executor/task.go` - Task execution pipeline
 - `internal/executor/qc.go` - Quality control, STOP justification
 - `internal/executor/commit_verifier.go` - Git commit verification
+- `internal/executor/setup_introspector.go` - Pre-wave setup phase
 - `internal/pattern/intelligence.go` - Pattern orchestrator
 - `internal/pattern/claude_enhancement.go` - LLM confidence refinement
 - `internal/budget/waiter.go` - Rate limit waiting with TTS
