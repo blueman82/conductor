@@ -38,9 +38,8 @@ Thumbs.db
 *.log
 logs/
 
-# Conductor home directory (but track config files)
+# Conductor home directory (track example, ignore user config)
 .conductor/
-!.conductor/config.yaml         # Track actual configuration
 !.conductor/config.yaml.example # Track example template
 
 # Claude Code directory (completely ignored - plugin provides commands via plugin/conductor-tools/)
