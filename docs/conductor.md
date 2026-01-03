@@ -3802,7 +3802,7 @@ Execution Event → Logger Interface → TTSLogger → Announcer → Client → 
 
 ---
 
-## Setup Introspector (v3.0+)
+## Setup Introspector (v3.1+)
 
 ### Overview {#setup-overview}
 
