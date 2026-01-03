@@ -10,11 +10,14 @@ import (
 func TestNewClaudeSimilarity(t *testing.T) {
 	cs := NewClaudeSimilarity(90*time.Second, nil)
 
-	if cs.Timeout != 90*time.Second {
-		t.Errorf("Timeout = %v, want 90s", cs.Timeout)
+	if cs.inv == nil {
+		t.Error("Invoker should not be nil")
 	}
-	if cs.ClaudePath != "claude" {
-		t.Errorf("Default ClaudePath = %s, want claude", cs.ClaudePath)
+	if cs.inv.Timeout != 90*time.Second {
+		t.Errorf("Invoker Timeout = %v, want 90s", cs.inv.Timeout)
+	}
+	if cs.inv.ClaudePath != "claude" {
+		t.Errorf("Default ClaudePath = %s, want claude", cs.inv.ClaudePath)
 	}
 	if cs.Logger != nil {
 		t.Errorf("Logger should be nil when not provided")
@@ -24,11 +27,14 @@ func TestNewClaudeSimilarity(t *testing.T) {
 func TestNewClaudeSimilarity_CustomTimeout(t *testing.T) {
 	cs := NewClaudeSimilarity(45*time.Second, nil)
 
-	if cs.Timeout != 45*time.Second {
-		t.Errorf("Timeout = %v, want 45s", cs.Timeout)
+	if cs.inv == nil {
+		t.Error("Invoker should not be nil")
 	}
-	if cs.ClaudePath != "claude" {
-		t.Errorf("ClaudePath = %s, want claude", cs.ClaudePath)
+	if cs.inv.Timeout != 45*time.Second {
+		t.Errorf("Invoker Timeout = %v, want 45s", cs.inv.Timeout)
+	}
+	if cs.inv.ClaudePath != "claude" {
+		t.Errorf("ClaudePath = %s, want claude", cs.inv.ClaudePath)
 	}
 	if cs.Logger != nil {
 		t.Errorf("Logger should be nil when not provided")
@@ -155,8 +161,14 @@ func TestNewClaudeSimilarityWithLogger(t *testing.T) {
 	if cs.Logger != logger {
 		t.Error("Logger should be the one provided")
 	}
-	if cs.Timeout != 90*time.Second {
-		t.Errorf("Timeout = %v, want 90s", cs.Timeout)
+	if cs.inv == nil {
+		t.Error("Invoker should not be nil")
+	}
+	if cs.inv.Timeout != 90*time.Second {
+		t.Errorf("Invoker Timeout = %v, want 90s", cs.inv.Timeout)
+	}
+	if cs.inv.Logger != logger {
+		t.Error("Invoker Logger should be the one provided")
 	}
 }
 
