@@ -50,7 +50,7 @@ func TestParseResponse(t *testing.T) {
 		{
 			name:          "plain text output without JSON",
 			rawOutput:     []byte("Plain text output without JSON"),
-			wantContent:   "",  // No JSON braces found, returns empty
+			wantContent:   "", // No JSON braces found, returns empty
 			wantSessionID: "",
 			wantErr:       false,
 		},
@@ -99,7 +99,7 @@ func TestParseResponse(t *testing.T) {
 		{
 			name:          "malformed JSON without closing brace - returns empty",
 			rawOutput:     []byte(`{"status":"success`),
-			wantContent:   "",  // No closing brace, returns empty
+			wantContent:   "", // No closing brace, returns empty
 			wantSessionID: "",
 			wantErr:       false,
 		},
