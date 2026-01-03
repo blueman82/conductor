@@ -36,6 +36,22 @@ func NewTaskAgentSelector(registry *agent.Registry, timeout time.Duration, logge
 	}
 }
 
+// NewTaskAgentSelectorWithInvoker creates a task agent selector using an external Invoker.
+// This allows sharing a single Invoker across multiple components for consistent
+// configuration and rate limit handling. The invoker should already have Timeout
+// and Logger configured.
+func NewTaskAgentSelectorWithInvoker(registry *agent.Registry, inv *claude.Invoker) *TaskAgentSelector {
+	var logger budget.WaiterLogger
+	if inv != nil {
+		logger = inv.Logger
+	}
+	return &TaskAgentSelector{
+		Registry: registry,
+		inv:      inv,
+		Logger:   logger,
+	}
+}
+
 // TaskAgentSelectionResult contains the result of intelligent agent selection.
 type TaskAgentSelectionResult struct {
 	Agent     string `json:"agent"`

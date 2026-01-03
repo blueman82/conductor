@@ -45,6 +45,24 @@ func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int, timeo
 	}
 }
 
+// NewIntelligentSelectorWithInvoker creates an intelligent selector using an external Invoker.
+// This allows sharing a single Invoker across multiple components for consistent
+// configuration and rate limit handling. The invoker should already have Timeout
+// and Logger configured.
+func NewIntelligentSelectorWithInvoker(registry *agent.Registry, cacheTTLSeconds int, inv *claude.Invoker) *IntelligentSelector {
+	var logger budget.WaiterLogger
+	if inv != nil {
+		logger = inv.Logger
+	}
+	return &IntelligentSelector{
+		Registry:  registry,
+		Cache:     NewQCSelectionCache(cacheTTLSeconds),
+		inv:       inv,
+		Logger:    logger,
+		MaxAgents: 4,
+	}
+}
+
 // SelectAgents uses Claude to recommend QC agents based on task context and executing agent
 func (is *IntelligentSelector) SelectAgents(
 	ctx context.Context,

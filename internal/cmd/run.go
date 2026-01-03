@@ -637,6 +637,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	qc.AgentConfig = plan.QualityControl.Agents // Apply plan-level QC agent configuration
 	qc.Logger = multiLog                        // Wire logger for QC events
 	qc.LLMTimeout = cfg.Timeouts.LLM            // Wire timeouts.llm for intelligent selection
+	qc.ClaudeInvoker = claudeInvoker            // Shared invoker for IntelligentSelector (v3.1+)
 
 	// Create task executor config
 	taskExecCfg := executor.TaskExecutorConfig{
@@ -685,12 +686,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Create shared ClaudeSimilarity for semantic matching (v2.32+)
 	// This instance is shared by Pattern Intelligence and Warm-Up Provider
 	// for consistent configuration and rate limit handling across both systems.
+	// Uses shared claudeInvoker for consistent configuration (v3.1+)
 	var claudeSim *similarity.ClaudeSimilarity
 	if cfg.Pattern.Enabled || cfg.Learning.Enabled {
-		claudeSim = similarity.NewClaudeSimilarity(
-			cfg.Timeouts.LLM,
-			multiLog,
-		)
+		claudeSim = similarity.NewClaudeSimilarityWithInvoker(claudeInvoker)
 	}
 
 	// Wire Pattern Intelligence (v2.24+) with shared ClaudeSimilarity
@@ -698,11 +697,9 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		pi := pattern.NewPatternIntelligence(&cfg.Pattern, learningStore, claudeSim, cfg.Timeouts.Search)
 		if pi != nil {
 			// Set up LLM enhancement if enabled
+			// Uses shared claudeInvoker for consistent configuration (v3.1+)
 			if cfg.Pattern.LLMEnhancementEnabled {
-				enhancer := pattern.NewClaudeEnhancer(
-					cfg.Timeouts.LLM,
-					multiLog,
-				)
+				enhancer := pattern.NewClaudeEnhancerWithInvoker(claudeInvoker)
 				if impl, ok := pi.(*pattern.PatternIntelligenceImpl); ok {
 					impl.SetEnhancer(enhancer)
 				}
@@ -719,19 +716,18 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Wire Architecture Checkpoint (v2.27+)
+	// Uses shared claudeInvoker for consistent configuration (v3.1+)
 	if cfg.Architecture.Enabled {
-		assessor := architecture.NewAssessor(
-			cfg.Timeouts.LLM,
-			multiLog,
-		)
+		assessor := architecture.NewAssessorWithInvoker(claudeInvoker)
 		taskExec.ArchitectureHook = executor.NewArchitectureCheckpointHook(assessor, &cfg.Architecture, consoleLog)
 	}
 
 	// Wire Setup Introspector (v3.0+)
 	// SetupIntrospector uses Claude to analyze the project and determine pre-wave setup commands
+	// Uses shared claudeInvoker for consistent configuration (v3.1+)
 	var setupHook *executor.SetupHook
 	if cfg.Setup.Enabled {
-		introspector := executor.NewSetupIntrospector(cfg.Timeouts.LLM, multiLog)
+		introspector := executor.NewSetupIntrospectorWithInvoker(claudeInvoker)
 		setupHook = executor.NewSetupHook(introspector, consoleLog)
 	}
 
@@ -739,20 +735,21 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Enable when either:
 	// 1. executor.intelligent_agent_selection is true in config, OR
 	// 2. quality_control.agents.mode is "intelligent" (backward compatibility)
+	// Uses shared claudeInvoker for consistent configuration (v3.1+)
 	if agentRegistry != nil && (cfg.Executor.IntelligentAgentSelection || plan.QualityControl.Agents.Mode == "intelligent") {
-		taskExec.TaskAgentSelector = executor.NewTaskAgentSelector(agentRegistry, cfg.Timeouts.LLM, multiLog)
+		taskExec.TaskAgentSelector = executor.NewTaskAgentSelectorWithInvoker(agentRegistry, claudeInvoker)
 		taskExec.IntelligentAgentSelection = true
 	}
 
 	// Wire intelligent agent swapper for retry loops (v2.29+)
 	// Uses Claude to analyze context and select better agents during retries
+	// Uses shared claudeInvoker for consistent configuration (v3.1+)
 	if cfg.Learning.SwapDuringRetries && agentRegistry != nil {
-		taskExec.IntelligentAgentSwapper = learning.NewIntelligentAgentSwapper(
+		taskExec.IntelligentAgentSwapper = learning.NewIntelligentAgentSwapperWithInvoker(
 			agentRegistry,
 			nil, // Knowledge graph not yet implemented
 			nil, // LIP store not yet implemented
-			cfg.Timeouts.LLM,
-			multiLog,
+			claudeInvoker,
 		)
 	}
 

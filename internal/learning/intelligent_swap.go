@@ -86,6 +86,24 @@ func NewIntelligentAgentSwapper(registry *agent.Registry, kg KnowledgeGraph, lip
 	}
 }
 
+// NewIntelligentAgentSwapperWithInvoker creates an IntelligentAgentSwapper using an external Invoker.
+// This allows sharing a single Invoker across multiple components for consistent
+// configuration and rate limit handling. The invoker should already have Timeout
+// and Logger configured.
+func NewIntelligentAgentSwapperWithInvoker(registry *agent.Registry, kg KnowledgeGraph, lipStore LIPCollector, inv *claude.Invoker) *IntelligentAgentSwapper {
+	var logger budget.WaiterLogger
+	if inv != nil {
+		logger = inv.Logger
+	}
+	return &IntelligentAgentSwapper{
+		Registry:       registry,
+		KnowledgeGraph: kg,
+		LIPStore:       lipStore,
+		inv:            inv,
+		Logger:         logger,
+	}
+}
+
 // SelectAgent uses Claude to recommend the best agent for a task retry
 // It considers file extensions, knowledge graph history, LIP progress, and error context
 func (ias *IntelligentAgentSwapper) SelectAgent(ctx context.Context, swapCtx *SwapContext) (*AgentSwapRecommendation, error) {

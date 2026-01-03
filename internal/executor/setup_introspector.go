@@ -47,6 +47,21 @@ func NewSetupIntrospector(timeout time.Duration, logger budget.WaiterLogger) *Se
 	}
 }
 
+// NewSetupIntrospectorWithInvoker creates a setup introspector using an external Invoker.
+// This allows sharing a single Invoker across multiple components for consistent
+// configuration and rate limit handling. The invoker should already have Timeout
+// and Logger configured.
+func NewSetupIntrospectorWithInvoker(inv *claude.Invoker) *SetupIntrospector {
+	var logger budget.WaiterLogger
+	if inv != nil {
+		logger = inv.Logger
+	}
+	return &SetupIntrospector{
+		inv:    inv,
+		Logger: logger,
+	}
+}
+
 // SetupSchema returns the JSON schema for Claude CLI enforcement.
 // This schema ensures Claude returns the expected SetupResult structure.
 func SetupSchema() string {

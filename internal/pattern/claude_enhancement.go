@@ -37,6 +37,21 @@ func NewClaudeEnhancer(timeout time.Duration, logger budget.WaiterLogger) *Claud
 	}
 }
 
+// NewClaudeEnhancerWithInvoker creates an enhancer using an external Invoker.
+// This allows sharing a single Invoker across multiple components for consistent
+// configuration and rate limit handling. The invoker should already have Timeout
+// and Logger configured.
+func NewClaudeEnhancerWithInvoker(inv *claude.Invoker) *ClaudeEnhancer {
+	var logger budget.WaiterLogger
+	if inv != nil {
+		logger = inv.Logger
+	}
+	return &ClaudeEnhancer{
+		inv:    inv,
+		Logger: logger,
+	}
+}
+
 // Enhance calls Claude for confidence refinement with rate limit retry
 func (ce *ClaudeEnhancer) Enhance(ctx context.Context, taskDesc string, patterns string, baseConfidence float64) (*EnhancementResult, error) {
 	prompt := ce.buildPrompt(taskDesc, patterns, baseConfidence)

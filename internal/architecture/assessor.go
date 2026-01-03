@@ -32,6 +32,21 @@ func NewAssessor(timeout time.Duration, logger budget.WaiterLogger) *Assessor {
 	}
 }
 
+// NewAssessorWithInvoker creates an assessor using an external Invoker.
+// This allows sharing a single Invoker across multiple components for consistent
+// configuration and rate limit handling. The invoker should already have Timeout
+// and Logger configured.
+func NewAssessorWithInvoker(inv *claude.Invoker) *Assessor {
+	var logger budget.WaiterLogger
+	if inv != nil {
+		logger = inv.Logger
+	}
+	return &Assessor{
+		inv:    inv,
+		Logger: logger,
+	}
+}
+
 // Assess evaluates a task against the 6-question architecture framework
 func (a *Assessor) Assess(ctx context.Context, task models.Task) (*AssessmentResult, error) {
 	prompt := a.buildPrompt(task)

@@ -42,6 +42,21 @@ func NewClaudeSimilarity(timeout time.Duration, logger budget.WaiterLogger) *Cla
 	}
 }
 
+// NewClaudeSimilarityWithInvoker creates a similarity instance using an external Invoker.
+// This allows sharing a single Invoker across multiple components for consistent
+// configuration and rate limit handling. The invoker should already have Timeout
+// and Logger configured.
+func NewClaudeSimilarityWithInvoker(inv *claude.Invoker) *ClaudeSimilarity {
+	var logger budget.WaiterLogger
+	if inv != nil {
+		logger = inv.Logger
+	}
+	return &ClaudeSimilarity{
+		inv:    inv,
+		Logger: logger,
+	}
+}
+
 // Compare computes semantic similarity between two descriptions using Claude
 func (cs *ClaudeSimilarity) Compare(ctx context.Context, desc1, desc2 string) (*SimilarityResult, error) {
 	prompt := cs.buildPrompt(desc1, desc2)

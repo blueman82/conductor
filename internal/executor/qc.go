@@ -13,6 +13,7 @@ import (
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/architecture"
 	"github.com/harrison/conductor/internal/behavioral"
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/pattern"
@@ -70,6 +71,7 @@ type QualityController struct {
 	IntelligentSelector *IntelligentSelector       // Intelligent selector for mode="intelligent" (v2.4+)
 	BehavioralMetrics   *BehavioralMetricsProvider // Provider for behavioral metrics context (v2.7+)
 	LLMTimeout          time.Duration              // Timeout for LLM calls (from timeouts.llm)
+	ClaudeInvoker       *claude.Invoker            // Shared Claude CLI invoker for intelligent selection (v3.1+)
 
 	// Test/verification results for QC prompt injection (v2.9+)
 	TestCommandResults     []TestCommandResult           // Results from RunTestCommands
@@ -529,7 +531,12 @@ func (qc *QualityController) ReviewMultiAgent(ctx context.Context, task models.T
 	if qc.AgentConfig.Mode == "intelligent" {
 		// Ensure intelligent selector is initialized
 		if qc.IntelligentSelector == nil && qc.Registry != nil {
-			qc.IntelligentSelector = NewIntelligentSelector(qc.Registry, qc.AgentConfig.CacheTTLSeconds, qc.LLMTimeout, nil)
+			// Use shared ClaudeInvoker if available (v3.1+), otherwise create standalone
+			if qc.ClaudeInvoker != nil {
+				qc.IntelligentSelector = NewIntelligentSelectorWithInvoker(qc.Registry, qc.AgentConfig.CacheTTLSeconds, qc.ClaudeInvoker)
+			} else {
+				qc.IntelligentSelector = NewIntelligentSelector(qc.Registry, qc.AgentConfig.CacheTTLSeconds, qc.LLMTimeout, nil)
+			}
 		}
 
 		selCtx = &SelectionContext{
