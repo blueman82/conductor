@@ -13,6 +13,7 @@ import (
 	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/architecture"
 	"github.com/harrison/conductor/internal/budget"
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/display"
 	"github.com/harrison/conductor/internal/executor"
@@ -587,6 +588,15 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Create shared Claude CLI invoker for all components (v3.1+)
+	// This centralizes Claude CLI configuration across:
+	// SetupIntrospector, ClaudeSimilarity, ClaudeEnhancer, IntelligentSelector,
+	// TaskAgentSelector, Assessor, and IntelligentAgentSwapper.
+	// Components receive consistent timeout and rate limit handling.
+	claudeInvoker := claude.NewInvoker()
+	claudeInvoker.Timeout = cfg.Timeouts.LLM
+	claudeInvoker.Logger = multiLog
+
 	// Create agent registry for agent discovery
 	agentRegistry := agent.NewRegistry("")
 	if _, err := agentRegistry.Discover(); err != nil {
@@ -762,6 +772,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		TargetTask:    singleTask,
 		Similarity:    claudeSim,
 		SetupHook:     setupHook,
+		ClaudeInvoker: claudeInvoker, // Shared Claude CLI invoker for all components (v3.1+)
 	})
 
 	// Create context with timeout

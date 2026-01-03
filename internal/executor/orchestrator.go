@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/similarity"
 )
@@ -87,6 +88,14 @@ type OrchestratorConfig struct {
 	// Created once at startup and injected into both subsystems for
 	// consistent configuration and rate limit handling.
 	Similarity *similarity.ClaudeSimilarity
+	// ClaudeInvoker is the shared Claude CLI invoker instance (v3.1+)
+	// Created once at startup with cfg.Timeouts.LLM and multiLog.
+	// Components that need Claude CLI invocation receive this shared instance
+	// for consistent configuration, rate limit handling, and logging.
+	// This centralizes Claude CLI configuration across all components:
+	// SetupIntrospector, ClaudeSimilarity, ClaudeEnhancer, IntelligentSelector,
+	// TaskAgentSelector, Assessor, and IntelligentAgentSwapper.
+	ClaudeInvoker *claude.Invoker
 }
 
 // Orchestrator coordinates plan execution, handles graceful shutdown, and aggregates results.
@@ -110,6 +119,9 @@ type Orchestrator struct {
 	// similarity provides Claude-based semantic similarity (v2.32+)
 	// Shared instance for PatternIntelligence and WarmUpProvider
 	similarity *similarity.ClaudeSimilarity
+	// claudeInvoker is the shared Claude CLI invoker (v3.1+)
+	// Centralized instance for all components that need Claude CLI
+	claudeInvoker *claude.Invoker
 }
 
 // NewOrchestrator creates a new Orchestrator instance.
@@ -192,6 +204,7 @@ func NewOrchestratorFromConfig(config OrchestratorConfig) *Orchestrator {
 		setupHook:         config.SetupHook,
 		targetTask:        config.TargetTask,
 		similarity:        config.Similarity,
+		claudeInvoker:     config.ClaudeInvoker,
 	}
 
 	// Wire Pattern Intelligence hook to WaveExecutor if provided (v2.23+)
@@ -306,6 +319,14 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (
 // Returns nil if no similarity was configured.
 func (o *Orchestrator) Similarity() *similarity.ClaudeSimilarity {
 	return o.similarity
+}
+
+// ClaudeInvoker returns the shared Claude CLI invoker instance (v3.1+).
+// This centralized invoker provides consistent configuration and rate limit
+// handling for all components that need Claude CLI invocation.
+// Returns nil if no invoker was configured.
+func (o *Orchestrator) ClaudeInvoker() *claude.Invoker {
+	return o.claudeInvoker
 }
 
 // aggregateResults processes task results and creates an ExecutionResult summary.
