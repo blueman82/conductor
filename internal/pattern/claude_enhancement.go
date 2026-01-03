@@ -4,11 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 
-	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/claude"
 )
@@ -20,89 +17,53 @@ type EnhancementResult struct {
 	RiskFactors        []string `json:"risk_factors"`
 }
 
-// ClaudeEnhancer enhances pattern confidence using Claude CLI
+// ClaudeEnhancer enhances pattern confidence using Claude CLI.
+// Uses claude.Invoker for CLI invocation with rate limit handling.
 type ClaudeEnhancer struct {
-	Timeout    time.Duration
-	ClaudePath string
-	Logger     budget.WaiterLogger // For TTS + visual during rate limit wait
+	inv    *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
+	Logger budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
 }
 
 // NewClaudeEnhancer creates an enhancer with the specified timeout.
 // The timeout parameter controls how long to wait for Claude CLI responses.
 // Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
 func NewClaudeEnhancer(timeout time.Duration, logger budget.WaiterLogger) *ClaudeEnhancer {
+	inv := claude.NewInvoker()
+	inv.Timeout = timeout
+	inv.Logger = logger
 	return &ClaudeEnhancer{
-		Timeout:    timeout,
-		ClaudePath: "claude",
-		Logger:     logger,
+		inv:    inv,
+		Logger: logger,
 	}
 }
 
 // Enhance calls Claude for confidence refinement with rate limit retry
 func (ce *ClaudeEnhancer) Enhance(ctx context.Context, taskDesc string, patterns string, baseConfidence float64) (*EnhancementResult, error) {
-	result, err := ce.invoke(ctx, taskDesc, patterns, baseConfidence)
+	prompt := ce.buildPrompt(taskDesc, patterns, baseConfidence)
 
-	// Handle rate limit with retry (TTS + visual countdown)
-	// Wait for actual reset time from Claude output - no arbitrary caps
+	req := claude.Request{
+		Prompt: prompt,
+		Schema: EnhancementSchema(),
+	}
+
+	// Invoke Claude CLI (rate limit handling is in Invoker)
+	resp, err := ce.inv.Invoke(ctx, req)
 	if err != nil {
-		if info := budget.ParseRateLimitFromError(err.Error()); info != nil {
-			// Use 24h as max - waiter uses actual reset time from info
-			waiter := budget.NewRateLimitWaiter(24*time.Hour, 15*time.Second, 30*time.Second, ce.Logger)
-			if waiter.ShouldWait(info) {
-				if waitErr := waiter.WaitForReset(ctx, info); waitErr != nil {
-					return nil, waitErr
-				}
-				// Retry once after wait
-				return ce.invoke(ctx, taskDesc, patterns, baseConfidence)
-			}
-		}
 		return nil, err
 	}
 
-	return result, nil
-}
-
-// invoke performs the actual Claude CLI call (follows qc_intelligent.go pattern)
-func (ce *ClaudeEnhancer) invoke(ctx context.Context, taskDesc, patterns string, baseConfidence float64) (*EnhancementResult, error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, ce.Timeout)
-	defer cancel()
-
-	prompt := ce.buildPrompt(taskDesc, patterns, baseConfidence)
-
-	args := []string{
-		"-p", prompt,
-		"--json-schema", EnhancementSchema(),
-		"--output-format", "json",
-		"--settings", `{"disableAllHooks": true}`,
-	}
-
-	cmd := exec.CommandContext(ctxWithTimeout, ce.ClaudePath, args...)
-	claude.SetCleanEnv(cmd)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
-	}
-
-	parsed, err := agent.ParseClaudeOutput(string(output))
+	// Parse the response
+	content, _, err := claude.ParseResponse(resp.RawOutput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse claude output: %w", err)
 	}
 
-	if parsed.Content == "" {
+	if content == "" {
 		return nil, fmt.Errorf("empty response from claude")
 	}
 
 	var result EnhancementResult
-	if err := json.Unmarshal([]byte(parsed.Content), &result); err != nil {
-		// Try extracting JSON from mixed output (fallback)
-		start := strings.Index(parsed.Content, "{")
-		end := strings.LastIndex(parsed.Content, "}")
-		if start >= 0 && end > start {
-			if err := json.Unmarshal([]byte(parsed.Content[start:end+1]), &result); err != nil {
-				return nil, fmt.Errorf("failed to extract JSON: %w", err)
-			}
-			return &result, nil
-		}
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse enhancement result: %w", err)
 	}
 
