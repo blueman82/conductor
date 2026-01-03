@@ -124,6 +124,8 @@ budget:
   enabled: true
   auto_resume: true           # Wait for rate limit reset
   max_wait_duration: 6h       # Save state if wait exceeds this
+setup:
+  enabled: false              # Pre-wave setup via Claude introspection
 ```
 
 ## Documentation
