@@ -4,90 +4,66 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/models"
 )
 
-// Assessor evaluates tasks for architectural impact using Claude CLI
+// Assessor evaluates tasks for architectural impact using Claude CLI.
+// Uses claude.Invoker for CLI invocation with rate limit handling.
 type Assessor struct {
-	Timeout    time.Duration
-	ClaudePath string
-	Logger     budget.WaiterLogger
+	inv    *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
+	Logger budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
 }
 
 // NewAssessor creates an assessor with the specified timeout.
 // The timeout parameter controls how long to wait for Claude CLI responses.
+// Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
 func NewAssessor(timeout time.Duration, logger budget.WaiterLogger) *Assessor {
+	inv := claude.NewInvoker()
+	inv.Timeout = timeout
+	inv.Logger = logger
 	return &Assessor{
-		Timeout:    timeout,
-		ClaudePath: "claude",
-		Logger:     logger,
+		inv:    inv,
+		Logger: logger,
 	}
 }
 
 // Assess evaluates a task against the 6-question architecture framework
 func (a *Assessor) Assess(ctx context.Context, task models.Task) (*AssessmentResult, error) {
-	result, err := a.invoke(ctx, task)
+	prompt := a.buildPrompt(task)
 
-	// Handle rate limit with retry
+	req := claude.Request{
+		Prompt: prompt,
+		Schema: AssessmentSchema(),
+	}
+
+	// Invoke Claude CLI (rate limit handling is in Invoker)
+	resp, err := a.inv.Invoke(ctx, req)
 	if err != nil {
-		if info := budget.ParseRateLimitFromError(err.Error()); info != nil {
-			waiter := budget.NewRateLimitWaiter(24*time.Hour, 15*time.Second, 30*time.Second, a.Logger)
-			if waiter.ShouldWait(info) {
-				if waitErr := waiter.WaitForReset(ctx, info); waitErr != nil {
-					return nil, waitErr
-				}
-				return a.invoke(ctx, task)
-			}
-		}
 		return nil, err
 	}
 
-	return result, nil
-}
-
-func (a *Assessor) invoke(ctx context.Context, task models.Task) (*AssessmentResult, error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, a.Timeout)
-	defer cancel()
-
-	prompt := a.buildPrompt(task)
-
-	args := []string{
-		"-p", prompt,
-		"--json-schema", AssessmentSchema(),
-		"--output-format", "json",
-		"--settings", `{"disableAllHooks": true}`,
-	}
-
-	cmd := exec.CommandContext(ctxWithTimeout, a.ClaudePath, args...)
-	claude.SetCleanEnv(cmd)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
-	}
-
-	parsed, err := agent.ParseClaudeOutput(string(output))
+	// Parse the response
+	content, _, err := claude.ParseResponse(resp.RawOutput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse claude output: %w", err)
 	}
 
-	if parsed.Content == "" {
+	if content == "" {
 		return nil, fmt.Errorf("empty response from claude")
 	}
 
 	var result AssessmentResult
-	if err := json.Unmarshal([]byte(parsed.Content), &result); err != nil {
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		// Try extracting JSON from mixed output
-		start := strings.Index(parsed.Content, "{")
-		end := strings.LastIndex(parsed.Content, "}")
+		start := strings.Index(content, "{")
+		end := strings.LastIndex(content, "}")
 		if start >= 0 && end > start {
-			if err := json.Unmarshal([]byte(parsed.Content[start:end+1]), &result); err != nil {
+			if err := json.Unmarshal([]byte(content[start:end+1]), &result); err != nil {
 				return nil, fmt.Errorf("failed to extract JSON: %w", err)
 			}
 			return &result, nil

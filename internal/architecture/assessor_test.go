@@ -12,11 +12,17 @@ func TestNewAssessor(t *testing.T) {
 	if a == nil {
 		t.Fatal("expected non-nil assessor")
 	}
-	if a.Timeout != timeout {
-		t.Errorf("expected %v timeout, got %v", timeout, a.Timeout)
+	if a.inv == nil {
+		t.Error("Invoker should not be nil")
 	}
-	if a.ClaudePath != "claude" {
-		t.Errorf("expected claude path, got %s", a.ClaudePath)
+	if a.inv.Timeout != timeout {
+		t.Errorf("Invoker Timeout = %v, want 90s", a.inv.Timeout)
+	}
+	if a.inv.ClaudePath != "claude" {
+		t.Errorf("Default ClaudePath = %s, want claude", a.inv.ClaudePath)
+	}
+	if a.Logger != nil {
+		t.Errorf("Logger should be nil when not provided")
 	}
 }
 
@@ -24,8 +30,52 @@ func TestNewAssessor_CustomTimeout(t *testing.T) {
 	timeout := 60 * time.Second
 	a := NewAssessor(timeout, nil)
 
-	if a.Timeout != timeout {
-		t.Errorf("expected %v timeout, got %v", timeout, a.Timeout)
+	if a.inv == nil {
+		t.Error("Invoker should not be nil")
+	}
+	if a.inv.Timeout != timeout {
+		t.Errorf("Invoker Timeout = %v, want 60s", a.inv.Timeout)
+	}
+	if a.inv.ClaudePath != "claude" {
+		t.Errorf("ClaudePath = %s, want claude", a.inv.ClaudePath)
+	}
+	if a.Logger != nil {
+		t.Errorf("Logger should be nil when not provided")
+	}
+}
+
+// mockWaiterLogger implements budget.WaiterLogger for testing
+type mockWaiterLogger struct {
+	countdownCalls int
+	announceCalls  int
+}
+
+func (m *mockWaiterLogger) LogRateLimitCountdown(remaining, total time.Duration) {
+	m.countdownCalls++
+}
+
+func (m *mockWaiterLogger) LogRateLimitAnnounce(remaining, total time.Duration) {
+	m.announceCalls++
+}
+
+func TestNewAssessorWithLogger(t *testing.T) {
+	logger := &mockWaiterLogger{}
+	a := NewAssessor(90*time.Second, logger)
+
+	if a.Logger == nil {
+		t.Error("Logger should not be nil when provided")
+	}
+	if a.Logger != logger {
+		t.Error("Logger should be the one provided")
+	}
+	if a.inv == nil {
+		t.Error("Invoker should not be nil")
+	}
+	if a.inv.Timeout != 90*time.Second {
+		t.Errorf("Invoker Timeout = %v, want 90s", a.inv.Timeout)
+	}
+	if a.inv.Logger != logger {
+		t.Error("Invoker Logger should be the one provided")
 	}
 }
 
