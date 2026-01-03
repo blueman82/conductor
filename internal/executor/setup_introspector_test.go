@@ -163,13 +163,13 @@ func TestSetupResult_Fields(t *testing.T) {
 
 func TestSetupResult_JSONParsing(t *testing.T) {
 	tests := []struct {
-		name           string
-		jsonInput      string
-		wantCmdCount   int
-		wantReasoning  string
-		wantFirstCmd   string
-		wantFirstReq   bool
-		wantErr        bool
+		name          string
+		jsonInput     string
+		wantCmdCount  int
+		wantReasoning string
+		wantFirstCmd  string
+		wantFirstReq  bool
+		wantErr       bool
 	}{
 		{
 			name: "valid with commands",
