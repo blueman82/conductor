@@ -146,7 +146,7 @@ func TestIntelligentSelectionIntegration(t *testing.T) {
 
 	t.Run("cache prevents duplicate selections", func(t *testing.T) {
 		cache := NewQCSelectionCache(3600)
-		selector := NewIntelligentSelector(registry, 3600, 90*time.Second)
+		selector := NewIntelligentSelector(registry, 3600, 90*time.Second, nil)
 		selector.Cache = cache
 
 		task := models.Task{
@@ -205,7 +205,7 @@ func TestIntelligentSelectionIntegration(t *testing.T) {
 	})
 
 	t.Run("guardrails enforce blocked agents", func(t *testing.T) {
-		selector := NewIntelligentSelector(registry, 3600, 90*time.Second)
+		selector := NewIntelligentSelector(registry, 3600, 90*time.Second, nil)
 
 		recommendation := &IntelligentAgentRecommendation{
 			Agents:    []string{"security-auditor", "golang-pro", "blocked-agent"},
@@ -324,7 +324,7 @@ func testIntelligentSelectQCAgents(
 	mockSelector *testIntelligentSelector,
 ) ([]string, string, error) {
 	// Create real selector for guardrails (use default 90s timeout for tests)
-	selector := NewIntelligentSelector(registry, config.CacheTTLSeconds, 90*time.Second)
+	selector := NewIntelligentSelector(registry, config.CacheTTLSeconds, 90*time.Second, nil)
 
 	// Apply guardrails to mock recommendation
 	result := selector.applyGuardrails(mockSelector.mockRecommendation, config)
@@ -381,7 +381,7 @@ func TestIntelligentSelectionEdgeCases(t *testing.T) {
 		registry := agent.NewRegistry("/nonexistent")
 		registry.Discover()
 
-		selector := NewIntelligentSelector(registry, 3600, 90*time.Second)
+		selector := NewIntelligentSelector(registry, 3600, 90*time.Second, nil)
 		selector.MaxAgents = 4 // Default
 
 		recommendation := &IntelligentAgentRecommendation{

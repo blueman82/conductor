@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/agent"
+	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -42,6 +43,11 @@ func SelectQCAgentsWithContext(
 	case "intelligent":
 		// Use Claude-based intelligent selection
 		if selCtx != nil && selCtx.IntelligentSelector != nil {
+			// Get logger from selector if available
+			var logger budget.WaiterLogger
+			if selCtx.IntelligentSelector != nil {
+				logger = selCtx.IntelligentSelector.Logger
+			}
 			selectedAgents, rationale, err := IntelligentSelectQCAgents(
 				ctx,
 				task,
@@ -50,6 +56,7 @@ func SelectQCAgentsWithContext(
 				registry,
 				selCtx.IntelligentSelector,
 				selCtx.LLMTimeout,
+				logger,
 			)
 			if err == nil && len(selectedAgents) > 0 {
 				agents = selectedAgents
