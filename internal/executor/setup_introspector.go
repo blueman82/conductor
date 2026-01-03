@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/harrison/conductor/internal/agent"
 	"github.com/harrison/conductor/internal/budget"
 	"github.com/harrison/conductor/internal/claude"
 )
@@ -29,21 +28,22 @@ type SetupResult struct {
 }
 
 // SetupIntrospector uses Claude CLI to analyze a project and determine setup commands.
-// Follows the ClaudeSimilarity pattern from internal/similarity/claude_similarity.go
+// Uses claude.Invoker for CLI invocation with rate limit handling.
 type SetupIntrospector struct {
-	Timeout    time.Duration
-	ClaudePath string
-	Logger     budget.WaiterLogger // For TTS + visual during rate limit wait
+	inv    *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
+	Logger budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
 }
 
 // NewSetupIntrospector creates a setup introspector with the specified timeout.
 // The timeout parameter controls how long to wait for Claude CLI responses.
 // Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
 func NewSetupIntrospector(timeout time.Duration, logger budget.WaiterLogger) *SetupIntrospector {
+	inv := claude.NewInvoker()
+	inv.Timeout = timeout
+	inv.Logger = logger
 	return &SetupIntrospector{
-		Timeout:    timeout,
-		ClaudePath: "claude",
-		Logger:     logger,
+		inv:    inv,
+		Logger: logger,
 	}
 }
 
@@ -88,72 +88,34 @@ func SetupSchema() string {
 
 // Introspect calls Claude CLI to analyze the project and determine setup commands
 func (si *SetupIntrospector) Introspect(ctx context.Context) (*SetupResult, error) {
-	result, err := si.invoke(ctx)
-
-	// Handle rate limit with retry (TTS + visual countdown)
-	// Wait for actual reset time from Claude output - no arbitrary caps
-	if err != nil {
-		if info := budget.ParseRateLimitFromError(err.Error()); info != nil {
-			// Use 24h as max - waiter uses actual reset time from info
-			waiter := budget.NewRateLimitWaiter(24*time.Hour, 15*time.Second, 30*time.Second, si.Logger)
-			if waiter.ShouldWait(info) {
-				if waitErr := waiter.WaitForReset(ctx, info); waitErr != nil {
-					return nil, waitErr
-				}
-				// Retry once after wait
-				return si.invoke(ctx)
-			}
-		}
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// invoke performs the actual Claude CLI call (follows ClaudeSimilarity.invoke() pattern)
-func (si *SetupIntrospector) invoke(ctx context.Context) (*SetupResult, error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, si.Timeout)
-	defer cancel()
-
 	prompt, err := si.buildPrompt()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build prompt: %w", err)
 	}
 
-	args := []string{
-		"-p", prompt,
-		"--json-schema", SetupSchema(),
-		"--output-format", "json",
-		"--settings", `{"disableAllHooks": true}`,
+	req := claude.Request{
+		Prompt: prompt,
+		Schema: SetupSchema(),
 	}
 
-	cmd := exec.CommandContext(ctxWithTimeout, si.ClaudePath, args...)
-	claude.SetCleanEnv(cmd)
-	output, err := cmd.CombinedOutput()
+	// Invoke Claude CLI (rate limit handling is in Invoker)
+	resp, err := si.inv.Invoke(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("claude invocation failed: %w (output: %s)", err, string(output))
+		return nil, err
 	}
 
-	parsed, err := agent.ParseClaudeOutput(string(output))
+	// Parse the response
+	content, _, err := claude.ParseResponse(resp.RawOutput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse claude output: %w", err)
 	}
 
-	if parsed.Content == "" {
+	if content == "" {
 		return nil, fmt.Errorf("empty response from claude")
 	}
 
 	var result SetupResult
-	if err := json.Unmarshal([]byte(parsed.Content), &result); err != nil {
-		// Try extracting JSON from mixed output (fallback)
-		start := strings.Index(parsed.Content, "{")
-		end := strings.LastIndex(parsed.Content, "}")
-		if start >= 0 && end > start {
-			if err := json.Unmarshal([]byte(parsed.Content[start:end+1]), &result); err != nil {
-				return nil, fmt.Errorf("failed to extract JSON: %w", err)
-			}
-			return &result, nil
-		}
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse setup result: %w", err)
 	}
 

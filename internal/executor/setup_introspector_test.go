@@ -28,11 +28,14 @@ func (m *mockSetupWaiterLogger) LogRateLimitAnnounce(remaining, total time.Durat
 func TestNewSetupIntrospector(t *testing.T) {
 	si := NewSetupIntrospector(90*time.Second, nil)
 
-	if si.Timeout != 90*time.Second {
-		t.Errorf("Timeout = %v, want 90s", si.Timeout)
+	if si.inv == nil {
+		t.Error("Invoker should not be nil")
 	}
-	if si.ClaudePath != "claude" {
-		t.Errorf("Default ClaudePath = %s, want claude", si.ClaudePath)
+	if si.inv.Timeout != 90*time.Second {
+		t.Errorf("Invoker Timeout = %v, want 90s", si.inv.Timeout)
+	}
+	if si.inv.ClaudePath != "claude" {
+		t.Errorf("Default ClaudePath = %s, want claude", si.inv.ClaudePath)
 	}
 	if si.Logger != nil {
 		t.Errorf("Logger should be nil when not provided")
@@ -42,11 +45,14 @@ func TestNewSetupIntrospector(t *testing.T) {
 func TestNewSetupIntrospector_CustomTimeout(t *testing.T) {
 	si := NewSetupIntrospector(45*time.Second, nil)
 
-	if si.Timeout != 45*time.Second {
-		t.Errorf("Timeout = %v, want 45s", si.Timeout)
+	if si.inv == nil {
+		t.Error("Invoker should not be nil")
 	}
-	if si.ClaudePath != "claude" {
-		t.Errorf("ClaudePath = %s, want claude", si.ClaudePath)
+	if si.inv.Timeout != 45*time.Second {
+		t.Errorf("Invoker Timeout = %v, want 45s", si.inv.Timeout)
+	}
+	if si.inv.ClaudePath != "claude" {
+		t.Errorf("ClaudePath = %s, want claude", si.inv.ClaudePath)
 	}
 	if si.Logger != nil {
 		t.Errorf("Logger should be nil when not provided")
@@ -63,8 +69,14 @@ func TestNewSetupIntrospectorWithLogger(t *testing.T) {
 	if si.Logger != logger {
 		t.Error("Logger should be the one provided")
 	}
-	if si.Timeout != 90*time.Second {
-		t.Errorf("Timeout = %v, want 90s", si.Timeout)
+	if si.inv == nil {
+		t.Error("Invoker should not be nil")
+	}
+	if si.inv.Timeout != 90*time.Second {
+		t.Errorf("Invoker Timeout = %v, want 90s", si.inv.Timeout)
+	}
+	if si.inv.Logger != logger {
+		t.Error("Invoker Logger should be the one provided")
 	}
 }
 
