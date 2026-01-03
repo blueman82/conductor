@@ -30,7 +30,7 @@ func TestNewStore(t *testing.T) {
 		},
 		{
 			name:    "returns error for invalid path",
-			dbPath:  "/invalid/nonexistent/deep/path/db.db",
+			dbPath:  "/dev/null/invalid/db.db", // /dev/null is not a directory, so this path is truly invalid
 			wantErr: true,
 		},
 		{

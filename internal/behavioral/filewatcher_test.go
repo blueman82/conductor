@@ -242,12 +242,19 @@ func TestFileWatcher_PatternFiltering(t *testing.T) {
 		t.Fatal("Timeout waiting for event")
 	}
 
-	// Ensure no more events (for the non-matching file)
-	select {
-	case event := <-fw.Events():
-		t.Errorf("Unexpected event for file: %v", event.Path)
-	case <-time.After(200 * time.Millisecond):
-		// Expected - no more events
+	// Ensure no events for non-matching files (allow additional events for matching file)
+	timeout := time.After(200 * time.Millisecond)
+drainLoop:
+	for {
+		select {
+		case event := <-fw.Events():
+			// Additional events for the matching file are OK (e.g., multiple filesystem events)
+			if event.Path != matchingFile {
+				t.Errorf("Unexpected event for non-matching file: %v", event.Path)
+			}
+		case <-timeout:
+			break drainLoop
+		}
 	}
 }
 

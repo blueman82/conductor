@@ -221,6 +221,10 @@ func TestUpdateTaskStatusPermissionDenied(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("chmod 000 semantics differ on Windows")
 	}
+	// Skip when running as root since root bypasses permission checks
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
 
 	tmpDir := t.TempDir()
 	planPath := filepath.Join(tmpDir, "plan.md")

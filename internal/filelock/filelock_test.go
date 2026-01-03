@@ -589,6 +589,11 @@ func TestLockAndWrite_DeletesLockFile(t *testing.T) {
 }
 
 func TestLockAndWrite_DeletesLockFileOnError(t *testing.T) {
+	// Skip when running as root since root bypasses permission checks
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
 	tmpDir := t.TempDir()
 	// Create a read-only directory to force write failure
 	readOnlyDir := filepath.Join(tmpDir, "readonly")

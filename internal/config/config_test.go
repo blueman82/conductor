@@ -512,6 +512,10 @@ func TestLoadConfigPermissionDenied(t *testing.T) {
 	if os.Getenv("GOOS") == "windows" {
 		t.Skip("Skipping permission test on Windows")
 	}
+	// Skip when running as root since root bypasses permission checks
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
 
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
