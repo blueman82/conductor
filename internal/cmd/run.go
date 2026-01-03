@@ -717,6 +717,14 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		taskExec.ArchitectureHook = executor.NewArchitectureCheckpointHook(assessor, &cfg.Architecture, consoleLog)
 	}
 
+	// Wire Setup Introspector (v3.0+)
+	// SetupIntrospector uses Claude to analyze the project and determine pre-wave setup commands
+	var setupHook *executor.SetupHook
+	if cfg.Setup.Enabled {
+		introspector := executor.NewSetupIntrospector(cfg.Timeouts.LLM, multiLog)
+		setupHook = executor.NewSetupHook(introspector, consoleLog)
+	}
+
 	// Wire intelligent task agent selection (v2.15+)
 	// Enable when either:
 	// 1. executor.intelligent_agent_selection is true in config, OR
@@ -753,6 +761,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		RetryFailed:   cfg.RetryFailed,
 		TargetTask:    singleTask,
 		Similarity:    claudeSim,
+		SetupHook:     setupHook,
 	})
 
 	// Create context with timeout
