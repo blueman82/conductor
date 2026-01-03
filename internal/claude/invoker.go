@@ -3,8 +3,10 @@ package claude
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/harrison/conductor/internal/budget"
@@ -184,4 +186,88 @@ func (inv *Invoker) invoke(ctx context.Context, req Request) (*Response, error) 
 	return &Response{
 		RawOutput: output,
 	}, nil
+}
+
+// ParseResponse extracts JSON content from Claude CLI output.
+// This implements the same parsing logic as agent.ParseClaudeOutput with
+// JSON extraction fallback, avoiding circular imports.
+//
+// The function:
+// 1. Attempts to parse the Claude CLI JSON wrapper (structured_output, content, result fields)
+// 2. If content is empty, applies fallback JSON extraction (find { and } braces)
+// 3. Returns content string and sessionID for callers to unmarshal into specific types
+//
+// Example usage:
+//
+//	resp, err := inv.Invoke(ctx, req)
+//	content, sessionID, err := claude.ParseResponse(resp.RawOutput)
+//	var result MyType
+//	json.Unmarshal([]byte(content), &result)
+func ParseResponse(rawOutput []byte) (content string, sessionID string, err error) {
+	output := string(rawOutput)
+
+	// First try to parse as JSON directly
+	var jsonMap map[string]interface{}
+	if err := json.Unmarshal(rawOutput, &jsonMap); err != nil {
+		// Direct parse failed - try to extract JSON from mixed output
+		// Claude CLI sometimes outputs errors/warnings before the JSON response
+		jsonStart := strings.Index(output, "{")
+		jsonEnd := strings.LastIndex(output, "}")
+		if jsonStart >= 0 && jsonEnd > jsonStart {
+			jsonStr := output[jsonStart : jsonEnd+1]
+			if err := json.Unmarshal([]byte(jsonStr), &jsonMap); err != nil {
+				// Still can't parse - return raw output as content
+				return output, "", nil
+			}
+			// Successfully extracted JSON from mixed output
+		} else {
+			// No JSON found - return empty content
+			return "", "", nil
+		}
+	}
+
+	// Extract session_id field (available in Claude CLI output)
+	if sessionIDField, ok := jsonMap["session_id"]; ok {
+		if sessionIDStr, ok := sessionIDField.(string); ok {
+			sessionID = sessionIDStr
+		}
+	}
+
+	// Check for "structured_output" field (used when --json-schema is specified)
+	// This takes highest precedence as it's the schema-validated output
+	if structuredOutput, ok := jsonMap["structured_output"]; ok && structuredOutput != nil {
+		// Check if it's a non-empty map (valid structured response)
+		if structMap, isMap := structuredOutput.(map[string]interface{}); isMap && len(structMap) > 0 {
+			// Re-serialize the structured output as JSON string for downstream parsing
+			if outputBytes, err := json.Marshal(structuredOutput); err == nil {
+				return string(outputBytes), sessionID, nil
+			}
+		}
+		// If structured_output is null, empty, or not a map, fall through to other fields
+	}
+
+	// Check for "result" field (used by some agents like conductor-qc)
+	if resultField, ok := jsonMap["result"]; ok {
+		if resultStr, ok := resultField.(string); ok {
+			return resultStr, sessionID, nil
+		}
+	}
+
+	// Check for "content" field (standard claude CLI JSON format)
+	if contentField, ok := jsonMap["content"]; ok {
+		if contentStr, ok := contentField.(string); ok {
+			return contentStr, sessionID, nil
+		}
+	}
+
+	// Fallback: extract JSON from raw output (handles code-fenced or mixed output)
+	// This follows the pattern from claude_similarity.go:104-112
+	start := strings.Index(output, "{")
+	end := strings.LastIndex(output, "}")
+	if start >= 0 && end > start {
+		return output[start : end+1], sessionID, nil
+	}
+
+	// No JSON content found
+	return "", sessionID, nil
 }
