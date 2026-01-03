@@ -49,7 +49,7 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [Server Setup](#server-setup)
   - [Configuration](#configuration-1)
   - [Available Voices](#available-voices)
-- [Setup Introspector](#setup-introspector-v30)
+- [Setup Introspector](#setup-introspector-v31)
   - [Overview](#setup-overview)
   - [How It Works](#setup-how-it-works)
   - [Configuration](#setup-configuration)
