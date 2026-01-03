@@ -1,13 +1,13 @@
 <coding_guidelines>
 # CLAUDE.md
-Last updated: 2026-01-02
+Last updated: 2026-01-03
 
 
 ## Project Overview
 
 Conductor is a Go CLI for autonomous multi-agent orchestration. It parses plan files (Markdown/YAML), calculates task dependencies via graph algorithms, and executes tasks in parallel waves with QC reviews and adaptive learning.
 
-**Current**: v3.0.0 - Major config cleanup removing 30+ dead/deprecated fields. All 71 config options now verified active. Breaking: removed `feedback.*`, `console.*`, deprecated timeout fields. See CHANGELOG.md for migration guide.
+**Current**: v3.1.0 - SetupIntrospector: Pre-wave setup phase that lets Claude introspect the project to determine setup commands before Wave 1 execution. See v3.0.0 for config cleanup details.
 
 ## Quick Reference
 
