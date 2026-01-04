@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/harrison/conductor/internal/config"
+	"github.com/harrison/conductor/internal/models"
 )
 
 // mockGitCheckpointer implements GitCheckpointer for testing.
@@ -86,14 +87,14 @@ type rollbackMockLogger struct {
 	errors []string
 }
 
-func (m *rollbackMockLogger) LogTestCommands(entries []TestCommandResult)                  {}
+func (m *rollbackMockLogger) LogTestCommands(entries []TestCommandResult)                    {}
 func (m *rollbackMockLogger) LogCriterionVerifications(entries []CriterionVerificationResult) {}
-func (m *rollbackMockLogger) LogDocTargetVerifications(entries []DocTargetResult)          {}
-func (m *rollbackMockLogger) LogErrorPattern(pattern interface{})                          {}
-func (m *rollbackMockLogger) LogDetectedError(detected interface{})                        {}
-func (m *rollbackMockLogger) Warnf(format string, args ...interface{})                     { m.warns = append(m.warns, format) }
-func (m *rollbackMockLogger) Info(message string)                                          { m.infos = append(m.infos, message) }
-func (m *rollbackMockLogger) Infof(format string, args ...interface{})                     { m.infos = append(m.infos, format) }
+func (m *rollbackMockLogger) LogDocTargetVerifications(entries []DocTargetResult)            {}
+func (m *rollbackMockLogger) LogErrorPattern(pattern interface{})                            {}
+func (m *rollbackMockLogger) LogDetectedError(detected interface{})                          {}
+func (m *rollbackMockLogger) Warnf(format string, args ...interface{})                       { m.warns = append(m.warns, format) }
+func (m *rollbackMockLogger) Info(message string)                                            { m.infos = append(m.infos, message) }
+func (m *rollbackMockLogger) Infof(format string, args ...interface{})                       { m.infos = append(m.infos, format) }
 
 func TestNewRollbackHook(t *testing.T) {
 	tests := []struct {
@@ -192,9 +193,15 @@ func TestRollbackHook_PreTask(t *testing.T) {
 			}
 
 			hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
-			metadata := make(map[string]interface{})
 
-			err := hook.PreTask(context.Background(), 1, metadata)
+			// Create task with models.Task
+			task := &models.Task{
+				Number:   "1",
+				Name:     "Test Task",
+				Metadata: make(map[string]interface{}),
+			}
+
+			err := hook.PreTask(context.Background(), task)
 			if err != nil {
 				t.Errorf("PreTask returned error: %v", err)
 			}
@@ -204,7 +211,7 @@ func TestRollbackHook_PreTask(t *testing.T) {
 					tt.wantCheckpointCalls, checkpointer.createCheckpointCalled)
 			}
 
-			_, hasCheckpoint := metadata["rollback_checkpoint"]
+			_, hasCheckpoint := task.Metadata["rollback_checkpoint"]
 			if tt.wantMetadata && !hasCheckpoint {
 				t.Error("expected checkpoint in metadata")
 			}
@@ -217,23 +224,72 @@ func TestRollbackHook_PreTask(t *testing.T) {
 
 func TestRollbackHook_PreTask_NilHook(t *testing.T) {
 	var hook *RollbackHook
-	err := hook.PreTask(context.Background(), 1, nil)
+	task := &models.Task{Number: "1", Name: "Test"}
+	err := hook.PreTask(context.Background(), task)
 	if err != nil {
 		t.Errorf("nil hook PreTask should not error, got %v", err)
 	}
 }
 
+func TestRollbackHook_PreTask_NilTask(t *testing.T) {
+	checkpointer := &mockGitCheckpointer{}
+	manager := &RollbackManager{
+		Config:       &config.RollbackConfig{Enabled: true},
+		Checkpointer: checkpointer,
+	}
+	hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
+
+	err := hook.PreTask(context.Background(), nil)
+	if err != nil {
+		t.Errorf("PreTask with nil task should not error, got %v", err)
+	}
+	if checkpointer.createCheckpointCalled != 0 {
+		t.Error("should not create checkpoint for nil task")
+	}
+}
+
+func TestRollbackHook_PreTask_NilMetadata(t *testing.T) {
+	checkpointer := &mockGitCheckpointer{}
+	manager := &RollbackManager{
+		Config:       &config.RollbackConfig{Enabled: true},
+		Checkpointer: checkpointer,
+	}
+	hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
+
+	// Task with nil metadata - should be initialized by PreTask
+	task := &models.Task{
+		Number:   "1",
+		Name:     "Test Task",
+		Metadata: nil, // Explicitly nil
+	}
+
+	err := hook.PreTask(context.Background(), task)
+	if err != nil {
+		t.Errorf("PreTask returned error: %v", err)
+	}
+
+	// Metadata should be initialized
+	if task.Metadata == nil {
+		t.Error("PreTask should initialize nil metadata")
+	}
+
+	// Checkpoint should be stored
+	if _, ok := task.Metadata["rollback_checkpoint"]; !ok {
+		t.Error("expected checkpoint in metadata")
+	}
+}
+
 func TestRollbackHook_PostTask(t *testing.T) {
 	tests := []struct {
-		name              string
-		enabled           bool
-		mode              config.RollbackMode
-		verdict           string
-		attempt           int
-		maxRetries        int
-		success           bool
-		wantRestore       bool
-		wantDeleteCalls   int
+		name            string
+		enabled         bool
+		mode            config.RollbackMode
+		verdict         string
+		attempt         int
+		maxRetries      int
+		success         bool
+		wantRestore     bool
+		wantDeleteCalls int
 	}{
 		{
 			name:            "no rollback on GREEN verdict",
@@ -317,16 +373,20 @@ func TestRollbackHook_PostTask(t *testing.T) {
 
 			hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
 
-			// Setup metadata with checkpoint
-			metadata := map[string]interface{}{
-				"rollback_checkpoint": &CheckpointInfo{
-					BranchName: "checkpoint-test",
-					CommitHash: "abc123",
-					CreatedAt:  time.Now(),
+			// Create task with checkpoint in metadata
+			task := &models.Task{
+				Number: "1",
+				Name:   "Test Task",
+				Metadata: map[string]interface{}{
+					"rollback_checkpoint": &CheckpointInfo{
+						BranchName: "checkpoint-test",
+						CommitHash: "abc123",
+						CreatedAt:  time.Now(),
+					},
 				},
 			}
 
-			err := hook.PostTask(context.Background(), 1, metadata, tt.verdict, tt.attempt, tt.maxRetries, tt.success)
+			err := hook.PostTask(context.Background(), task, tt.verdict, tt.attempt, tt.maxRetries, tt.success)
 			if err != nil {
 				t.Errorf("PostTask returned error: %v", err)
 			}
@@ -355,10 +415,14 @@ func TestRollbackHook_PostTask_NoCheckpoint(t *testing.T) {
 
 	hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
 
-	// Empty metadata - no checkpoint
-	metadata := make(map[string]interface{})
+	// Task with empty metadata - no checkpoint
+	task := &models.Task{
+		Number:   "1",
+		Name:     "Test Task",
+		Metadata: make(map[string]interface{}),
+	}
 
-	err := hook.PostTask(context.Background(), 1, metadata, "RED", 1, 2, false)
+	err := hook.PostTask(context.Background(), task, "RED", 1, 2, false)
 	if err != nil {
 		t.Errorf("PostTask without checkpoint should not error, got %v", err)
 	}
@@ -371,17 +435,35 @@ func TestRollbackHook_PostTask_NoCheckpoint(t *testing.T) {
 
 func TestRollbackHook_PostTask_NilHook(t *testing.T) {
 	var hook *RollbackHook
-	err := hook.PostTask(context.Background(), 1, nil, "RED", 1, 2, false)
+	task := &models.Task{Number: "1", Name: "Test"}
+	err := hook.PostTask(context.Background(), task, "RED", 1, 2, false)
 	if err != nil {
 		t.Errorf("nil hook PostTask should not error, got %v", err)
 	}
 }
 
+func TestRollbackHook_PostTask_NilTask(t *testing.T) {
+	checkpointer := &mockGitCheckpointer{}
+	manager := &RollbackManager{
+		Config:       &config.RollbackConfig{Enabled: true, Mode: config.RollbackModeAutoOnRed},
+		Checkpointer: checkpointer,
+	}
+	hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
+
+	err := hook.PostTask(context.Background(), nil, "RED", 1, 2, false)
+	if err != nil {
+		t.Errorf("PostTask with nil task should not error, got %v", err)
+	}
+	if checkpointer.restoreCalled != 0 {
+		t.Error("should not restore for nil task")
+	}
+}
+
 func TestRollbackHook_Enabled(t *testing.T) {
 	tests := []struct {
-		name    string
-		hook    *RollbackHook
-		want    bool
+		name string
+		hook *RollbackHook
+		want bool
 	}{
 		{
 			name: "nil hook returns false",
@@ -440,16 +522,20 @@ func TestRollbackHook_PostTask_RestoreError(t *testing.T) {
 
 	hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
 
-	metadata := map[string]interface{}{
-		"rollback_checkpoint": &CheckpointInfo{
-			BranchName: "checkpoint-test",
-			CommitHash: "abc123",
-			CreatedAt:  time.Now(),
+	task := &models.Task{
+		Number: "1",
+		Name:   "Test Task",
+		Metadata: map[string]interface{}{
+			"rollback_checkpoint": &CheckpointInfo{
+				BranchName: "checkpoint-test",
+				CommitHash: "abc123",
+				CreatedAt:  time.Now(),
+			},
 		},
 	}
 
 	// Should not return error - graceful degradation
-	err := hook.PostTask(context.Background(), 1, metadata, "RED", 1, 2, false)
+	err := hook.PostTask(context.Background(), task, "RED", 1, 2, false)
 	if err != nil {
 		t.Errorf("PostTask with restore error should not fail, got %v", err)
 	}
@@ -469,16 +555,20 @@ func TestRollbackHook_PostTask_DeleteError(t *testing.T) {
 
 	hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
 
-	metadata := map[string]interface{}{
-		"rollback_checkpoint": &CheckpointInfo{
-			BranchName: "checkpoint-test",
-			CommitHash: "abc123",
-			CreatedAt:  time.Now(),
+	task := &models.Task{
+		Number: "1",
+		Name:   "Test Task",
+		Metadata: map[string]interface{}{
+			"rollback_checkpoint": &CheckpointInfo{
+				BranchName: "checkpoint-test",
+				CommitHash: "abc123",
+				CreatedAt:  time.Now(),
+			},
 		},
 	}
 
 	// Should not return error - graceful degradation (cleanup failure is non-fatal)
-	err := hook.PostTask(context.Background(), 1, metadata, "GREEN", 1, 2, true)
+	err := hook.PostTask(context.Background(), task, "GREEN", 1, 2, true)
 	if err != nil {
 		t.Errorf("PostTask with delete error should not fail, got %v", err)
 	}
@@ -500,11 +590,15 @@ func TestRollbackHook_IntegrationScenario(t *testing.T) {
 	hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
 	ctx := context.Background()
 
-	// Simulate task metadata
-	metadata := make(map[string]interface{})
+	// Create task
+	task := &models.Task{
+		Number:   "1",
+		Name:     "Integration Test Task",
+		Metadata: make(map[string]interface{}),
+	}
 
 	// PreTask: Create checkpoint
-	if err := hook.PreTask(ctx, 1, metadata); err != nil {
+	if err := hook.PreTask(ctx, task); err != nil {
 		t.Fatalf("PreTask failed: %v", err)
 	}
 
@@ -512,13 +606,13 @@ func TestRollbackHook_IntegrationScenario(t *testing.T) {
 	if checkpointer.createCheckpointCalled != 1 {
 		t.Error("expected checkpoint to be created in PreTask")
 	}
-	if _, ok := metadata["rollback_checkpoint"]; !ok {
+	if _, ok := task.Metadata["rollback_checkpoint"]; !ok {
 		t.Error("expected checkpoint to be stored in metadata")
 	}
 
 	// Simulate task failure with max retries exhausted
 	// attempt=3 > maxRetries=2 triggers rollback
-	if err := hook.PostTask(ctx, 1, metadata, "RED", 3, 2, false); err != nil {
+	if err := hook.PostTask(ctx, task, "RED", 3, 2, false); err != nil {
 		t.Fatalf("PostTask failed: %v", err)
 	}
 
@@ -547,13 +641,18 @@ func TestRollbackHook_SuccessfulTaskCleanup(t *testing.T) {
 
 	hook := NewRollbackHook(manager, checkpointer, &rollbackMockLogger{})
 	ctx := context.Background()
-	metadata := make(map[string]interface{})
+
+	task := &models.Task{
+		Number:   "1",
+		Name:     "Success Test Task",
+		Metadata: make(map[string]interface{}),
+	}
 
 	// PreTask: Create checkpoint
-	hook.PreTask(ctx, 1, metadata)
+	hook.PreTask(ctx, task)
 
 	// PostTask with GREEN verdict and success=true
-	hook.PostTask(ctx, 1, metadata, "GREEN", 1, 2, true)
+	hook.PostTask(ctx, task, "GREEN", 1, 2, true)
 
 	// Should NOT restore (no rollback needed)
 	if checkpointer.restoreCalled != 0 {
@@ -563,5 +662,31 @@ func TestRollbackHook_SuccessfulTaskCleanup(t *testing.T) {
 	// Should cleanup checkpoint
 	if checkpointer.deleteCheckpointCalled != 1 {
 		t.Error("expected checkpoint cleanup on success")
+	}
+}
+
+func TestParseTaskNumberForRollback(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int
+	}{
+		{"1", 1},
+		{"42", 42},
+		{"1.1", 1},
+		{"1.2", 1},
+		{"task-1", 1},
+		{"task-42", 42},
+		{"feature-123", 123},
+		{"", 0},
+		{"abc", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := parseTaskNumberForRollback(tt.input)
+			if result != tt.expected {
+				t.Errorf("parseTaskNumberForRollback(%q) = %d, want %d", tt.input, result, tt.expected)
+			}
+		})
 	}
 }

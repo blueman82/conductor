@@ -549,11 +549,10 @@ func (te *DefaultTaskExecutor) rollbackPostTask(ctx context.Context, task *model
 		return
 	}
 
-	taskNum := parseTaskNumber(task.Number)
 	// Use retryLimit as maxRetries (this is how the retry loop determines exhaustion)
 	maxRetries := te.retryLimit
 
-	if err := te.RollbackHook.PostTask(ctx, taskNum, task.Metadata, verdict, attempt, maxRetries, success); err != nil {
+	if err := te.RollbackHook.PostTask(ctx, task, verdict, attempt, maxRetries, success); err != nil {
 		// Graceful degradation: log but don't block
 		if te.Logger != nil {
 			te.Logger.Warnf("Rollback PostTask failed for task %s: %v", task.Number, err)
@@ -897,13 +896,9 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 	}
 
 	// Rollback pre-task hook: Create task checkpoint before agent invocation (v3.2+)
-	// Initialize task.Metadata if nil (needed for checkpoint storage)
-	if task.Metadata == nil {
-		task.Metadata = make(map[string]interface{})
-	}
+	// PreTask initializes task.Metadata if nil (for checkpoint storage)
 	if te.RollbackHook != nil {
-		taskNum := parseTaskNumber(task.Number)
-		if err := te.RollbackHook.PreTask(ctx, taskNum, task.Metadata); err != nil {
+		if err := te.RollbackHook.PreTask(ctx, &task); err != nil {
 			// Graceful degradation: log but don't block
 			if te.Logger != nil {
 				te.Logger.Warnf("Rollback checkpoint failed for task %s: %v", task.Number, err)
