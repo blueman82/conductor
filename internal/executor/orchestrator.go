@@ -80,6 +80,9 @@ type OrchestratorConfig struct {
 	PatternHook *PatternIntelligenceHook
 	// Setup hook for pre-wave project introspection (v3.0+)
 	SetupHook *SetupHook
+	// Branch guard hook for plan-level branch protection (v3.2+)
+	// Runs BEFORE SetupHook to ensure branch safety before any other operations
+	BranchGuardHook *BranchGuardHook
 	// TargetTask filters execution to a single task (v2.27+)
 	// Empty string means run all tasks
 	TargetTask string
@@ -113,6 +116,8 @@ type Orchestrator struct {
 	patternHook *PatternIntelligenceHook
 	// Setup hook for pre-wave project introspection (v3.0+)
 	setupHook *SetupHook
+	// Branch guard hook for plan-level branch protection (v3.2+)
+	branchGuardHook *BranchGuardHook
 	// targetTask filters execution to a single task (v2.27+)
 	// Empty string means run all tasks
 	targetTask string
@@ -202,6 +207,7 @@ func NewOrchestratorFromConfig(config OrchestratorConfig) *Orchestrator {
 		FileToTaskMapping: config.FileToTaskMapping,
 		patternHook:       config.PatternHook,
 		setupHook:         config.SetupHook,
+		branchGuardHook:   config.BranchGuardHook,
 		targetTask:        config.TargetTask,
 		similarity:        config.Similarity,
 		claudeInvoker:     config.ClaudeInvoker,
@@ -286,6 +292,21 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (
 	}()
 
 	startTime := time.Now()
+
+	// Run branch guard hook FIRST, before any other operations (v3.2+)
+	// BranchGuardHook ensures branch safety, creates checkpoints, and switches to working branch if needed
+	if o.branchGuardHook != nil {
+		result, err := o.branchGuardHook.Guard(ctx)
+		if err != nil {
+			// Return error to block execution (e.g., dirty state with require_clean_state: true)
+			return nil, fmt.Errorf("branch guard failed: %w", err)
+		}
+		// Log result if WasProtected (orchestrator-level visibility)
+		if result != nil && result.WasProtected && o.logger != nil {
+			fmt.Printf("Branch Guard: Switched from protected branch '%s' to working branch '%s'\n",
+				result.OriginalBranch, result.WorkingBranch)
+		}
+	}
 
 	// Run setup hook before wave execution (v3.0+)
 	// SetupHook introspects the project and runs required setup commands
