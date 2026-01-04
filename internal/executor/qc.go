@@ -19,6 +19,23 @@ import (
 	"github.com/harrison/conductor/internal/pattern"
 )
 
+// MaxAgentOutputLen is the maximum length of agent output to include in QC prompts.
+// Set to 50KB to leave room for other prompt sections within Claude's context window.
+// Claude's context window is ~200K tokens (~800KB chars), but QC prompts include
+// task requirements, success criteria, test results, historical context, etc.
+const MaxAgentOutputLen = 50 * 1024 // 50KB
+
+// truncateOutput truncates a string to maxLen bytes, adding a truncation notice if needed.
+// This prevents QC prompts from exceeding Claude's context window limit.
+func truncateOutput(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	// Keep the beginning (most relevant context) and add truncation notice
+	truncated := s[:maxLen]
+	return truncated + "\n\n... [OUTPUT TRUNCATED - exceeded " + fmt.Sprintf("%dKB", maxLen/1024) + " limit] ..."
+}
+
 // domainSpecificChecks maps file extensions to domain-specific QC review criteria
 var domainSpecificChecks = map[string]string{
 	".go": agent.XMLSection("go_review_criteria", `- Error handling follows if err != nil pattern
