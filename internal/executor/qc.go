@@ -279,7 +279,10 @@ func (qc *QualityController) BuildStructuredReviewPrompt(ctx context.Context, ta
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString(agent.XMLSection("agent_output", output))
+	// Truncate agent output to prevent exceeding context window (max ~50KB to leave room for other sections)
+	// Claude's context window is ~200K tokens (~800KB chars), but QC prompt has many other sections
+	truncatedOutput := truncateOutput(output, MaxAgentOutputLen)
+	sb.WriteString(agent.XMLSection("agent_output", truncatedOutput))
 	sb.WriteString("\n\n")
 
 	// Inject test command results (v2.9+)
