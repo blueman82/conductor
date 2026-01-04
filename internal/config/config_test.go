@@ -2793,3 +2793,267 @@ func TestTimeoutsConfigMerge(t *testing.T) {
 		t.Errorf("Timeouts.Search = %v, want default %v", cfg.Timeouts.Search, 30*time.Second)
 	}
 }
+
+// TestDefaultRollbackConfig tests default rollback configuration values
+func TestDefaultRollbackConfig(t *testing.T) {
+	cfg := DefaultRollbackConfig()
+
+	// Rollback should be DISABLED by default
+	if cfg.Enabled != false {
+		t.Errorf("Enabled = %v, want false", cfg.Enabled)
+	}
+	if cfg.Mode != RollbackModeAutoOnMaxRetries {
+		t.Errorf("Mode = %q, want %q", cfg.Mode, RollbackModeAutoOnMaxRetries)
+	}
+	if cfg.RequireCleanState != true {
+		t.Errorf("RequireCleanState = %v, want true", cfg.RequireCleanState)
+	}
+	expectedBranches := []string{"main", "master", "develop"}
+	if len(cfg.ProtectedBranches) != len(expectedBranches) {
+		t.Errorf("ProtectedBranches len = %d, want %d", len(cfg.ProtectedBranches), len(expectedBranches))
+	}
+	for i, branch := range expectedBranches {
+		if cfg.ProtectedBranches[i] != branch {
+			t.Errorf("ProtectedBranches[%d] = %q, want %q", i, cfg.ProtectedBranches[i], branch)
+		}
+	}
+	if cfg.WorkingBranchPrefix != "conductor-run/" {
+		t.Errorf("WorkingBranchPrefix = %q, want %q", cfg.WorkingBranchPrefix, "conductor-run/")
+	}
+	if cfg.CheckpointPrefix != "conductor-checkpoint-" {
+		t.Errorf("CheckpointPrefix = %q, want %q", cfg.CheckpointPrefix, "conductor-checkpoint-")
+	}
+	if cfg.KeepCheckpointDays != 7 {
+		t.Errorf("KeepCheckpointDays = %d, want 7", cfg.KeepCheckpointDays)
+	}
+}
+
+// TestDefaultConfigIncludesRollback tests that DefaultConfig includes rollback config
+func TestDefaultConfigIncludesRollback(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Verify Rollback config is included with correct defaults
+	if cfg.Rollback.Enabled != false {
+		t.Errorf("Rollback.Enabled = %v, want false (default)", cfg.Rollback.Enabled)
+	}
+	if cfg.Rollback.Mode != RollbackModeAutoOnMaxRetries {
+		t.Errorf("Rollback.Mode = %q, want %q (default)", cfg.Rollback.Mode, RollbackModeAutoOnMaxRetries)
+	}
+	if cfg.Rollback.RequireCleanState != true {
+		t.Errorf("Rollback.RequireCleanState = %v, want true (default)", cfg.Rollback.RequireCleanState)
+	}
+}
+
+// TestLoadConfigRollback tests loading rollback configuration from YAML
+func TestLoadConfigRollback(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configYAML := `rollback:
+  enabled: true
+  mode: auto_on_red
+  require_clean_state: false
+  protected_branches: [main, production]
+  working_branch_prefix: "my-conductor/"
+  checkpoint_prefix: "my-checkpoint-"
+  keep_checkpoint_days: 14
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if !cfg.Rollback.Enabled {
+		t.Errorf("Rollback.Enabled = %v, want true", cfg.Rollback.Enabled)
+	}
+	if cfg.Rollback.Mode != RollbackModeAutoOnRed {
+		t.Errorf("Rollback.Mode = %q, want %q", cfg.Rollback.Mode, RollbackModeAutoOnRed)
+	}
+	if cfg.Rollback.RequireCleanState != false {
+		t.Errorf("Rollback.RequireCleanState = %v, want false", cfg.Rollback.RequireCleanState)
+	}
+	if len(cfg.Rollback.ProtectedBranches) != 2 {
+		t.Errorf("ProtectedBranches len = %d, want 2", len(cfg.Rollback.ProtectedBranches))
+	}
+	if cfg.Rollback.ProtectedBranches[0] != "main" {
+		t.Errorf("ProtectedBranches[0] = %q, want %q", cfg.Rollback.ProtectedBranches[0], "main")
+	}
+	if cfg.Rollback.ProtectedBranches[1] != "production" {
+		t.Errorf("ProtectedBranches[1] = %q, want %q", cfg.Rollback.ProtectedBranches[1], "production")
+	}
+	if cfg.Rollback.WorkingBranchPrefix != "my-conductor/" {
+		t.Errorf("WorkingBranchPrefix = %q, want %q", cfg.Rollback.WorkingBranchPrefix, "my-conductor/")
+	}
+	if cfg.Rollback.CheckpointPrefix != "my-checkpoint-" {
+		t.Errorf("CheckpointPrefix = %q, want %q", cfg.Rollback.CheckpointPrefix, "my-checkpoint-")
+	}
+	if cfg.Rollback.KeepCheckpointDays != 14 {
+		t.Errorf("KeepCheckpointDays = %d, want 14", cfg.Rollback.KeepCheckpointDays)
+	}
+
+	// Validate entire config
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() error = %v", err)
+	}
+}
+
+// TestRollbackConfigMerge verifies partial config merges correctly with defaults
+func TestRollbackConfigMerge(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Only specify some rollback values, others should use defaults
+	configYAML := `rollback:
+  enabled: true
+  mode: manual
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Explicitly set values
+	if !cfg.Rollback.Enabled {
+		t.Errorf("Rollback.Enabled = %v, want true", cfg.Rollback.Enabled)
+	}
+	if cfg.Rollback.Mode != RollbackModeManual {
+		t.Errorf("Rollback.Mode = %q, want %q", cfg.Rollback.Mode, RollbackModeManual)
+	}
+
+	// Defaults should be preserved for unset values
+	if cfg.Rollback.RequireCleanState != true {
+		t.Errorf("Rollback.RequireCleanState = %v, want default true", cfg.Rollback.RequireCleanState)
+	}
+	if cfg.Rollback.WorkingBranchPrefix != "conductor-run/" {
+		t.Errorf("WorkingBranchPrefix = %q, want default %q", cfg.Rollback.WorkingBranchPrefix, "conductor-run/")
+	}
+	if cfg.Rollback.CheckpointPrefix != "conductor-checkpoint-" {
+		t.Errorf("CheckpointPrefix = %q, want default %q", cfg.Rollback.CheckpointPrefix, "conductor-checkpoint-")
+	}
+	if cfg.Rollback.KeepCheckpointDays != 7 {
+		t.Errorf("KeepCheckpointDays = %d, want default 7", cfg.Rollback.KeepCheckpointDays)
+	}
+
+	// Validate entire config
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() error = %v", err)
+	}
+}
+
+// TestRollbackConfigValidation tests validation of rollback configuration
+func TestRollbackConfigValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		config    string
+		wantError bool
+		errorMsg  string
+	}{
+		{
+			name: "valid config with all fields",
+			config: `rollback:
+  enabled: true
+  mode: auto_on_max_retries
+  working_branch_prefix: "conductor-run/"
+  checkpoint_prefix: "conductor-checkpoint-"
+  keep_checkpoint_days: 7
+`,
+			wantError: false,
+		},
+		{
+			name: "invalid mode",
+			config: `rollback:
+  enabled: true
+  mode: invalid_mode
+`,
+			wantError: true,
+			errorMsg:  "rollback.mode must be one of",
+		},
+		{
+			name: "empty working_branch_prefix when enabled",
+			config: `rollback:
+  enabled: true
+  working_branch_prefix: ""
+`,
+			wantError: true,
+			errorMsg:  "working_branch_prefix cannot be empty",
+		},
+		{
+			name: "empty checkpoint_prefix when enabled",
+			config: `rollback:
+  enabled: true
+  checkpoint_prefix: ""
+`,
+			wantError: true,
+			errorMsg:  "checkpoint_prefix cannot be empty",
+		},
+		{
+			name: "negative keep_checkpoint_days",
+			config: `rollback:
+  enabled: true
+  keep_checkpoint_days: -1
+`,
+			wantError: true,
+			errorMsg:  "keep_checkpoint_days must be >= 0",
+		},
+		{
+			name: "disabled rollback with invalid mode is ok",
+			config: `rollback:
+  enabled: false
+  mode: invalid_mode
+`,
+			wantError: false, // Validation only runs when enabled
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			if err := os.WriteFile(configPath, []byte(tt.config), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				if !tt.wantError {
+					t.Fatalf("LoadConfig() unexpected error = %v", err)
+				}
+				return
+			}
+
+			// Validate the loaded config
+			err = cfg.Validate()
+			if (err != nil) != tt.wantError {
+				t.Errorf("Validate() error = %v, wantError %v", err, tt.wantError)
+			}
+			if tt.wantError && err != nil && tt.errorMsg != "" {
+				if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Validate() error = %q, want error containing %q", err.Error(), tt.errorMsg)
+				}
+			}
+		})
+	}
+}
+
+// TestRollbackModeConstants tests rollback mode constants
+func TestRollbackModeConstants(t *testing.T) {
+	// Verify the mode constants have the expected string values
+	if RollbackModeManual != "manual" {
+		t.Errorf("RollbackModeManual = %q, want %q", RollbackModeManual, "manual")
+	}
+	if RollbackModeAutoOnRed != "auto_on_red" {
+		t.Errorf("RollbackModeAutoOnRed = %q, want %q", RollbackModeAutoOnRed, "auto_on_red")
+	}
+	if RollbackModeAutoOnMaxRetries != "auto_on_max_retries" {
+		t.Errorf("RollbackModeAutoOnMaxRetries = %q, want %q", RollbackModeAutoOnMaxRetries, "auto_on_max_retries")
+	}
+}

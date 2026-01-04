@@ -267,6 +267,44 @@ type SetupConfig struct {
 	Enabled bool `yaml:"enabled"`
 }
 
+// RollbackMode specifies when to perform automatic rollback
+type RollbackMode string
+
+const (
+	// RollbackModeManual only rolls back when explicitly requested
+	RollbackModeManual RollbackMode = "manual"
+
+	// RollbackModeAutoOnRed automatically rolls back on RED verdict
+	RollbackModeAutoOnRed RollbackMode = "auto_on_red"
+
+	// RollbackModeAutoOnMaxRetries automatically rolls back after max retries exhausted
+	RollbackModeAutoOnMaxRetries RollbackMode = "auto_on_max_retries"
+)
+
+// RollbackConfig controls git checkpoint and rollback functionality (v3.2+)
+type RollbackConfig struct {
+	// Enabled enables the checkpoint/rollback feature (default: false for zero behavior change)
+	Enabled bool `yaml:"enabled"`
+
+	// Mode specifies when to rollback: "manual", "auto_on_red", "auto_on_max_retries" (default: auto_on_max_retries)
+	Mode RollbackMode `yaml:"mode"`
+
+	// RequireCleanState blocks execution if uncommitted changes exist (default: true)
+	RequireCleanState bool `yaml:"require_clean_state"`
+
+	// ProtectedBranches are branches that trigger working branch creation (default: [main, master, develop])
+	ProtectedBranches []string `yaml:"protected_branches"`
+
+	// WorkingBranchPrefix is the prefix for working branches (default: "conductor-run/")
+	WorkingBranchPrefix string `yaml:"working_branch_prefix"`
+
+	// CheckpointPrefix is the prefix for checkpoint branches (default: "conductor-checkpoint-")
+	CheckpointPrefix string `yaml:"checkpoint_prefix"`
+
+	// KeepCheckpointDays is the number of days to keep old checkpoint branches (default: 7)
+	KeepCheckpointDays int `yaml:"keep_checkpoint_days"`
+}
+
 // ExecutorConfig controls task execution behavior
 type ExecutorConfig struct {
 	// EnforceDependencyChecks enables running dependency check commands before task invocation.
@@ -367,6 +405,9 @@ type Config struct {
 	// Setup controls pre-wave setup phase functionality
 	Setup SetupConfig `yaml:"setup"`
 
+	// Rollback controls git checkpoint and rollback functionality (v3.2+)
+	Rollback RollbackConfig `yaml:"rollback"`
+
 	// Budget controls usage budget tracking and enforcement
 	Budget BudgetConfig `yaml:"budget"`
 
@@ -459,6 +500,20 @@ func DefaultTTSConfig() TTSConfig {
 func DefaultSetupConfig() SetupConfig {
 	return SetupConfig{
 		Enabled: false,
+	}
+}
+
+// DefaultRollbackConfig returns RollbackConfig with sensible default values
+// Rollback is DISABLED by default to ensure zero behavior change unless explicitly enabled
+func DefaultRollbackConfig() RollbackConfig {
+	return RollbackConfig{
+		Enabled:             false,
+		Mode:                RollbackModeAutoOnMaxRetries,
+		RequireCleanState:   true,
+		ProtectedBranches:   []string{"main", "master", "develop"},
+		WorkingBranchPrefix: "conductor-run/",
+		CheckpointPrefix:    "conductor-checkpoint-",
+		KeepCheckpointDays:  7,
 	}
 }
 
@@ -564,6 +619,7 @@ func DefaultConfig() *Config {
 		},
 		TTS:          DefaultTTSConfig(),
 		Setup:        DefaultSetupConfig(),
+		Rollback:     DefaultRollbackConfig(),
 		Budget:       DefaultBudgetConfig(),
 		Pattern:      DefaultPatternConfig(),
 		Architecture: DefaultArchitectureConfig(),
@@ -638,6 +694,7 @@ func LoadConfig(path string) (*Config, error) {
 		Executor       ExecutorConfig       `yaml:"executor"`
 		TTS            yamlTTSConfig        `yaml:"tts"`
 		Setup          SetupConfig          `yaml:"setup"`
+		Rollback       RollbackConfig       `yaml:"rollback"`
 		Budget         yamlBudgetConfig     `yaml:"budget"`
 		Pattern        PatternConfig        `yaml:"pattern"`
 		Architecture   ArchitectureConfig   `yaml:"architecture"`
@@ -889,6 +946,36 @@ func LoadConfig(path string) (*Config, error) {
 
 			if _, exists := setupMap["enabled"]; exists {
 				cfg.Setup.Enabled = setup.Enabled
+			}
+		}
+
+		// Merge Rollback config
+		if rollbackSection, exists := rawMap["rollback"]; exists && rollbackSection != nil {
+			rollback := yamlCfg.Rollback
+			rollbackMap, _ := rollbackSection.(map[string]interface{})
+
+			if _, exists := rollbackMap["enabled"]; exists {
+				cfg.Rollback.Enabled = rollback.Enabled
+			}
+			if _, exists := rollbackMap["mode"]; exists {
+				cfg.Rollback.Mode = rollback.Mode
+			}
+			if _, exists := rollbackMap["require_clean_state"]; exists {
+				cfg.Rollback.RequireCleanState = rollback.RequireCleanState
+			}
+			if protectedBranches, exists := rollbackMap["protected_branches"]; exists {
+				if list, ok := protectedBranches.([]interface{}); ok {
+					cfg.Rollback.ProtectedBranches = interfaceSliceToStringSlice(list)
+				}
+			}
+			if _, exists := rollbackMap["working_branch_prefix"]; exists {
+				cfg.Rollback.WorkingBranchPrefix = rollback.WorkingBranchPrefix
+			}
+			if _, exists := rollbackMap["checkpoint_prefix"]; exists {
+				cfg.Rollback.CheckpointPrefix = rollback.CheckpointPrefix
+			}
+			if _, exists := rollbackMap["keep_checkpoint_days"]; exists {
+				cfg.Rollback.KeepCheckpointDays = rollback.KeepCheckpointDays
 			}
 		}
 
@@ -1252,6 +1339,34 @@ func (c *Config) Validate() error {
 		}
 		if c.Budget.SafetyBuffer < 0 {
 			return fmt.Errorf("budget.safety_buffer must be >= 0, got %v", c.Budget.SafetyBuffer)
+		}
+	}
+
+	// Validate Rollback configuration
+	if c.Rollback.Enabled {
+		// Validate mode
+		validRollbackModes := map[RollbackMode]bool{
+			RollbackModeManual:           true,
+			RollbackModeAutoOnRed:        true,
+			RollbackModeAutoOnMaxRetries: true,
+		}
+		if !validRollbackModes[c.Rollback.Mode] {
+			return fmt.Errorf("rollback.mode must be one of: manual, auto_on_red, auto_on_max_retries; got %q", c.Rollback.Mode)
+		}
+
+		// Validate working_branch_prefix is not empty
+		if c.Rollback.WorkingBranchPrefix == "" {
+			return fmt.Errorf("rollback.working_branch_prefix cannot be empty when rollback is enabled")
+		}
+
+		// Validate checkpoint_prefix is not empty
+		if c.Rollback.CheckpointPrefix == "" {
+			return fmt.Errorf("rollback.checkpoint_prefix cannot be empty when rollback is enabled")
+		}
+
+		// Validate keep_checkpoint_days is non-negative
+		if c.Rollback.KeepCheckpointDays < 0 {
+			return fmt.Errorf("rollback.keep_checkpoint_days must be >= 0, got %d", c.Rollback.KeepCheckpointDays)
 		}
 	}
 

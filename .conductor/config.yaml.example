@@ -385,6 +385,70 @@ setup:
 # setup:
 #   enabled: true
 
+# Git rollback and checkpoint protection (v3.2+)
+# Provides safety checkpoints and automatic rollback for failed tasks
+rollback:
+  # Enable/disable rollback functionality (default: false)
+  # When false, no checkpoints are created - zero behavior change from pre-rollback
+  enabled: false
+
+  # When to rollback:
+  # - manual: Only rollback when explicitly requested via CLI
+  # - auto_on_red: Automatically rollback on RED verdict
+  # - auto_on_max_retries: Automatically rollback after max retries exhausted (default)
+  mode: auto_on_max_retries
+
+  # Block execution if uncommitted changes exist (default: true)
+  # When true, conductor will refuse to start if working directory is dirty
+  require_clean_state: true
+
+  # Branches that trigger working branch creation (default: [main, master, develop])
+  # When on a protected branch, conductor creates a working branch before execution
+  protected_branches: [main, master, develop]
+
+  # Prefix for working branches (default: "conductor-run/")
+  # Working branches are created as: {prefix}{plan-name}-{timestamp}
+  working_branch_prefix: "conductor-run/"
+
+  # Prefix for checkpoint branches (default: "conductor-checkpoint-")
+  # Checkpoints are created as: {prefix}{task-id}-{timestamp}
+  checkpoint_prefix: "conductor-checkpoint-"
+
+  # Days to keep old checkpoint branches (default: 7)
+  # Older checkpoints are cleaned up automatically
+  keep_checkpoint_days: 7
+
+# Rollback Examples
+
+# Example: Enable rollback with default settings
+# rollback:
+#   enabled: true
+
+# Example: Only manual rollback (no automatic rollback)
+# rollback:
+#   enabled: true
+#   mode: manual
+
+# Example: Rollback immediately on RED verdict
+# rollback:
+#   enabled: true
+#   mode: auto_on_red
+
+# Example: Allow dirty working directory (not recommended)
+# rollback:
+#   enabled: true
+#   require_clean_state: false
+
+# Example: Custom protected branches
+# rollback:
+#   enabled: true
+#   protected_branches: [main, production, staging]
+
+# Example: Keep checkpoints longer
+# rollback:
+#   enabled: true
+#   keep_checkpoint_days: 30
+
 # Budget & Rate Limit Auto-Resume (v2.20+)
 # Intelligent rate limit handling with state persistence for long-running plans
 budget:
