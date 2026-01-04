@@ -731,6 +731,27 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		setupHook = executor.NewSetupHook(introspector, consoleLog)
 	}
 
+	// Wire Git Rollback (v3.2+)
+	// Checkpoint/rollback provides plan-level branch protection and task-level recovery
+	// BranchGuardHook runs BEFORE SetupHook in orchestrator to ensure branch safety first
+	// RollbackHook runs per-task to create checkpoints and perform rollbacks on QC failures
+	var branchGuardHook *executor.BranchGuardHook
+	var rollbackHook *executor.RollbackHook
+	if cfg.Rollback.Enabled {
+		checkpointer := executor.NewGitCheckpointerWithWorkDir(&cfg.Rollback, "")
+
+		// Plan-level: BranchGuard creates checkpoint and switches to working branch if on protected branch
+		branchGuard := executor.NewBranchGuard(checkpointer, &cfg.Rollback, consoleLog, planFile)
+		branchGuardHook = executor.NewBranchGuardHook(branchGuard, consoleLog)
+
+		// Task-level: RollbackManager + RollbackHook for checkpoint/rollback per task
+		rollbackManager := executor.NewRollbackManager(&cfg.Rollback, checkpointer, consoleLog)
+		rollbackHook = executor.NewRollbackHook(rollbackManager, checkpointer, consoleLog)
+
+		// Wire rollbackHook to TaskExecutor for task-level checkpoint/rollback
+		taskExec.RollbackHook = rollbackHook
+	}
+
 	// Wire intelligent task agent selection (v2.15+)
 	// Enable when either:
 	// 1. executor.intelligent_agent_selection is true in config, OR
@@ -758,18 +779,19 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	// Create orchestrator with learning integration
 	orch := executor.NewOrchestratorFromConfig(executor.OrchestratorConfig{
-		WaveExecutor:  waveExec,
-		Logger:        multiLog,
-		LearningStore: learningStore,
-		SessionID:     sessionID,
-		RunNumber:     taskExec.RunNumber,
-		PlanFile:      planFile,
-		SkipCompleted: cfg.SkipCompleted,
-		RetryFailed:   cfg.RetryFailed,
-		TargetTask:    singleTask,
-		Similarity:    claudeSim,
-		SetupHook:     setupHook,
-		ClaudeInvoker: claudeInvoker, // Shared Claude CLI invoker for all components (v3.1+)
+		WaveExecutor:    waveExec,
+		Logger:          multiLog,
+		LearningStore:   learningStore,
+		SessionID:       sessionID,
+		RunNumber:       taskExec.RunNumber,
+		PlanFile:        planFile,
+		SkipCompleted:   cfg.SkipCompleted,
+		RetryFailed:     cfg.RetryFailed,
+		TargetTask:      singleTask,
+		Similarity:      claudeSim,
+		SetupHook:       setupHook,
+		BranchGuardHook: branchGuardHook, // Plan-level branch protection (v3.2+)
+		ClaudeInvoker:   claudeInvoker,   // Shared Claude CLI invoker for all components (v3.1+)
 	})
 
 	// Create context with timeout
