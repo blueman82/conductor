@@ -113,6 +113,15 @@ setup:
 ```
 When enabled, Claude introspects the project before wave execution to discover and run setup commands (e.g., dependency installation, build prerequisites).
 
+### Rollback (v3.2+)
+```yaml
+rollback:
+  enabled: true               # Enable task-level git checkpoints
+  checkpoint_prefix: "conductor-checkpoint-"  # Branch name prefix
+  keep_checkpoint_days: 7     # Auto-cleanup stale branches on startup
+```
+Creates checkpoint branches before each task. On RED verdict after exhausting retries, rolls back to checkpoint. BranchGuard provides plan-level branch isolation.
+
 ### Timeouts (v2.33+)
 ```yaml
 timeouts:
