@@ -3859,3 +3859,78 @@ func TestQCCommitVerificationIntegration(t *testing.T) {
 		}
 	})
 }
+
+func TestTruncateOutput(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		maxLen   int
+		wantLen  int // approximate, accounts for truncation message
+		wantFull bool // expect full output without truncation
+	}{
+		{
+			name:     "short output not truncated",
+			input:    "Hello, World!",
+			maxLen:   100,
+			wantFull: true,
+		},
+		{
+			name:     "exact length not truncated",
+			input:    "12345",
+			maxLen:   5,
+			wantFull: true,
+		},
+		{
+			name:     "long output truncated",
+			input:    strings.Repeat("x", 1000),
+			maxLen:   100,
+			wantFull: false,
+		},
+		{
+			name:     "empty output not truncated",
+			input:    "",
+			maxLen:   100,
+			wantFull: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := truncateOutput(tt.input, tt.maxLen)
+
+			if tt.wantFull {
+				if result != tt.input {
+					t.Errorf("expected output to be unchanged, got different result")
+				}
+			} else {
+				// Should be truncated with message
+				if !strings.Contains(result, "[OUTPUT TRUNCATED") {
+					t.Error("expected truncation message in output")
+				}
+				if len(result) < tt.maxLen {
+					t.Errorf("result length %d should be >= maxLen %d", len(result), tt.maxLen)
+				}
+			}
+		})
+	}
+}
+
+func TestTruncateOutput_PreservesContent(t *testing.T) {
+	// Verify the beginning of the output is preserved (most important context)
+	input := "CRITICAL_START:" + strings.Repeat("x", 1000) + ":CRITICAL_END"
+	result := truncateOutput(input, 100)
+
+	if !strings.HasPrefix(result, "CRITICAL_START:") {
+		t.Error("truncation should preserve beginning of output")
+	}
+	if strings.Contains(result, ":CRITICAL_END") {
+		t.Error("end of long output should be truncated")
+	}
+}
+
+func TestMaxAgentOutputLen(t *testing.T) {
+	// Verify the constant is set to a reasonable value (50KB)
+	if MaxAgentOutputLen != 50*1024 {
+		t.Errorf("MaxAgentOutputLen should be 50KB (51200), got %d", MaxAgentOutputLen)
+	}
+}
