@@ -127,6 +127,9 @@ budget:
   max_wait_duration: 6h       # Save state if wait exceeds this
 setup:
   enabled: false              # Pre-wave setup via Claude introspection
+rollback:
+  enabled: false              # Task-level git checkpoints with auto-rollback
+  keep_checkpoint_days: 7     # Auto-cleanup stale checkpoint branches
 ```
 
 ## Documentation
