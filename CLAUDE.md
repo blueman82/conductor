@@ -7,7 +7,7 @@ Last updated: 2026-01-03
 
 Conductor is a Go CLI for autonomous multi-agent orchestration. It parses plan files (Markdown/YAML), calculates task dependencies via graph algorithms, and executes tasks in parallel waves with QC reviews and adaptive learning.
 
-**Current**: v3.1.1 - SetupIntrospector: Pre-wave setup phase that lets Claude introspect the project to determine setup commands before Wave 1 execution. See v3.0.0 for config cleanup details.
+**Current**: v3.2.0 - Git Rollback: Task-level checkpoints with automatic rollback on QC failure. Includes BranchGuard for plan-level branch isolation and CheckpointCleanupHook for stale branch cleanup. See v3.1.0 for SetupIntrospector.
 
 ## Quick Reference
 
