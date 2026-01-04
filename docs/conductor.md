@@ -54,6 +54,11 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [How It Works](#setup-how-it-works)
   - [Configuration](#setup-configuration)
   - [Example Usage](#setup-example-usage)
+- [Git Rollback](#git-rollback-v32)
+  - [Overview](#rollback-overview)
+  - [How It Works](#rollback-how-it-works)
+  - [Configuration](#rollback-configuration)
+  - [Checkpoint Cleanup](#checkpoint-cleanup)
 - [Troubleshooting & FAQ](#troubleshooting--faq)
 - [Development Workflow](#development-workflow)
 
