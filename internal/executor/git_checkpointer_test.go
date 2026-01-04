@@ -545,3 +545,243 @@ func TestGitCheckpointer_NilConfig(t *testing.T) {
 		t.Errorf("Expected default prefix with nil config, got %q", prefix)
 	}
 }
+
+// === ListCheckpoints Tests ===
+
+func TestListCheckpoints_Success(t *testing.T) {
+	runner := NewMockGitCommandRunner()
+	runner.Outputs["git branch --list conductor-checkpoint-*"] = `  conductor-checkpoint-task-1-20260104-143052
+  conductor-checkpoint-task-2-20260104-150000
+* conductor-checkpoint-task-3-20260105-090000
+`
+
+	cfg := config.DefaultRollbackConfig()
+	g := NewGitCheckpointerWithRunner(runner, &cfg)
+
+	checkpoints, err := g.ListCheckpoints(context.Background())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(checkpoints) != 3 {
+		t.Fatalf("Expected 3 checkpoints, got %d", len(checkpoints))
+	}
+
+	// Verify first checkpoint
+	if checkpoints[0].BranchName != "conductor-checkpoint-task-1-20260104-143052" {
+		t.Errorf("Expected branch name 'conductor-checkpoint-task-1-20260104-143052', got %q", checkpoints[0].BranchName)
+	}
+	expectedTime1, _ := time.Parse("20060102-150405", "20260104-143052")
+	if !checkpoints[0].CreatedAt.Equal(expectedTime1) {
+		t.Errorf("Expected CreatedAt %v, got %v", expectedTime1, checkpoints[0].CreatedAt)
+	}
+
+	// Verify branch with asterisk (current branch) is handled correctly
+	if checkpoints[2].BranchName != "conductor-checkpoint-task-3-20260105-090000" {
+		t.Errorf("Expected branch name without asterisk, got %q", checkpoints[2].BranchName)
+	}
+}
+
+func TestListCheckpoints_EmptyResult(t *testing.T) {
+	runner := NewMockGitCommandRunner()
+	runner.Outputs["git branch --list conductor-checkpoint-*"] = ""
+
+	cfg := config.DefaultRollbackConfig()
+	g := NewGitCheckpointerWithRunner(runner, &cfg)
+
+	checkpoints, err := g.ListCheckpoints(context.Background())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Should return empty slice, not nil
+	if checkpoints == nil {
+		t.Error("Expected empty slice, not nil")
+	}
+	if len(checkpoints) != 0 {
+		t.Errorf("Expected 0 checkpoints, got %d", len(checkpoints))
+	}
+}
+
+func TestListCheckpoints_WhitespaceOnly(t *testing.T) {
+	runner := NewMockGitCommandRunner()
+	runner.Outputs["git branch --list conductor-checkpoint-*"] = "   \n\n  "
+
+	cfg := config.DefaultRollbackConfig()
+	g := NewGitCheckpointerWithRunner(runner, &cfg)
+
+	checkpoints, err := g.ListCheckpoints(context.Background())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Should return empty slice for whitespace-only output
+	if checkpoints == nil {
+		t.Error("Expected empty slice, not nil")
+	}
+	if len(checkpoints) != 0 {
+		t.Errorf("Expected 0 checkpoints, got %d", len(checkpoints))
+	}
+}
+
+func TestListCheckpoints_CustomPrefix(t *testing.T) {
+	runner := NewMockGitCommandRunner()
+	runner.Outputs["git branch --list custom-prefix-*"] = "  custom-prefix-task-5-20260104-120000\n"
+
+	cfg := config.RollbackConfig{
+		CheckpointPrefix: "custom-prefix-",
+	}
+	g := NewGitCheckpointerWithRunner(runner, &cfg)
+
+	checkpoints, err := g.ListCheckpoints(context.Background())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(checkpoints) != 1 {
+		t.Fatalf("Expected 1 checkpoint, got %d", len(checkpoints))
+	}
+	if checkpoints[0].BranchName != "custom-prefix-task-5-20260104-120000" {
+		t.Errorf("Expected branch name 'custom-prefix-task-5-20260104-120000', got %q", checkpoints[0].BranchName)
+	}
+}
+
+func TestListCheckpoints_GitError(t *testing.T) {
+	runner := NewMockGitCommandRunner()
+	runner.Errors["git branch --list conductor-checkpoint-*"] = errors.New("fatal: not a git repository")
+
+	cfg := config.DefaultRollbackConfig()
+	g := NewGitCheckpointerWithRunner(runner, &cfg)
+
+	_, err := g.ListCheckpoints(context.Background())
+	if err == nil {
+		t.Error("Expected error for git failure")
+	}
+	if !strings.Contains(err.Error(), "list checkpoint branches") {
+		t.Errorf("Expected 'list checkpoint branches' in error, got %q", err.Error())
+	}
+}
+
+func TestListCheckpoints_MalformedBranchNames(t *testing.T) {
+	runner := NewMockGitCommandRunner()
+	// Include some malformed branch names that won't parse properly
+	runner.Outputs["git branch --list conductor-checkpoint-*"] = `  conductor-checkpoint-task-1-20260104-143052
+  conductor-checkpoint-malformed
+  conductor-checkpoint-task-2-invalid-time
+`
+
+	cfg := config.DefaultRollbackConfig()
+	g := NewGitCheckpointerWithRunner(runner, &cfg)
+
+	checkpoints, err := g.ListCheckpoints(context.Background())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// All branches should be returned, but malformed ones have zero time
+	if len(checkpoints) != 3 {
+		t.Fatalf("Expected 3 checkpoints, got %d", len(checkpoints))
+	}
+
+	// First one should parse correctly
+	if checkpoints[0].CreatedAt.IsZero() {
+		t.Error("First checkpoint should have valid timestamp")
+	}
+
+	// Malformed ones should have zero time
+	if !checkpoints[1].CreatedAt.IsZero() {
+		t.Error("Malformed branch should have zero CreatedAt")
+	}
+	if !checkpoints[2].CreatedAt.IsZero() {
+		t.Error("Branch with invalid time should have zero CreatedAt")
+	}
+}
+
+func TestListCheckpoints_ContextCancelled(t *testing.T) {
+	runner := NewMockGitCommandRunner()
+	runner.Errors["git branch --list conductor-checkpoint-*"] = context.Canceled
+
+	cfg := config.DefaultRollbackConfig()
+	g := NewGitCheckpointerWithRunner(runner, &cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := g.ListCheckpoints(ctx)
+	if err == nil {
+		t.Error("Expected error when context is cancelled")
+	}
+}
+
+// === parseTimestampFromBranch Tests ===
+
+func TestParseTimestampFromBranch_ValidFormat(t *testing.T) {
+	tests := []struct {
+		name       string
+		branchName string
+		expected   string // format: 20060102-150405
+	}{
+		{
+			name:       "standard checkpoint",
+			branchName: "conductor-checkpoint-task-1-20260104-143052",
+			expected:   "20260104-143052",
+		},
+		{
+			name:       "custom prefix",
+			branchName: "my-prefix-task-5-20251231-235959",
+			expected:   "20251231-235959",
+		},
+		{
+			name:       "task with multi-digit id",
+			branchName: "conductor-checkpoint-task-123-20260115-080000",
+			expected:   "20260115-080000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseTimestampFromBranch(tt.branchName)
+			expected, _ := time.Parse("20060102-150405", tt.expected)
+			if !result.Equal(expected) {
+				t.Errorf("Expected %v, got %v", expected, result)
+			}
+		})
+	}
+}
+
+func TestParseTimestampFromBranch_InvalidFormat(t *testing.T) {
+	tests := []struct {
+		name       string
+		branchName string
+	}{
+		{
+			name:       "no timestamp",
+			branchName: "conductor-checkpoint-task-1",
+		},
+		{
+			name:       "malformed timestamp",
+			branchName: "conductor-checkpoint-task-1-invalid-time",
+		},
+		{
+			name:       "too few parts",
+			branchName: "single",
+		},
+		{
+			name:       "empty string",
+			branchName: "",
+		},
+		{
+			name:       "partial timestamp",
+			branchName: "conductor-checkpoint-task-1-20260104",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseTimestampFromBranch(tt.branchName)
+			if !result.IsZero() {
+				t.Errorf("Expected zero time for invalid format, got %v", result)
+			}
+		})
+	}
+}

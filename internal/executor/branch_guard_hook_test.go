@@ -108,6 +108,10 @@ func (m *branchGuardMockCheckpointer) IsCleanState(ctx context.Context) (bool, e
 	return m.isClean, nil
 }
 
+func (m *branchGuardMockCheckpointer) ListCheckpoints(ctx context.Context) ([]CheckpointInfo, error) {
+	return []CheckpointInfo{}, nil
+}
+
 func TestNewBranchGuardHook_NilGuard(t *testing.T) {
 	// Test that nil guard returns nil hook (graceful degradation)
 	hook := NewBranchGuardHook(nil, nil)
@@ -595,4 +599,8 @@ func (m *orderTrackingCheckpointer) IsCleanState(ctx context.Context) (bool, err
 		m.onIsCleanState()
 	}
 	return m.isClean, nil
+}
+
+func (m *orderTrackingCheckpointer) ListCheckpoints(ctx context.Context) ([]CheckpointInfo, error) {
+	return []CheckpointInfo{}, nil
 }

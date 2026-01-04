@@ -99,6 +99,10 @@ func (m *MockRollbackCheckpointer) IsCleanState(ctx context.Context) (bool, erro
 	return m.CleanState, m.CleanStateErr
 }
 
+func (m *MockRollbackCheckpointer) ListCheckpoints(ctx context.Context) ([]CheckpointInfo, error) {
+	return []CheckpointInfo{}, nil
+}
+
 // === Constructor Tests ===
 
 func TestNewRollbackManager(t *testing.T) {

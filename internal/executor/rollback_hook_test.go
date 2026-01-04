@@ -80,6 +80,10 @@ func (m *mockGitCheckpointer) IsCleanState(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+func (m *mockGitCheckpointer) ListCheckpoints(ctx context.Context) ([]CheckpointInfo, error) {
+	return []CheckpointInfo{}, nil
+}
+
 // rollbackMockLogger implements RuntimeEnforcementLogger for testing.
 type rollbackMockLogger struct {
 	infos  []string

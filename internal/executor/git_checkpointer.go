@@ -52,6 +52,11 @@ type GitCheckpointer interface {
 	// IsCleanState checks if the working directory has no uncommitted changes.
 	// Returns true if git status --porcelain returns empty output.
 	IsCleanState(ctx context.Context) (bool, error)
+
+	// ListCheckpoints lists all checkpoint branches matching the configured prefix.
+	// Returns []CheckpointInfo with BranchName and CreatedAt populated from branch names.
+	// CommitHash is left empty as it's not needed for age-based cleanup operations.
+	ListCheckpoints(ctx context.Context) ([]CheckpointInfo, error)
 }
 
 // DefaultGitCheckpointer implements GitCheckpointer using git commands.
@@ -202,6 +207,41 @@ func (g *DefaultGitCheckpointer) IsCleanState(ctx context.Context) (bool, error)
 	return strings.TrimSpace(output) == "", nil
 }
 
+// ListCheckpoints lists all checkpoint branches matching the configured prefix.
+// Returns []CheckpointInfo with BranchName and CreatedAt populated from branch names.
+// The timestamp is parsed from the branch name suffix (format: YYYYMMDD-HHMMSS).
+func (g *DefaultGitCheckpointer) ListCheckpoints(ctx context.Context) ([]CheckpointInfo, error) {
+	prefix := g.getCheckpointPrefix()
+	output, err := g.runCommand(ctx, "git", "branch", "--list", prefix+"*")
+	if err != nil {
+		return nil, fmt.Errorf("list checkpoint branches: %w", err)
+	}
+
+	// Handle empty output - return empty slice (not nil) per Go idiom
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return []CheckpointInfo{}, nil
+	}
+
+	var checkpoints []CheckpointInfo
+	for _, line := range strings.Split(trimmed, "\n") {
+		// Trim whitespace and leading asterisk (marks current branch)
+		branch := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "*"))
+		if branch == "" {
+			continue
+		}
+
+		// Parse timestamp from branch name suffix
+		createdAt := parseTimestampFromBranch(branch)
+		checkpoints = append(checkpoints, CheckpointInfo{
+			BranchName: branch,
+			CreatedAt:  createdAt,
+		})
+	}
+
+	return checkpoints, nil
+}
+
 // runCommand executes a git command and returns the output.
 func (g *DefaultGitCheckpointer) runCommand(ctx context.Context, name string, args ...string) (string, error) {
 	if g.CommandRunner != nil {
@@ -224,6 +264,29 @@ func (g *DefaultGitCheckpointer) runCommand(ctx context.Context, name string, ar
 		return string(output), fmt.Errorf("%w: %s", err, string(output))
 	}
 	return string(output), nil
+}
+
+// parseTimestampFromBranch extracts and parses the timestamp from a checkpoint branch name.
+// Expected format: {prefix}task-{id}-{YYYYMMDD-HHMMSS}
+// Returns zero time if parsing fails.
+func parseTimestampFromBranch(branchName string) time.Time {
+	// Split by dash and look for the timestamp pattern at the end
+	// Format: conductor-checkpoint-task-1-20260104-143052
+	// The timestamp is the last two dash-separated parts: YYYYMMDD-HHMMSS
+	parts := strings.Split(branchName, "-")
+	if len(parts) < 2 {
+		return time.Time{}
+	}
+
+	// Get the last two parts (YYYYMMDD and HHMMSS)
+	timestampStr := parts[len(parts)-2] + "-" + parts[len(parts)-1]
+
+	// Parse using the same format as CreateCheckpoint
+	t, err := time.Parse("20060102-150405", timestampStr)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // getCheckpointPrefix returns the checkpoint prefix from config or default.

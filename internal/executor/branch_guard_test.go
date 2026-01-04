@@ -107,6 +107,13 @@ func (m *MockGitCheckpointerForGuard) IsCleanState(ctx context.Context) (bool, e
 	return m.IsClean, nil
 }
 
+func (m *MockGitCheckpointerForGuard) ListCheckpoints(ctx context.Context) ([]CheckpointInfo, error) {
+	if err, ok := m.Errors["ListCheckpoints"]; ok && err != nil {
+		return nil, err
+	}
+	return []CheckpointInfo{}, nil
+}
+
 // === Constructor Tests ===
 
 func TestNewBranchGuard(t *testing.T) {
