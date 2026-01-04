@@ -3952,6 +3952,120 @@ The Setup Introspector is designed for reliability:
 
 ---
 
+## Git Rollback (v3.2+)
+
+### Rollback Overview
+
+Git Rollback provides automatic checkpoint/rollback capability at the task level. Before each agent executes a task, conductor creates a git checkpoint branch. If the task fails QC review after exhausting retries, conductor can automatically roll back to the checkpoint, preventing broken code from accumulating.
+
+This feature integrates with conductor's existing QC system and follows the graceful degradation pattern used throughout the codebase.
+
+### Rollback How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    TASK EXECUTION LIFECYCLE                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Pre-Task (RollbackHook.PreTask)                                │
+│    └─ Create checkpoint branch: conductor-checkpoint-task-N-... │
+│                                                                  │
+│  Agent Execution                                                 │
+│    └─ Agent works on task, makes code changes                   │
+│                                                                  │
+│  QC Review                                                       │
+│    ├─ GREEN: Delete checkpoint, continue to next task           │
+│    ├─ YELLOW: Retry with suggestions, checkpoint preserved      │
+│    └─ RED: Evaluate rollback decision                           │
+│         ├─ Retries remaining? Keep checkpoint, retry            │
+│         └─ Final failure? Rollback to checkpoint commit         │
+│                                                                  │
+│  Post-Task (RollbackHook.PostTask)                              │
+│    ├─ Success: Delete checkpoint branch (cleanup)               │
+│    └─ Rollback: Restore to checkpoint commit, delete branch     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key behaviors:**
+
+1. **Checkpoint Creation**: Before agent invocation, creates a branch at current HEAD
+2. **Branch Naming**: `{prefix}task-{N}-{YYYYMMDD-HHMMSS}` (e.g., `conductor-checkpoint-task-3-20260104-143052`)
+3. **Rollback Trigger**: RED verdict + all retries exhausted
+4. **Restore Method**: `git reset --hard {checkpoint-commit}`
+5. **Cleanup**: Checkpoint branches deleted after success or rollback
+
+### Rollback Configuration
+
+Add to `.conductor/config.yaml`:
+
+```yaml
+rollback:
+  enabled: true                    # Enable checkpoint/rollback feature
+  checkpoint_prefix: "conductor-checkpoint-"  # Branch name prefix
+  keep_checkpoint_days: 7          # Auto-cleanup stale checkpoints older than N days
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `enabled` | `false` | Enable/disable the rollback feature |
+| `checkpoint_prefix` | `conductor-checkpoint-` | Prefix for checkpoint branch names |
+| `keep_checkpoint_days` | `7` | Days to keep orphaned checkpoints before cleanup |
+
+**Example with all options:**
+
+```yaml
+rollback:
+  enabled: true
+  checkpoint_prefix: "my-project-checkpoint-"
+  keep_checkpoint_days: 14
+```
+
+### Checkpoint Cleanup
+
+Orphaned checkpoint branches (from interrupted runs, crashes, etc.) are automatically cleaned up at conductor startup:
+
+```
+CheckpointCleanup: Scanning 12 checkpoint branches (cutoff: 2025-12-28)
+CheckpointCleanup: Deleted stale branch 'conductor-checkpoint-task-1-20251225-103045' (created: 2025-12-25 10:30:45)
+CheckpointCleanup: Completed - deleted 3 stale checkpoint branches
+```
+
+**Cleanup behavior:**
+- Runs once at startup before any waves execute
+- Only deletes branches older than `keep_checkpoint_days`
+- Logs each deleted branch and final count
+- Individual deletion failures don't stop cleanup (graceful degradation)
+- Skipped if rollback is disabled or `keep_checkpoint_days` <= 0
+
+### BranchGuard Protection
+
+When rollback is enabled, BranchGuard creates an isolated working branch for the entire plan execution:
+
+```
+BranchGuard: Creating working branch 'conductor-work-20260104-143052'
+... (wave execution with task-level checkpoints) ...
+BranchGuard: Execution complete on 'conductor-work-20260104-143052'
+```
+
+This provides two-tier protection:
+1. **Plan-level**: BranchGuard isolates entire execution from main branch
+2. **Task-level**: RollbackHook checkpoints enable per-task rollback within the working branch
+
+### Graceful Degradation
+
+The rollback system follows conductor's graceful degradation pattern:
+
+| Condition | Behavior |
+|-----------|----------|
+| `rollback.enabled: false` | No checkpoints created, normal execution |
+| Checkpoint creation fails | Warning logged, task continues without rollback |
+| Rollback fails | Warning logged, task marked failed |
+| Dirty working tree | BranchGuard skipped with warning |
+| Git not available | Feature silently disabled |
+
+---
+
 ## Troubleshooting & FAQ
 
 ### Common Errors
