@@ -91,14 +91,18 @@ type rollbackMockLogger struct {
 	errors []string
 }
 
-func (m *rollbackMockLogger) LogTestCommands(entries []TestCommandResult)                    {}
+func (m *rollbackMockLogger) LogTestCommands(entries []TestCommandResult)                     {}
 func (m *rollbackMockLogger) LogCriterionVerifications(entries []CriterionVerificationResult) {}
-func (m *rollbackMockLogger) LogDocTargetVerifications(entries []DocTargetResult)            {}
-func (m *rollbackMockLogger) LogErrorPattern(pattern interface{})                            {}
-func (m *rollbackMockLogger) LogDetectedError(detected interface{})                          {}
-func (m *rollbackMockLogger) Warnf(format string, args ...interface{})                       { m.warns = append(m.warns, format) }
-func (m *rollbackMockLogger) Info(message string)                                            { m.infos = append(m.infos, message) }
-func (m *rollbackMockLogger) Infof(format string, args ...interface{})                       { m.infos = append(m.infos, format) }
+func (m *rollbackMockLogger) LogDocTargetVerifications(entries []DocTargetResult)             {}
+func (m *rollbackMockLogger) LogErrorPattern(pattern interface{})                             {}
+func (m *rollbackMockLogger) LogDetectedError(detected interface{})                           {}
+func (m *rollbackMockLogger) Warnf(format string, args ...interface{}) {
+	m.warns = append(m.warns, format)
+}
+func (m *rollbackMockLogger) Info(message string) { m.infos = append(m.infos, message) }
+func (m *rollbackMockLogger) Infof(format string, args ...interface{}) {
+	m.infos = append(m.infos, format)
+}
 
 func TestNewRollbackHook(t *testing.T) {
 	tests := []struct {

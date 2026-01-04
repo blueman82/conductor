@@ -76,14 +76,18 @@ func newMockCleanupLogger() *cleanupMockLogger {
 	}
 }
 
-func (m *cleanupMockLogger) LogTestCommands(entries []TestCommandResult)                    {}
+func (m *cleanupMockLogger) LogTestCommands(entries []TestCommandResult)                     {}
 func (m *cleanupMockLogger) LogCriterionVerifications(entries []CriterionVerificationResult) {}
-func (m *cleanupMockLogger) LogDocTargetVerifications(entries []DocTargetResult)            {}
-func (m *cleanupMockLogger) LogErrorPattern(pattern interface{})                            {}
-func (m *cleanupMockLogger) LogDetectedError(detected interface{})                          {}
-func (m *cleanupMockLogger) Info(message string)                                            { m.infos = append(m.infos, message) }
-func (m *cleanupMockLogger) Infof(format string, args ...interface{})                       { m.infos = append(m.infos, format) }
-func (m *cleanupMockLogger) Warnf(format string, args ...interface{})                       { m.warnings = append(m.warnings, format) }
+func (m *cleanupMockLogger) LogDocTargetVerifications(entries []DocTargetResult)             {}
+func (m *cleanupMockLogger) LogErrorPattern(pattern interface{})                             {}
+func (m *cleanupMockLogger) LogDetectedError(detected interface{})                           {}
+func (m *cleanupMockLogger) Info(message string)                                             { m.infos = append(m.infos, message) }
+func (m *cleanupMockLogger) Infof(format string, args ...interface{}) {
+	m.infos = append(m.infos, format)
+}
+func (m *cleanupMockLogger) Warnf(format string, args ...interface{}) {
+	m.warnings = append(m.warnings, format)
+}
 
 // === Constructor Tests ===
 
@@ -307,10 +311,10 @@ func TestCheckpointCleanupHook_Cleanup_AllFresh(t *testing.T) {
 
 	checkpointer := newMockCheckpointerForCleanup()
 	checkpointer.checkpoints = []CheckpointInfo{
-		{BranchName: "conductor-checkpoint-task-1-20260109-120000", CreatedAt: time.Date(2026, 1, 9, 12, 0, 0, 0, time.UTC)},  // 1 day old
-		{BranchName: "conductor-checkpoint-task-2-20260108-120000", CreatedAt: time.Date(2026, 1, 8, 12, 0, 0, 0, time.UTC)},  // 2 days old
-		{BranchName: "conductor-checkpoint-task-3-20260105-120000", CreatedAt: time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)},  // 5 days old
-		{BranchName: "conductor-checkpoint-task-4-20260104-120000", CreatedAt: time.Date(2026, 1, 4, 12, 0, 0, 0, time.UTC)},  // 6 days old (within retention)
+		{BranchName: "conductor-checkpoint-task-1-20260109-120000", CreatedAt: time.Date(2026, 1, 9, 12, 0, 0, 0, time.UTC)}, // 1 day old
+		{BranchName: "conductor-checkpoint-task-2-20260108-120000", CreatedAt: time.Date(2026, 1, 8, 12, 0, 0, 0, time.UTC)}, // 2 days old
+		{BranchName: "conductor-checkpoint-task-3-20260105-120000", CreatedAt: time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)}, // 5 days old
+		{BranchName: "conductor-checkpoint-task-4-20260104-120000", CreatedAt: time.Date(2026, 1, 4, 12, 0, 0, 0, time.UTC)}, // 6 days old (within retention)
 	}
 
 	cfg := &config.RollbackConfig{Enabled: true, KeepCheckpointDays: 7}
@@ -360,8 +364,8 @@ func TestCheckpointCleanupHook_Cleanup_SkipsZeroTime(t *testing.T) {
 
 	checkpointer := newMockCheckpointerForCleanup()
 	checkpointer.checkpoints = []CheckpointInfo{
-		{BranchName: "conductor-checkpoint-task-1-malformed", CreatedAt: time.Time{}},                                          // Zero time - skip
-		{BranchName: "conductor-checkpoint-task-2-20260101-120000", CreatedAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)},   // 9 days old - delete
+		{BranchName: "conductor-checkpoint-task-1-malformed", CreatedAt: time.Time{}},                                        // Zero time - skip
+		{BranchName: "conductor-checkpoint-task-2-20260101-120000", CreatedAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}, // 9 days old - delete
 	}
 
 	cfg := &config.RollbackConfig{Enabled: true, KeepCheckpointDays: 7}

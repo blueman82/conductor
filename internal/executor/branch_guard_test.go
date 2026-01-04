@@ -23,22 +23,27 @@ func NewMockBranchGuardLogger() *MockBranchGuardLogger {
 	}
 }
 
-func (m *MockBranchGuardLogger) LogTestCommands(entries []models.TestCommandResult)                   {}
-func (m *MockBranchGuardLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {}
-func (m *MockBranchGuardLogger) LogDocTargetVerifications(entries []models.DocTargetResult)           {}
-func (m *MockBranchGuardLogger) LogErrorPattern(pattern interface{})                                   {}
-func (m *MockBranchGuardLogger) LogDetectedError(detected interface{})                                 {}
-func (m *MockBranchGuardLogger) Warnf(format string, args ...interface{})                              { m.Warnings = append(m.Warnings, format) }
-func (m *MockBranchGuardLogger) Info(message string)                                                   { m.Infos = append(m.Infos, message) }
-func (m *MockBranchGuardLogger) Infof(format string, args ...interface{})                              { m.Infos = append(m.Infos, format) }
+func (m *MockBranchGuardLogger) LogTestCommands(entries []models.TestCommandResult) {}
+func (m *MockBranchGuardLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
+}
+func (m *MockBranchGuardLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}
+func (m *MockBranchGuardLogger) LogErrorPattern(pattern interface{})                        {}
+func (m *MockBranchGuardLogger) LogDetectedError(detected interface{})                      {}
+func (m *MockBranchGuardLogger) Warnf(format string, args ...interface{}) {
+	m.Warnings = append(m.Warnings, format)
+}
+func (m *MockBranchGuardLogger) Info(message string) { m.Infos = append(m.Infos, message) }
+func (m *MockBranchGuardLogger) Infof(format string, args ...interface{}) {
+	m.Infos = append(m.Infos, format)
+}
 
 // MockGitCheckpointerForGuard implements GitCheckpointer for branch guard testing.
 type MockGitCheckpointerForGuard struct {
-	CurrentBranch  string
-	IsClean        bool
+	CurrentBranch   string
+	IsClean         bool
 	BranchesCreated []string
-	SwitchedTo     []string
-	Errors         map[string]error
+	SwitchedTo      []string
+	Errors          map[string]error
 }
 
 func NewMockGitCheckpointerForGuard() *MockGitCheckpointerForGuard {

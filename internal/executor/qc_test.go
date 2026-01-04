@@ -3865,7 +3865,7 @@ func TestTruncateOutput(t *testing.T) {
 		name     string
 		input    string
 		maxLen   int
-		wantLen  int // approximate, accounts for truncation message
+		wantLen  int  // approximate, accounts for truncation message
 		wantFull bool // expect full output without truncation
 	}{
 		{

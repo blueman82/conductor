@@ -24,11 +24,12 @@ func NewMockRollbackLogger() *MockRollbackLogger {
 	}
 }
 
-func (m *MockRollbackLogger) LogTestCommands(entries []models.TestCommandResult)                     {}
-func (m *MockRollbackLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {}
-func (m *MockRollbackLogger) LogDocTargetVerifications(entries []models.DocTargetResult)             {}
-func (m *MockRollbackLogger) LogErrorPattern(pattern interface{})                                    {}
-func (m *MockRollbackLogger) LogDetectedError(detected interface{})                                  {}
+func (m *MockRollbackLogger) LogTestCommands(entries []models.TestCommandResult) {}
+func (m *MockRollbackLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
+}
+func (m *MockRollbackLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}
+func (m *MockRollbackLogger) LogErrorPattern(pattern interface{})                        {}
+func (m *MockRollbackLogger) LogDetectedError(detected interface{})                      {}
 
 func (m *MockRollbackLogger) Warnf(format string, args ...interface{}) {
 	m.WarnMessages = append(m.WarnMessages, format)
@@ -44,15 +45,15 @@ func (m *MockRollbackLogger) Infof(format string, args ...interface{}) {
 
 // MockRollbackCheckpointer implements GitCheckpointer for rollback testing.
 type MockRollbackCheckpointer struct {
-	RestoreError     error
-	RestoreCalls     []string // Stores commit hashes passed to RestoreCheckpoint
-	CreateCalls      int
-	DeleteCalls      []string
-	CreateBranchErr  error
-	SwitchBranchErr  error
-	CurrentBranch    string
-	CleanState       bool
-	CleanStateErr    error
+	RestoreError    error
+	RestoreCalls    []string // Stores commit hashes passed to RestoreCheckpoint
+	CreateCalls     int
+	DeleteCalls     []string
+	CreateBranchErr error
+	SwitchBranchErr error
+	CurrentBranch   string
+	CleanState      bool
+	CleanStateErr   error
 }
 
 func NewMockRollbackCheckpointer() *MockRollbackCheckpointer {
