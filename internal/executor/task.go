@@ -211,6 +211,9 @@ type DefaultTaskExecutor struct {
 	// Commit Verification integration (v2.30+)
 	CommitVerifier CommitVerifier // Verifies agent created expected commit (optional)
 
+	// Rollback Hook integration (v3.2+)
+	RollbackHook *RollbackHook // Task-level checkpoint/rollback hook (optional)
+
 	// MinFailuresBeforeAdapt is the threshold for failure analysis (v2.34+)
 	// Defaults to 1 if not set
 	MinFailuresBeforeAdapt int
@@ -535,6 +538,26 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 	// Records: task→succeeded_with→agent (or used_by for failures)
 	if te.LIPCollectorHook != nil {
 		te.LIPCollectorHook.PostTaskHook(ctx, *task, result, success)
+	}
+}
+
+// rollbackPostTask evaluates and performs rollback after task completion (v3.2+).
+// Called after postTaskHook when a task reaches a final state (success or failure after retries).
+// This hook handles cleanup (delete checkpoint on success) or rollback (restore checkpoint on failure).
+func (te *DefaultTaskExecutor) rollbackPostTask(ctx context.Context, task *models.Task, verdict string, attempt int, success bool) {
+	if te.RollbackHook == nil || task == nil {
+		return
+	}
+
+	taskNum := parseTaskNumber(task.Number)
+	// Use retryLimit as maxRetries (this is how the retry loop determines exhaustion)
+	maxRetries := te.retryLimit
+
+	if err := te.RollbackHook.PostTask(ctx, taskNum, task.Metadata, verdict, attempt, maxRetries, success); err != nil {
+		// Graceful degradation: log but don't block
+		if te.Logger != nil {
+			te.Logger.Warnf("Rollback PostTask failed for task %s: %v", task.Number, err)
+		}
 	}
 }
 
@@ -871,6 +894,21 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 	if err := te.preTaskHook(ctx, &task); err != nil {
 		// Hook errors are non-fatal but should be logged
 		// For now, continue without learning adaptation
+	}
+
+	// Rollback pre-task hook: Create task checkpoint before agent invocation (v3.2+)
+	// Initialize task.Metadata if nil (needed for checkpoint storage)
+	if task.Metadata == nil {
+		task.Metadata = make(map[string]interface{})
+	}
+	if te.RollbackHook != nil {
+		taskNum := parseTaskNumber(task.Number)
+		if err := te.RollbackHook.PreTask(ctx, taskNum, task.Metadata); err != nil {
+			// Graceful degradation: log but don't block
+			if te.Logger != nil {
+				te.Logger.Warnf("Rollback checkpoint failed for task %s: %v", task.Number, err)
+			}
+		}
 	}
 
 	// Pattern Intelligence pre-task hook: STOP protocol analysis and duplicate detection (v2.23+)
@@ -1230,6 +1268,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				result.Error = lastErr
 				_ = te.updatePlanStatus(task, StatusFailed, false)
 				te.postTaskHook(ctx, &task, &result, models.StatusRed)
+				te.rollbackPostTask(ctx, &task, models.StatusRed, attempt, false)
 				return result, lastErr
 			}
 
@@ -1291,6 +1330,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 					result.Error = fmt.Errorf("human intervention required: all detected errors cannot be fixed by agent")
 					_ = te.updatePlanStatus(task, StatusFailed, false)
 					te.postTaskHook(ctx, &task, &result, models.StatusRed)
+					te.rollbackPostTask(ctx, &task, models.StatusRed, attempt, false)
 					return result, result.Error
 				}
 			}
@@ -1327,9 +1367,11 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				result.Status = models.StatusFailed
 				result.Error = err
 				te.postTaskHook(ctx, &task, &result, models.StatusFailed)
+				te.rollbackPostTask(ctx, &task, models.StatusFailed, attempt, false)
 				return result, err
 			}
 			te.postTaskHook(ctx, &task, &result, models.StatusGreen)
+			te.rollbackPostTask(ctx, &task, models.StatusGreen, attempt, true)
 
 			// Pattern Intelligence post-task hook: Record successful pattern (v2.23+)
 			if te.PatternHook != nil {
@@ -1445,9 +1487,11 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				result.Status = models.StatusFailed
 				result.Error = err
 				te.postTaskHook(ctx, &task, &result, models.StatusFailed)
+				te.rollbackPostTask(ctx, &task, models.StatusFailed, attempt, false)
 				return result, err
 			}
 			te.postTaskHook(ctx, &task, &result, models.StatusGreen)
+			te.rollbackPostTask(ctx, &task, models.StatusGreen, attempt, true)
 
 			// Pattern Intelligence post-task hook: Record successful pattern (v2.23+)
 			if te.PatternHook != nil {
@@ -1462,9 +1506,11 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				result.Status = models.StatusFailed
 				result.Error = err
 				te.postTaskHook(ctx, &task, &result, models.StatusFailed)
+				te.rollbackPostTask(ctx, &task, models.StatusFailed, attempt, false)
 				return result, err
 			}
 			te.postTaskHook(ctx, &task, &result, models.StatusYellow)
+			te.rollbackPostTask(ctx, &task, models.StatusYellow, attempt, true)
 			return result, nil
 		case review.Flag == models.StatusRed:
 			lastErr = ErrQualityGateFailed
@@ -1522,6 +1568,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 			result.Error = lastErr
 			_ = te.updatePlanStatus(task, StatusFailed, false)
 			te.postTaskHook(ctx, &task, &result, models.StatusRed)
+			te.rollbackPostTask(ctx, &task, models.StatusRed, attempt, false)
 			return result, lastErr
 		}
 
@@ -1553,6 +1600,7 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 	result.Error = lastErr
 	_ = te.updatePlanStatus(task, StatusFailed, false)
 	te.postTaskHook(ctx, &task, &result, models.StatusRed)
+	te.rollbackPostTask(ctx, &task, models.StatusRed, te.retryLimit, false)
 	return result, lastErr
 }
 
