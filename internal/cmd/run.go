@@ -740,6 +740,18 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	if cfg.Rollback.Enabled {
 		checkpointer := executor.NewGitCheckpointerWithWorkDir(&cfg.Rollback, "")
 
+		// Cleanup old checkpoint branches at startup (v3.2+)
+		// Runs BEFORE BranchGuard to clean stale branches before creating new checkpoints
+		// Uses context.Background() as cleanup is a quick operation during startup
+		cleanupHook := executor.NewCheckpointCleanupHook(checkpointer, &cfg.Rollback, consoleLog)
+		if cleanupHook != nil {
+			if deleted, err := cleanupHook.Cleanup(context.Background()); err != nil {
+				consoleLog.Warnf("Checkpoint cleanup failed: %v", err)
+			} else if deleted > 0 {
+				consoleLog.Infof("Checkpoint cleanup: deleted %d stale branches", deleted)
+			}
+		}
+
 		// Plan-level: BranchGuard creates checkpoint and switches to working branch if on protected branch
 		branchGuard := executor.NewBranchGuard(checkpointer, &cfg.Rollback, consoleLog, planFile)
 		branchGuardHook = executor.NewBranchGuardHook(branchGuard, consoleLog)
