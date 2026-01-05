@@ -757,8 +757,7 @@ func TestParseTimestampFromBranch_ValidFormat(t *testing.T) {
 			result := parseTimestampFromBranch(tt.branchName)
 			var expected time.Time
 			if tt.isUnix {
-				var unix int64
-				fmt.Sscanf(tt.expected, "%d", &unix)
+				unix, _ := strconv.ParseInt(tt.expected, 10, 64)
 				expected = time.Unix(unix, 0)
 			} else {
 				expected, _ = time.Parse("20060102-150405", tt.expected)
