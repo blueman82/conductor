@@ -23,6 +23,12 @@ NEVER speculate about code you have not read. Use the Read tool to
 examine files BEFORE making claims about code. If unsure, investigate
 first rather than guessing.
 </anti_hallucination>
+
+<parallel_tool_calls>
+When multiple independent tool operations are needed (e.g., reading several
+files, running multiple searches), execute them in parallel rather than
+sequentially. Only serialize operations that have dependencies.
+</parallel_tool_calls>
 `
 
 // XMLTag wraps content in XML tags: <name>content</name>
