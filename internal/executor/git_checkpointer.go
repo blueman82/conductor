@@ -267,26 +267,40 @@ func (g *DefaultGitCheckpointer) runCommand(ctx context.Context, name string, ar
 }
 
 // parseTimestampFromBranch extracts and parses the timestamp from a checkpoint branch name.
-// Expected format: {prefix}task-{id}-{YYYYMMDD-HHMMSS}
+// Supports two formats:
+//   - BranchGuard format: {prefix}{unix_timestamp} (e.g., conductor-checkpoint-1767626940)
+//   - Task checkpoint format: {prefix}task-{id}-{YYYYMMDD-HHMMSS} (e.g., conductor-checkpoint-task-1-20260104-143052)
+//
 // Returns zero time if parsing fails.
 func parseTimestampFromBranch(branchName string) time.Time {
-	// Split by dash and look for the timestamp pattern at the end
-	// Format: conductor-checkpoint-task-1-20260104-143052
-	// The timestamp is the last two dash-separated parts: YYYYMMDD-HHMMSS
 	parts := strings.Split(branchName, "-")
 	if len(parts) < 2 {
 		return time.Time{}
 	}
 
-	// Get the last two parts (YYYYMMDD and HHMMSS)
-	timestampStr := parts[len(parts)-2] + "-" + parts[len(parts)-1]
-
-	// Parse using the same format as CreateCheckpoint
-	t, err := time.Parse("20060102-150405", timestampStr)
-	if err != nil {
-		return time.Time{}
+	// Try BranchGuard format first: last part is a Unix timestamp (10 digits)
+	// Format: conductor-checkpoint-1767626940
+	lastPart := parts[len(parts)-1]
+	if len(lastPart) == 10 {
+		var unixTime int64
+		if _, err := fmt.Sscanf(lastPart, "%d", &unixTime); err == nil {
+			// Sanity check: timestamp should be reasonable (year 2020-2100)
+			if unixTime > 1577836800 && unixTime < 4102444800 {
+				return time.Unix(unixTime, 0)
+			}
+		}
 	}
-	return t
+
+	// Try task checkpoint format: last two parts are YYYYMMDD-HHMMSS
+	// Format: conductor-checkpoint-task-1-20260104-143052
+	if len(parts) >= 2 {
+		timestampStr := parts[len(parts)-2] + "-" + parts[len(parts)-1]
+		if t, err := time.Parse("20060102-150405", timestampStr); err == nil {
+			return t
+		}
+	}
+
+	return time.Time{}
 }
 
 // getCheckpointPrefix returns the checkpoint prefix from config or default.
