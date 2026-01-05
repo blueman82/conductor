@@ -49,6 +49,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 			TaskNumber: "1",
 			TaskName:   "Implement feature X",
 			FilePaths:  []string{"/src/main.go", "/src/util.go"},
+			PlanFile:   "/plans/test.yaml", // Required for projectDir
 		}
 
 		warmUp, err := provider.BuildContext(ctx, task)
@@ -67,6 +68,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		exec := &TaskExecution{
 			TaskNumber: "1",
 			TaskName:   "Implement feature Y",
+			PlanFile:   "/plans/test.yaml", // Must match the search filter pattern
 			Prompt:     "test prompt",
 			Success:    true,
 			Output:     "Feature Y implemented successfully",
@@ -99,6 +101,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 			TaskNumber: "2", // Different task number
 			TaskName:   "Implement feature X",
 			FilePaths:  []string{"/src/main.go", "/src/util.go"},
+			PlanFile:   "/plans/test.yaml", // Required for projectDir
 		}
 
 		warmUp, err := provider.BuildContext(ctx, task)
@@ -119,6 +122,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		exec := &TaskExecution{
 			TaskNumber: "1",
 			TaskName:   "Add user authentication",
+			PlanFile:   "/plans/test.yaml", // Must match the search filter pattern
 			Prompt:     "test prompt",
 			Success:    true,
 			Output:     "Authentication added",
@@ -134,6 +138,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 			TaskNumber: "2",
 			TaskName:   "Add user authorization", // Similar name
 			FilePaths:  []string{},
+			PlanFile:   "/plans/test.yaml", // Required for projectDir
 		}
 
 		warmUp, err := provider.BuildContext(ctx, task)
@@ -153,6 +158,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		exec := &TaskExecution{
 			TaskNumber: "1",
 			TaskName:   "Build feature module",
+			PlanFile:   "/plans/test.yaml", // Must match the search filter pattern
 			Prompt:     "test prompt",
 			Success:    true,
 			Output:     "Module built",
@@ -199,6 +205,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 			TaskNumber: "2",
 			TaskName:   "Build another module",
 			FilePaths:  []string{"/pkg/module.go"},
+			PlanFile:   "/plans/test.yaml", // Required for projectDir
 		}
 
 		warmUp, err := provider.BuildContext(ctx, task)
@@ -219,13 +226,14 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 		store, cleanup := setupWarmUpTestStore(t)
 		defer cleanup()
 
-		// Create a successful historical task with GREEN verdict
+		// Create a successful historical task with GREEN verdict and JSON output with Summary
 		exec := &TaskExecution{
 			TaskNumber: "1",
 			TaskName:   "Implement API endpoint",
+			PlanFile:   "/plans/test.yaml", // Must match the search filter pattern
 			Prompt:     "test prompt",
 			Success:    true,
-			Output:     "Successfully implemented the API endpoint using REST patterns with proper error handling and validation.",
+			Output:     `{"status":"success","summary":"Implemented API endpoint using REST patterns","output":"verbose details"}`,
 			Agent:      "backend-developer",
 			QCVerdict:  "GREEN",
 		}
@@ -253,6 +261,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 			TaskNumber: "2",
 			TaskName:   "Implement another endpoint",
 			FilePaths:  []string{"/api/handler.go"},
+			PlanFile:   "/plans/test.yaml", // Required for projectDir
 		}
 
 		warmUp, err := provider.BuildContext(ctx, task)
@@ -260,7 +269,7 @@ func TestWarmUpProviderBuildContext(t *testing.T) {
 
 		if len(warmUp.RelevantHistory) > 0 {
 			assert.NotEmpty(t, warmUp.RecommendedApproach)
-			assert.Contains(t, warmUp.RecommendedApproach, "API endpoint")
+			assert.Contains(t, warmUp.RecommendedApproach, "REST patterns")
 		}
 	})
 
@@ -552,13 +561,14 @@ func TestMultipleSimilarTasksWithDifferentSuccessRates(t *testing.T) {
 	// Create multiple historical tasks with different success rates
 	// This explicitly tests the QC-identified gap: "multiple similar tasks with different success rates"
 
-	// Successful task 1 - GREEN verdict
+	// Successful task 1 - GREEN verdict with JSON output containing Summary
 	exec1 := &TaskExecution{
 		TaskNumber: "1",
 		TaskName:   "Implement database layer",
+		PlanFile:   "/plans/db.yaml", // Must match the search filter pattern
 		Prompt:     "test prompt",
 		Success:    true,
-		Output:     "Database layer implemented with ORM",
+		Output:     `{"status":"success","summary":"Database layer implemented with ORM patterns","output":"verbose details"}`,
 		Agent:      "backend-developer",
 		QCVerdict:  "GREEN",
 	}
@@ -569,6 +579,7 @@ func TestMultipleSimilarTasksWithDifferentSuccessRates(t *testing.T) {
 	exec2 := &TaskExecution{
 		TaskNumber: "2",
 		TaskName:   "Implement database connection",
+		PlanFile:   "/plans/db.yaml", // Must match the search filter pattern
 		Prompt:     "test prompt",
 		Success:    false,
 		Output:     "Connection failed due to timeout",
@@ -582,6 +593,7 @@ func TestMultipleSimilarTasksWithDifferentSuccessRates(t *testing.T) {
 	exec3 := &TaskExecution{
 		TaskNumber: "3",
 		TaskName:   "Implement database caching",
+		PlanFile:   "/plans/db.yaml", // Must match the search filter pattern
 		Prompt:     "test prompt",
 		Success:    true,
 		Output:     "Caching layer added with minor issues",
@@ -658,6 +670,7 @@ func TestMultipleSimilarTasksWithDifferentSuccessRates(t *testing.T) {
 		TaskNumber: "4",
 		TaskName:   "Implement database migration",
 		FilePaths:  []string{"/internal/database/db.go", "/internal/database/conn.go"},
+		PlanFile:   "/plans/db.yaml", // Required for projectDir
 	}
 
 	warmUp, err := provider.BuildContext(ctx, task)
@@ -685,7 +698,7 @@ func TestMultipleSimilarTasksWithDifferentSuccessRates(t *testing.T) {
 	// The recommended approach should come from the successful GREEN task
 	if successfulTaskFound {
 		assert.NotEmpty(t, warmUp.RecommendedApproach)
-		assert.Contains(t, warmUp.RecommendedApproach, "database")
+		assert.Contains(t, warmUp.RecommendedApproach, "ORM patterns")
 	}
 
 	// Confidence should reflect the mixed success rates
@@ -716,17 +729,17 @@ func TestExtractRecommendedApproach(t *testing.T) {
 			contains: "",
 		},
 		{
-			name: "successful GREEN task",
+			name: "successful GREEN task with valid JSON",
 			history: []TaskExecution{
 				{
 					TaskName:  "Implement auth",
 					Success:   true,
 					QCVerdict: "GREEN",
-					Output:    "Used JWT for authentication",
+					Output:    `{"status":"success","summary":"Used JWT for authentication","output":"verbose output"}`,
 					Agent:     "backend-developer",
 				},
 			},
-			contains: "Implement auth",
+			contains: "Used JWT for authentication",
 		},
 		{
 			name: "prefers GREEN over non-GREEN",
@@ -735,18 +748,18 @@ func TestExtractRecommendedApproach(t *testing.T) {
 					TaskName:  "Task without GREEN",
 					Success:   true,
 					QCVerdict: "YELLOW",
-					Output:    "Some output",
+					Output:    `{"status":"success","summary":"Some output","output":"verbose"}`,
 					Agent:     "agent1",
 				},
 				{
 					TaskName:  "Task with GREEN",
 					Success:   true,
 					QCVerdict: "GREEN",
-					Output:    "Better output",
+					Output:    `{"status":"success","summary":"Better output","output":"verbose"}`,
 					Agent:     "agent2",
 				},
 			},
-			contains: "Task with GREEN",
+			contains: "Better output",
 		},
 		{
 			name: "skips failed tasks for recommended approach",
@@ -755,18 +768,31 @@ func TestExtractRecommendedApproach(t *testing.T) {
 					TaskName:  "Failed task",
 					Success:   false,
 					QCVerdict: "RED",
-					Output:    "This approach failed",
+					Output:    `{"status":"failed","summary":"This approach failed","output":"error details"}`,
 					Agent:     "agent1",
 				},
 				{
 					TaskName:  "Successful fallback",
 					Success:   true,
 					QCVerdict: "",
-					Output:    "This worked",
+					Output:    `{"status":"success","summary":"This worked","output":"verbose"}`,
 					Agent:     "agent2",
 				},
 			},
-			contains: "Successful fallback",
+			contains: "This worked",
+		},
+		{
+			name: "returns empty for legacy non-JSON data (no fallback)",
+			history: []TaskExecution{
+				{
+					TaskName:  "Legacy task",
+					Success:   true,
+					QCVerdict: "GREEN",
+					Output:    "Plain text output without JSON",
+					Agent:     "backend-developer",
+				},
+			},
+			contains: "", // Empty is better than polluted
 		},
 	}
 
@@ -780,6 +806,128 @@ func TestExtractRecommendedApproach(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExtractRecommendedApproachParsesJSON(t *testing.T) {
+	store, cleanup := setupWarmUpTestStore(t)
+	defer cleanup()
+
+	provider := NewWarmUpProvider(store, nil)
+
+	tests := []struct {
+		name            string
+		history         []TaskExecution
+		containsSummary string
+		notContains     string
+	}{
+		{
+			name: "parses JSON and extracts Summary field",
+			history: []TaskExecution{
+				{
+					TaskName:  "Add feature",
+					Success:   true,
+					QCVerdict: "GREEN",
+					// Simulates the actual JSON output from agents
+					Output: `{"status":"success","summary":"Implemented feature with proper error handling","output":"Full verbose output with /path/to/project/specific/file.go","files_modified":["/path/to/project/file.go"]}`,
+					Agent:  "backend-developer",
+				},
+			},
+			containsSummary: "Implemented feature with proper error handling",
+			notContains:     "/path/to/project", // Should NOT contain project-specific paths
+		},
+		{
+			name: "returns empty for non-JSON data (no fallback)",
+			history: []TaskExecution{
+				{
+					TaskName:  "Legacy task",
+					Success:   true,
+					QCVerdict: "GREEN",
+					Output:    "This is plain text output without JSON structure",
+					Agent:     "backend-developer",
+				},
+			},
+			containsSummary: "", // Empty is better than polluted
+			notContains:     "",
+		},
+		{
+			name: "returns empty for JSON without Summary (no fallback)",
+			history: []TaskExecution{
+				{
+					TaskName:  "Partial JSON task",
+					Success:   true,
+					QCVerdict: "GREEN",
+					Output:    `{"status":"success","output":"Some output but no summary field"}`,
+					Agent:     "backend-developer",
+				},
+			},
+			containsSummary: "", // Empty is better than polluted
+			notContains:     "",
+		},
+		{
+			name: "returns empty for invalid JSON (no fallback)",
+			history: []TaskExecution{
+				{
+					TaskName:  "Invalid JSON task",
+					Success:   true,
+					QCVerdict: "GREEN",
+					Output:    `{"status":"success", broken json here`,
+					Agent:     "backend-developer",
+				},
+			},
+			containsSummary: "", // Empty is better than polluted
+			notContains:     "",
+		},
+		{
+			name: "uses Summary for fallback non-GREEN successful tasks",
+			history: []TaskExecution{
+				{
+					TaskName:  "Non-GREEN task",
+					Success:   true,
+					QCVerdict: "YELLOW",
+					Output:    `{"status":"success","summary":"Completed with minor issues","output":"Verbose details with /home/user/project/internal/foo.go"}`,
+					Agent:     "backend-developer",
+				},
+			},
+			containsSummary: "Completed with minor issues",
+			notContains:     "/home/user/project",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := provider.extractRecommendedApproach(tt.history)
+			assert.Contains(t, result, tt.containsSummary,
+				"expected result to contain the summary or key phrase")
+			if tt.notContains != "" {
+				assert.NotContains(t, result, tt.notContains,
+					"result should NOT contain project-specific paths")
+			}
+		})
+	}
+}
+
+func TestFindSimilarTasksEmptyProjectDir(t *testing.T) {
+	ctx := context.Background()
+	store, cleanup := setupWarmUpTestStore(t)
+	defer cleanup()
+
+	provider := NewWarmUpProvider(store, nil)
+
+	// Test with empty PlanFile (which results in empty projectDir)
+	task := &TaskInfo{
+		TaskNumber: "1",
+		TaskName:   "Test Task",
+		FilePaths:  []string{"/src/main.go"},
+		PlanFile:   "", // Empty plan file results in empty projectDir
+	}
+
+	// BuildContext should return an error because projectDir is empty
+	warmUp, err := provider.BuildContext(ctx, task)
+
+	// The error should be propagated from findSimilarTasks
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "projectDir is empty")
+	assert.NotNil(t, warmUp) // WarmUp is still returned (initialized before error)
 }
 
 func TestMinMaxHelpers(t *testing.T) {

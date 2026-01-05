@@ -382,9 +382,16 @@ func MergePlans(plans ...*models.Plan) (*models.Plan, error) {
 		return nil, fmt.Errorf("no plans provided")
 	}
 
-	// Single plan: return as-is
+	// Single plan: still need to set SourceFile on tasks
 	if len(plans) == 1 {
-		return plans[0], nil
+		plan := plans[0]
+		if plan != nil && plan.FilePath != "" {
+			// Set SourceFile on each task (same as multi-plan case)
+			for i := range plan.Tasks {
+				plan.Tasks[i].SourceFile = plan.FilePath
+			}
+		}
+		return plan, nil
 	}
 
 	// Track seen task numbers to detect conflicts

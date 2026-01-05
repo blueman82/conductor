@@ -2,11 +2,14 @@ package learning
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
 	"unicode"
 
+	"github.com/harrison/conductor/internal/models"
 	"github.com/harrison/conductor/internal/similarity"
 )
 
@@ -158,11 +161,15 @@ func (p *DefaultWarmUpProvider) findSimilarTasks(ctx context.Context, task *Task
 		ORDER BY timestamp DESC
 		LIMIT 100`
 
+	// Fail-fast if projectDir is empty - this should never happen in normal conductor
+	// usage (parser always sets SourceFile), so fail loudly rather than silently
+	// polluting with cross-project data by matching all projects with "%"
+	if projectDir == "" {
+		return nil, fmt.Errorf("projectDir is empty, cannot query similar tasks")
+	}
+
 	// Filter pattern: same directory prefix
 	filterPattern := projectDir + "%"
-	if projectDir == "" {
-		filterPattern = "%"
-	}
 
 	rows, err := p.store.db.QueryContext(ctx, query, filterPattern)
 	if err != nil {
@@ -279,28 +286,33 @@ func (p *DefaultWarmUpProvider) extractPatterns(ctx context.Context, task *TaskI
 }
 
 // extractRecommendedApproach finds the best approach from successful historical executions.
+// It parses the stored JSON output to extract the clean Summary field, avoiding
+// cross-project pollution from raw JSON that may contain project-specific paths.
 func (p *DefaultWarmUpProvider) extractRecommendedApproach(history []TaskExecution) string {
 	// Find the most recent successful execution with high-quality output
 	for _, exec := range history {
 		if exec.Success && exec.QCVerdict == "GREEN" && exec.Output != "" {
-			// Extract approach description from the output (first 500 chars as summary)
-			approach := exec.Output
-			if len(approach) > 500 {
-				approach = approach[:500] + "..."
+			// Try to parse JSON and use Summary field (clean, project-agnostic)
+			// No fallback to raw Output - empty is better than polluted context
+			var resp models.AgentResponse
+			if err := json.Unmarshal([]byte(exec.Output), &resp); err == nil && resp.Summary != "" {
+				return "Based on successful execution of similar task '" + exec.TaskName +
+					"' with agent " + exec.Agent + ": " + resp.Summary
 			}
-			return "Based on successful execution of similar task '" + exec.TaskName +
-				"' with agent " + exec.Agent + ": " + approach
+			// Continue to next execution if JSON parsing fails (legacy data)
 		}
 	}
 
-	// Fall back to any successful execution
+	// Fall back to any successful execution (non-GREEN)
 	for _, exec := range history {
 		if exec.Success && exec.Output != "" {
-			approach := exec.Output
-			if len(approach) > 300 {
-				approach = approach[:300] + "..."
+			// Try to parse JSON and use Summary field
+			// No fallback to raw Output - empty is better than polluted context
+			var resp models.AgentResponse
+			if err := json.Unmarshal([]byte(exec.Output), &resp); err == nil && resp.Summary != "" {
+				return "Previously successful approach for '" + exec.TaskName + "': " + resp.Summary
 			}
-			return "Previously successful approach for '" + exec.TaskName + "': " + approach
+			// Continue to next execution if JSON parsing fails (legacy data)
 		}
 	}
 
