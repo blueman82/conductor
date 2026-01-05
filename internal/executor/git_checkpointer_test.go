@@ -719,7 +719,8 @@ func TestParseTimestampFromBranch_ValidFormat(t *testing.T) {
 	tests := []struct {
 		name       string
 		branchName string
-		expected   string // format: 20060102-150405
+		expected   string // format: 20060102-150405 or Unix timestamp
+		isUnix     bool   // if true, expected is Unix timestamp string
 	}{
 		{
 			name:       "standard checkpoint",
@@ -736,12 +737,31 @@ func TestParseTimestampFromBranch_ValidFormat(t *testing.T) {
 			branchName: "conductor-checkpoint-task-123-20260115-080000",
 			expected:   "20260115-080000",
 		},
+		{
+			name:       "BranchGuard unix timestamp format",
+			branchName: "conductor-checkpoint-1767626940",
+			expected:   "1767626940",
+			isUnix:     true,
+		},
+		{
+			name:       "BranchGuard with custom prefix",
+			branchName: "my-prefix-1767654108",
+			expected:   "1767654108",
+			isUnix:     true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseTimestampFromBranch(tt.branchName)
-			expected, _ := time.Parse("20060102-150405", tt.expected)
+			var expected time.Time
+			if tt.isUnix {
+				var unix int64
+				fmt.Sscanf(tt.expected, "%d", &unix)
+				expected = time.Unix(unix, 0)
+			} else {
+				expected, _ = time.Parse("20060102-150405", tt.expected)
+			}
 			if !result.Equal(expected) {
 				t.Errorf("Expected %v, got %v", expected, result)
 			}
