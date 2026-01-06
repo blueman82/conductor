@@ -616,6 +616,173 @@ depends_on:
 	}
 }
 
+// LOC Tracking Tests
+
+func TestTask_NetLOC(t *testing.T) {
+	tests := []struct {
+		name         string
+		linesAdded   int
+		linesDeleted int
+		expected     int
+	}{
+		{
+			name:         "more additions than deletions",
+			linesAdded:   100,
+			linesDeleted: 30,
+			expected:     70,
+		},
+		{
+			name:         "more deletions than additions",
+			linesAdded:   20,
+			linesDeleted: 50,
+			expected:     -30,
+		},
+		{
+			name:         "equal additions and deletions",
+			linesAdded:   50,
+			linesDeleted: 50,
+			expected:     0,
+		},
+		{
+			name:         "zero values",
+			linesAdded:   0,
+			linesDeleted: 0,
+			expected:     0,
+		},
+		{
+			name:         "only additions",
+			linesAdded:   100,
+			linesDeleted: 0,
+			expected:     100,
+		},
+		{
+			name:         "only deletions",
+			linesAdded:   0,
+			linesDeleted: 75,
+			expected:     -75,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := Task{
+				Number:       "1",
+				Name:         "Test Task",
+				Prompt:       "test prompt",
+				LinesAdded:   tt.linesAdded,
+				LinesDeleted: tt.linesDeleted,
+			}
+			result := task.NetLOC()
+			if result != tt.expected {
+				t.Errorf("NetLOC() = %d, expected %d", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestTask_TotalLOC(t *testing.T) {
+	tests := []struct {
+		name         string
+		linesAdded   int
+		linesDeleted int
+		expected     int
+	}{
+		{
+			name:         "both additions and deletions",
+			linesAdded:   100,
+			linesDeleted: 30,
+			expected:     130,
+		},
+		{
+			name:         "zero values",
+			linesAdded:   0,
+			linesDeleted: 0,
+			expected:     0,
+		},
+		{
+			name:         "only additions",
+			linesAdded:   100,
+			linesDeleted: 0,
+			expected:     100,
+		},
+		{
+			name:         "only deletions",
+			linesAdded:   0,
+			linesDeleted: 75,
+			expected:     75,
+		},
+		{
+			name:         "large values",
+			linesAdded:   10000,
+			linesDeleted: 5000,
+			expected:     15000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := Task{
+				Number:       "1",
+				Name:         "Test Task",
+				Prompt:       "test prompt",
+				LinesAdded:   tt.linesAdded,
+				LinesDeleted: tt.linesDeleted,
+			}
+			result := task.TotalLOC()
+			if result != tt.expected {
+				t.Errorf("TotalLOC() = %d, expected %d", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestTask_LOCFieldsDefaultToZero(t *testing.T) {
+	// Verify that LOC fields default to zero for new tasks
+	task := Task{
+		Number: "1",
+		Name:   "Test Task",
+		Prompt: "test prompt",
+	}
+
+	if task.LinesAdded != 0 {
+		t.Errorf("LinesAdded should default to 0, got %d", task.LinesAdded)
+	}
+	if task.LinesDeleted != 0 {
+		t.Errorf("LinesDeleted should default to 0, got %d", task.LinesDeleted)
+	}
+	if task.NetLOC() != 0 {
+		t.Errorf("NetLOC() should return 0 for default values, got %d", task.NetLOC())
+	}
+	if task.TotalLOC() != 0 {
+		t.Errorf("TotalLOC() should return 0 for default values, got %d", task.TotalLOC())
+	}
+}
+
+func TestTask_LOCFieldsWithDirectAssignment(t *testing.T) {
+	// LOC fields are runtime execution metadata populated by the executor,
+	// similar to FilesModified/FilesCreated/FilesDeleted. Test direct assignment.
+	task := Task{
+		Number:       "1",
+		Name:         "LOC Test Task",
+		Prompt:       "Test LOC fields",
+		LinesAdded:   150,
+		LinesDeleted: 50,
+	}
+
+	if task.LinesAdded != 150 {
+		t.Errorf("LinesAdded = %d, expected 150", task.LinesAdded)
+	}
+	if task.LinesDeleted != 50 {
+		t.Errorf("LinesDeleted = %d, expected 50", task.LinesDeleted)
+	}
+	if task.NetLOC() != 100 {
+		t.Errorf("NetLOC() = %d, expected 100", task.NetLOC())
+	}
+	if task.TotalLOC() != 200 {
+		t.Errorf("TotalLOC() = %d, expected 200", task.TotalLOC())
+	}
+}
+
 // Backward Compatibility Tests
 
 func TestTask_BackwardCompat_NumericOnlyYAML(t *testing.T) {

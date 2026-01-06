@@ -44,6 +44,10 @@ type ExecutionResult struct {
 	AgentUsage      map[string]int `json:"agent_usage" yaml:"agent_usage"`             // Count by agent name
 	TotalFiles      int            `json:"total_files" yaml:"total_files"`             // Count of unique files modified
 	AvgTaskDuration time.Duration  `json:"avg_task_duration" yaml:"avg_task_duration"` // Average duration per task
+
+	// LOC tracking aggregates (v3.4+)
+	TotalLinesAdded   int `json:"total_lines_added" yaml:"total_lines_added"`
+	TotalLinesDeleted int `json:"total_lines_deleted" yaml:"total_lines_deleted"`
 }
 
 // calculateMetricsFromResults calculates all metrics from a slice of TaskResults.
@@ -58,6 +62,8 @@ func (er *ExecutionResult) calculateMetricsFromResults(results []TaskResult) {
 	// Reset counters
 	er.Completed = 0
 	er.Failed = 0
+	er.TotalLinesAdded = 0
+	er.TotalLinesDeleted = 0
 
 	// Track unique files using a map (set)
 	uniqueFiles := make(map[string]bool)
@@ -81,6 +87,10 @@ func (er *ExecutionResult) calculateMetricsFromResults(results []TaskResult) {
 		for _, file := range result.Task.Files {
 			uniqueFiles[file] = true
 		}
+
+		// Aggregate LOC metrics
+		er.TotalLinesAdded += result.Task.LinesAdded
+		er.TotalLinesDeleted += result.Task.LinesDeleted
 
 		// Track completed/failed
 		if result.Status == StatusRed || result.Status == StatusFailed {

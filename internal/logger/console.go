@@ -321,12 +321,15 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 	// Calculate task count
 	taskCount := len(wave.TaskNumbers)
 
-	// Count status breakdown from results
+	// Count status breakdown from results and calculate LOC totals for wave (v3.4+)
 	statusCounts := make(map[string]int)
+	var waveLinesAdded, waveLinesDeleted int
 	for _, result := range results {
 		if result.Status != "" {
 			statusCounts[result.Status]++
 		}
+		waveLinesAdded += result.Task.LinesAdded
+		waveLinesDeleted += result.Task.LinesDeleted
 	}
 
 	// Build the completion message with task count
@@ -363,6 +366,18 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 		} else {
 			// No status data, just show task count
 			statusBreakdown = fmt.Sprintf(" - %d/%d completed", taskCount, taskCount)
+		}
+
+		// Append LOC to status breakdown if non-zero (v3.4+)
+		if waveLinesAdded > 0 || waveLinesDeleted > 0 {
+			if cl.colorOutput {
+				locText := fmt.Sprintf(" | %s/%s LOC",
+					color.New(color.FgGreen).Sprintf("+%d", waveLinesAdded),
+					color.New(color.FgRed).Sprintf("-%d", waveLinesDeleted))
+				statusBreakdown += locText
+			} else {
+				statusBreakdown += fmt.Sprintf(" | +%d/-%d LOC", waveLinesAdded, waveLinesDeleted)
+			}
 		}
 	} else {
 		// Show 0/0 for empty waves
@@ -714,6 +729,18 @@ func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 			output += fmt.Sprintf("[%s] Files Modified: %s files\n", ts, filesColored)
 		}
 
+		// Lines of Code section (v3.4+)
+		if result.TotalLinesAdded > 0 || result.TotalLinesDeleted > 0 {
+			locHeader := color.New(color.Bold).Sprint("Lines of Code:")
+			output += fmt.Sprintf("[%s] %s\n", ts, locHeader)
+			output += fmt.Sprintf("[%s]   Added: %s\n", ts,
+				color.New(color.FgGreen).Sprintf("+%d", result.TotalLinesAdded))
+			output += fmt.Sprintf("[%s]   Deleted: %s\n", ts,
+				color.New(color.FgRed).Sprintf("-%d", result.TotalLinesDeleted))
+			net := result.TotalLinesAdded - result.TotalLinesDeleted
+			output += fmt.Sprintf("[%s]   Net: %+d\n", ts, net)
+		}
+
 		// Average Duration section
 		if result.AvgTaskDuration > 0 {
 			avgStr := formatDurationWithDecimal(result.AvgTaskDuration)
@@ -766,6 +793,14 @@ func (cl *ConsoleLogger) LogSummary(result models.ExecutionResult) {
 		// Files Modified section
 		if result.TotalFiles > 0 {
 			output += fmt.Sprintf("[%s] Files Modified: %d files\n", ts, result.TotalFiles)
+		}
+
+		// Lines of Code section (v3.4+)
+		if result.TotalLinesAdded > 0 || result.TotalLinesDeleted > 0 {
+			output += fmt.Sprintf("[%s] Lines of Code:\n", ts)
+			output += fmt.Sprintf("[%s]   Added: +%d\n", ts, result.TotalLinesAdded)
+			output += fmt.Sprintf("[%s]   Deleted: -%d\n", ts, result.TotalLinesDeleted)
+			output += fmt.Sprintf("[%s]   Net: %+d\n", ts, result.TotalLinesAdded-result.TotalLinesDeleted)
 		}
 
 		// Average Duration section

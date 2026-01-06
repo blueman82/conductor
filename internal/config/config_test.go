@@ -3057,3 +3057,121 @@ func TestRollbackModeConstants(t *testing.T) {
 		t.Errorf("RollbackModeAutoOnMaxRetries = %q, want %q", RollbackModeAutoOnMaxRetries, "auto_on_max_retries")
 	}
 }
+
+// TestDefaultMetricsConfig tests default metrics configuration values
+func TestDefaultMetricsConfig(t *testing.T) {
+	cfg := DefaultMetricsConfig()
+
+	// LOCTracking should be ENABLED by default
+	if cfg.LOCTracking != true {
+		t.Errorf("LOCTracking = %v, want true", cfg.LOCTracking)
+	}
+}
+
+// TestDefaultConfigIncludesMetrics tests that DefaultConfig includes metrics config
+func TestDefaultConfigIncludesMetrics(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Verify Metrics config is included with correct defaults
+	if cfg.Metrics.LOCTracking != true {
+		t.Errorf("Metrics.LOCTracking = %v, want true (default)", cfg.Metrics.LOCTracking)
+	}
+}
+
+// TestLoadConfigMetrics tests loading metrics configuration from YAML
+func TestLoadConfigMetrics(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configYAML := `metrics:
+  loc_tracking: false
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.Metrics.LOCTracking != false {
+		t.Errorf("Metrics.LOCTracking = %v, want false", cfg.Metrics.LOCTracking)
+	}
+}
+
+// TestLoadConfigMetricsDefaults tests that metrics defaults are preserved when not specified
+func TestLoadConfigMetricsDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Config without metrics section
+	configYAML := `max_concurrency: 4
+log_level: debug
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Default should be true (LOCTracking enabled by default)
+	if cfg.Metrics.LOCTracking != true {
+		t.Errorf("Metrics.LOCTracking = %v, want true (default)", cfg.Metrics.LOCTracking)
+	}
+}
+
+// TestLoadConfigMetricsEnabled tests explicitly enabling metrics
+func TestLoadConfigMetricsEnabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configYAML := `metrics:
+  loc_tracking: true
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if cfg.Metrics.LOCTracking != true {
+		t.Errorf("Metrics.LOCTracking = %v, want true", cfg.Metrics.LOCTracking)
+	}
+}
+
+// TestMetricsConfigMerge verifies partial metrics config merges correctly with defaults
+func TestMetricsConfigMerge(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Disable LOC tracking explicitly
+	configYAML := `max_concurrency: 4
+metrics:
+  loc_tracking: false
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Explicitly set values
+	if cfg.Metrics.LOCTracking != false {
+		t.Errorf("Metrics.LOCTracking = %v, want false", cfg.Metrics.LOCTracking)
+	}
+
+	// Other config should be preserved
+	if cfg.MaxConcurrency != 4 {
+		t.Errorf("MaxConcurrency = %d, want 4", cfg.MaxConcurrency)
+	}
+}

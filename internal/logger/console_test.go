@@ -3305,3 +3305,285 @@ func TestLogErrorPattern_MethodDisplay(t *testing.T) {
 		})
 	}
 }
+
+// TestLogWaveComplete_LOCMetrics verifies LOC metrics are displayed in wave completion (v3.4+)
+func TestLogWaveComplete_LOCMetrics(t *testing.T) {
+	tests := []struct {
+		name        string
+		results     []models.TaskResult
+		colorOutput bool
+		expected    []string
+		notExpected []string
+	}{
+		{
+			name: "LOC metrics shown when non-zero - plain text",
+			results: []models.TaskResult{
+				{
+					Task:   models.Task{Number: "1", LinesAdded: 100, LinesDeleted: 25},
+					Status: models.StatusGreen,
+				},
+				{
+					Task:   models.Task{Number: "2", LinesAdded: 145, LinesDeleted: 57},
+					Status: models.StatusGreen,
+				},
+			},
+			colorOutput: false,
+			expected:    []string{"+245/-82 LOC"},
+			notExpected: []string{},
+		},
+		{
+			name: "LOC metrics with color output",
+			results: []models.TaskResult{
+				{
+					Task:   models.Task{Number: "1", LinesAdded: 50, LinesDeleted: 10},
+					Status: models.StatusGreen,
+				},
+			},
+			colorOutput: true,
+			expected:    []string{"+50", "-10", "LOC"},
+			notExpected: []string{},
+		},
+		{
+			name: "no LOC metrics when zero",
+			results: []models.TaskResult{
+				{
+					Task:   models.Task{Number: "1", LinesAdded: 0, LinesDeleted: 0},
+					Status: models.StatusGreen,
+				},
+			},
+			colorOutput: false,
+			expected:    []string{},
+			notExpected: []string{"LOC"},
+		},
+		{
+			name: "only additions - show LOC",
+			results: []models.TaskResult{
+				{
+					Task:   models.Task{Number: "1", LinesAdded: 200, LinesDeleted: 0},
+					Status: models.StatusGreen,
+				},
+			},
+			colorOutput: false,
+			expected:    []string{"+200/-0 LOC"},
+			notExpected: []string{},
+		},
+		{
+			name: "only deletions - show LOC",
+			results: []models.TaskResult{
+				{
+					Task:   models.Task{Number: "1", LinesAdded: 0, LinesDeleted: 50},
+					Status: models.StatusGreen,
+				},
+			},
+			colorOutput: false,
+			expected:    []string{"+0/-50 LOC"},
+			notExpected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "info")
+			logger.colorOutput = tt.colorOutput
+
+			wave := models.Wave{
+				Name:           "Wave 1",
+				TaskNumbers:    []string{"1", "2"},
+				MaxConcurrency: 2,
+			}
+
+			logger.LogWaveComplete(wave, 5*time.Second, tt.results)
+
+			output := buf.String()
+
+			for _, exp := range tt.expected {
+				if !strings.Contains(output, exp) {
+					t.Errorf("expected output to contain %q, got:\n%s", exp, output)
+				}
+			}
+
+			for _, notExp := range tt.notExpected {
+				if strings.Contains(output, notExp) {
+					t.Errorf("expected output NOT to contain %q, got:\n%s", notExp, output)
+				}
+			}
+		})
+	}
+}
+
+// TestLogSummary_LOCMetrics verifies LOC metrics section in summary (v3.4+)
+func TestLogSummary_LOCMetrics(t *testing.T) {
+	tests := []struct {
+		name        string
+		result      models.ExecutionResult
+		colorOutput bool
+		expected    []string
+		notExpected []string
+	}{
+		{
+			name: "LOC metrics section shown when non-zero - plain text",
+			result: models.ExecutionResult{
+				TotalTasks:        4,
+				Completed:         4,
+				Duration:          2 * time.Minute,
+				TotalLinesAdded:   500,
+				TotalLinesDeleted: 150,
+				StatusBreakdown:   map[string]int{},
+				AgentUsage:        map[string]int{},
+			},
+			colorOutput: false,
+			expected: []string{
+				"Lines of Code:",
+				"Added: +500",
+				"Deleted: -150",
+				"Net: +350",
+			},
+			notExpected: []string{},
+		},
+		{
+			name: "LOC metrics with color output",
+			result: models.ExecutionResult{
+				TotalTasks:        2,
+				Completed:         2,
+				Duration:          1 * time.Minute,
+				TotalLinesAdded:   200,
+				TotalLinesDeleted: 75,
+				StatusBreakdown:   map[string]int{},
+				AgentUsage:        map[string]int{},
+			},
+			colorOutput: true,
+			expected: []string{
+				"Lines of Code:",
+				"+200",
+				"-75",
+				"Net: +125",
+			},
+			notExpected: []string{},
+		},
+		{
+			name: "no LOC section when zero",
+			result: models.ExecutionResult{
+				TotalTasks:        1,
+				Completed:         1,
+				Duration:          30 * time.Second,
+				TotalLinesAdded:   0,
+				TotalLinesDeleted: 0,
+				StatusBreakdown:   map[string]int{},
+				AgentUsage:        map[string]int{},
+			},
+			colorOutput: false,
+			expected:    []string{},
+			notExpected: []string{"Lines of Code:"},
+		},
+		{
+			name: "negative net LOC (more deleted than added)",
+			result: models.ExecutionResult{
+				TotalTasks:        1,
+				Completed:         1,
+				Duration:          15 * time.Second,
+				TotalLinesAdded:   50,
+				TotalLinesDeleted: 200,
+				StatusBreakdown:   map[string]int{},
+				AgentUsage:        map[string]int{},
+			},
+			colorOutput: false,
+			expected: []string{
+				"Lines of Code:",
+				"Added: +50",
+				"Deleted: -200",
+				"Net: -150",
+			},
+			notExpected: []string{},
+		},
+		{
+			name: "only additions",
+			result: models.ExecutionResult{
+				TotalTasks:        1,
+				Completed:         1,
+				Duration:          10 * time.Second,
+				TotalLinesAdded:   100,
+				TotalLinesDeleted: 0,
+				StatusBreakdown:   map[string]int{},
+				AgentUsage:        map[string]int{},
+			},
+			colorOutput: false,
+			expected: []string{
+				"Lines of Code:",
+				"Added: +100",
+				"Deleted: -0",
+				"Net: +100",
+			},
+			notExpected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := NewConsoleLogger(buf, "info")
+			logger.colorOutput = tt.colorOutput
+
+			logger.LogSummary(tt.result)
+
+			output := buf.String()
+
+			for _, exp := range tt.expected {
+				if !strings.Contains(output, exp) {
+					t.Errorf("expected output to contain %q, got:\n%s", exp, output)
+				}
+			}
+
+			for _, notExp := range tt.notExpected {
+				if strings.Contains(output, notExp) {
+					t.Errorf("expected output NOT to contain %q, got:\n%s", notExp, output)
+				}
+			}
+		})
+	}
+}
+
+// TestLogSummary_LOCMetrics_AfterFilesModified verifies LOC section appears after Files Modified
+func TestLogSummary_LOCMetrics_AfterFilesModified(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := NewConsoleLogger(buf, "info")
+	logger.colorOutput = false
+
+	result := models.ExecutionResult{
+		TotalTasks:        2,
+		Completed:         2,
+		Duration:          1 * time.Minute,
+		TotalFiles:        5,
+		TotalLinesAdded:   300,
+		TotalLinesDeleted: 100,
+		AvgTaskDuration:   30 * time.Second,
+		StatusBreakdown:   map[string]int{},
+		AgentUsage:        map[string]int{},
+	}
+
+	logger.LogSummary(result)
+
+	output := buf.String()
+
+	// Verify order: Files Modified, then Lines of Code, then Average Duration
+	filesModifiedIdx := strings.Index(output, "Files Modified:")
+	linesOfCodeIdx := strings.Index(output, "Lines of Code:")
+	avgDurationIdx := strings.Index(output, "Average Duration:")
+
+	if filesModifiedIdx == -1 {
+		t.Error("expected 'Files Modified:' in output")
+	}
+	if linesOfCodeIdx == -1 {
+		t.Error("expected 'Lines of Code:' in output")
+	}
+	if avgDurationIdx == -1 {
+		t.Error("expected 'Average Duration:' in output")
+	}
+
+	if filesModifiedIdx >= linesOfCodeIdx {
+		t.Error("expected 'Files Modified:' to appear BEFORE 'Lines of Code:'")
+	}
+	if linesOfCodeIdx >= avgDurationIdx {
+		t.Error("expected 'Lines of Code:' to appear BEFORE 'Average Duration:'")
+	}
+}

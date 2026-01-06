@@ -35,6 +35,10 @@ type TaskExecution struct {
 	FailurePatterns []string // Identified failure patterns
 	Timestamp       time.Time
 	Context         string // JSON blob for additional context
+
+	// LOC tracking (v3.4+)
+	LinesAdded   int `json:"lines_added"`
+	LinesDeleted int `json:"lines_deleted"`
 }
 
 // ApproachHistory tracks different approaches tried for recurring task patterns
@@ -197,8 +201,8 @@ func (s *Store) RecordExecution(ctx context.Context, exec *TaskExecution) error 
 	}
 
 	query := `INSERT INTO task_executions
-		(plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, qc_verdict, qc_feedback, failure_patterns, context)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		(plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, qc_verdict, qc_feedback, failure_patterns, context, lines_added, lines_deleted)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := s.db.ExecContext(ctx, query,
 		exec.PlanFile,
@@ -215,6 +219,8 @@ func (s *Store) RecordExecution(ctx context.Context, exec *TaskExecution) error 
 		exec.QCFeedback,
 		failurePatternsJSON,
 		contextJSON,
+		exec.LinesAdded,
+		exec.LinesDeleted,
 	)
 	if err != nil {
 		return fmt.Errorf("insert task execution: %w", err)

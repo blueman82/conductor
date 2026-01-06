@@ -222,6 +222,72 @@ func TestExecutionResult_TotalFiles(t *testing.T) {
 	}
 }
 
+func TestExecutionResult_LOC(t *testing.T) {
+	tests := []struct {
+		name                string
+		results             []TaskResult
+		expectTotalAdded    int
+		expectTotalDeleted  int
+	}{
+		{
+			name: "aggregate LOC across tasks",
+			results: []TaskResult{
+				{Task: Task{Number: "1", Name: "T1", Prompt: "test", LinesAdded: 100, LinesDeleted: 20}},
+				{Task: Task{Number: "2", Name: "T2", Prompt: "test", LinesAdded: 50, LinesDeleted: 30}},
+				{Task: Task{Number: "3", Name: "T3", Prompt: "test", LinesAdded: 75, LinesDeleted: 10}},
+			},
+			expectTotalAdded:   225, // 100 + 50 + 75
+			expectTotalDeleted: 60,  // 20 + 30 + 10
+		},
+		{
+			name: "tasks with zero LOC",
+			results: []TaskResult{
+				{Task: Task{Number: "1", Name: "T1", Prompt: "test", LinesAdded: 0, LinesDeleted: 0}},
+				{Task: Task{Number: "2", Name: "T2", Prompt: "test", LinesAdded: 0, LinesDeleted: 0}},
+			},
+			expectTotalAdded:   0,
+			expectTotalDeleted: 0,
+		},
+		{
+			name: "mixed LOC values",
+			results: []TaskResult{
+				{Task: Task{Number: "1", Name: "T1", Prompt: "test", LinesAdded: 500, LinesDeleted: 0}},
+				{Task: Task{Number: "2", Name: "T2", Prompt: "test", LinesAdded: 0, LinesDeleted: 200}},
+				{Task: Task{Number: "3", Name: "T3", Prompt: "test", LinesAdded: 100, LinesDeleted: 100}},
+			},
+			expectTotalAdded:   600, // 500 + 0 + 100
+			expectTotalDeleted: 300, // 0 + 200 + 100
+		},
+		{
+			name:                "empty results",
+			results:             []TaskResult{},
+			expectTotalAdded:    0,
+			expectTotalDeleted:  0,
+		},
+		{
+			name: "single task with LOC",
+			results: []TaskResult{
+				{Task: Task{Number: "1", Name: "T1", Prompt: "test", LinesAdded: 42, LinesDeleted: 17}},
+			},
+			expectTotalAdded:   42,
+			expectTotalDeleted: 17,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NewExecutionResult(tt.results, true, 1*time.Minute)
+
+			if result.TotalLinesAdded != tt.expectTotalAdded {
+				t.Errorf("TotalLinesAdded = %v, want %v", result.TotalLinesAdded, tt.expectTotalAdded)
+			}
+			if result.TotalLinesDeleted != tt.expectTotalDeleted {
+				t.Errorf("TotalLinesDeleted = %v, want %v", result.TotalLinesDeleted, tt.expectTotalDeleted)
+			}
+		})
+	}
+}
+
 func TestExecutionResult_AvgTaskDuration(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -335,12 +401,12 @@ func TestExecutionResult_JSONSerialization(t *testing.T) {
 			{
 				Status:   StatusGreen,
 				Duration: 3 * time.Second,
-				Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"file1.go"}},
+				Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"file1.go"}, LinesAdded: 100, LinesDeleted: 25},
 			},
 			{
 				Status:   StatusYellow,
 				Duration: 2 * time.Second,
-				Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "devops", Files: []string{"file2.yaml"}},
+				Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "devops", Files: []string{"file2.yaml"}, LinesAdded: 50, LinesDeleted: 10},
 			},
 		}
 
@@ -372,6 +438,12 @@ func TestExecutionResult_JSONSerialization(t *testing.T) {
 		if unmarshaled.TotalFiles != original.TotalFiles {
 			t.Errorf("TotalFiles = %v, want %v", unmarshaled.TotalFiles, original.TotalFiles)
 		}
+		if unmarshaled.TotalLinesAdded != original.TotalLinesAdded {
+			t.Errorf("TotalLinesAdded = %v, want %v", unmarshaled.TotalLinesAdded, original.TotalLinesAdded)
+		}
+		if unmarshaled.TotalLinesDeleted != original.TotalLinesDeleted {
+			t.Errorf("TotalLinesDeleted = %v, want %v", unmarshaled.TotalLinesDeleted, original.TotalLinesDeleted)
+		}
 	})
 }
 
@@ -381,12 +453,12 @@ func TestExecutionResult_YAMLSerialization(t *testing.T) {
 			{
 				Status:   StatusGreen,
 				Duration: 3 * time.Second,
-				Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"file1.go"}},
+				Task:     Task{Number: "1", Name: "T1", Prompt: "test", Agent: "golang-pro", Files: []string{"file1.go"}, LinesAdded: 100, LinesDeleted: 25},
 			},
 			{
 				Status:   StatusYellow,
 				Duration: 2 * time.Second,
-				Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "devops", Files: []string{"file2.yaml"}},
+				Task:     Task{Number: "2", Name: "T2", Prompt: "test", Agent: "devops", Files: []string{"file2.yaml"}, LinesAdded: 50, LinesDeleted: 10},
 			},
 		}
 
@@ -417,6 +489,12 @@ func TestExecutionResult_YAMLSerialization(t *testing.T) {
 		}
 		if unmarshaled.TotalFiles != original.TotalFiles {
 			t.Errorf("TotalFiles = %v, want %v", unmarshaled.TotalFiles, original.TotalFiles)
+		}
+		if unmarshaled.TotalLinesAdded != original.TotalLinesAdded {
+			t.Errorf("TotalLinesAdded = %v, want %v", unmarshaled.TotalLinesAdded, original.TotalLinesAdded)
+		}
+		if unmarshaled.TotalLinesDeleted != original.TotalLinesDeleted {
+			t.Errorf("TotalLinesDeleted = %v, want %v", unmarshaled.TotalLinesDeleted, original.TotalLinesDeleted)
 		}
 	})
 }
@@ -633,6 +711,16 @@ func TestExecutionResult_MetricConsistency(t *testing.T) {
 			if resultFromNew.Failed != resultFromCalc.Failed {
 				t.Errorf("Failed mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
 					resultFromNew.Failed, resultFromCalc.Failed)
+			}
+
+			// Verify LOC aggregates are identical
+			if resultFromNew.TotalLinesAdded != resultFromCalc.TotalLinesAdded {
+				t.Errorf("TotalLinesAdded mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+					resultFromNew.TotalLinesAdded, resultFromCalc.TotalLinesAdded)
+			}
+			if resultFromNew.TotalLinesDeleted != resultFromCalc.TotalLinesDeleted {
+				t.Errorf("TotalLinesDeleted mismatch: NewExecutionResult=%d, CalculateMetrics=%d",
+					resultFromNew.TotalLinesDeleted, resultFromCalc.TotalLinesDeleted)
 			}
 		})
 	}
