@@ -152,6 +152,17 @@ git worktree remove ../conductor-my-feature
 
 This allows running Conductor plans in isolation without affecting your main working directory.
 
+## Claude Code Integration
+
+Conductor includes a slash command for Claude Code that generates conductor-compatible YAML plans:
+
+```bash
+# In Claude Code, use the slash command:
+/conductor implement user authentication with JWT tokens
+```
+
+The command invokes the `implementation-planner` skill to create a structured YAML plan ready for execution. Install by copying `.claude/commands/conductor.md` to your `~/.claude/commands/` directory.
+
 ## Documentation
 
 - [Complete Reference](docs/conductor.md) — Full usage, formats, troubleshooting
