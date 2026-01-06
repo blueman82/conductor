@@ -225,6 +225,12 @@ type PatternConfig struct {
 	RequireJustification bool `yaml:"require_justification"`
 }
 
+// MetricsConfig controls execution metrics collection (v3.4+)
+type MetricsConfig struct {
+	// LOCTracking enables lines-of-code tracking per task (default: true)
+	LOCTracking bool `yaml:"loc_tracking"`
+}
+
 // TimeoutsConfig controls timeout durations for different operation types
 type TimeoutsConfig struct {
 	// Task is the timeout for main agent task execution (default: 12h)
@@ -419,6 +425,9 @@ type Config struct {
 
 	// Timeouts contains timeout configuration for different operation types
 	Timeouts TimeoutsConfig `yaml:"timeouts"`
+
+	// Metrics controls execution metrics collection (v3.4+)
+	Metrics MetricsConfig `yaml:"metrics"`
 }
 
 // ArchitectureMode specifies the Architecture Checkpoint operating mode
@@ -547,6 +556,14 @@ func DefaultPatternConfig() PatternConfig {
 	}
 }
 
+// DefaultMetricsConfig returns MetricsConfig with sensible default values.
+// LOC tracking is ENABLED by default.
+func DefaultMetricsConfig() MetricsConfig {
+	return MetricsConfig{
+		LOCTracking: true, // Enabled by default per requirements
+	}
+}
+
 // DefaultArchitectureConfig returns ArchitectureConfig with sensible default values.
 // Architecture Checkpoint is DISABLED by default to ensure zero behavior change.
 func DefaultArchitectureConfig() ArchitectureConfig {
@@ -624,6 +641,7 @@ func DefaultConfig() *Config {
 		Pattern:      DefaultPatternConfig(),
 		Architecture: DefaultArchitectureConfig(),
 		Timeouts:     DefaultTimeoutsConfig(),
+		Metrics:      DefaultMetricsConfig(),
 	}
 }
 
@@ -699,6 +717,7 @@ func LoadConfig(path string) (*Config, error) {
 		Pattern        PatternConfig        `yaml:"pattern"`
 		Architecture   ArchitectureConfig   `yaml:"architecture"`
 		Timeouts       yamlTimeoutsConfig   `yaml:"timeouts"`
+		Metrics        MetricsConfig        `yaml:"metrics"`
 	}
 
 	var yamlCfg yamlConfig
@@ -1110,6 +1129,16 @@ func LoadConfig(path string) (*Config, error) {
 					return nil, fmt.Errorf("invalid timeouts.search format %q: %w", timeouts.Search, err)
 				}
 				cfg.Timeouts.Search = d
+			}
+		}
+
+		// Merge Metrics config
+		if metricsSection, exists := rawMap["metrics"]; exists && metricsSection != nil {
+			metrics := yamlCfg.Metrics
+			metricsMap, _ := metricsSection.(map[string]interface{})
+
+			if _, exists := metricsMap["loc_tracking"]; exists {
+				cfg.Metrics.LOCTracking = metrics.LOCTracking
 			}
 		}
 
