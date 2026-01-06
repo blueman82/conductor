@@ -214,6 +214,9 @@ type DefaultTaskExecutor struct {
 	// Rollback Hook integration (v3.2+)
 	RollbackHook *RollbackHook // Task-level checkpoint/rollback hook (optional)
 
+	// LOC Tracker integration (v3.4+)
+	LOCTrackerHook *LOCTrackerHook // LOC change tracking hook (optional)
+
 	// MinFailuresBeforeAdapt is the threshold for failure analysis (v2.34+)
 	// Defaults to 1 if not set
 	MinFailuresBeforeAdapt int
@@ -906,6 +909,15 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 		}
 	}
 
+	// LOC Tracker pre-task hook: Capture baseline commit (v3.4+)
+	if te.LOCTrackerHook != nil {
+		if err := te.LOCTrackerHook.PreTask(ctx, &task); err != nil {
+			if te.Logger != nil {
+				te.Logger.Warnf("LOC baseline capture failed for task %s: %v", task.Number, err)
+			}
+		}
+	}
+
 	// Pattern Intelligence pre-task hook: STOP protocol analysis and duplicate detection (v2.23+)
 	te.lastPatternResult = nil // Reset for new task
 	if te.PatternHook != nil {
@@ -1486,6 +1498,17 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				return result, err
 			}
 			te.postTaskHook(ctx, &task, &result, models.StatusGreen)
+
+			// LOC Tracker post-task hook: Calculate LOC changes (v3.4+)
+			if te.LOCTrackerHook != nil {
+				if _, err := te.LOCTrackerHook.PostTask(ctx, &task); err != nil {
+					if te.Logger != nil {
+						te.Logger.Warnf("LOC calculation failed for task %s: %v", task.Number, err)
+					}
+				}
+				result.Task = task // Ensure LOC fields are copied to result
+			}
+
 			te.rollbackPostTask(ctx, &task, models.StatusGreen, attempt, true)
 
 			// Pattern Intelligence post-task hook: Record successful pattern (v2.23+)
@@ -1505,6 +1528,17 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				return result, err
 			}
 			te.postTaskHook(ctx, &task, &result, models.StatusYellow)
+
+			// LOC Tracker post-task hook: Calculate LOC changes (v3.4+)
+			if te.LOCTrackerHook != nil {
+				if _, err := te.LOCTrackerHook.PostTask(ctx, &task); err != nil {
+					if te.Logger != nil {
+						te.Logger.Warnf("LOC calculation failed for task %s: %v", task.Number, err)
+					}
+				}
+				result.Task = task // Ensure LOC fields are copied to result
+			}
+
 			te.rollbackPostTask(ctx, &task, models.StatusYellow, attempt, true)
 			return result, nil
 		case review.Flag == models.StatusRed:
