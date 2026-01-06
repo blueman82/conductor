@@ -1813,3 +1813,124 @@ func TestUpdateCommitVerification(t *testing.T) {
 		assert.Equal(t, 1, count, "only latest execution should be updated")
 	})
 }
+
+// TestRecordExecution_WithLOC tests the LOC tracking fields
+func TestRecordExecution_WithLOC(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("records execution with LOC metrics", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		exec := &TaskExecution{
+			PlanFile:     "test-plan.yaml",
+			TaskNumber:   "1",
+			TaskName:     "Add new feature",
+			Agent:        "golang-pro",
+			Prompt:       "Implement feature X",
+			Success:      true,
+			Output:       "Feature implemented",
+			DurationSecs: 300,
+			QCVerdict:    "GREEN",
+			LinesAdded:   150,
+			LinesDeleted: 25,
+		}
+
+		err := store.RecordExecution(ctx, exec)
+		require.NoError(t, err)
+
+		// Verify by querying directly
+		var linesAdded, linesDeleted int
+		err = store.db.QueryRowContext(ctx,
+			"SELECT lines_added, lines_deleted FROM task_executions WHERE plan_file = ? AND task_number = ?",
+			"test-plan.yaml", "1").Scan(&linesAdded, &linesDeleted)
+		require.NoError(t, err)
+		assert.Equal(t, 150, linesAdded)
+		assert.Equal(t, 25, linesDeleted)
+	})
+
+	t.Run("records execution with zero LOC values", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		exec := &TaskExecution{
+			PlanFile:     "test-plan.yaml",
+			TaskNumber:   "2",
+			TaskName:     "Documentation update",
+			Agent:        "docs-architect",
+			Prompt:       "Update README",
+			Success:      true,
+			QCVerdict:    "GREEN",
+			LinesAdded:   0,
+			LinesDeleted: 0,
+		}
+
+		err := store.RecordExecution(ctx, exec)
+		require.NoError(t, err)
+
+		// Verify zero values are stored correctly
+		var linesAdded, linesDeleted int
+		err = store.db.QueryRowContext(ctx,
+			"SELECT lines_added, lines_deleted FROM task_executions WHERE plan_file = ? AND task_number = ?",
+			"test-plan.yaml", "2").Scan(&linesAdded, &linesDeleted)
+		require.NoError(t, err)
+		assert.Equal(t, 0, linesAdded)
+		assert.Equal(t, 0, linesDeleted)
+	})
+
+	t.Run("records execution with only additions", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		exec := &TaskExecution{
+			PlanFile:     "test-plan.yaml",
+			TaskNumber:   "3",
+			TaskName:     "Add new file",
+			Agent:        "golang-pro",
+			Prompt:       "Create new module",
+			Success:      true,
+			QCVerdict:    "GREEN",
+			LinesAdded:   500,
+			LinesDeleted: 0,
+		}
+
+		err := store.RecordExecution(ctx, exec)
+		require.NoError(t, err)
+
+		var linesAdded, linesDeleted int
+		err = store.db.QueryRowContext(ctx,
+			"SELECT lines_added, lines_deleted FROM task_executions WHERE plan_file = ? AND task_number = ?",
+			"test-plan.yaml", "3").Scan(&linesAdded, &linesDeleted)
+		require.NoError(t, err)
+		assert.Equal(t, 500, linesAdded)
+		assert.Equal(t, 0, linesDeleted)
+	})
+
+	t.Run("records execution with only deletions", func(t *testing.T) {
+		store := setupTestStore(t)
+		defer store.Close()
+
+		exec := &TaskExecution{
+			PlanFile:     "test-plan.yaml",
+			TaskNumber:   "4",
+			TaskName:     "Remove dead code",
+			Agent:        "refactoring-specialist",
+			Prompt:       "Clean up unused code",
+			Success:      true,
+			QCVerdict:    "GREEN",
+			LinesAdded:   0,
+			LinesDeleted: 200,
+		}
+
+		err := store.RecordExecution(ctx, exec)
+		require.NoError(t, err)
+
+		var linesAdded, linesDeleted int
+		err = store.db.QueryRowContext(ctx,
+			"SELECT lines_added, lines_deleted FROM task_executions WHERE plan_file = ? AND task_number = ?",
+			"test-plan.yaml", "4").Scan(&linesAdded, &linesDeleted)
+		require.NoError(t, err)
+		assert.Equal(t, 0, linesAdded)
+		assert.Equal(t, 200, linesDeleted)
+	})
+}

@@ -528,6 +528,8 @@ func (te *DefaultTaskExecutor) postTaskHook(ctx context.Context, task *models.Ta
 		QCVerdict:       verdict,
 		QCFeedback:      qcFeedback,
 		FailurePatterns: failurePatterns,
+		LinesAdded:      task.LinesAdded,
+		LinesDeleted:    task.LinesDeleted,
 	}
 
 	// Record execution (graceful degradation on error)
