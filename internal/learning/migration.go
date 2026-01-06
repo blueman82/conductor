@@ -397,6 +397,14 @@ CREATE INDEX IF NOT EXISTS idx_kg_edges_weight ON kg_edges(weight DESC);
 		// commit_hash: the short git commit hash if found
 		SQL: ``,
 	},
+	{
+		Version:     12,
+		Description: "Add LOC tracking columns to task_executions",
+		// This migration adds columns for tracking lines of code changes.
+		// lines_added: number of lines added during task execution
+		// lines_deleted: number of lines deleted during task execution
+		SQL: ``,
+	},
 }
 
 // MigrationVersion represents a record of an applied migration
@@ -456,6 +464,13 @@ func (s *Store) ApplyMigrations(ctx context.Context) error {
 		// Handle migration 11 special case: add commit verification columns idempotently
 		if migration.Version == 11 {
 			if err := s.applyMigration11Tx(ctx, tx); err != nil {
+				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
+			}
+		}
+
+		// Handle migration 12 special case: add LOC tracking columns idempotently
+		if migration.Version == 12 {
+			if err := s.applyMigration12Tx(ctx, tx); err != nil {
 				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
 			}
 		}
@@ -704,6 +719,25 @@ func (s *Store) applyMigration11Tx(ctx context.Context, tx *sql.Tx) error {
 	}{
 		{"commit_verified", "BOOLEAN"},
 		{"commit_hash", "TEXT"},
+	}
+
+	for _, col := range columns {
+		if err := s.addColumnIfNotExistsTx(ctx, tx, "task_executions", col.name, col.def); err != nil {
+			return fmt.Errorf("add column %s: %w", col.name, err)
+		}
+	}
+
+	return nil
+}
+
+// applyMigration12Tx adds LOC tracking columns to task_executions (within transaction).
+func (s *Store) applyMigration12Tx(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		def  string
+	}{
+		{"lines_added", "INTEGER DEFAULT 0"},
+		{"lines_deleted", "INTEGER DEFAULT 0"},
 	}
 
 	for _, col := range columns {

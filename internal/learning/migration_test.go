@@ -362,6 +362,77 @@ func TestMigrations_TableCreation(t *testing.T) {
 	})
 }
 
+func TestMigration12_LOCColumns(t *testing.T) {
+	t.Run("adds lines_added and lines_deleted columns to task_executions", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Apply all migrations
+		err := store.ApplyMigrations(ctx)
+		require.NoError(t, err)
+
+		// Verify columns exist by inserting and querying with LOC values
+		_, err = store.db.ExecContext(ctx, `
+			INSERT INTO task_executions (task_number, task_name, prompt, success, lines_added, lines_deleted)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, "task_1", "test_task", "test prompt", true, 150, 25)
+		require.NoError(t, err)
+
+		// Query back and verify values
+		var linesAdded, linesDeleted int
+		err = store.db.QueryRowContext(ctx, `
+			SELECT lines_added, lines_deleted FROM task_executions WHERE task_number = ?
+		`, "task_1").Scan(&linesAdded, &linesDeleted)
+		require.NoError(t, err)
+		assert.Equal(t, 150, linesAdded)
+		assert.Equal(t, 25, linesDeleted)
+	})
+
+	t.Run("columns default to 0", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		err := store.ApplyMigrations(ctx)
+		require.NoError(t, err)
+
+		// Insert without specifying LOC columns
+		_, err = store.db.ExecContext(ctx, `
+			INSERT INTO task_executions (task_number, task_name, prompt, success)
+			VALUES (?, ?, ?, ?)
+		`, "task_default", "test_task", "test prompt", true)
+		require.NoError(t, err)
+
+		// Query back and verify defaults
+		var linesAdded, linesDeleted int
+		err = store.db.QueryRowContext(ctx, `
+			SELECT lines_added, lines_deleted FROM task_executions WHERE task_number = ?
+		`, "task_default").Scan(&linesAdded, &linesDeleted)
+		require.NoError(t, err)
+		assert.Equal(t, 0, linesAdded)
+		assert.Equal(t, 0, linesDeleted)
+	})
+
+	t.Run("migration is idempotent", func(t *testing.T) {
+		ctx := context.Background()
+		store := setupTestStore(t)
+		defer store.Close()
+
+		// Apply migrations twice
+		err := store.ApplyMigrations(ctx)
+		require.NoError(t, err)
+
+		err = store.ApplyMigrations(ctx)
+		require.NoError(t, err)
+
+		// Verify migration 12 is applied
+		applied, err := store.IsMigrationApplied(12)
+		require.NoError(t, err)
+		assert.True(t, applied)
+	})
+}
+
 func TestMigrations_IndexCreation(t *testing.T) {
 	t.Run("creates all required indexes", func(t *testing.T) {
 		ctx := context.Background()
