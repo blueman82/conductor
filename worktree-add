@@ -1,0 +1,77 @@
+#!/bin/bash
+#
+# worktree-add - Create a git worktree with all build artifacts symlinked
+#
+# Usage: ./worktree-add <path> <branch>
+# Example: ./worktree-add ../camp-ops-emea-feature feature/my-feature
+#
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Get the main repo root (where this script lives)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAIN_REPO="$SCRIPT_DIR"
+
+if [ $# -lt 2 ]; then
+    echo -e "${RED}Usage: ./worktree-add <path> <branch>${NC}"
+    echo ""
+    echo "Examples:"
+    echo "  ./worktree-add ../camp-ops-emea-feature feature/my-feature"
+    echo "  ./worktree-add /tmp/ketchup-test feature/test-branch"
+    exit 1
+fi
+
+WORKTREE_PATH="$1"
+BRANCH="$2"
+
+echo -e "${BLUE}[INFO]${NC} Creating worktree at: $WORKTREE_PATH"
+echo -e "${BLUE}[INFO]${NC} Branch: $BRANCH"
+
+# Create the worktree
+# Find git root dynamically
+GIT_ROOT="$(cd "$MAIN_REPO" && git rev-parse --show-toplevel)"
+cd "$GIT_ROOT"
+git worktree add "$WORKTREE_PATH" -b "$BRANCH" 2>/dev/null || git worktree add "$WORKTREE_PATH" "$BRANCH"
+
+# Resolve the absolute path of the new worktree
+WORKTREE_ABS="$(cd "$WORKTREE_PATH" && pwd)"
+WORKTREE_KETCHUP="$WORKTREE_ABS/projects/ketchup"
+
+echo -e "${BLUE}[INFO]${NC} Setting up symlinks for build artifacts..."
+
+# Symlink Python venv
+if [ -d "$MAIN_REPO/tests/setup/.venv" ]; then
+    mkdir -p "$WORKTREE_KETCHUP/tests/setup"
+    ln -sf "$MAIN_REPO/tests/setup/.venv" "$WORKTREE_KETCHUP/tests/setup/.venv"
+    echo -e "${GREEN}[SUCCESS]${NC} Symlinked tests/setup/.venv"
+else
+    echo -e "${RED}[WARN]${NC} No .venv found in main repo - you may need to create it"
+fi
+
+# Symlink corp_jira_mcp/dist
+if [ -d "$MAIN_REPO/corp_jira_mcp/dist" ]; then
+    ln -sf "$MAIN_REPO/corp_jira_mcp/dist" "$WORKTREE_KETCHUP/corp_jira_mcp/dist"
+    echo -e "${GREEN}[SUCCESS]${NC} Symlinked corp_jira_mcp/dist"
+else
+    echo -e "${RED}[WARN]${NC} No corp_jira_mcp/dist found - run 'npm run build' in main repo first"
+fi
+
+# Symlink corp_jira_mcp/node_modules
+if [ -d "$MAIN_REPO/corp_jira_mcp/node_modules" ]; then
+    ln -sf "$MAIN_REPO/corp_jira_mcp/node_modules" "$WORKTREE_KETCHUP/corp_jira_mcp/node_modules"
+    echo -e "${GREEN}[SUCCESS]${NC} Symlinked corp_jira_mcp/node_modules"
+fi
+
+echo ""
+echo -e "${GREEN}[SUCCESS]${NC} Worktree ready at: $WORKTREE_KETCHUP"
+echo ""
+echo "Next steps:"
+echo "  cd $WORKTREE_KETCHUP"
+echo "  ./check           # Verify lint passes"
+echo "  ./deploy          # Deploy from this worktree"
