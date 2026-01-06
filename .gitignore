@@ -42,8 +42,9 @@ logs/
 .conductor/
 !.conductor/config.yaml.example # Track example template
 
-# Claude Code directory (completely ignored - plugin provides commands via plugin/conductor-tools/)
-.claude/
+# Claude Code directory (ignore user config, but track commands)
+.claude/*
+!.claude/commands/
 
 # Test learning databases
 internal/cmd/.conductor/
