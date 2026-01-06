@@ -132,6 +132,26 @@ rollback:
   keep_checkpoint_days: 7     # Auto-cleanup stale checkpoint branches
 ```
 
+## Development
+
+### Worktrees for Feature Development
+
+Use `worktree-add` to create isolated worktrees for parallel feature development:
+
+```bash
+# Create a worktree for a new feature branch
+./worktree-add ../conductor-my-feature feature/my-feature
+
+# Work in the new worktree
+cd ../conductor-my-feature
+conductor run docs/plans/my-feature.yaml
+
+# When done, remove the worktree
+git worktree remove ../conductor-my-feature
+```
+
+This allows running Conductor plans in isolation without affecting your main working directory.
+
 ## Documentation
 
 - [Complete Reference](docs/conductor.md) — Full usage, formats, troubleshooting
