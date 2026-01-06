@@ -84,3 +84,4 @@ docs/*
 !docs/plans/
 docs/plans/*
 !docs/plans/setup-introspector.yaml
+check

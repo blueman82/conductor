@@ -134,6 +134,29 @@ rollback:
 
 ## Development
 
+### Local CI
+
+Run the CI pipeline locally before pushing:
+
+```bash
+# Create symlink (one-time setup)
+ln -sf scripts/ci-local.sh check
+
+# Run full CI (format, vet, tests with race detection)
+./check
+
+# Quick check (no tests)
+./check --quick
+
+# Auto-fix formatting issues
+./check --fix
+
+# Verbose output with custom parallelism
+./check -v -p 8
+```
+
+Or use `make ci` directly.
+
 ### Worktrees for Feature Development
 
 Use `worktree-add` to create isolated worktrees for parallel feature development:
