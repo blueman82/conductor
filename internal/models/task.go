@@ -70,6 +70,10 @@ type Task struct {
 	FilesModified      int           `json:"files_modified,omitempty" yaml:"files_modified,omitempty"`
 	FilesCreated       int           `json:"files_created,omitempty" yaml:"files_created,omitempty"`
 	FilesDeleted       int           `json:"files_deleted,omitempty" yaml:"files_deleted,omitempty"`
+
+	// LOC tracking fields (v3.4+)
+	LinesAdded   int `json:"lines_added,omitempty" yaml:"lines_added,omitempty"`
+	LinesDeleted int `json:"lines_deleted,omitempty" yaml:"lines_deleted,omitempty"`
 }
 
 // Validate checks if the task has all required fields
@@ -125,6 +129,16 @@ func (t *Task) RecordFileOperation(operation string) {
 // TotalFileOperations returns the sum of all file operations
 func (t *Task) TotalFileOperations() int {
 	return t.FilesModified + t.FilesCreated + t.FilesDeleted
+}
+
+// NetLOC returns the net lines of code change (added - deleted)
+func (t *Task) NetLOC() int {
+	return t.LinesAdded - t.LinesDeleted
+}
+
+// TotalLOC returns the total lines touched (added + deleted) - useful for code churn metrics
+func (t *Task) TotalLOC() int {
+	return t.LinesAdded + t.LinesDeleted
 }
 
 // GetFormattedDuration returns the ExecutionDuration in human-readable format
