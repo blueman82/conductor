@@ -1,14 +1,18 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/learning"
+	"github.com/harrison/conductor/internal/logger"
 	"github.com/harrison/conductor/internal/models"
 )
 
@@ -461,6 +465,328 @@ func TestLOCTrackingEdgeCases(t *testing.T) {
 		if metrics != nil {
 			t.Error("expected nil metrics when baseline not captured")
 		}
+	})
+}
+
+// TestLOCTrackingWaveCompleteLOCDisplay verifies that wave completion log includes LOC metrics.
+// This satisfies success criteria 3: "Verify wave completion log includes LOC display"
+func TestLOCTrackingWaveCompleteLOCDisplay(t *testing.T) {
+	t.Run("wave completion shows LOC from task results", func(t *testing.T) {
+		// Create git repo with real LOC tracking
+		dir := t.TempDir()
+		initGitRepo(t, dir)
+		writeFile(t, filepath.Join(dir, "init.go"), "package main\n")
+		gitAdd(t, dir, ".")
+		gitCommit(t, dir, "Initial")
+
+		// Create LOC hook
+		hook := NewLOCTrackerHook(true, dir, nil)
+
+		// Task with LOC tracking
+		task := &models.Task{Number: "1", Name: "Feature task", Prompt: "test"}
+		hook.PreTask(context.Background(), task)
+
+		// Make changes
+		writeFile(t, filepath.Join(dir, "feature.go"), "package main\n\nfunc Feature() {}\n\nfunc Helper() {}\n")
+		gitAdd(t, dir, ".")
+		gitCommit(t, dir, "Add feature")
+		hook.PostTask(context.Background(), task)
+
+		// Verify task has LOC data
+		if task.LinesAdded <= 0 {
+			t.Fatalf("expected positive LinesAdded, got %d", task.LinesAdded)
+		}
+
+		// Create task result with LOC data (simulates what wave executor produces)
+		taskResult := models.TaskResult{
+			Task:     *task,
+			Status:   models.StatusGreen,
+			Duration: 10 * time.Second,
+		}
+
+		// Create console logger with buffer to capture output
+		buf := &bytes.Buffer{}
+		consoleLogger := logger.NewConsoleLogger(buf, "info")
+
+		// Create a wave
+		wave := models.Wave{
+			Name:        "Wave 1",
+			TaskNumbers: []string{"1"},
+		}
+
+		// Call LogWaveComplete and verify LOC is included in output
+		consoleLogger.LogWaveComplete(wave, 10*time.Second, []models.TaskResult{taskResult})
+
+		output := buf.String()
+
+		// Verify the wave completion log contains LOC metrics
+		// Format from console.go: " | +%d/-%d LOC"
+		if !strings.Contains(output, "LOC") {
+			t.Errorf("expected wave completion output to contain LOC metrics, got:\n%s", output)
+		}
+		// Verify the actual numbers appear
+		if !strings.Contains(output, "+") {
+			t.Errorf("expected wave completion output to contain '+' for lines added, got:\n%s", output)
+		}
+
+		t.Logf("Wave completion output: %s", output)
+	})
+
+	t.Run("wave completion omits LOC when zero", func(t *testing.T) {
+		// Create task with zero LOC
+		task := models.Task{Number: "1", Name: "No changes task", LinesAdded: 0, LinesDeleted: 0}
+		taskResult := models.TaskResult{
+			Task:     task,
+			Status:   models.StatusGreen,
+			Duration: 5 * time.Second,
+		}
+
+		buf := &bytes.Buffer{}
+		consoleLogger := logger.NewConsoleLogger(buf, "info")
+
+		wave := models.Wave{Name: "Wave 1", TaskNumbers: []string{"1"}}
+		consoleLogger.LogWaveComplete(wave, 5*time.Second, []models.TaskResult{taskResult})
+
+		output := buf.String()
+
+		// Verify LOC is NOT shown when zero
+		if strings.Contains(output, "LOC") {
+			t.Errorf("expected wave completion output to NOT contain LOC when zero, got:\n%s", output)
+		}
+	})
+
+	t.Run("wave completion aggregates LOC from multiple tasks", func(t *testing.T) {
+		// Create multiple tasks with LOC
+		task1 := models.Task{Number: "1", Name: "Task 1", LinesAdded: 100, LinesDeleted: 25}
+		task2 := models.Task{Number: "2", Name: "Task 2", LinesAdded: 50, LinesDeleted: 10}
+
+		results := []models.TaskResult{
+			{Task: task1, Status: models.StatusGreen, Duration: 10 * time.Second},
+			{Task: task2, Status: models.StatusGreen, Duration: 15 * time.Second},
+		}
+
+		buf := &bytes.Buffer{}
+		consoleLogger := logger.NewConsoleLogger(buf, "info")
+
+		wave := models.Wave{Name: "Wave 1", TaskNumbers: []string{"1", "2"}}
+		consoleLogger.LogWaveComplete(wave, 25*time.Second, results)
+
+		output := buf.String()
+
+		// Verify aggregated LOC is shown (100+50=150 added, 25+10=35 deleted)
+		if !strings.Contains(output, "+150") {
+			t.Errorf("expected aggregated lines added (+150), got:\n%s", output)
+		}
+		if !strings.Contains(output, "-35") {
+			t.Errorf("expected aggregated lines deleted (-35), got:\n%s", output)
+		}
+	})
+}
+
+// TestLOCTrackingSummaryLOCDisplay verifies that execution summary includes LOC totals.
+// This satisfies success criteria 4: "Verify execution summary includes LOC totals"
+func TestLOCTrackingSummaryLOCDisplay(t *testing.T) {
+	t.Run("execution summary shows LOC totals from ExecutionResult", func(t *testing.T) {
+		// Create git repo with real LOC tracking
+		dir := t.TempDir()
+		initGitRepo(t, dir)
+		writeFile(t, filepath.Join(dir, "init.go"), "package main\n")
+		gitAdd(t, dir, ".")
+		gitCommit(t, dir, "Initial")
+
+		// Create LOC hook
+		hook := NewLOCTrackerHook(true, dir, nil)
+
+		// Task 1 with LOC tracking
+		task1 := &models.Task{Number: "1", Name: "Feature 1", Prompt: "test"}
+		hook.PreTask(context.Background(), task1)
+		writeFile(t, filepath.Join(dir, "feature1.go"), "package main\n\nfunc F1() {}\n")
+		gitAdd(t, dir, ".")
+		gitCommit(t, dir, "Add feature 1")
+		hook.PostTask(context.Background(), task1)
+
+		// Task 2 with LOC tracking
+		task2 := &models.Task{Number: "2", Name: "Feature 2", Prompt: "test"}
+		hook.PreTask(context.Background(), task2)
+		writeFile(t, filepath.Join(dir, "feature2.go"), "package main\n\nfunc F2() {}\n\nfunc F2Helper() {}\n")
+		gitAdd(t, dir, ".")
+		gitCommit(t, dir, "Add feature 2")
+		hook.PostTask(context.Background(), task2)
+
+		// Create task results
+		results := []models.TaskResult{
+			{Task: *task1, Status: models.StatusGreen, Duration: 10 * time.Second},
+			{Task: *task2, Status: models.StatusGreen, Duration: 15 * time.Second},
+		}
+
+		// Create ExecutionResult using models.NewExecutionResult (which aggregates LOC)
+		execResult := models.NewExecutionResult(results, true, 25*time.Second)
+
+		// Verify ExecutionResult has aggregated LOC
+		expectedAdded := task1.LinesAdded + task2.LinesAdded
+		expectedDeleted := task1.LinesDeleted + task2.LinesDeleted
+		if execResult.TotalLinesAdded != expectedAdded {
+			t.Errorf("ExecutionResult.TotalLinesAdded = %d, expected %d (task1=%d + task2=%d)",
+				execResult.TotalLinesAdded, expectedAdded, task1.LinesAdded, task2.LinesAdded)
+		}
+		if execResult.TotalLinesDeleted != expectedDeleted {
+			t.Errorf("ExecutionResult.TotalLinesDeleted = %d, expected %d",
+				execResult.TotalLinesDeleted, expectedDeleted)
+		}
+
+		// Create console logger and verify output
+		buf := &bytes.Buffer{}
+		consoleLogger := logger.NewConsoleLogger(buf, "info")
+		consoleLogger.LogSummary(*execResult)
+
+		output := buf.String()
+
+		// Verify summary contains "Lines of Code:" section
+		if !strings.Contains(output, "Lines of Code:") {
+			t.Errorf("expected summary to contain 'Lines of Code:' section, got:\n%s", output)
+		}
+
+		// Verify Added/Deleted/Net are shown
+		if !strings.Contains(output, "Added:") {
+			t.Errorf("expected summary to contain 'Added:' line, got:\n%s", output)
+		}
+		if !strings.Contains(output, "Deleted:") {
+			t.Errorf("expected summary to contain 'Deleted:' line, got:\n%s", output)
+		}
+		if !strings.Contains(output, "Net:") {
+			t.Errorf("expected summary to contain 'Net:' line, got:\n%s", output)
+		}
+
+		t.Logf("Execution summary LOC output:\n%s", output)
+		t.Logf("Aggregated LOC: +%d/-%d (Net: %+d)",
+			execResult.TotalLinesAdded, execResult.TotalLinesDeleted,
+			execResult.TotalLinesAdded-execResult.TotalLinesDeleted)
+	})
+
+	t.Run("execution summary omits LOC section when zero", func(t *testing.T) {
+		// Create ExecutionResult with zero LOC
+		results := []models.TaskResult{
+			{Task: models.Task{Number: "1", LinesAdded: 0, LinesDeleted: 0}, Status: models.StatusGreen},
+		}
+		execResult := models.NewExecutionResult(results, true, 10*time.Second)
+
+		buf := &bytes.Buffer{}
+		consoleLogger := logger.NewConsoleLogger(buf, "info")
+		consoleLogger.LogSummary(*execResult)
+
+		output := buf.String()
+
+		// Verify LOC section is NOT shown when zero
+		if strings.Contains(output, "Lines of Code:") {
+			t.Errorf("expected summary to NOT contain 'Lines of Code:' when zero, got:\n%s", output)
+		}
+	})
+
+	t.Run("execution summary shows correct net (added - deleted)", func(t *testing.T) {
+		// Create ExecutionResult with specific LOC values
+		results := []models.TaskResult{
+			{Task: models.Task{Number: "1", LinesAdded: 200, LinesDeleted: 50}, Status: models.StatusGreen},
+		}
+		execResult := models.NewExecutionResult(results, true, 10*time.Second)
+
+		buf := &bytes.Buffer{}
+		consoleLogger := logger.NewConsoleLogger(buf, "info")
+		consoleLogger.LogSummary(*execResult)
+
+		output := buf.String()
+
+		// Net should be 200 - 50 = +150
+		if !strings.Contains(output, "Net: +150") {
+			t.Errorf("expected 'Net: +150' in summary, got:\n%s", output)
+		}
+	})
+
+	t.Run("execution summary shows negative net when more deleted", func(t *testing.T) {
+		// Create ExecutionResult with more deletions than additions
+		results := []models.TaskResult{
+			{Task: models.Task{Number: "1", LinesAdded: 30, LinesDeleted: 100}, Status: models.StatusGreen},
+		}
+		execResult := models.NewExecutionResult(results, true, 10*time.Second)
+
+		buf := &bytes.Buffer{}
+		consoleLogger := logger.NewConsoleLogger(buf, "info")
+		consoleLogger.LogSummary(*execResult)
+
+		output := buf.String()
+
+		// Net should be 30 - 100 = -70
+		if !strings.Contains(output, "Net: -70") {
+			t.Errorf("expected 'Net: -70' in summary, got:\n%s", output)
+		}
+	})
+}
+
+// TestLOCTrackingEndToEndWithLogger verifies the full flow from hook to logger output.
+// This tests the complete integration: hook -> task -> result -> ExecutionResult -> logger
+func TestLOCTrackingEndToEndWithLogger(t *testing.T) {
+	t.Run("complete flow: hook -> task -> result -> logger display", func(t *testing.T) {
+		// Setup isolated git repo
+		dir := t.TempDir()
+		initGitRepo(t, dir)
+		writeFile(t, filepath.Join(dir, "init.go"), "package main\n")
+		gitAdd(t, dir, ".")
+		gitCommit(t, dir, "Initial")
+
+		// Create LOC hook
+		hook := NewLOCTrackerHook(true, dir, nil)
+
+		// Run task through LOC tracking
+		task := &models.Task{Number: "1", Name: "Full flow test", Prompt: "test"}
+		hook.PreTask(context.Background(), task)
+		writeFile(t, filepath.Join(dir, "feature.go"), "package main\n\nfunc Feature() {\n\treturn\n}\n")
+		gitAdd(t, dir, ".")
+		gitCommit(t, dir, "Add feature")
+		hook.PostTask(context.Background(), task)
+
+		// Create result (simulates what wave executor produces)
+		taskResult := models.TaskResult{
+			Task:     *task,
+			Status:   models.StatusGreen,
+			Duration: 10 * time.Second,
+		}
+
+		// Create ExecutionResult (simulates what orchestrator produces)
+		execResult := models.NewExecutionResult([]models.TaskResult{taskResult}, true, 10*time.Second)
+
+		// Verify the chain: task LOC -> ExecutionResult LOC
+		if task.LinesAdded <= 0 {
+			t.Fatal("task should have positive LinesAdded from hook")
+		}
+		if execResult.TotalLinesAdded != task.LinesAdded {
+			t.Errorf("ExecutionResult.TotalLinesAdded (%d) should match task.LinesAdded (%d)",
+				execResult.TotalLinesAdded, task.LinesAdded)
+		}
+
+		// Verify wave completion log shows LOC
+		waveBuf := &bytes.Buffer{}
+		waveLogger := logger.NewConsoleLogger(waveBuf, "info")
+		wave := models.Wave{Name: "Wave 1", TaskNumbers: []string{"1"}}
+		waveLogger.LogWaveComplete(wave, 10*time.Second, []models.TaskResult{taskResult})
+
+		waveOutput := waveBuf.String()
+		if !strings.Contains(waveOutput, "LOC") {
+			t.Errorf("wave completion should include LOC, got:\n%s", waveOutput)
+		}
+
+		// Verify execution summary shows LOC
+		summaryBuf := &bytes.Buffer{}
+		summaryLogger := logger.NewConsoleLogger(summaryBuf, "info")
+		summaryLogger.LogSummary(*execResult)
+
+		summaryOutput := summaryBuf.String()
+		if !strings.Contains(summaryOutput, "Lines of Code:") {
+			t.Errorf("execution summary should include 'Lines of Code:' section, got:\n%s", summaryOutput)
+		}
+
+		t.Logf("Task LOC: +%d/-%d", task.LinesAdded, task.LinesDeleted)
+		t.Logf("ExecutionResult LOC: +%d/-%d", execResult.TotalLinesAdded, execResult.TotalLinesDeleted)
+		t.Logf("Wave output:\n%s", waveOutput)
+		t.Logf("Summary output:\n%s", summaryOutput)
 	})
 }
 
