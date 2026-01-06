@@ -1,4 +1,4 @@
-.PHONY: help build build-patch build-minor build-major test test-coverage test-verbose test-race fmt lint clean run validate learning-stats learning-export learning-clear
+.PHONY: help build build-patch build-minor build-major test test-coverage test-verbose test-race fmt lint clean run validate learning-stats learning-export learning-clear ci
 
 # Variables
 BINARY_NAME = conductor
@@ -23,6 +23,7 @@ help:
 	@echo "  make test-coverage      - Run tests with coverage report"
 	@echo ""
 	@echo "Quality targets:"
+	@echo "  make ci                 - Run full CI pipeline locally (parallel tests)"
 	@echo "  make fmt                - Format all Go code"
 	@echo "  make lint               - Run linter (requires golangci-lint)"
 	@echo ""
@@ -136,6 +137,10 @@ learning-export:
 
 learning-clear:
 	$(GO) run ./cmd/conductor learning clear
+
+# Run full CI pipeline locally (mirrors GitHub Actions)
+ci:
+	@./scripts/ci-local.sh
 
 # Clean build artifacts
 clean:
