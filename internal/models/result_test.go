@@ -224,10 +224,10 @@ func TestExecutionResult_TotalFiles(t *testing.T) {
 
 func TestExecutionResult_LOC(t *testing.T) {
 	tests := []struct {
-		name                string
-		results             []TaskResult
-		expectTotalAdded    int
-		expectTotalDeleted  int
+		name               string
+		results            []TaskResult
+		expectTotalAdded   int
+		expectTotalDeleted int
 	}{
 		{
 			name: "aggregate LOC across tasks",
@@ -259,10 +259,10 @@ func TestExecutionResult_LOC(t *testing.T) {
 			expectTotalDeleted: 300, // 0 + 200 + 100
 		},
 		{
-			name:                "empty results",
-			results:             []TaskResult{},
-			expectTotalAdded:    0,
-			expectTotalDeleted:  0,
+			name:               "empty results",
+			results:            []TaskResult{},
+			expectTotalAdded:   0,
+			expectTotalDeleted: 0,
 		},
 		{
 			name: "single task with LOC",
