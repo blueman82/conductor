@@ -195,6 +195,10 @@ The command invokes the `implementation-planner` skill to create a structured YA
 
 **Production-ready** — 86%+ test coverage, 500+ tests.
 
+## Acknowledgments
+
+Inspired by [CLAWED](https://github.com/badvision/clawed) (Claude Agent Workflow Execution Delegation) by [@badvision](https://github.com/badvision) — a production-tested multi-agent orchestration framework that shares many of the same quality control and agent coordination patterns.
+
 ## License
 
 [MIT](LICENSE)
