@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -20,12 +19,11 @@ type IntelligentAgentRecommendation struct {
 }
 
 // IntelligentSelector manages intelligent QC agent selection using Claude.
-// Uses claude.Invoker for CLI invocation with rate limit handling.
+// Embeds claude.Service for CLI invocation with rate limit handling.
 type IntelligentSelector struct {
+	claude.Service
 	Registry  *agent.Registry
 	Cache     *QCSelectionCache
-	inv       *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
-	Logger    budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
 	MaxAgents int
 }
 
@@ -33,14 +31,10 @@ type IntelligentSelector struct {
 // The timeout parameter controls how long to wait for Claude's agent selection response.
 // Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
 func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int, timeout time.Duration, logger budget.WaiterLogger) *IntelligentSelector {
-	inv := claude.NewInvoker()
-	inv.Timeout = timeout
-	inv.Logger = logger
 	return &IntelligentSelector{
+		Service:   *claude.NewService(timeout, logger),
 		Registry:  registry,
 		Cache:     NewQCSelectionCache(cacheTTLSeconds),
-		inv:       inv,
-		Logger:    logger,
 		MaxAgents: 4,
 	}
 }
@@ -50,15 +44,10 @@ func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int, timeo
 // configuration and rate limit handling. The invoker should already have Timeout
 // and Logger configured.
 func NewIntelligentSelectorWithInvoker(registry *agent.Registry, cacheTTLSeconds int, inv *claude.Invoker) *IntelligentSelector {
-	var logger budget.WaiterLogger
-	if inv != nil {
-		logger = inv.Logger
-	}
 	return &IntelligentSelector{
+		Service:   *claude.NewServiceWithInvoker(inv),
 		Registry:  registry,
 		Cache:     NewQCSelectionCache(cacheTTLSeconds),
-		inv:       inv,
-		Logger:    logger,
 		MaxAgents: 4,
 	}
 }
@@ -82,31 +71,10 @@ func (is *IntelligentSelector) SelectAgents(
 	// Build prompt for Claude
 	prompt := is.buildSelectionPrompt(task, executingAgent, availableAgents, config)
 
-	// Invoke Claude for recommendation via Invoker (rate limit handling is automatic)
-	req := claude.Request{
-		Prompt: prompt,
-		Schema: models.IntelligentSelectionSchema(),
-	}
-
-	resp, err := is.inv.Invoke(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("intelligent selection failed: %w", err)
-	}
-
-	// Parse the response
-	content, _, err := claude.ParseResponse(resp.RawOutput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse claude output: %w", err)
-	}
-
-	if content == "" {
-		return nil, fmt.Errorf("empty response from claude")
-	}
-
-	// Parse as recommendation - schema guarantees valid JSON
+	// Invoke Claude for recommendation
 	var recommendation IntelligentAgentRecommendation
-	if err := json.Unmarshal([]byte(content), &recommendation); err != nil {
-		return nil, fmt.Errorf("schema enforcement failed: %w (content: %s)", err, content)
+	if err := is.InvokeAndParse(ctx, prompt, models.IntelligentSelectionSchema(), &recommendation); err != nil {
+		return nil, fmt.Errorf("intelligent selection failed: %w", err)
 	}
 
 	// Apply guardrails

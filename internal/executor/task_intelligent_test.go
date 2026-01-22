@@ -56,7 +56,7 @@ func TestNewTaskAgentSelector(t *testing.T) {
 	if selector.Registry != registry {
 		t.Error("expected registry to be set")
 	}
-	if selector.inv == nil {
+	if selector.Invoker() == nil {
 		t.Error("expected invoker to be set")
 	}
 }
@@ -67,8 +67,8 @@ func TestNewTaskAgentSelector_CustomTimeout(t *testing.T) {
 
 	selector := NewTaskAgentSelector(registry, 45*time.Second, nil)
 
-	// Timeout is set on the internal invoker, verify via a field check
-	if selector.inv == nil {
+	// Timeout is set on the internal invoker, verify via method accessor
+	if selector.Invoker() == nil {
 		t.Fatal("expected invoker to be set")
 	}
 }
@@ -258,13 +258,11 @@ func TestTaskAgentSelector_SelectAgent_EmptyRegistry(t *testing.T) {
 }
 
 func TestTaskAgentSelector_SelectAgent_WithNilRegistry(t *testing.T) {
-	// Create selector with nil registry using constructor
-	// inv must be set since SelectAgent will call it if agents are available
+	// Create selector with nil registry
+	// The embedded Service will have zero values (nil invoker, nil logger)
 	// But with nil registry, it errors early before invoking Claude
 	selector := &TaskAgentSelector{
 		Registry: nil,
-		inv:      nil, // Won't be called since no agents available
-		Logger:   nil,
 	}
 
 	task := models.Task{

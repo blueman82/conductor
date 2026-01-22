@@ -2,7 +2,6 @@ package architecture
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -13,22 +12,17 @@ import (
 )
 
 // Assessor evaluates tasks for architectural impact using Claude CLI.
-// Uses claude.Invoker for CLI invocation with rate limit handling.
+// Embeds claude.Service for CLI invocation with rate limit handling.
 type Assessor struct {
-	inv    *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
-	Logger budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
+	claude.Service
 }
 
 // NewAssessor creates an assessor with the specified timeout.
 // The timeout parameter controls how long to wait for Claude CLI responses.
 // Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
 func NewAssessor(timeout time.Duration, logger budget.WaiterLogger) *Assessor {
-	inv := claude.NewInvoker()
-	inv.Timeout = timeout
-	inv.Logger = logger
 	return &Assessor{
-		inv:    inv,
-		Logger: logger,
+		Service: *claude.NewService(timeout, logger),
 	}
 }
 
@@ -37,13 +31,8 @@ func NewAssessor(timeout time.Duration, logger budget.WaiterLogger) *Assessor {
 // configuration and rate limit handling. The invoker should already have Timeout
 // and Logger configured.
 func NewAssessorWithInvoker(inv *claude.Invoker) *Assessor {
-	var logger budget.WaiterLogger
-	if inv != nil {
-		logger = inv.Logger
-	}
 	return &Assessor{
-		inv:    inv,
-		Logger: logger,
+		Service: *claude.NewServiceWithInvoker(inv),
 	}
 }
 
@@ -51,39 +40,9 @@ func NewAssessorWithInvoker(inv *claude.Invoker) *Assessor {
 func (a *Assessor) Assess(ctx context.Context, task models.Task) (*AssessmentResult, error) {
 	prompt := a.buildPrompt(task)
 
-	req := claude.Request{
-		Prompt: prompt,
-		Schema: AssessmentSchema(),
-	}
-
-	// Invoke Claude CLI (rate limit handling is in Invoker)
-	resp, err := a.inv.Invoke(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse the response
-	content, _, err := claude.ParseResponse(resp.RawOutput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse claude output: %w", err)
-	}
-
-	if content == "" {
-		return nil, fmt.Errorf("empty response from claude")
-	}
-
 	var result AssessmentResult
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		// Try extracting JSON from mixed output
-		start := strings.Index(content, "{")
-		end := strings.LastIndex(content, "}")
-		if start >= 0 && end > start {
-			if err := json.Unmarshal([]byte(content[start:end+1]), &result); err != nil {
-				return nil, fmt.Errorf("failed to extract JSON: %w", err)
-			}
-			return &result, nil
-		}
-		return nil, fmt.Errorf("failed to parse assessment result: %w", err)
+	if err := a.InvokeAndParseWithFallback(ctx, prompt, AssessmentSchema(), &result); err != nil {
+		return nil, err
 	}
 
 	return &result, nil

@@ -13,15 +13,15 @@ func TestNewClaudeEnhancer(t *testing.T) {
 	if enhancer == nil {
 		t.Fatal("NewClaudeEnhancer returned nil")
 	}
-	// Invoker is now internal - verify it was created
-	if enhancer.inv == nil {
+	// Invoker is accessible via Invoker() method
+	if enhancer.Invoker() == nil {
 		t.Error("Invoker should be initialized")
 	}
-	if enhancer.inv.Timeout != 90*time.Second {
-		t.Errorf("inv.Timeout = %v, want 90s", enhancer.inv.Timeout)
+	if enhancer.Invoker().Timeout != 90*time.Second {
+		t.Errorf("Invoker().Timeout = %v, want 90s", enhancer.Invoker().Timeout)
 	}
-	if enhancer.inv.ClaudePath != "claude" {
-		t.Errorf("inv.ClaudePath = %s, want claude", enhancer.inv.ClaudePath)
+	if enhancer.Invoker().ClaudePath != "claude" {
+		t.Errorf("Invoker().ClaudePath = %s, want claude", enhancer.Invoker().ClaudePath)
 	}
 	if enhancer.Logger != nil {
 		t.Errorf("Logger should be nil when not provided")
@@ -31,8 +31,8 @@ func TestNewClaudeEnhancer(t *testing.T) {
 func TestNewClaudeEnhancer_CustomTimeout(t *testing.T) {
 	enhancer := NewClaudeEnhancer(45*time.Second, nil)
 
-	if enhancer.inv.Timeout != 45*time.Second {
-		t.Errorf("inv.Timeout = %v, want 45s", enhancer.inv.Timeout)
+	if enhancer.Invoker().Timeout != 45*time.Second {
+		t.Errorf("Invoker().Timeout = %v, want 45s", enhancer.Invoker().Timeout)
 	}
 }
 

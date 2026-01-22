@@ -3,7 +3,6 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -16,23 +15,18 @@ import (
 
 // TaskAgentSelector uses Claude to intelligently select an agent for task execution.
 // This is used when task.Agent is empty and QC mode is "intelligent".
-// Uses claude.Invoker for CLI invocation with rate limit handling.
+// Embeds claude.Service for CLI invocation with rate limit handling.
 type TaskAgentSelector struct {
+	claude.Service
 	Registry *agent.Registry
-	inv      *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
-	Logger   budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
 }
 
 // NewTaskAgentSelector creates a new task agent selector with the specified timeout.
 // The timeout controls how long to wait for Claude's agent selection response.
 func NewTaskAgentSelector(registry *agent.Registry, timeout time.Duration, logger budget.WaiterLogger) *TaskAgentSelector {
-	inv := claude.NewInvoker()
-	inv.Timeout = timeout
-	inv.Logger = logger
 	return &TaskAgentSelector{
+		Service:  *claude.NewService(timeout, logger),
 		Registry: registry,
-		inv:      inv,
-		Logger:   logger,
 	}
 }
 
@@ -41,14 +35,9 @@ func NewTaskAgentSelector(registry *agent.Registry, timeout time.Duration, logge
 // configuration and rate limit handling. The invoker should already have Timeout
 // and Logger configured.
 func NewTaskAgentSelectorWithInvoker(registry *agent.Registry, inv *claude.Invoker) *TaskAgentSelector {
-	var logger budget.WaiterLogger
-	if inv != nil {
-		logger = inv.Logger
-	}
 	return &TaskAgentSelector{
+		Service:  *claude.NewServiceWithInvoker(inv),
 		Registry: registry,
-		inv:      inv,
-		Logger:   logger,
 	}
 }
 
@@ -85,42 +74,13 @@ func (tas *TaskAgentSelector) SelectAgent(ctx context.Context, task models.Task)
 
 	prompt := tas.buildSelectionPrompt(task, availableAgents)
 
-	// Invoke Claude for recommendation via Invoker (rate limit handling is automatic)
-	req := claude.Request{
-		Prompt: prompt,
-		Schema: TaskAgentSelectionSchema(),
-	}
-
-	resp, err := tas.inv.Invoke(ctx, req)
-	if err != nil {
+	// Invoke Claude for recommendation with fallback JSON extraction
+	var result TaskAgentSelectionResult
+	if err := tas.InvokeAndParseWithFallback(ctx, prompt, TaskAgentSelectionSchema(), &result); err != nil {
 		return nil, fmt.Errorf("intelligent task agent selection failed: %w", err)
 	}
 
-	// Parse the response
-	content, _, err := claude.ParseResponse(resp.RawOutput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse claude output: %w", err)
-	}
-
-	if content == "" {
-		return nil, fmt.Errorf("empty content in claude response")
-	}
-
-	// Parse as selection result - schema guarantees valid JSON
-	var result TaskAgentSelectionResult
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		// Fallback: try to extract JSON from content (handles edge cases)
-		start := strings.Index(content, "{")
-		end := strings.LastIndex(content, "}")
-		if start >= 0 && end > start {
-			if err := json.Unmarshal([]byte(content[start:end+1]), &result); err != nil {
-				return nil, fmt.Errorf("schema enforcement failed: %w (content: %s)", err, content)
-			}
-		} else {
-			return nil, fmt.Errorf("schema enforcement failed: %w (content: %s)", err, content)
-		}
-	}
-
+	// Validate agent exists, fallback to general-purpose if not
 	if !tas.agentExists(result.Agent) {
 		result.Agent = "general-purpose"
 		result.Rationale = fmt.Sprintf("Fallback (agent not in registry): %s", result.Rationale)

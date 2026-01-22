@@ -12,14 +12,14 @@ func TestNewAssessor(t *testing.T) {
 	if a == nil {
 		t.Fatal("expected non-nil assessor")
 	}
-	if a.inv == nil {
+	if a.Invoker() == nil {
 		t.Error("Invoker should not be nil")
 	}
-	if a.inv.Timeout != timeout {
-		t.Errorf("Invoker Timeout = %v, want 90s", a.inv.Timeout)
+	if a.Invoker().Timeout != timeout {
+		t.Errorf("Invoker Timeout = %v, want 90s", a.Invoker().Timeout)
 	}
-	if a.inv.ClaudePath != "claude" {
-		t.Errorf("Default ClaudePath = %s, want claude", a.inv.ClaudePath)
+	if a.Invoker().ClaudePath != "claude" {
+		t.Errorf("Default ClaudePath = %s, want claude", a.Invoker().ClaudePath)
 	}
 	if a.Logger != nil {
 		t.Errorf("Logger should be nil when not provided")
@@ -30,14 +30,14 @@ func TestNewAssessor_CustomTimeout(t *testing.T) {
 	timeout := 60 * time.Second
 	a := NewAssessor(timeout, nil)
 
-	if a.inv == nil {
+	if a.Invoker() == nil {
 		t.Error("Invoker should not be nil")
 	}
-	if a.inv.Timeout != timeout {
-		t.Errorf("Invoker Timeout = %v, want 60s", a.inv.Timeout)
+	if a.Invoker().Timeout != timeout {
+		t.Errorf("Invoker Timeout = %v, want 60s", a.Invoker().Timeout)
 	}
-	if a.inv.ClaudePath != "claude" {
-		t.Errorf("ClaudePath = %s, want claude", a.inv.ClaudePath)
+	if a.Invoker().ClaudePath != "claude" {
+		t.Errorf("ClaudePath = %s, want claude", a.Invoker().ClaudePath)
 	}
 	if a.Logger != nil {
 		t.Errorf("Logger should be nil when not provided")
@@ -68,13 +68,13 @@ func TestNewAssessorWithLogger(t *testing.T) {
 	if a.Logger != logger {
 		t.Error("Logger should be the one provided")
 	}
-	if a.inv == nil {
+	if a.Invoker() == nil {
 		t.Error("Invoker should not be nil")
 	}
-	if a.inv.Timeout != 90*time.Second {
-		t.Errorf("Invoker Timeout = %v, want 90s", a.inv.Timeout)
+	if a.Invoker().Timeout != 90*time.Second {
+		t.Errorf("Invoker Timeout = %v, want 90s", a.Invoker().Timeout)
 	}
-	if a.inv.Logger != logger {
+	if a.Invoker().Logger != logger {
 		t.Error("Invoker Logger should be the one provided")
 	}
 }
