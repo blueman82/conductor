@@ -45,9 +45,7 @@ func (h *ArchitectureCheckpointHook) CheckTask(ctx context.Context, task models.
 	// Run architecture assessment
 	assessment, err := h.assessor.Assess(ctx, task)
 	if err != nil {
-		if h.logger != nil {
-			h.logger.Warnf("Architecture assessment failed for task %s: %v", task.Number, err)
-		}
+		GracefulWarn(h.logger, "Architecture assessment failed for task %s: %v", task.Number, err)
 		return &architecture.CheckpointResult{}, nil // Graceful degradation
 	}
 
@@ -58,10 +56,8 @@ func (h *ArchitectureCheckpointHook) CheckTask(ctx context.Context, task models.
 	// Check for low confidence escalation
 	if h.config.EscalateOnUncertain && assessment.OverallConfidence < h.config.ConfidenceThreshold {
 		result.ShouldEscalate = true
-		if h.logger != nil {
-			h.logger.Warnf("Architecture assessment low confidence (%.0f%%) for task %s - escalating",
-				assessment.OverallConfidence*100, task.Number)
-		}
+		GracefulWarn(h.logger, "Architecture assessment low confidence (%.0f%%) for task %s - escalating",
+			assessment.OverallConfidence*100, task.Number)
 	}
 
 	// Handle mode-specific behavior
@@ -71,18 +67,14 @@ func (h *ArchitectureCheckpointHook) CheckTask(ctx context.Context, task models.
 			result.ShouldBlock = true
 			result.BlockReason = fmt.Sprintf("Architecture review required: %s. Flagged: %s",
 				assessment.Summary, strings.Join(assessment.FlaggedQuestions(), ", "))
-			if h.logger != nil {
-				h.logger.Warnf("Architecture checkpoint BLOCKED task %s: %s", task.Number, result.BlockReason)
-			}
+			GracefulWarn(h.logger, "Architecture checkpoint BLOCKED task %s: %s", task.Number, result.BlockReason)
 		}
 
 	case config.ArchitectureModeEscalate:
 		if assessment.RequiresReview {
 			result.ShouldEscalate = true
-			if h.logger != nil {
-				h.logger.Warnf("Architecture checkpoint ESCALATE for task %s: %s (flagged: %s)",
-					task.Number, assessment.Summary, strings.Join(assessment.FlaggedQuestions(), ", "))
-			}
+			GracefulWarn(h.logger, "Architecture checkpoint ESCALATE for task %s: %s (flagged: %s)",
+				task.Number, assessment.Summary, strings.Join(assessment.FlaggedQuestions(), ", "))
 		}
 		// Always build prompt injection in escalate mode
 		result.PromptInjection = h.buildPromptInjection(assessment)

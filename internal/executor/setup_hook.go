@@ -38,32 +38,24 @@ func (h *SetupHook) Setup(ctx context.Context) error {
 
 	startTime := time.Now()
 
-	if h.logger != nil {
-		h.logger.Infof("Setup: Starting project introspection...")
-	}
+	GracefulInfo(h.logger, "Setup: Starting project introspection...")
 
 	// Run introspection to determine setup commands
 	result, err := h.introspector.Introspect(ctx)
 	if err != nil {
-		if h.logger != nil {
-			h.logger.Warnf("Setup: Introspection failed (continuing without setup): %v", err)
-		}
+		GracefulWarn(h.logger, "Setup: Introspection failed (continuing without setup): %v", err)
 		return nil // Graceful degradation - don't fail the plan on setup error
 	}
 
 	introspectDuration := time.Since(startTime)
 
 	if result == nil || len(result.Commands) == 0 {
-		if h.logger != nil {
-			h.logger.Infof("Setup: No setup commands needed (introspection took %s)", formatDuration(introspectDuration))
-		}
+		GracefulInfo(h.logger, "Setup: No setup commands needed (introspection took %s)", formatDuration(introspectDuration))
 		return nil
 	}
 
-	if h.logger != nil {
-		h.logger.Infof("Setup: Introspection found %d commands (took %s): %s",
-			len(result.Commands), formatDuration(introspectDuration), result.Reasoning)
-	}
+	GracefulInfo(h.logger, "Setup: Introspection found %d commands (took %s): %s",
+		len(result.Commands), formatDuration(introspectDuration), result.Reasoning)
 
 	// Run the setup commands
 	commandStartTime := time.Now()
@@ -71,9 +63,7 @@ func (h *SetupHook) Setup(ctx context.Context) error {
 	commandDuration := time.Since(commandStartTime)
 
 	if err != nil {
-		if h.logger != nil {
-			h.logger.Warnf("Setup: Commands failed after %s (continuing): %v", formatDuration(commandDuration), err)
-		}
+		GracefulWarn(h.logger, "Setup: Commands failed after %s (continuing): %v", formatDuration(commandDuration), err)
 		// Note: We return nil here for graceful degradation, but a required command failure
 		// is already handled inside RunSetupCommands which returns an error for required failures.
 		// The decision to block or continue is made there based on Required field.
@@ -81,10 +71,8 @@ func (h *SetupHook) Setup(ctx context.Context) error {
 	}
 
 	totalDuration := time.Since(startTime)
-	if h.logger != nil {
-		h.logger.Infof("Setup: Completed %d commands successfully (total: %s)",
-			len(result.Commands), formatDuration(totalDuration))
-	}
+	GracefulInfo(h.logger, "Setup: Completed %d commands successfully (total: %s)",
+		len(result.Commands), formatDuration(totalDuration))
 
 	return nil
 }

@@ -51,9 +51,7 @@ func (h *WarmUpHook) InjectContext(ctx context.Context, task models.Task) (model
 	// Build warm-up context
 	warmUpCtx, err := h.provider.BuildContext(ctx, taskInfo)
 	if err != nil {
-		if h.logger != nil {
-			h.logger.Warnf("WarmUp: failed to build context for task %s: %v", task.Number, err)
-		}
+		GracefulWarn(h.logger, "WarmUp: failed to build context for task %s: %v", task.Number, err)
 		return task, nil // Graceful degradation - don't fail task on warm-up error
 	}
 
@@ -72,9 +70,7 @@ func (h *WarmUpHook) InjectContext(ctx context.Context, task models.Task) (model
 	// Inject into prompt
 	task.Prompt = injection + "\n\n" + task.Prompt
 
-	if h.logger != nil {
-		h.logger.Infof("WarmUp: Injected context with %.0f%% confidence for task %s", warmUpCtx.Confidence*100, task.Number)
-	}
+	GracefulInfo(h.logger, "WarmUp: Injected context with %.0f%% confidence for task %s", warmUpCtx.Confidence*100, task.Number)
 
 	return task, nil
 }

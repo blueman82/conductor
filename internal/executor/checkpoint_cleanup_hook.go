@@ -80,20 +80,16 @@ func (h *CheckpointCleanupHook) Cleanup(ctx context.Context) (int, error) {
 	// Calculate cutoff time using injected clock
 	cutoff := h.now().AddDate(0, 0, -h.config.KeepCheckpointDays)
 
-	if h.logger != nil {
-		h.logger.Infof("CheckpointCleanup: Scanning %d checkpoint branches (cutoff: %s)",
-			len(checkpoints), cutoff.Format("2006-01-02"))
-	}
+	GracefulInfo(h.logger, "CheckpointCleanup: Scanning %d checkpoint branches (cutoff: %s)",
+		len(checkpoints), cutoff.Format("2006-01-02"))
 
 	// Filter and delete stale checkpoints
 	deleted := 0
 	for _, checkpoint := range checkpoints {
 		// Skip checkpoints with invalid timestamps (zero time)
 		if checkpoint.CreatedAt.IsZero() {
-			if h.logger != nil {
-				h.logger.Warnf("CheckpointCleanup: Skipping branch '%s' with unparseable timestamp",
-					checkpoint.BranchName)
-			}
+			GracefulWarn(h.logger, "CheckpointCleanup: Skipping branch '%s' with unparseable timestamp",
+				checkpoint.BranchName)
 			continue
 		}
 
@@ -105,22 +101,18 @@ func (h *CheckpointCleanupHook) Cleanup(ctx context.Context) (int, error) {
 		// Delete stale checkpoint
 		if err := h.checkpointer.DeleteCheckpoint(ctx, checkpoint.BranchName); err != nil {
 			// Log warning but continue with remaining branches (graceful degradation)
-			if h.logger != nil {
-				h.logger.Warnf("CheckpointCleanup: Failed to delete stale branch '%s': %v",
-					checkpoint.BranchName, err)
-			}
+			GracefulWarn(h.logger, "CheckpointCleanup: Failed to delete stale branch '%s': %v",
+				checkpoint.BranchName, err)
 			continue
 		}
 
 		deleted++
-		if h.logger != nil {
-			h.logger.Infof("CheckpointCleanup: Deleted stale branch '%s' (created: %s)",
-				checkpoint.BranchName, checkpoint.CreatedAt.Format("2006-01-02 15:04:05"))
-		}
+		GracefulInfo(h.logger, "CheckpointCleanup: Deleted stale branch '%s' (created: %s)",
+			checkpoint.BranchName, checkpoint.CreatedAt.Format("2006-01-02 15:04:05"))
 	}
 
-	if h.logger != nil && deleted > 0 {
-		h.logger.Infof("CheckpointCleanup: Completed - deleted %d stale checkpoint branches", deleted)
+	if deleted > 0 {
+		GracefulInfo(h.logger, "CheckpointCleanup: Completed - deleted %d stale checkpoint branches", deleted)
 	}
 
 	return deleted, nil
