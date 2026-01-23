@@ -56,16 +56,12 @@ func (h *RollbackHook) PreTask(ctx context.Context, task *models.Task) error {
 	// Parse task number for checkpoint naming
 	taskNumber := parseTaskNumberForRollback(task.Number)
 
-	if h.Logger != nil {
-		h.Logger.Infof("Rollback: Creating checkpoint for task %d", taskNumber)
-	}
+	GracefulInfo(h.Logger, "Rollback: Creating checkpoint for task %d", taskNumber)
 
 	// Create checkpoint branch
 	checkpoint, err := h.Checkpointer.CreateCheckpoint(ctx, taskNumber)
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.Warnf("Rollback: Failed to create checkpoint for task %d: %v", taskNumber, err)
-		}
+		GracefulWarn(h.Logger, "Rollback: Failed to create checkpoint for task %d: %v", taskNumber, err)
 		// Non-fatal: continue without checkpoint (graceful degradation)
 		return nil
 	}
@@ -76,10 +72,8 @@ func (h *RollbackHook) PreTask(ctx context.Context, task *models.Task) error {
 	}
 	task.Metadata["rollback_checkpoint"] = checkpoint
 
-	if h.Logger != nil {
-		h.Logger.Infof("Rollback: Checkpoint created '%s' (commit: %s)",
-			checkpoint.BranchName, checkpoint.CommitHash)
-	}
+	GracefulInfo(h.Logger, "Rollback: Checkpoint created '%s' (commit: %s)",
+		checkpoint.BranchName, checkpoint.CommitHash)
 
 	return nil
 }
@@ -149,9 +143,7 @@ func (h *RollbackHook) PostTask(ctx context.Context, task *models.Task,
 
 	// No checkpoint stored - nothing to do
 	if checkpoint == nil {
-		if h.Logger != nil {
-			h.Logger.Warnf("Rollback: No checkpoint found for task %s - skipping rollback evaluation", task.Number)
-		}
+		GracefulWarn(h.Logger, "Rollback: No checkpoint found for task %s - skipping rollback evaluation", task.Number)
 		return nil
 	}
 
@@ -159,25 +151,19 @@ func (h *RollbackHook) PostTask(ctx context.Context, task *models.Task,
 	shouldRollback := h.Manager.ShouldRollback(verdict, attempt, maxRetries)
 
 	if shouldRollback {
-		if h.Logger != nil {
-			h.Logger.Infof("Rollback: Task %s triggered rollback (verdict=%s, attempt=%d, maxRetries=%d)",
-				task.Number, verdict, attempt, maxRetries)
-		}
+		GracefulInfo(h.Logger, "Rollback: Task %s triggered rollback (verdict=%s, attempt=%d, maxRetries=%d)",
+			task.Number, verdict, attempt, maxRetries)
 
 		// Perform rollback
 		if err := h.Manager.PerformRollback(ctx, checkpoint); err != nil {
-			if h.Logger != nil {
-				h.Logger.Warnf("Rollback: Failed to rollback task %s: %v", task.Number, err)
-			}
+			GracefulWarn(h.Logger, "Rollback: Failed to rollback task %s: %v", task.Number, err)
 			// Don't return error - graceful degradation
 			return nil
 		}
 
 		// Delete checkpoint branch after successful rollback (cleanup)
 		if err := h.deleteCheckpoint(ctx, checkpoint); err != nil {
-			if h.Logger != nil {
-				h.Logger.Warnf("Rollback: Failed to delete checkpoint branch after rollback: %v", err)
-			}
+			GracefulWarn(h.Logger, "Rollback: Failed to delete checkpoint branch after rollback: %v", err)
 		}
 
 		return nil
@@ -186,11 +172,9 @@ func (h *RollbackHook) PostTask(ctx context.Context, task *models.Task,
 	// Task succeeded (no rollback needed) - cleanup checkpoint branch
 	if success {
 		if err := h.deleteCheckpoint(ctx, checkpoint); err != nil {
-			if h.Logger != nil {
-				h.Logger.Warnf("Rollback: Failed to cleanup checkpoint for task %s: %v", task.Number, err)
-			}
-		} else if h.Logger != nil {
-			h.Logger.Infof("Rollback: Cleaned up checkpoint '%s' after successful task", checkpoint.BranchName)
+			GracefulWarn(h.Logger, "Rollback: Failed to cleanup checkpoint for task %s: %v", task.Number, err)
+		} else {
+			GracefulInfo(h.Logger, "Rollback: Cleaned up checkpoint '%s' after successful task", checkpoint.BranchName)
 		}
 	}
 

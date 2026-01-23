@@ -52,9 +52,7 @@ func (h *LOCTrackerHook) PreTask(ctx context.Context, task *models.Task) error {
 	}
 	output, err := cmd.Output()
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.Warnf("LOC: Failed to capture baseline commit: %v", err)
-		}
+		GracefulWarn(h.Logger, "LOC: Failed to capture baseline commit: %v", err)
 		return nil // Graceful degradation
 	}
 
@@ -90,9 +88,7 @@ func (h *LOCTrackerHook) PostTask(ctx context.Context, task *models.Task) (*LOCM
 	}
 	output, err := cmd.Output()
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.Warnf("LOC: Failed to calculate diff: %v", err)
-		}
+		GracefulWarn(h.Logger, "LOC: Failed to calculate diff: %v", err)
 		return nil, nil
 	}
 
@@ -101,10 +97,8 @@ func (h *LOCTrackerHook) PostTask(ctx context.Context, task *models.Task) (*LOCM
 	task.LinesAdded = metrics.LinesAdded
 	task.LinesDeleted = metrics.LinesDeleted
 
-	if h.Logger != nil {
-		h.Logger.Infof("LOC: Task %s changed +%d/-%d lines across %d files",
-			task.Number, metrics.LinesAdded, metrics.LinesDeleted, metrics.FileCount)
-	}
+	GracefulInfo(h.Logger, "LOC: Task %s changed +%d/-%d lines across %d files",
+		task.Number, metrics.LinesAdded, metrics.LinesDeleted, metrics.FileCount)
 
 	return metrics, nil
 }
