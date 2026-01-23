@@ -28,6 +28,7 @@ Generate conductor-compatible YAML plans. **Do NOT activate for:** questions, de
 | **Data flow deps** | If task B uses function from task A, B must `depends_on: [A]` |
 | **Package serialization** | Go: tasks modifying same package need sequential deps |
 | **Verify before claiming** | `grep` to confirm existing behavior before writing key_points |
+| **Verify file paths** | `find`/`ls` to confirm test files exist before adding to `test_commands` |
 | **Code reuse first** | Search for existing implementations before creating new code |
 | **No wrappers without value** | Direct usage preferred over unnecessary abstraction |
 

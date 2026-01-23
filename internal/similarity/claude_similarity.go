@@ -2,7 +2,6 @@ package similarity
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -23,22 +22,17 @@ type Similarity interface {
 }
 
 // ClaudeSimilarity computes semantic similarity using Claude CLI.
-// Uses claude.Invoker for CLI invocation with rate limit handling.
+// Embeds claude.Service for CLI invocation with rate limit handling.
 type ClaudeSimilarity struct {
-	inv    *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
-	Logger budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
+	claude.Service
 }
 
 // NewClaudeSimilarity creates a similarity instance with the specified timeout.
 // The timeout parameter controls how long to wait for Claude CLI responses.
 // Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
 func NewClaudeSimilarity(timeout time.Duration, logger budget.WaiterLogger) *ClaudeSimilarity {
-	inv := claude.NewInvoker()
-	inv.Timeout = timeout
-	inv.Logger = logger
 	return &ClaudeSimilarity{
-		inv:    inv,
-		Logger: logger,
+		Service: *claude.NewService(timeout, logger),
 	}
 }
 
@@ -47,13 +41,8 @@ func NewClaudeSimilarity(timeout time.Duration, logger budget.WaiterLogger) *Cla
 // configuration and rate limit handling. The invoker should already have Timeout
 // and Logger configured.
 func NewClaudeSimilarityWithInvoker(inv *claude.Invoker) *ClaudeSimilarity {
-	var logger budget.WaiterLogger
-	if inv != nil {
-		logger = inv.Logger
-	}
 	return &ClaudeSimilarity{
-		inv:    inv,
-		Logger: logger,
+		Service: *claude.NewServiceWithInvoker(inv),
 	}
 }
 
@@ -61,30 +50,9 @@ func NewClaudeSimilarityWithInvoker(inv *claude.Invoker) *ClaudeSimilarity {
 func (cs *ClaudeSimilarity) Compare(ctx context.Context, desc1, desc2 string) (*SimilarityResult, error) {
 	prompt := cs.buildPrompt(desc1, desc2)
 
-	req := claude.Request{
-		Prompt: prompt,
-		Schema: SimilaritySchema(),
-	}
-
-	// Invoke Claude CLI (rate limit handling is in Invoker)
-	resp, err := cs.inv.Invoke(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse the response
-	content, _, err := claude.ParseResponse(resp.RawOutput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse claude output: %w", err)
-	}
-
-	if content == "" {
-		return nil, fmt.Errorf("empty response from claude")
-	}
-
 	var result SimilarityResult
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse similarity result: %w", err)
+	if err := cs.InvokeAndParse(ctx, prompt, SimilaritySchema(), &result); err != nil {
+		return nil, err
 	}
 
 	return &result, nil

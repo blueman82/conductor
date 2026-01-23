@@ -216,16 +216,33 @@ func BuildBehaviorPromptSection(metrics *behavioral.BehavioralMetrics) string {
 
 // formatDuration formats duration as human-readable string
 func formatDuration(d time.Duration) string {
-	if d < time.Second {
+	switch {
+	case d >= time.Hour:
+		hours := d / time.Hour
+		remainder := d % time.Hour
+		if remainder == 0 {
+			return fmt.Sprintf("%dh", hours)
+		}
+		minutes := remainder / time.Minute
+		remainder = remainder % time.Minute
+		if remainder == 0 {
+			return fmt.Sprintf("%dh%dm", hours, minutes)
+		}
+		seconds := remainder / time.Second
+		return fmt.Sprintf("%dh%dm%ds", hours, minutes, seconds)
+	case d >= time.Minute:
+		minutes := d / time.Minute
+		remainder := d % time.Minute
+		if remainder == 0 {
+			return fmt.Sprintf("%dm", minutes)
+		}
+		seconds := remainder / time.Second
+		return fmt.Sprintf("%dm%ds", minutes, seconds)
+	case d >= time.Second:
+		return fmt.Sprintf("%ds", int64(d.Seconds()))
+	default:
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
-	if d < time.Minute {
-		return fmt.Sprintf("%.1fs", d.Seconds())
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("%.1fm", d.Minutes())
-	}
-	return fmt.Sprintf("%.1fh", d.Hours())
 }
 
 // formatTokenCount formats token count with K/M suffixes

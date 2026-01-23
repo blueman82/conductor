@@ -55,14 +55,14 @@ func (h *SetupHook) Setup(ctx context.Context) error {
 
 	if result == nil || len(result.Commands) == 0 {
 		if h.logger != nil {
-			h.logger.Infof("Setup: No setup commands needed (introspection took %v)", introspectDuration)
+			h.logger.Infof("Setup: No setup commands needed (introspection took %s)", formatDuration(introspectDuration))
 		}
 		return nil
 	}
 
 	if h.logger != nil {
-		h.logger.Infof("Setup: Introspection found %d commands (took %v): %s",
-			len(result.Commands), introspectDuration, result.Reasoning)
+		h.logger.Infof("Setup: Introspection found %d commands (took %s): %s",
+			len(result.Commands), formatDuration(introspectDuration), result.Reasoning)
 	}
 
 	// Run the setup commands
@@ -72,7 +72,7 @@ func (h *SetupHook) Setup(ctx context.Context) error {
 
 	if err != nil {
 		if h.logger != nil {
-			h.logger.Warnf("Setup: Commands failed after %v (continuing): %v", commandDuration, err)
+			h.logger.Warnf("Setup: Commands failed after %s (continuing): %v", formatDuration(commandDuration), err)
 		}
 		// Note: We return nil here for graceful degradation, but a required command failure
 		// is already handled inside RunSetupCommands which returns an error for required failures.
@@ -82,8 +82,8 @@ func (h *SetupHook) Setup(ctx context.Context) error {
 
 	totalDuration := time.Since(startTime)
 	if h.logger != nil {
-		h.logger.Infof("Setup: Completed %d commands successfully (total: %v)",
-			len(result.Commands), totalDuration)
+		h.logger.Infof("Setup: Completed %d commands successfully (total: %s)",
+			len(result.Commands), formatDuration(totalDuration))
 	}
 
 	return nil

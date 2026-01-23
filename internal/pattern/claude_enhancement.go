@@ -2,7 +2,6 @@ package pattern
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -18,22 +17,17 @@ type EnhancementResult struct {
 }
 
 // ClaudeEnhancer enhances pattern confidence using Claude CLI.
-// Uses claude.Invoker for CLI invocation with rate limit handling.
+// Embeds claude.Service for CLI invocation with rate limit handling.
 type ClaudeEnhancer struct {
-	inv    *claude.Invoker     // Invoker handles CLI invocation and rate limit retry
-	Logger budget.WaiterLogger // For TTS + visual during rate limit wait (passed to Invoker)
+	claude.Service
 }
 
 // NewClaudeEnhancer creates an enhancer with the specified timeout.
 // The timeout parameter controls how long to wait for Claude CLI responses.
 // Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
 func NewClaudeEnhancer(timeout time.Duration, logger budget.WaiterLogger) *ClaudeEnhancer {
-	inv := claude.NewInvoker()
-	inv.Timeout = timeout
-	inv.Logger = logger
 	return &ClaudeEnhancer{
-		inv:    inv,
-		Logger: logger,
+		Service: *claude.NewService(timeout, logger),
 	}
 }
 
@@ -42,13 +36,8 @@ func NewClaudeEnhancer(timeout time.Duration, logger budget.WaiterLogger) *Claud
 // configuration and rate limit handling. The invoker should already have Timeout
 // and Logger configured.
 func NewClaudeEnhancerWithInvoker(inv *claude.Invoker) *ClaudeEnhancer {
-	var logger budget.WaiterLogger
-	if inv != nil {
-		logger = inv.Logger
-	}
 	return &ClaudeEnhancer{
-		inv:    inv,
-		Logger: logger,
+		Service: *claude.NewServiceWithInvoker(inv),
 	}
 }
 
@@ -56,30 +45,9 @@ func NewClaudeEnhancerWithInvoker(inv *claude.Invoker) *ClaudeEnhancer {
 func (ce *ClaudeEnhancer) Enhance(ctx context.Context, taskDesc string, patterns string, baseConfidence float64) (*EnhancementResult, error) {
 	prompt := ce.buildPrompt(taskDesc, patterns, baseConfidence)
 
-	req := claude.Request{
-		Prompt: prompt,
-		Schema: EnhancementSchema(),
-	}
-
-	// Invoke Claude CLI (rate limit handling is in Invoker)
-	resp, err := ce.inv.Invoke(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse the response
-	content, _, err := claude.ParseResponse(resp.RawOutput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse claude output: %w", err)
-	}
-
-	if content == "" {
-		return nil, fmt.Errorf("empty response from claude")
-	}
-
 	var result EnhancementResult
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse enhancement result: %w", err)
+	if err := ce.InvokeAndParse(ctx, prompt, EnhancementSchema(), &result); err != nil {
+		return nil, err
 	}
 
 	return &result, nil
