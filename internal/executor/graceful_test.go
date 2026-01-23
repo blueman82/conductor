@@ -26,7 +26,8 @@ func (m *gracefulTestLogger) Debugf(format string, args ...interface{}) {}
 
 func (m *gracefulTestLogger) LogTestCommands(entries []models.TestCommandResult) {}
 
-func (m *gracefulTestLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {}
+func (m *gracefulTestLogger) LogCriterionVerifications(entries []models.CriterionVerificationResult) {
+}
 
 func (m *gracefulTestLogger) LogDocTargetVerifications(entries []models.DocTargetResult) {}
 
