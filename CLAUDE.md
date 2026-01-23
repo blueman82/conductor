@@ -7,7 +7,7 @@ Last updated: 2026-01-23
 
 Conductor is a Go CLI for autonomous multi-agent orchestration. It parses plan files (Markdown/YAML), calculates task dependencies via graph algorithms, and executes tasks in parallel waves with QC reviews and adaptive learning.
 
-**Current**: v3.4.1 - LOC Tracking: Capture lines added/deleted per task via git diff --numstat, aggregate per wave, display in logs, persist to learning database. Enabled by default via metrics.loc_tracking config.
+**Current**: v3.4.2 - LOC Reduction: Consolidated Claude CLI invocation patterns (ClaudeService), graceful degradation helpers, and BaseSelector abstraction. ~143 LOC saved through refactoring.
 
 ## Quick Reference
 
