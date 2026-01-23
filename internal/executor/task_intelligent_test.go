@@ -98,7 +98,7 @@ func TestTaskAgentSelector_GetAvailableAgents(t *testing.T) {
 	})
 
 	t.Run("with nil registry", func(t *testing.T) {
-		selector := &TaskAgentSelector{Registry: nil}
+		selector := &TaskAgentSelector{BaseSelector: BaseSelector{Registry: nil}}
 		agents := selector.getAvailableAgents()
 
 		if len(agents) != 0 {
@@ -129,7 +129,7 @@ func TestTaskAgentSelector_AgentExists(t *testing.T) {
 	})
 
 	t.Run("with nil registry", func(t *testing.T) {
-		nilSelector := &TaskAgentSelector{Registry: nil}
+		nilSelector := &TaskAgentSelector{BaseSelector: BaseSelector{Registry: nil}}
 		if nilSelector.agentExists("any-agent") {
 			t.Error("expected agent to not exist with nil registry")
 		}
@@ -259,10 +259,10 @@ func TestTaskAgentSelector_SelectAgent_EmptyRegistry(t *testing.T) {
 
 func TestTaskAgentSelector_SelectAgent_WithNilRegistry(t *testing.T) {
 	// Create selector with nil registry
-	// The embedded Service will have zero values (nil invoker, nil logger)
+	// The embedded BaseSelector will have zero values (nil invoker, nil registry)
 	// But with nil registry, it errors early before invoking Claude
 	selector := &TaskAgentSelector{
-		Registry: nil,
+		BaseSelector: BaseSelector{Registry: nil},
 	}
 
 	task := models.Task{

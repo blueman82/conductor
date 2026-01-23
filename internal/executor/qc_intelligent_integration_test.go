@@ -83,7 +83,7 @@ func TestIntelligentSelectionIntegration(t *testing.T) {
 
 		selCtx := &SelectionContext{
 			ExecutingAgent:      task.Agent,
-			IntelligentSelector: &IntelligentSelector{Registry: registry, Cache: NewQCSelectionCache(60)},
+			IntelligentSelector: &IntelligentSelector{BaseSelector: BaseSelector{Registry: registry}, Cache: NewQCSelectionCache(60)},
 		}
 
 		// Override with mock selector's behavior
