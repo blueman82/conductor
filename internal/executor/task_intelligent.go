@@ -15,18 +15,19 @@ import (
 
 // TaskAgentSelector uses Claude to intelligently select an agent for task execution.
 // This is used when task.Agent is empty and QC mode is "intelligent".
-// Embeds claude.Service for CLI invocation with rate limit handling.
+// Embeds BaseSelector for shared registry access and Claude invocation.
 type TaskAgentSelector struct {
-	claude.Service
-	Registry *agent.Registry
+	BaseSelector
 }
 
 // NewTaskAgentSelector creates a new task agent selector with the specified timeout.
 // The timeout controls how long to wait for Claude's agent selection response.
 func NewTaskAgentSelector(registry *agent.Registry, timeout time.Duration, logger budget.WaiterLogger) *TaskAgentSelector {
 	return &TaskAgentSelector{
-		Service:  *claude.NewService(timeout, logger),
-		Registry: registry,
+		BaseSelector: BaseSelector{
+			Service:  *claude.NewService(timeout, logger),
+			Registry: registry,
+		},
 	}
 }
 
@@ -36,8 +37,10 @@ func NewTaskAgentSelector(registry *agent.Registry, timeout time.Duration, logge
 // and Logger configured.
 func NewTaskAgentSelectorWithInvoker(registry *agent.Registry, inv *claude.Invoker) *TaskAgentSelector {
 	return &TaskAgentSelector{
-		Service:  *claude.NewServiceWithInvoker(inv),
-		Registry: registry,
+		BaseSelector: BaseSelector{
+			Service:  *claude.NewServiceWithInvoker(inv),
+			Registry: registry,
+		},
 	}
 }
 
@@ -87,20 +90,6 @@ func (tas *TaskAgentSelector) SelectAgent(ctx context.Context, task models.Task)
 	}
 
 	return &result, nil
-}
-
-// getAvailableAgents returns a list of agent names from the registry.
-func (tas *TaskAgentSelector) getAvailableAgents() []string {
-	if tas.Registry == nil {
-		return []string{}
-	}
-
-	agents := tas.Registry.List()
-	names := make([]string, 0, len(agents))
-	for _, a := range agents {
-		names = append(names, a.Name)
-	}
-	return names
 }
 
 // agentExists checks if an agent exists in the registry.

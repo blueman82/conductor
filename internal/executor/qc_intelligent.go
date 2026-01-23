@@ -19,10 +19,9 @@ type IntelligentAgentRecommendation struct {
 }
 
 // IntelligentSelector manages intelligent QC agent selection using Claude.
-// Embeds claude.Service for CLI invocation with rate limit handling.
+// Embeds BaseSelector for shared registry access and Claude invocation.
 type IntelligentSelector struct {
-	claude.Service
-	Registry  *agent.Registry
+	BaseSelector
 	Cache     *QCSelectionCache
 	MaxAgents int
 }
@@ -32,8 +31,10 @@ type IntelligentSelector struct {
 // Use config.DefaultTimeoutsConfig().LLM for the standard timeout value.
 func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int, timeout time.Duration, logger budget.WaiterLogger) *IntelligentSelector {
 	return &IntelligentSelector{
-		Service:   *claude.NewService(timeout, logger),
-		Registry:  registry,
+		BaseSelector: BaseSelector{
+			Service:  *claude.NewService(timeout, logger),
+			Registry: registry,
+		},
 		Cache:     NewQCSelectionCache(cacheTTLSeconds),
 		MaxAgents: 4,
 	}
@@ -45,8 +46,10 @@ func NewIntelligentSelector(registry *agent.Registry, cacheTTLSeconds int, timeo
 // and Logger configured.
 func NewIntelligentSelectorWithInvoker(registry *agent.Registry, cacheTTLSeconds int, inv *claude.Invoker) *IntelligentSelector {
 	return &IntelligentSelector{
-		Service:   *claude.NewServiceWithInvoker(inv),
-		Registry:  registry,
+		BaseSelector: BaseSelector{
+			Service:  *claude.NewServiceWithInvoker(inv),
+			Registry: registry,
+		},
 		Cache:     NewQCSelectionCache(cacheTTLSeconds),
 		MaxAgents: 4,
 	}
@@ -84,20 +87,6 @@ func (is *IntelligentSelector) SelectAgents(
 	is.Cache.Set(cacheKey, result)
 
 	return result, nil
-}
-
-// getAvailableAgents returns a list of agent names from the registry
-func (is *IntelligentSelector) getAvailableAgents() []string {
-	if is.Registry == nil {
-		return []string{}
-	}
-
-	agents := is.Registry.List()
-	names := make([]string, 0, len(agents))
-	for _, a := range agents {
-		names = append(names, a.Name)
-	}
-	return names
 }
 
 // buildSelectionPrompt creates the prompt for Claude to recommend agents
