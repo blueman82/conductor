@@ -551,6 +551,18 @@ func (cl *ConsoleLogger) logTaskResultVerbose(result models.TaskResult) error {
 	// Duration section
 	output.WriteString(fmt.Sprintf("[%s]   Duration: %s\n", ts, durationStr))
 
+	// Human estimate section (v3.5+) - only if estimate available
+	speedup := result.Task.CalculateSpeedup()
+	if speedup > 0 {
+		humanDuration := formatDurationForHuman(result.Task.GetHumanEstimate())
+		if cl.colorOutput {
+			speedupColored := color.New(color.FgCyan).Sprintf("%.1fx speedup", speedup)
+			output.WriteString(fmt.Sprintf("[%s]   Human Est: ~%s (%s)\n", ts, humanDuration, speedupColored))
+		} else {
+			output.WriteString(fmt.Sprintf("[%s]   Human Est: ~%s (%.1fx speedup)\n", ts, humanDuration, speedup))
+		}
+	}
+
 	// Agent section
 	if result.Task.Agent != "" {
 		if cl.colorOutput {
