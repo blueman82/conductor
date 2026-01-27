@@ -317,10 +317,12 @@ func (l *PatternLibrary) RetrieveWithSimilarity(ctx context.Context, description
 		}
 	}
 
-	// Sort by similarity descending
+	if len(results) == 0 && len(allPatterns) > 0 {
+		fmt.Fprintf(os.Stderr, "[PATTERN CHECK] No matches above threshold %.2f (%d patterns checked)\n", threshold, len(allPatterns))
+	}
+
 	sortPatternsBySimilarity(results)
 
-	// Limit results
 	if len(results) > limit {
 		results = results[:limit]
 	}
