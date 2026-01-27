@@ -563,9 +563,11 @@ func DefaultPatternConfig() PatternConfig {
 
 // DefaultMetricsConfig returns MetricsConfig with sensible default values.
 // LOC tracking is ENABLED by default.
+// Human estimation is DISABLED by default (requires Claude calls).
 func DefaultMetricsConfig() MetricsConfig {
 	return MetricsConfig{
-		LOCTracking: true, // Enabled by default per requirements
+		LOCTracking:     true,  // Enabled by default per requirements
+		HumanEstimation: false, // Disabled by default (requires Claude calls)
 	}
 }
 
