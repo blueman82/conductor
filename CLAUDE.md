@@ -7,7 +7,7 @@ Last updated: 2026-01-27
 
 Conductor is a Go CLI for autonomous multi-agent orchestration. It parses plan files (Markdown/YAML), calculates task dependencies via graph algorithms, and executes tasks in parallel waves with QC reviews and adaptive learning.
 
-**Current**: v3.5.0 - Human Time Estimation: Estimates how long a human developer would take per task via Claude haiku, calculates speedup ratio (e.g., "10.5x faster than human"), displays in wave summary and verbose task output.
+**Current**: v3.5.1 - Fix --task flag for double-digit task numbers: Recalculates waves after task filtering to prevent "task not found in Wave" errors when targeting tasks outside Wave 1.
 
 ## Quick Reference
 
