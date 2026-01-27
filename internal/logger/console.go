@@ -388,6 +388,17 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 				statusBreakdown += fmt.Sprintf(" | +%d/-%d LOC", waveLinesAdded, waveLinesDeleted)
 			}
 		}
+
+		// Append average speedup to status breakdown if available (v3.5+)
+		if speedupCount > 0 {
+			avgSpeedup := speedupSum / float64(speedupCount)
+			if cl.colorOutput {
+				speedupText := color.New(color.FgCyan).Sprintf("%.1fx faster than human", avgSpeedup)
+				statusBreakdown += fmt.Sprintf(" | %s", speedupText)
+			} else {
+				statusBreakdown += fmt.Sprintf(" | %.1fx faster than human", avgSpeedup)
+			}
+		}
 	} else {
 		// Show 0/0 for empty waves
 		statusBreakdown = " - 0/0 completed"
