@@ -1523,6 +1523,16 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 				result.Task = task // Ensure LOC fields are copied to result
 			}
 
+			// Human Time Estimation post-task hook: Log speedup ratio (v3.5+)
+			if te.EstimationHook != nil {
+				if err := te.EstimationHook.PostTask(ctx, &task); err != nil {
+					if te.Logger != nil {
+						te.Logger.Warnf("Human time estimation post-task failed for task %s: %v", task.Number, err)
+					}
+				}
+				result.Task = task // Ensure estimation fields are copied to result
+			}
+
 			te.rollbackPostTask(ctx, &task, models.StatusGreen, attempt, true)
 
 			// Pattern Intelligence post-task hook: Record successful pattern (v2.23+)
