@@ -804,3 +804,22 @@ func (s *Store) addColumnIfNotExistsTx(ctx context.Context, tx *sql.Tx, table, c
 
 	return nil
 }
+
+// applyMigration13Tx adds human time estimation columns to task_executions (within transaction).
+func (s *Store) applyMigration13Tx(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		def  string
+	}{
+		{"human_estimate_secs", "INTEGER DEFAULT 0"},
+		{"human_estimate_source", "TEXT"},
+	}
+
+	for _, col := range columns {
+		if err := s.addColumnIfNotExistsTx(ctx, tx, "task_executions", col.name, col.def); err != nil {
+			return fmt.Errorf("add column %s: %w", col.name, err)
+		}
+	}
+
+	return nil
+}
