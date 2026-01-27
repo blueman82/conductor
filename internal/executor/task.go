@@ -923,6 +923,15 @@ func (te *DefaultTaskExecutor) executeTask(ctx context.Context, task models.Task
 		}
 	}
 
+	// Human Time Estimation pre-task hook: Get human time estimate (v3.5+)
+	if te.EstimationHook != nil {
+		if err := te.EstimationHook.PreTask(ctx, &task); err != nil {
+			if te.Logger != nil {
+				te.Logger.Warnf("Human time estimation failed for task %s: %v", task.Number, err)
+			}
+		}
+	}
+
 	// Pattern Intelligence pre-task hook: STOP protocol analysis and duplicate detection (v2.23+)
 	te.lastPatternResult = nil // Reset for new task
 	if te.PatternHook != nil {
