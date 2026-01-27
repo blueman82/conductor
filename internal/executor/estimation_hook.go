@@ -51,7 +51,7 @@ func (h *EstimationHook) PreTask(ctx context.Context, task *models.Task) error {
 
 	// Format duration for logging
 	humanDuration := time.Duration(estimateSecs) * time.Second
-	GracefulInfo(h.Logger, "Estimation: Task %s - Human estimate: %s", task.Number, formatDuration(humanDuration))
+	GracefulInfo(h.Logger, "Estimation: Task %s - Human estimate: %s", task.Number, formatEstimationDuration(humanDuration))
 
 	return nil
 }
@@ -71,13 +71,13 @@ func (h *EstimationHook) PostTask(ctx context.Context, task *models.Task) error 
 
 	humanDuration := task.GetHumanEstimate()
 	GracefulInfo(h.Logger, "Estimation: Task %s - %.1fx faster than human (human: %s, actual: %s)",
-		task.Number, speedup, formatDuration(humanDuration), formatDuration(task.ExecutionDuration))
+		task.Number, speedup, formatEstimationDuration(humanDuration), formatEstimationDuration(task.ExecutionDuration))
 
 	return nil
 }
 
-// formatDuration formats a duration in a human-readable way
-func formatDuration(d time.Duration) string {
+// formatEstimationDuration formats a duration in a human-readable way
+func formatEstimationDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}
