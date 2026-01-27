@@ -2164,6 +2164,34 @@ func formatDurationWithDecimal(d time.Duration) string {
 	}
 }
 
+// formatDurationForHuman formats a duration in a human-friendly way (v3.5+).
+// Uses approximate values like "~1h30m" for readability.
+// Designed for human time estimates rather than precise execution times.
+func formatDurationForHuman(d time.Duration) string {
+	switch {
+	case d >= time.Hour:
+		hours := d / time.Hour
+		minutes := (d % time.Hour) / time.Minute
+		if minutes >= 30 {
+			// Round to nearest half hour for readability
+			if minutes >= 45 {
+				return fmt.Sprintf("%dh", hours+1)
+			}
+			return fmt.Sprintf("%dh30m", hours)
+		}
+		if minutes > 0 {
+			return fmt.Sprintf("%dh%dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dh", hours)
+	case d >= time.Minute:
+		minutes := d / time.Minute
+		return fmt.Sprintf("%dm", minutes)
+	default:
+		// For sub-minute, show seconds
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+}
+
 // formatBehavioralMetrics formats behavioral metrics from task metadata into a readable summary.
 // Returns empty string if no relevant behavioral data is available.
 // Format: "tools: N, bash: N, cost: $X.XX"
