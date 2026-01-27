@@ -229,6 +229,11 @@ type PatternConfig struct {
 type MetricsConfig struct {
 	// LOCTracking enables lines-of-code tracking per task (default: true)
 	LOCTracking bool `yaml:"loc_tracking"`
+
+	// HumanEstimation enables human time estimation per task (default: false)
+	// When enabled, uses Claude haiku to estimate how long a human developer would take.
+	// Requires Claude CLI calls, so disabled by default.
+	HumanEstimation bool `yaml:"human_estimation"`
 }
 
 // TimeoutsConfig controls timeout durations for different operation types
