@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/harrison/conductor/internal/config"
@@ -283,11 +284,21 @@ func (l *PatternLibrary) RetrieveWithSimilarity(ctx context.Context, description
 		scores = make([]float64, len(allPatterns))
 	}
 
-	// Filter patterns above threshold
+	// Filter patterns above threshold and fetch reasoning for matches
 	for i, p := range allPatterns {
 		simScore := scores[i]
 
 		if simScore >= threshold {
+			var reasoning string
+			if sim != nil {
+				if result, err := sim.Compare(ctx, description, p.PatternDescription); err == nil && result != nil {
+					reasoning = result.Reasoning
+				}
+			}
+
+			fmt.Fprintf(os.Stderr, "[PATTERN MATCH] Score: %.2f (threshold: %.2f)\n  Pattern: %q\n  Reasoning: %s\n",
+				simScore, threshold, truncateStr(p.PatternDescription, 80), reasoning)
+
 			var metadata map[string]interface{}
 			if p.Metadata != "" {
 				json.Unmarshal([]byte(p.Metadata), &metadata)
@@ -519,4 +530,11 @@ func sortPatternsBySimilarity(patterns []StoredPattern) {
 			}
 		}
 	}
+}
+
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
