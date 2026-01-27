@@ -483,6 +483,13 @@ func (s *Store) ApplyMigrations(ctx context.Context) error {
 			}
 		}
 
+		// Handle migration 13 special case: add human estimation columns idempotently
+		if migration.Version == 13 {
+			if err := s.applyMigration13Tx(ctx, tx); err != nil {
+				return fmt.Errorf("apply migration %d (%s): %w", migration.Version, migration.Description, err)
+			}
+		}
+
 		// Execute migration SQL (indexes are IF NOT EXISTS, safe to re-run)
 		if migration.SQL != "" {
 			if _, err := tx.ExecContext(ctx, migration.SQL); err != nil {
