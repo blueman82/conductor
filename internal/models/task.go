@@ -74,6 +74,10 @@ type Task struct {
 	// LOC tracking fields (v3.4+)
 	LinesAdded   int `json:"lines_added,omitempty" yaml:"lines_added,omitempty"`
 	LinesDeleted int `json:"lines_deleted,omitempty" yaml:"lines_deleted,omitempty"`
+
+	// Human time estimation fields (v3.5+)
+	HumanEstimateSecs   int64  `json:"human_estimate_secs,omitempty" yaml:"human_estimate_secs,omitempty"`
+	HumanEstimateSource string `json:"human_estimate_source,omitempty" yaml:"human_estimate_source,omitempty"`
 }
 
 // Validate checks if the task has all required fields
