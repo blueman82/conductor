@@ -23,9 +23,9 @@ Complete documentation for Conductor - a multi-agent orchestration CLI for auton
   - [Feedback Storage Settings](#dual-feedback-storage-v210)
   - [Learning Settings](#configuration-learning)
   - [Integration Tasks](#integration-tasks-v250)
-
   - [Pattern Intelligence](#pattern-intelligence-v224)
   - [Budget & Rate Limits](#budget--rate-limits-v220)
+  - [Metrics Configuration](#metrics-configuration-v34)
 - [Multi-File Plans & Objective Splitting](#multi-file-plans--objective-splitting)
   - [Core Concepts](#core-concepts)
   - [Usage Examples](#multi-file-usage-examples)
