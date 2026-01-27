@@ -87,23 +87,23 @@ Download a pre-built binary from [GitHub Releases](https://github.com/blueman82/
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/blueman82/conductor/releases/download/v3.4.3/conductor-darwin-arm64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v3.5.0/conductor-darwin-arm64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/blueman82/conductor/releases/download/v3.4.3/conductor-darwin-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v3.5.0/conductor-darwin-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Linux
-curl -L https://github.com/blueman82/conductor/releases/download/v3.4.3/conductor-linux-amd64 -o conductor
+curl -L https://github.com/blueman82/conductor/releases/download/v3.5.0/conductor-linux-amd64 -o conductor
 chmod +x conductor
 sudo mv conductor /usr/local/bin/
 
 # Verify installation
 conductor --version
-# v3.4.3
+# v3.5.0
 ```
 
 **Benefits of using pre-built binaries:**
@@ -2396,6 +2396,69 @@ Execution logs written to `.conductor/logs/`:
 ├── task-2-config-143030.log
 └── ...
 ```
+
+---
+
+## Metrics Configuration (v3.4+)
+
+Controls execution metrics collection for tasks.
+
+### Configuration
+
+```yaml
+metrics:
+  # Track lines of code added/deleted per task (default: true)
+  loc_tracking: true
+
+  # Estimate human developer time per task (default: false)
+  # Uses Claude haiku to estimate, calculates speedup ratio
+  human_estimation: false
+```
+
+### LOC Tracking (v3.4+)
+
+When enabled, Conductor tracks lines added/deleted for each task using `git diff --numstat` after agent completion.
+
+**Output in verbose mode:**
+```
+Task 1: ✓ GREEN (2m15s) | +247 -89 LOC
+```
+
+**Wave summary:**
+```
+Wave 1 completed: 3 GREEN | +500 -200 LOC
+```
+
+**Stored in learning database:** `LinesAdded`, `LinesDeleted` columns in `task_executions` table.
+
+### Human Time Estimation (v3.5+)
+
+When enabled, estimates how long a human developer would take for each task.
+
+**How it works:**
+1. Before task execution, Claude haiku analyzes task description, files, and success criteria
+2. Returns estimate in minutes with reasoning and confidence level
+3. After completion, calculates speedup ratio: `human_estimate / actual_duration`
+
+**Output in verbose mode:**
+```
+Task 1: ✓ GREEN (8m32s)
+  Human Est: ~1h30m (10.5x speedup)
+```
+
+**Wave summary:**
+```
+Wave 1 completed: 3 GREEN | +247 -89 LOC | 10.5x faster than human
+```
+
+**Configuration example:**
+```yaml
+metrics:
+  loc_tracking: true      # Track lines changed (default: true)
+  human_estimation: true  # Enable human time estimation
+```
+
+**Note:** Human estimation requires Claude CLI calls, adding ~1-2 seconds per task. Disabled by default to avoid extra API costs.
 
 ---
 
