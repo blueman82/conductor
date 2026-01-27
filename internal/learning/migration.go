@@ -405,6 +405,14 @@ CREATE INDEX IF NOT EXISTS idx_kg_edges_weight ON kg_edges(weight DESC);
 		// lines_deleted: number of lines deleted during task execution
 		SQL: ``,
 	},
+	{
+		Version:     13,
+		Description: "Add human time estimation columns to task_executions",
+		// This migration adds columns for tracking human time estimates.
+		// human_estimate_secs: estimated seconds a human developer would take
+		// human_estimate_source: where the estimate came from (e.g., "claude-haiku")
+		SQL: ``,
+	},
 }
 
 // MigrationVersion represents a record of an applied migration
