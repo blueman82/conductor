@@ -1147,6 +1147,9 @@ func LoadConfig(path string) (*Config, error) {
 			if _, exists := metricsMap["loc_tracking"]; exists {
 				cfg.Metrics.LOCTracking = metrics.LOCTracking
 			}
+			if _, exists := metricsMap["human_estimation"]; exists {
+				cfg.Metrics.HumanEstimation = metrics.HumanEstimation
+			}
 		}
 
 	}
