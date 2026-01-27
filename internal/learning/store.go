@@ -205,8 +205,8 @@ func (s *Store) RecordExecution(ctx context.Context, exec *TaskExecution) error 
 	}
 
 	query := `INSERT INTO task_executions
-		(plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, qc_verdict, qc_feedback, failure_patterns, context, lines_added, lines_deleted)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		(plan_file, run_number, task_number, task_name, agent, prompt, success, output, error_message, duration_seconds, qc_verdict, qc_feedback, failure_patterns, context, lines_added, lines_deleted, human_estimate_secs, human_estimate_source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := s.db.ExecContext(ctx, query,
 		exec.PlanFile,
@@ -225,6 +225,8 @@ func (s *Store) RecordExecution(ctx context.Context, exec *TaskExecution) error 
 		contextJSON,
 		exec.LinesAdded,
 		exec.LinesDeleted,
+		exec.HumanEstimateSecs,
+		exec.HumanEstimateSource,
 	)
 	if err != nil {
 		return fmt.Errorf("insert task execution: %w", err)
