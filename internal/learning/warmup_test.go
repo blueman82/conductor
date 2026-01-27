@@ -24,6 +24,14 @@ func (m *mockSimilarity) Compare(ctx context.Context, desc1, desc2 string) (*sim
 	}, nil
 }
 
+func (m *mockSimilarity) CompareBatch(ctx context.Context, query string, candidates []string) ([]float64, error) {
+	scores := make([]float64, len(candidates))
+	for i := range candidates {
+		scores[i] = m.returnScore
+	}
+	return scores, nil
+}
+
 func TestWarmUpProviderBuildContext(t *testing.T) {
 	ctx := context.Background()
 
