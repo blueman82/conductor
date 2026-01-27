@@ -16,6 +16,7 @@ import (
 	"github.com/harrison/conductor/internal/claude"
 	"github.com/harrison/conductor/internal/config"
 	"github.com/harrison/conductor/internal/display"
+	"github.com/harrison/conductor/internal/estimation"
 	"github.com/harrison/conductor/internal/executor"
 	"github.com/harrison/conductor/internal/learning"
 	"github.com/harrison/conductor/internal/logger"
