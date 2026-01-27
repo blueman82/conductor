@@ -704,8 +704,19 @@ metrics:
   # Track lines added/deleted per task (default: true)
   loc_tracking: true
 
+  # Enable human time estimation per task (default: false)
+  # Uses Claude haiku to estimate how long a human developer would take
+  # Calculates speedup ratio (human_estimate / actual_duration)
+  # Requires Claude CLI calls, so disabled by default
+  human_estimation: false
+
 # Metrics Examples
 
 # Example: Disable LOC tracking
 # metrics:
 #   loc_tracking: false
+
+# Example: Enable human time estimation (v3.5+)
+# metrics:
+#   loc_tracking: true
+#   human_estimation: true
