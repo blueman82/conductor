@@ -43,6 +43,7 @@ Plan File(s) → Parser → Graph Builder → Orchestrator → Wave Executor →
 | `internal/budget/` | Rate limit handling, state persistence |
 | `internal/tts/` | Optional voice feedback |
 | `internal/config/` | Configuration loading |
+| `internal/estimation/` | Human time estimation via Claude haiku |
 
 ### Claude CLI Invocation Pattern
 ```go
