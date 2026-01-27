@@ -322,14 +322,23 @@ func (cl *ConsoleLogger) LogWaveComplete(wave models.Wave, duration time.Duratio
 	taskCount := len(wave.TaskNumbers)
 
 	// Count status breakdown from results and calculate LOC totals for wave (v3.4+)
+	// Also calculate average speedup ratio for wave (v3.5+)
 	statusCounts := make(map[string]int)
 	var waveLinesAdded, waveLinesDeleted int
+	var speedupSum float64
+	var speedupCount int
 	for _, result := range results {
 		if result.Status != "" {
 			statusCounts[result.Status]++
 		}
 		waveLinesAdded += result.Task.LinesAdded
 		waveLinesDeleted += result.Task.LinesDeleted
+		// Track speedup for tasks with human estimates (v3.5+)
+		speedup := result.Task.CalculateSpeedup()
+		if speedup > 0 {
+			speedupSum += speedup
+			speedupCount++
+		}
 	}
 
 	// Build the completion message with task count
