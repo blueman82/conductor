@@ -145,6 +145,25 @@ func (t *Task) TotalLOC() int {
 	return t.LinesAdded + t.LinesDeleted
 }
 
+// GetHumanEstimate returns the human estimate as a time.Duration
+func (t *Task) GetHumanEstimate() time.Duration {
+	return time.Duration(t.HumanEstimateSecs) * time.Second
+}
+
+// CalculateSpeedup calculates the speedup ratio (human time / actual time)
+// Returns 0 if no human estimate or no execution duration is available
+func (t *Task) CalculateSpeedup() float64 {
+	if t.HumanEstimateSecs == 0 || t.ExecutionDuration == 0 {
+		return 0
+	}
+	humanDuration := float64(t.HumanEstimateSecs)
+	actualDuration := t.ExecutionDuration.Seconds()
+	if actualDuration == 0 {
+		return 0
+	}
+	return humanDuration / actualDuration
+}
+
 // GetFormattedDuration returns the ExecutionDuration in human-readable format
 func (t *Task) GetFormattedDuration() string {
 	return t.ExecutionDuration.String()
