@@ -259,27 +259,35 @@ func (l *PatternLibrary) RetrieveWithSimilarity(ctx context.Context, description
 		}
 	}
 
-	// Calculate semantic similarity for each pattern using ClaudeSimilarity
+	// Calculate semantic similarity for all patterns using batched ClaudeSimilarity
 	results := make([]StoredPattern, 0, len(allPatterns))
 	threshold := l.config.SimilarityThreshold
 	if threshold <= 0 {
 		threshold = 0.3 // Default threshold
 	}
 
-	for _, p := range allPatterns {
-		var simScore float64
-
-		// Use ClaudeSimilarity for semantic comparison
-		if sim != nil {
-			simResult, err := sim.Compare(ctx, description, p.PatternDescription)
-			if err == nil && simResult != nil {
-				simScore = simResult.Score
-			}
+	// Batch similarity scoring - single Claude call for all candidates
+	var scores []float64
+	if sim != nil && len(allPatterns) > 0 {
+		candidates := make([]string, len(allPatterns))
+		for i, p := range allPatterns {
+			candidates[i] = p.PatternDescription
 		}
+		var err error
+		scores, err = sim.CompareBatch(ctx, description, candidates)
+		if err != nil {
+			// Graceful degradation: continue without similarity scores
+			scores = make([]float64, len(allPatterns))
+		}
+	} else {
+		scores = make([]float64, len(allPatterns))
+	}
 
-		// Only include patterns above the similarity threshold
+	// Filter patterns above threshold
+	for i, p := range allPatterns {
+		simScore := scores[i]
+
 		if simScore >= threshold {
-			// Parse metadata
 			var metadata map[string]interface{}
 			if p.Metadata != "" {
 				json.Unmarshal([]byte(p.Metadata), &metadata)

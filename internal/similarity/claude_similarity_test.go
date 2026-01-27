@@ -300,3 +300,135 @@ func TestSimilarityResult_SemanticMatchFalse(t *testing.T) {
 		t.Errorf("SemanticMatch should be false for low similarity")
 	}
 }
+
+func TestBatchSimilaritySchema(t *testing.T) {
+	schema := BatchSimilaritySchema()
+
+	if schema == "" {
+		t.Error("BatchSimilaritySchema returned empty string")
+	}
+	if !strings.Contains(schema, "scores") {
+		t.Error("Schema should contain scores property")
+	}
+	if !strings.Contains(schema, "array") {
+		t.Error("Schema should specify scores as array type")
+	}
+}
+
+func TestBuildBatchPrompt(t *testing.T) {
+	cs := NewClaudeSimilarity(30*time.Second, nil)
+
+	tests := []struct {
+		name       string
+		query      string
+		candidates []string
+		wantParts  []string
+	}{
+		{
+			name:       "single candidate",
+			query:      "implement user auth",
+			candidates: []string{"add login feature"},
+			wantParts:  []string{"implement user auth", "[0] add login feature", "scores"},
+		},
+		{
+			name:       "multiple candidates",
+			query:      "fix database bug",
+			candidates: []string{"repair SQL query", "update schema", "add index"},
+			wantParts:  []string{"fix database bug", "[0] repair SQL query", "[1] update schema", "[2] add index"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prompt := cs.buildBatchPrompt(tt.query, tt.candidates)
+			for _, part := range tt.wantParts {
+				if !strings.Contains(prompt, part) {
+					t.Errorf("Prompt should contain %q", part)
+				}
+			}
+		})
+	}
+}
+
+func TestCompareBatch_EmptyInput(t *testing.T) {
+	cs := NewClaudeSimilarity(30*time.Second, nil)
+
+	scores, err := cs.CompareBatch(nil, "query", nil)
+	if err != nil {
+		t.Errorf("CompareBatch with nil candidates should not error: %v", err)
+	}
+	if scores != nil {
+		t.Errorf("CompareBatch with nil candidates should return nil scores")
+	}
+
+	scores, err = cs.CompareBatch(nil, "query", []string{})
+	if err != nil {
+		t.Errorf("CompareBatch with empty candidates should not error: %v", err)
+	}
+	if scores != nil {
+		t.Errorf("CompareBatch with empty candidates should return nil scores")
+	}
+}
+
+func TestBatchSimilarityResponse_JSONParsing(t *testing.T) {
+	tests := []struct {
+		name       string
+		jsonInput  string
+		wantScores []float64
+		wantErr    bool
+	}{
+		{
+			name:       "valid scores",
+			jsonInput:  `{"scores": [0.9, 0.5, 0.1]}`,
+			wantScores: []float64{0.9, 0.5, 0.1},
+			wantErr:    false,
+		},
+		{
+			name:       "single score",
+			jsonInput:  `{"scores": [0.75]}`,
+			wantScores: []float64{0.75},
+			wantErr:    false,
+		},
+		{
+			name:       "empty scores",
+			jsonInput:  `{"scores": []}`,
+			wantScores: []float64{},
+			wantErr:    false,
+		},
+		{
+			name:      "invalid json",
+			jsonInput: `{not valid}`,
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result batchSimilarityResponse
+			err := json.Unmarshal([]byte(tt.jsonInput), &result)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Expected error but got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if len(result.Scores) != len(tt.wantScores) {
+				t.Errorf("Scores length = %d, want %d", len(result.Scores), len(tt.wantScores))
+				return
+			}
+
+			for i, score := range result.Scores {
+				if score != tt.wantScores[i] {
+					t.Errorf("Scores[%d] = %f, want %f", i, score, tt.wantScores[i])
+				}
+			}
+		})
+	}
+}
