@@ -217,6 +217,9 @@ type DefaultTaskExecutor struct {
 	// LOC Tracker integration (v3.4+)
 	LOCTrackerHook *LOCTrackerHook // LOC change tracking hook (optional)
 
+	// Human Time Estimation integration (v3.5+)
+	EstimationHook *EstimationHook // Human time estimation hook (optional)
+
 	// MinFailuresBeforeAdapt is the threshold for failure analysis (v2.34+)
 	// Defaults to 1 if not set
 	MinFailuresBeforeAdapt int
