@@ -769,6 +769,12 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		taskExec.LOCTrackerHook = executor.NewLOCTrackerHook(true, "", consoleLog)
 	}
 
+	// Initialize human time estimation if enabled (v3.5+)
+	if cfg.Metrics.HumanEstimation {
+		estimator := estimation.NewEstimator(cfg.Timeouts.LLM, multiLog)
+		taskExec.EstimationHook = executor.NewEstimationHook(true, estimator, consoleLog)
+	}
+
 	// Wire intelligent task agent selection (v2.15+)
 	// Enable when either:
 	// 1. executor.intelligent_agent_selection is true in config, OR
