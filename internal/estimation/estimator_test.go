@@ -57,7 +57,7 @@ func TestBuildPrompt(t *testing.T) {
 	if !contains(prompt, "jwt.go") {
 		t.Error("Prompt missing files")
 	}
-	if !contains(prompt, "reading") {
+	if !contains(prompt, "Reading") {
 		t.Error("Prompt missing development cycle considerations")
 	}
 }
