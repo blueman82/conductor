@@ -266,6 +266,15 @@ func (o *Orchestrator) ExecutePlan(ctx context.Context, plans ...*models.Plan) (
 			return nil, fmt.Errorf("task %s not found in plan", o.targetTask)
 		}
 		mergedPlan.Tasks = filteredTasks
+
+		// Recalculate waves after filtering to a single task (v3.5.1+)
+		// Without this, waves still reference all original task numbers,
+		// causing "task not found in Wave" errors for non-target tasks.
+		filteredWaves, err := CalculateWaves(filteredTasks)
+		if err != nil {
+			return nil, fmt.Errorf("failed to recalculate waves after task filtering: %w", err)
+		}
+		mergedPlan.Waves = filteredWaves
 	}
 
 	// Set up context with cancellation for signal handling
