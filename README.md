@@ -31,6 +31,8 @@ Conductor orchestrates multiple Claude Code agents to execute implementation pla
 - **Voice Feedback** — Optional TTS via local Orpheus server
 - **Setup Introspection** — Pre-wave setup phase via Claude introspection for dependency installation
 - **Git Rollback** — Task-level checkpoints with automatic rollback on QC failure
+- **LOC Tracking** — Track lines added/deleted per task, aggregate in wave summary
+- **Human Time Estimation** — Estimate human developer time, calculate speedup ratio
 
 ## Quick Start
 
