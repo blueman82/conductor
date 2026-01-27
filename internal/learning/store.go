@@ -39,6 +39,10 @@ type TaskExecution struct {
 	// LOC tracking (v3.4+)
 	LinesAdded   int `json:"lines_added"`
 	LinesDeleted int `json:"lines_deleted"`
+
+	// Human time estimation (v3.5+)
+	HumanEstimateSecs   int64  `json:"human_estimate_secs"`
+	HumanEstimateSource string `json:"human_estimate_source"`
 }
 
 // ApproachHistory tracks different approaches tried for recurring task patterns
