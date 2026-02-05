@@ -1,6 +1,6 @@
 <coding_guidelines>
 # CLAUDE.md
-Last updated: 2026-01-27
+Last updated: 2026-02-05
 
 
 ## Project Overview
