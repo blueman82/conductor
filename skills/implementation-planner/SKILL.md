@@ -1,213 +1,205 @@
 ---
 name: implementation-planner
-description: Generate comprehensive implementation plans for features. Use when user requests "help me implement X", "create a plan for X", "break down feature X", "how should I build X", or asks for detailed implementation guidance. Activates for planning requests, not exploratory design discussions.
-allowed-tools: Read, Bash, Glob, Grep, Write, TodoWrite, Task
+description: Generate conductor-compatible YAML plans. Use when user requests "help me implement X", "create a plan for X", or asks for implementation guidance. NOT for questions, debugging, or code reviews.
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, mcp__mcp-exec__*
 ---
 
-# Implementation Planner v4.2
+# Implementation Planner v5.1
 
-Generate conductor-compatible YAML plans. **Do NOT activate for:** questions, debugging, code reviews.
+Generate conductor-compatible YAML plans with **mandatory** tool integrations.
 
-## Workflow
-
-1. **Discover** → Launch Explore agents for codebase, patterns, existing implementations
-2. **Design** → Break into tasks, map dependencies, build data flow registry
-3. **Detail** → Write SPECIFIC success_criteria and key_points (see examples below)
-4. **Classify** → Simple task vs Complex task (determines what to embed)
-5. **Generate** → Output YAML with all required fields
-6. **Validate** → `conductor validate <plan>.yaml`
+**Output location:** `docs/plans/<feature-name>.yaml`
 
 ---
 
-## Discovery Phase
+## PHASE 1: Context Gathering (MANDATORY)
 
-Launch Explore agents IN PARALLEL (this is step 1!):
+Execute ALL of these before designing:
+
+### 1.1 Activate Serena + Recall Theo Context
+
+```javascript
+// EXECUTE via mcp__mcp-exec__execute_code_with_wrappers with wrappers: ["serena", "theo"]
+
+// Activate project
+await serena.activate_project({ project: "/path/to/project" });
+
+// Get project memories
+const memories = await theo.memory_recall({
+  query: "architecture patterns decisions for <project>",
+  namespace: "project:<name>",
+  limit: 5
+});
+console.log("Project context:", memories.data?.memories?.map(m => m.content.slice(0, 200)));
+
+// Check for ./check script
+const hasCheck = await serena.find_file({ file_mask: "check", relative_path: "." });
+console.log("Has ./check:", hasCheck);
 ```
-Agent 1: "Explore codebase structure, stack, existing patterns"
-Agent 2: "Search for existing implementations of <feature>"
-Agent 3: "Explore available agents in ~/.claude/agents"
+
+### 1.2 Explore Codebase with Serena
+
+```javascript
+// EXECUTE via mcp__mcp-exec__execute_code_with_wrappers with wrappers: ["serena"]
+
+// List structure
+const structure = await serena.list_dir({ relative_path: ".", recursive: false });
+console.log("Root:", structure);
+
+// Find relevant files
+const symbols = await serena.get_symbols_overview({ relative_path: "TARGET_FILE" });
+console.log("Symbols:", symbols);
+
+// Search for patterns
+const patterns = await serena.search_for_pattern({ substring_pattern: "PATTERN" });
+console.log("Found:", patterns);
 ```
 
-### Data Flow Registry
+### 1.3 Check Available Agents
 
-Build producer/consumer map to ensure correct dependencies:
+```bash
+ls ~/.claude/agents/*.md | head -20
+```
 
+---
+
+## PHASE 2: Design
+
+### 2.1 Data Flow Registry
+
+Build producer/consumer map:
 ```yaml
-# PRODUCERS: Task 2 → memories table, Task 3 → search methods
-# CONSUMERS: Task 4 → [3], Task 8 → [3, 7]
-# VALIDATION: All consumers depend_on producers ✓
-
 data_flow_registry:
   producers:
-    search_methods:
-      - task: 3
-        description: "Creates search_vector, search_fts, search_hybrid"
+    config: [{task: 1, description: "Creates X"}]
   consumers:
-    search_methods:
-      - task: 4
-        description: "HybridStore uses search methods"
+    config: [{task: 2, description: "Uses X"}]
+```
+
+**Rule:** If task B uses something task A creates → B `depends_on: [A]`
+
+### 2.2 Task Breakdown
+
+For each task identify:
+- Files to modify
+- Dependencies (data flow)
+- Success criteria (SPECIFIC names, not vague)
+- Test commands
+
+---
+
+## PHASE 3: Detail Tasks (CRITICAL)
+
+### 3.0 Task Creation Loop (MANDATORY - BLOCKING)
+
+For **EACH** task you create, you MUST follow this sequence:
+
+```
+1. IDENTIFY: List files this task will modify
+2. READ: Read EVERY file NOW using Read tool
+   - Verify the file exists
+   - Verify APIs/methods you'll call exist
+   - Note actual signatures (don't assume)
+3. ONLY THEN: Write the task description
+```
+
+**BLOCKING RULE:** Do NOT write a task's `description` field until you have read ALL files in its `files` array in THIS session.
+
+**Why this works:**
+- Verification happens at point of need (when creating task)
+- Cannot skip because it's part of the creation workflow
+- Files are known at task creation time
+
+**Example (CORRECT):**
+```yaml
+# Step 1: I identify files
+files: ["src/main.py", "src/client.py"]
+
+# Step 2: I READ both files NOW
+# [Read src/main.py] → Found Agent created at line 142
+# [Read src/client.py] → Found start() initializes at line 320
+
+# Step 3: NOW I write the description with verified info
+description: |
+  Modify Agent initialization at main.py:142...
+  Modify start() at client.py:320...
+```
+
+**Example (WRONG - causes broken plans):**
+```yaml
+# I write files and description together without reading
+files: ["src/main.py", "src/client.py"]
+description: |
+  Modify Agent initialization...  # ASSUMED, not verified - WILL FAIL
 ```
 
 ---
 
-## THE CORE RULE: Specificity
+### 3.1 The Specificity Rule
 
-**Agents only see task-level fields.** If context isn't in the task description, success_criteria, or key_points, the agent won't know it.
+**Agents only see task-level fields.** Embed ALL context in description.
 
-### Bad vs Good Success Criteria
+| BAD | GOOD |
+|-----|------|
+| "Tables created" | "users table with columns: id, email, created_at" |
+| "Search works" | "search_vector(embedding, n_results) uses vec_distance_cosine" |
+| "Tests pass" | "Tests: test_create, test_read, test_update, test_delete" |
 
-| BAD (vague) | GOOD (specific) |
-|-------------|-----------------|
-| "Tables created" | "memories table created with columns: id, content, content_hash, memory_type, namespace, confidence, importance, source_file, chunk_index, start_line, end_line, created_at, last_accessed, access_count, tags" |
-| "CRUD methods work" | "add_memory() inserts to memories + memories_vec + memories_fts in single transaction" |
-| "Update types" | "Document dataclass field doc_type renamed to memory_type to match SQLite schema" |
-| "Search works" | "search_vector(embedding, n_results, where) uses vec_distance_cosine" |
-| "Tests pass" | "Tests cover CRUD: add_memory, get_memory, update_memory, delete_memory" |
+### 3.2 Mandatory Principles (embed in EVERY complex task)
 
-### Bad vs Good Key_points
+```
+<mandatory_principles>
+ENGINEERING: YAGNI, KISS, DRY, Fail Fast, SSOT, Law of Demeter.
+PYTHON:
+  - PEP 8: snake_case functions, PascalCase classes, UPPER_CASE constants
+  - Full type hints on ALL signatures (Pyright strict)
+  - Explicit imports (no star imports, no lazy imports, no TYPE_CHECKING)
+  - EAFP over LBYL (try/except not if-checks)
+  - Context managers for resources
+  - f-strings, list comprehensions where readable
+  - No mutable default arguments
+GO:
+  - Accept interfaces, return structs
+  - Errors are values (handle or return, never ignore)
+  - Table-driven tests
+  - Early returns over nested if/else
+TYPESCRIPT:
+  - Strict mode, explicit return types
+  - Discriminated unions over type assertions
+  - Optional chaining (?.), nullish coalescing (??)
+  - No any type
+CODE REDUCTION:
+  - No helpers for one-time ops
+  - No premature abstractions (3 similar lines > abstraction)
+  - Delete unused code completely (no _unused renames)
+QUALITY: Run ./check --fix before committing (or project equivalent)
+</mandatory_principles>
+```
 
-| BAD (abstract) | GOOD (actionable) |
-|----------------|-------------------|
-| "Update ValidationLoop" | "ValidationLoop uses SQLiteStore.update_memory() for confidence adjustments" |
-| "Update tools" | "memory_tools.py: memory_store→add_memory(), memory_recall→search_hybrid(), memory_forget→delete_memory()" |
-| "Handle errors" | "On migration failure, restore from .backup files created at start" |
+### 3.3 Task Classification
 
-### The Count Rule
+**Simple tasks** (config changes, deletions, imports): No principles needed
+**Complex tasks** (new code, refactoring): MUST include `<mandatory_principles>`
 
-**If success_criteria lists N items, key_points needs N entries.**
+### 3.4 Count Rule
 
-Example: If success_criteria says "Tests cover: add_memory, get_memory, update_memory, delete_memory, list_memories, count_memories, search_vector, search_fts, search_hybrid, cache operations, golden rules, edges" (12 items), then key_points needs 12 entries covering each.
+If success_criteria has N items → key_points needs N matching entries.
 
 ---
 
-## Task Complexity Classification
+## PHASE 4: Generate YAML
 
-### Simple Tasks (NO `<mandatory_principles>` needed)
-
-- Adding/removing dependencies in pyproject.toml
-- Deleting files
-- Updating __init__.py exports
-- Removing fields from config classes
-- Simple find-replace refactors
-
-### Complex Tasks (NEED `<mandatory_principles>` + embedded context)
-
-- New method implementations
-- Schema changes with exact SQL
-- Migration scripts with field mappings
-- Refactoring with business logic
-
----
-
-## Mandatory Principles Reference
-
-Use these in `<mandatory_principles>` tags for complex tasks:
-
-### Python
-```
-ENGINEERING: YAGNI, KISS, DRY, Fail Fast, Single Source of Truth, Law of Demeter.
-PYTHONIC: PEP 8 naming (snake_case functions, PascalCase classes), full type hints (Pyright strict),
-  EAFP over LBYL (try/except not if-checks), context managers for resources, f-strings,
-  explicit imports (no star imports), PEP 257 docstrings for public APIs only.
-CODE REDUCTION: No helpers for one-time ops, no premature abstractions, delete unused code completely.
-```
-
-### Go
-```
-ENGINEERING: YAGNI, KISS, DRY, Fail Fast, Single Source of Truth, Law of Demeter.
-GO IDIOMS: Accept interfaces return structs, errors are values (handle or return),
-  table-driven tests, short variable names in small scopes, package-level organization.
-CODE REDUCTION: No empty structs (Type{}), no unused variables (_ = x), no TODO comments.
-```
-
-### TypeScript
-```
-ENGINEERING: YAGNI, KISS, DRY, Fail Fast, Single Source of Truth.
-TS IDIOMS: Strict mode, explicit return types, discriminated unions over type assertions,
-  const assertions, exhaustive switch checks, no any.
-```
-
----
-
-## Embedded Context by Task Type
-
-### For Database Tasks
-- Include exact SQL CREATE TABLE statements
-- List all columns with types and constraints
-- Include all indexes
-
-### For Migration Tasks
-- Include field mapping table (old name → new name)
-- Include rollback plan
-- Include verification queries
-
-### For API/Method Tasks
-- Include method signatures with full type hints
-- Include example SQL queries if applicable
-- Include error handling requirements
-
-### For Test Tasks
-- List each test case by name
-- Specify test data (e.g., "[0.1] * 1024 for mock embeddings")
-- Specify assertions
-
----
-
-## Critical Rules
-
-| Rule | Rationale |
-|------|-----------|
-| **Terminology match** | Conductor rubric validates that key_points terms appear in success_criteria |
-| **Data flow deps** | If task B uses function from task A, B must `depends_on: [A]` |
-| **Verify before claiming** | `grep` to confirm existing behavior before writing key_points |
-| **Verify file paths** | `ls` to confirm files exist before adding to `files[]` |
-
-**Auto-append to ALL tasks' success_criteria:**
-- No TODO comments in production code
-- No placeholder code
-
----
-
-## Dependency Patterns
-
-### Creation Dependencies (Data Flow)
-If task B **uses** something task A creates → B `depends_on: [A]`
-
-### Removal Dependencies (CRITICAL - often missed!)
-
-| Removal Task | Must Depend On |
-|--------------|----------------|
-| **Delete a file** | ALL tasks that update imports from that file |
-| **Remove a library** | ALL tasks that use that library (including migration scripts!) |
-| **Remove a config field** | ALL tasks that reference that field |
-| **Remove API endpoint** | ALL tasks that update consumers of that endpoint |
-
-**Rule:** Before removing X, identify ALL consumers. Each consumer update becomes a prerequisite task. Use `grep` to find them.
-
-**Example bug we caught:**
-- Task 11 "Delete chroma_store.py" had `depends_on: [4, 8]`
-- But ChromaStore was imported in 5 more files (validation/, __main__.py, tools/)
-- Fixed to: `depends_on: [4, 5, 8, 9, 10]`
-
-- Task 14 "Remove chromadb dependency" had `depends_on: [11, 13]`
-- But migration script (Task 12) needs chromadb to read old data
-- Fixed to: `depends_on: [11, 12, 13]`
-
----
-
-## REFERENCE: YAML Schema
-
-### Root Structure
+### 4.1 Required Structure
 
 ```yaml
 conductor:
   worktree_groups:
-    - group_id: "foundation"
-      tasks: [1, 2, 3]
-      rationale: "Sequential dependency chain"
+    - group_id: "name"
+      tasks: [1, 2]
+      rationale: "Why grouped"
 
 planner_compliance:
-  planner_version: "4.0.0"
+  planner_version: "5.0.0"
   strict_enforcement: true
   required_features: [dependency_checks, test_commands, success_criteria, data_flow_registry]
 
@@ -220,111 +212,133 @@ plan:
     feature_name: "Name"
     created: "YYYY-MM-DD"
     target: "Goal"
+    project_root: "/absolute/path"
   context:
-    framework: "Python 3.13"
+    framework: "Python 3.11, FastAPI"
     test_framework: "pytest"
+    quality_tool: "./check --fix"
   tasks: []
 ```
 
-### Task Structure
+### 4.2 Task Template
 
 ```yaml
 - task_number: "1"
   name: "Task name"
-  agent: "python-pro"
-  files: ["src/module/file.py"]
+  agent: "python-pro"  # or fastapi-pro, test-automator, etc.
+  files: ["path/to/file.py"]
   depends_on: []
 
   success_criteria:
-    - "Specific, verifiable criterion with exact names"
-    - "Another specific criterion"
+    - "Specific criterion with exact names"
+    - "./check --fix passes"
     - "No TODO comments"
 
   test_commands:
-    - "cd /path && uv run pytest tests/test_file.py -v"
+    - "cd /path && ./check --fix"
+    - "cd /path && uv run pytest tests/test_x.py -v"
 
   runtime_metadata:
     dependency_checks:
-      - command: "uv run python -c 'import module'"
-        description: "Verify import works"
+      - command: "grep 'pattern' file"
+        description: "Verify X"
     documentation_targets: []
 
   description: |
     <mandatory_principles>
-    ENGINEERING: YAGNI, KISS, DRY, Fail Fast, Single Source of Truth.
-    PYTHONIC: Full type hints, EAFP (try/except), context managers.
+    [Full principles from 3.2 above]
     </mandatory_principles>
 
-    <task_description>What to implement with full context.</task_description>
+    <task_description>
+    What to implement with EXACT code snippets.
+
+    ```python
+    def function_name(param: Type) -> ReturnType:
+        """Docstring."""
+        implementation
+    ```
+
+    Run ./check --fix after changes.
+    </task_description>
 
   implementation:
-    approach: |
-      Strategy and decisions.
+    approach: "Strategy"
     key_points:
-      - point: "Exact function/method name"
-        details: "What it does and how"
-        reference: "src/file.py:method_name"
+      - point: "function_name"
+        details: "What it does"
+        reference: "file.py:line"
 
   code_quality:
     python:
       full_quality_pipeline:
-        command: "cd /path && uv run black src/ && uv run isort src/ && uv run ruff check src/ --fix && uv run mypy src/"
+        command: "cd /path && ./check --fix"
         exit_on_failure: true
 
   commit:
     type: "feat"
-    message: "Description of change"
-    files: ["src/**"]
+    message: "description"
+    files: ["path/**"]
 ```
 
 ---
 
-## REFERENCE: Code Quality Commands
+## PHASE 5: Validate
 
-### Python
-```yaml
-code_quality:
-  python:
-    full_quality_pipeline:
-      command: "cd /path && uv run black . && uv run isort . && uv run ruff check . --fix && uv run mypy ."
-      exit_on_failure: true
+```bash
+cd /project && conductor validate docs/plans/<name>.yaml
 ```
 
-### Go
-```yaml
-code_quality:
-  go:
-    full_quality_pipeline:
-      command: "gofmt -w . && go vet ./... && go test ./..."
-      exit_on_failure: true
-```
+Must pass:
+- Rubric validation
+- Data flow registry validation
+- No circular dependencies
+- All agents available
+- All task dependencies valid
 
 ---
 
-## Validation Checklist
+## Dependency Patterns
 
-Before running `conductor validate`:
+### Creation: B uses A's output → B depends_on A
 
-```
-□ Every success_criteria item is SPECIFIC (exact names, columns, methods)
-□ Every key_point has corresponding success criterion (SAME terminology)
-□ Key_points count matches success_criteria detail level
-□ Complex tasks have <mandatory_principles> + embedded context
-□ Simple tasks are lean (no unnecessary principles)
-□ Data flow: consumers depend_on all producers
-□ All file paths verified to exist
-□ Code quality commands use project tooling
-```
+### Removal (often missed!):
+| Removing | Must depend on |
+|----------|----------------|
+| Delete file | ALL tasks updating imports from it |
+| Remove library | ALL tasks using it (including migrations!) |
+| Remove config | ALL tasks referencing it |
+
+**Use grep to find all consumers before removal.**
 
 ---
 
 ## Common Failures
 
-| Failure | Prevention |
-|---------|------------|
-| Agent implements wrong thing | Be SPECIFIC in success_criteria |
-| QC fails despite working code | Use IDENTICAL terms in key_points and success_criteria |
-| Missing methods | Count items in success_criteria, ensure key_points matches |
-| Context lost | Embed SQL/mappings/signatures in task description |
-| Over-engineered simple tasks | Don't add principles to config/delete tasks |
-| Plan too large | ~2000 lines max, split at worktree boundaries |
+| Failure | Fix |
+|---------|-----|
+| Wrong API called | READ files during task creation (Phase 3.0), verify signatures |
+| Integration point missing | READ files during task creation (Phase 3.0), confirm hooks exist |
+| Agent does wrong thing | Be SPECIFIC in success_criteria |
+| QC fails | Use IDENTICAL terms in key_points and success_criteria |
+| Context lost | Embed SQL/signatures/code in description |
+| Wrong location | Output to docs/plans/, NOT .conductor/ |
+| Missing ./check | Add to EVERY task's test_commands AND description |
+
+---
+
+## Checklist Before Generating
+
+```
+□ Serena activated, codebase explored
+□ Theo memories recalled for project
+□ For EACH task: Read files BEFORE writing description (Phase 3.0)
+□ Method signatures VERIFIED not assumed (Phase 3.0)
+□ Integration points confirmed to exist (Phase 3.0)
+□ ./check --fix in every Python task
+□ Full <mandatory_principles> in complex tasks
+□ success_criteria are SPECIFIC (exact names)
+□ key_points count matches success_criteria count
+□ Data flow: consumers depend_on producers
+□ Output path: docs/plans/<name>.yaml
+□ conductor validate passes
+```
