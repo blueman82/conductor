@@ -1,6 +1,8 @@
 package behavioral
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -459,5 +461,54 @@ func TestModels(t *testing.T) {
 
 	if err := metrics.Validate(); err != nil {
 		t.Fatalf("BehavioralMetrics.Validate() failed: %v", err)
+	}
+}
+
+func TestBehavioralMetricsValidate_ErrorChainPreserved(t *testing.T) {
+	metrics := BehavioralMetrics{
+		TotalSessions: 1,
+		SuccessRate:   1.0,
+		ToolExecutions: []ToolExecution{
+			{Name: "", Count: 1, SuccessRate: 1.0},
+		},
+	}
+
+	err := metrics.Validate()
+	if err == nil {
+		t.Fatal("expected error from Validate()")
+	}
+
+	// The wrapped error should be unwrappable via errors.Unwrap
+	inner := errors.Unwrap(err)
+	if inner == nil {
+		t.Fatal("expected Unwrap to return inner error, got nil")
+	}
+	if inner.Error() != "tool name is required" {
+		t.Errorf("inner error = %q, want %q", inner.Error(), "tool name is required")
+	}
+}
+
+func TestBehavioralMetricsValidate_DoubleDigitIndex(t *testing.T) {
+	// Build metrics with 11 tool executions; the 11th (index 10) is invalid
+	tools := make([]ToolExecution, 11)
+	for i := 0; i < 10; i++ {
+		tools[i] = ToolExecution{Name: "Valid", Count: 1, SuccessRate: 1.0}
+	}
+	tools[10] = ToolExecution{Name: "", Count: 1} // invalid at index 10
+
+	metrics := BehavioralMetrics{
+		TotalSessions:  1,
+		SuccessRate:    1.0,
+		ToolExecutions: tools,
+	}
+
+	err := metrics.Validate()
+	if err == nil {
+		t.Fatal("expected error from Validate()")
+	}
+
+	// The error message must contain "index 10" as a decimal number
+	if !strings.Contains(err.Error(), "index 10") {
+		t.Errorf("expected error to contain 'index 10', got %q", err)
 	}
 }

@@ -448,7 +448,9 @@ func extractAllToolsFromContent(content json.RawMessage, ts time.Time, model str
 		if toolBlock.Type == "tool_use" && toolBlock.Name != "" {
 			// Convert input to map
 			var params map[string]interface{}
-			json.Unmarshal(toolBlock.Input, &params)
+			if err := json.Unmarshal(toolBlock.Input, &params); err != nil {
+				continue
+			}
 
 			// Check if this is a Bash command - extract command details
 			if toolBlock.Name == "Bash" {

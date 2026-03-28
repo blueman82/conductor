@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/harrison/conductor/internal/config"
@@ -32,6 +33,8 @@ type Client struct {
 	once        sync.Once
 	speechQueue chan string
 	queueOnce   sync.Once
+	closeOnce   sync.Once
+	closed      atomic.Bool
 }
 
 // NewClient creates a new TTS client with the given configuration.
@@ -130,13 +133,22 @@ func (c *Client) speakSync(text string) {
 	playAudio(audioData)
 }
 
+// Close shuts down the speech worker goroutine by closing the speech queue.
+// It is safe to call multiple times. After Close is called, Speak becomes a no-op.
+func (c *Client) Close() {
+	c.closeOnce.Do(func() {
+		c.closed.Store(true)
+		close(c.speechQueue)
+	})
+}
+
 // Speak queues text to be spoken by the TTS service.
-// If the service is not available, it returns immediately without doing anything.
+// If the service is not available or closed, it returns immediately without doing anything.
 // Speech requests are processed sequentially to prevent overlapping audio.
 // This method never blocks - it just adds to the queue.
 // All errors are silently ignored.
 func (c *Client) Speak(text string) {
-	if !c.IsAvailable() {
+	if c.closed.Load() || !c.IsAvailable() {
 		return
 	}
 

@@ -369,6 +369,46 @@ func TestClient_Speak_SilentlyHandlesErrors(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 }
 
+func TestClient_Close(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := config.TTSConfig{
+		Enabled: true,
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg, 2*time.Second)
+
+	// Start the worker by calling Speak
+	client.Speak("test")
+
+	// Close should not panic
+	client.Close()
+
+	// Close again should not panic (idempotent)
+	client.Close()
+}
+
+func TestClient_Speak_AfterClose(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := config.TTSConfig{
+		Enabled: true,
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg, 2*time.Second)
+
+	client.Close()
+
+	// Speak after Close should be a no-op, not panic
+	client.Speak("should not panic")
+}
+
 func TestClient_Speak_HandlesUnavailableServer(t *testing.T) {
 	// First create a server for health check, then close it
 	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

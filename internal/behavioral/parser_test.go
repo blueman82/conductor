@@ -482,6 +482,12 @@ func TestParseEventLine(t *testing.T) {
 			wantErr:  true,
 		},
 		{
+			name:     "tool_use with malformed input JSON is skipped",
+			line:     `{"type":"assistant","timestamp":"2025-01-15T10:00:00Z","sessionId":"sess-1","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":"not valid json"}]}}`,
+			wantType: "",
+			wantErr:  false,
+		},
+		{
 			name:     "invalid json",
 			line:     `{invalid json}`,
 			wantType: "",
@@ -506,6 +512,14 @@ func TestParseEventLine(t *testing.T) {
 			}
 
 			// parseEventLine now returns []Event, check first event
+			if tt.wantType == "" {
+				// Expect zero events (e.g., malformed input gracefully skipped)
+				if len(events) != 0 {
+					t.Errorf("parseEventLine() returned %d events, want 0", len(events))
+				}
+				return
+			}
+
 			if len(events) == 0 {
 				t.Errorf("parseEventLine() returned no events")
 				return
