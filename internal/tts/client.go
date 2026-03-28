@@ -32,6 +32,7 @@ type Client struct {
 	once        sync.Once
 	speechQueue chan string
 	queueOnce   sync.Once
+	closeOnce   sync.Once
 }
 
 // NewClient creates a new TTS client with the given configuration.
@@ -128,6 +129,14 @@ func (c *Client) speakSync(text string) {
 
 	// Play the audio (blocking)
 	playAudio(audioData)
+}
+
+// Close shuts down the speech worker goroutine by closing the speech queue.
+// It is safe to call multiple times. Must not be called concurrently with Speak.
+func (c *Client) Close() {
+	c.closeOnce.Do(func() {
+		close(c.speechQueue)
+	})
 }
 
 // Speak queues text to be spoken by the TTS service.

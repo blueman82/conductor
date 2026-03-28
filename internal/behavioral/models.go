@@ -2,6 +2,7 @@ package behavioral
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -105,21 +106,21 @@ func (bm *BehavioralMetrics) Validate() error {
 	// Validate tool executions
 	for i, te := range bm.ToolExecutions {
 		if err := te.Validate(); err != nil {
-			return errors.New("invalid tool execution at index " + string(rune(i+'0')) + ": " + err.Error())
+			return fmt.Errorf("invalid tool execution at index %d: %w", i, err)
 		}
 	}
 
 	// Validate bash commands
 	for i, bc := range bm.BashCommands {
 		if err := bc.Validate(); err != nil {
-			return errors.New("invalid bash command at index " + string(rune(i+'0')) + ": " + err.Error())
+			return fmt.Errorf("invalid bash command at index %d: %w", i, err)
 		}
 	}
 
 	// Validate file operations
 	for i, fo := range bm.FileOperations {
 		if err := fo.Validate(); err != nil {
-			return errors.New("invalid file operation at index " + string(rune(i+'0')) + ": " + err.Error())
+			return fmt.Errorf("invalid file operation at index %d: %w", i, err)
 		}
 	}
 
