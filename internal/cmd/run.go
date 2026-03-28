@@ -582,8 +582,8 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Wire optional TTS logger if enabled and available
 	if cfg.TTS.Enabled {
 		ttsClient := tts.NewClient(cfg.TTS, cfg.Timeouts.HTTP)
-		defer ttsClient.Close()
 		if ttsClient.IsAvailable() {
+			defer ttsClient.Close()
 			announcer := tts.NewAnnouncer(ttsClient)
 			ttsLogger := tts.NewTTSLogger(announcer)
 			multiLog.loggers = append(multiLog.loggers, ttsLogger)

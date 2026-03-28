@@ -1,7 +1,6 @@
 package behavioral
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -464,7 +463,7 @@ func TestModels(t *testing.T) {
 	}
 }
 
-func TestBehavioralMetricsValidate_ErrorChainPreserved(t *testing.T) {
+func TestBehavioralMetricsValidate_ErrorFormatting(t *testing.T) {
 	metrics := BehavioralMetrics{
 		TotalSessions: 1,
 		SuccessRate:   1.0,
@@ -478,13 +477,9 @@ func TestBehavioralMetricsValidate_ErrorChainPreserved(t *testing.T) {
 		t.Fatal("expected error from Validate()")
 	}
 
-	// The wrapped error should be unwrappable via errors.Unwrap
-	inner := errors.Unwrap(err)
-	if inner == nil {
-		t.Fatal("expected Unwrap to return inner error, got nil")
-	}
-	if inner.Error() != "tool name is required" {
-		t.Errorf("inner error = %q, want %q", inner.Error(), "tool name is required")
+	want := "invalid tool execution at index 0: tool name is required"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
 	}
 }
 

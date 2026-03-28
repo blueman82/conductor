@@ -439,15 +439,17 @@ func TestParseEventLine(t *testing.T) {
 	tests := []struct {
 		name      string
 		line      string
+		wantCount int // expected number of events; 0 means none
 		wantType  string
 		wantErr   bool
 		validator func(Event) error
 	}{
 		{
-			name:     "tool call event",
-			line:     `{"type":"tool_call","timestamp":"2025-01-15T10:00:00Z","tool_name":"Read","parameters":{"file_path":"/test.go"},"success":true,"duration":100}`,
-			wantType: "tool_call",
-			wantErr:  false,
+			name:      "tool call event",
+			line:      `{"type":"tool_call","timestamp":"2025-01-15T10:00:00Z","tool_name":"Read","parameters":{"file_path":"/test.go"},"success":true,"duration":100}`,
+			wantCount: 1,
+			wantType:  "tool_call",
+			wantErr:   false,
 			validator: func(e Event) error {
 				tc, ok := e.(*ToolCallEvent)
 				if !ok {
@@ -460,10 +462,11 @@ func TestParseEventLine(t *testing.T) {
 			},
 		},
 		{
-			name:     "bash command event",
-			line:     `{"type":"bash_command","timestamp":"2025-01-15T10:01:00Z","command":"go test","exit_code":0,"output":"PASS","duration":500,"background":false}`,
-			wantType: "bash_command",
-			wantErr:  false,
+			name:      "bash command event",
+			line:      `{"type":"bash_command","timestamp":"2025-01-15T10:01:00Z","command":"go test","exit_code":0,"output":"PASS","duration":500,"background":false}`,
+			wantCount: 1,
+			wantType:  "bash_command",
+			wantErr:   false,
 			validator: func(e Event) error {
 				bc, ok := e.(*BashCommandEvent)
 				if !ok {
@@ -476,22 +479,33 @@ func TestParseEventLine(t *testing.T) {
 			},
 		},
 		{
-			name:     "unknown event type",
-			line:     `{"type":"unknown_type","timestamp":"2025-01-15T10:00:00Z"}`,
-			wantType: "",
-			wantErr:  true,
+			name:    "unknown event type",
+			line:    `{"type":"unknown_type","timestamp":"2025-01-15T10:00:00Z"}`,
+			wantErr: true,
 		},
 		{
-			name:     "tool_use with malformed input JSON is skipped",
-			line:     `{"type":"assistant","timestamp":"2025-01-15T10:00:00Z","sessionId":"sess-1","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":"not valid json"}]}}`,
-			wantType: "",
-			wantErr:  false,
+			name:      "tool_use with malformed input JSON emits generic tool call",
+			line:      `{"type":"assistant","timestamp":"2025-01-15T10:00:00Z","sessionId":"sess-1","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":"not valid json"}]}}`,
+			wantCount: 1,
+			wantType:  "tool_call",
+			validator: func(e Event) error {
+				tc, ok := e.(*ToolCallEvent)
+				if !ok {
+					return errors.New("expected ToolCallEvent")
+				}
+				if tc.ToolName != "Bash" {
+					return errors.New("expected tool name 'Bash'")
+				}
+				if tc.Parameters != nil {
+					return errors.New("expected nil parameters for malformed input")
+				}
+				return nil
+			},
 		},
 		{
-			name:     "invalid json",
-			line:     `{invalid json}`,
-			wantType: "",
-			wantErr:  true,
+			name:    "invalid json",
+			line:    `{invalid json}`,
+			wantErr: true,
 		},
 	}
 
@@ -511,17 +525,12 @@ func TestParseEventLine(t *testing.T) {
 				return
 			}
 
-			// parseEventLine now returns []Event, check first event
-			if tt.wantType == "" {
-				// Expect zero events (e.g., malformed input gracefully skipped)
-				if len(events) != 0 {
-					t.Errorf("parseEventLine() returned %d events, want 0", len(events))
-				}
+			if len(events) != tt.wantCount {
+				t.Errorf("parseEventLine() returned %d events, want %d", len(events), tt.wantCount)
 				return
 			}
 
-			if len(events) == 0 {
-				t.Errorf("parseEventLine() returned no events")
+			if tt.wantCount == 0 {
 				return
 			}
 

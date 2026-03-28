@@ -449,6 +449,12 @@ func extractAllToolsFromContent(content json.RawMessage, ts time.Time, model str
 			// Convert input to map
 			var params map[string]interface{}
 			if err := json.Unmarshal(toolBlock.Input, &params); err != nil {
+				// Can't parse params — emit as generic tool call with nil parameters
+				events = append(events, &ToolCallEvent{
+					BaseEvent: BaseEvent{Type: "tool_call", Timestamp: ts},
+					ToolName:  toolBlock.Name,
+					Success:   true,
+				})
 				continue
 			}
 
