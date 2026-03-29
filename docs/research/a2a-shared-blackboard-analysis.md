@@ -96,9 +96,61 @@ Replace one-shot invocations with long-lived Claude sessions that exchange messa
 | `internal/executor/warmup_hook.go` | Existing prompt injection pattern | 38-76, 126-194 |
 | `internal/models/response.go` | AgentResponse schema | 6-14 |
 
-## Validation Before Building
+## Validation Before Building (Action Required)
 
-Run 5-10 complex plans, track cases where a task fails or produces suboptimal output because it lacked information that a sibling task had. If that pattern is common, the blackboard is justified. If failures are mostly about agent capability or task scoping, the communication layer isn't the bottleneck.
+**The recommendation for Approach B is based on architectural reasoning, not empirical evidence.** Before implementing, the next session should answer these questions using actual data:
+
+### 1. Query the learning database for intra-wave failure patterns
+
+The SQLite learning store (`internal/learning/store.go`) records every task execution with plan file, task number, QC verdict, failure patterns, and QC feedback. The schema is at `internal/learning/schema.sql`.
+
+**What to look for:**
+- Tasks in the same wave that both received RED verdicts — do their failure patterns suggest they were working at cross purposes (e.g., conflicting file modifications)?
+- Tasks that failed with patterns like `compilation_error` or `dependency_missing` where a sibling task in the same wave modified the same package — this suggests PackageGuard prevented file conflicts but not logical conflicts
+- RED verdicts where QC feedback references work done by another task ("doesn't match the API from task X", "inconsistent with the approach in task Y")
+
+**How to query:**
+```sql
+-- Find tasks that ran in the same wave and both failed
+-- Cross-reference with plan file wave assignments
+SELECT te1.task_number, te1.task_name, te1.qc_verdict, te1.qc_feedback,
+       te2.task_number, te2.task_name, te2.qc_verdict, te2.qc_feedback
+FROM task_executions te1
+JOIN task_executions te2 ON te1.plan_file = te2.plan_file
+  AND te1.run_number = te2.run_number
+  AND te1.task_number != te2.task_number
+WHERE te1.qc_verdict = 'RED' AND te2.qc_verdict = 'RED';
+```
+
+### 2. Check warm-up injection effectiveness
+
+- How often does warm-up context actually get injected? (confidence >= 0.3 threshold at `warmup_hook.go:59`)
+- When it fires, do subsequent attempts succeed at a higher rate than without it?
+- Is the 0.3 confidence threshold appropriate or is useful context being filtered out?
+
+### 3. Check failure analysis effectiveness
+
+- How often does `enhancePromptWithLearning` fire? (requires `analysis.FailedAttempts > 0` at `task.go:314`)
+- When failure patterns are injected, do retries succeed more often?
+- Are the keyword-matched patterns (`task.go:370-386`) capturing the right categories?
+
+### 4. Measure prompt accumulation
+
+- For tasks that receive warm-up + failure analysis + integration context, how large does the injected context get relative to the actual task prompt?
+- Is there a correlation between context size and task success/failure?
+
+### What the answers mean
+
+- **If intra-wave conflicts are common** → Blackboard is justified, proceed with implementation
+- **If failures are mostly single-task capability issues** → Communication isn't the bottleneck, invest in agent tooling or task decomposition instead
+- **If existing learning mechanisms have low effectiveness** → Fix those first before adding another context layer
+- **If prompt bloat correlates with failure** → Any new context injection (including blackboard) could make things worse
+
+### Where to find data
+
+- SQLite database location: check `internal/learning/store.go` for the database path (typically `.conductor/learning.db`)
+- Plan files with wave assignments: parsed by `internal/parser/` from Markdown/YAML
+- Execution logs: check `.conductor/` directory for any log files
 
 ## Risks and Mitigations
 
@@ -108,3 +160,21 @@ Run 5-10 complex plans, track cases where a task fails or produces suboptimal ou
 | Prompt bloat from too many observations | Cap at N observations, prioritize by relevance |
 | Ordering dependency on shared state | Empty blackboard = today's behavior (safe default) |
 | Debugging complexity | Log all blackboard reads/writes with task attribution |
+
+## Agent SDK Migration Path
+
+The subprocess constraint (`exec.CommandContext` in `invoker.go:379`) is the architectural reason Approach C (persistent sessions) was rejected. If Conductor migrates to the Claude Agent SDK:
+
+- Agents become in-process, long-lived, and capable of receiving messages mid-execution
+- The blackboard could evolve into real-time pub/sub between agents
+- Approach C becomes viable without a full rewrite
+- The blackboard (Approach B) would still be useful as the persistence layer behind live messaging
+
+This analysis did NOT evaluate the Agent SDK migration path in depth. A separate investigation should assess: migration effort, cost model changes (streaming vs one-shot), impact on the existing budget/rate-limit system, and whether the blackboard should be designed with SDK migration in mind.
+
+## Open Questions
+
+1. Is the subprocess model the right long-term choice, or is Agent SDK migration already on the roadmap?
+2. What is the actual failure rate for intra-wave tasks, and how much is attributable to isolation?
+3. Are the existing learning mechanisms (warm-up, failure analysis) measurably effective?
+4. Would a blackboard create a false sense of coordination while masking deeper issues in task decomposition?
