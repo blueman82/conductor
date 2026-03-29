@@ -29,6 +29,7 @@ VERSION
 *.swp
 *.swo
 *~
+*.code-workspace
 
 # OS files
 .DS_Store
